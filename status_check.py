@@ -2,7 +2,7 @@ import sys
 import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
-from execution import get_exchange_client
+from data_client import MarketDataClient
 from config import API_KEY, SECRET_KEY, TOP_COINS_LIMIT
 from data import get_top_gainers, get_candles, add_indicators
 from datetime import datetime
@@ -14,7 +14,7 @@ print("=" * 50)
 status_report = []
 
 try:
-    client = get_exchange_client()
+    client = MarketDataClient()
     # Check balance
     account = client.get_account()
     balances = {b['asset']: float(b['free']) for b in account['balances'] if float(b['free']) > 0}

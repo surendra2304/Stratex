@@ -3,7 +3,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
-from execution import get_exchange_client
+from data_client import MarketDataClient
 from config import API_KEY, SECRET_KEY, TIMEFRAME, SYMBOL
 
 def download_and_verify_data(symbol=SYMBOL, timeframe=TIMEFRAME, days=90, use_cache=True):
@@ -23,10 +23,15 @@ def download_and_verify_data(symbol=SYMBOL, timeframe=TIMEFRAME, days=90, use_ca
         return df
         
     print(f"[DATA LOADER] Downloading {days} days of {timeframe} data for {symbol} from Binance Testnet...")
-    client = get_exchange_client()
+    client = MarketDataClient()
     
+    if not client.is_available():
+        raise ValueError(f"MarketDataClient is explicitly disabled. DATA_UNAVAILABLE.")
+        
     start_str = f"{days} days ago UTC"
     raw = client.get_historical_klines(symbol, timeframe, start_str)
+    
+    data_source = client.data_source
     
     if not raw:
         raise ValueError(f"No data returned from Binance for {symbol}")
@@ -81,7 +86,10 @@ def download_and_verify_data(symbol=SYMBOL, timeframe=TIMEFRAME, days=90, use_ca
     df["sell_vol"] = df["volume"] - df["buy_vol"]
     df["vol_delta"] = df["buy_vol"] - df["sell_vol"]
     
-    print(f"[DATA LOADER] Download complete. Validated {len(df)} candles.")
+    # Tag data source
+    df.attrs['data_source'] = data_source
+    
+    print(f"[DATA LOADER] Download complete. Validated {len(df)} candles. Source: {data_source}")
     
     # Save cache
     df.to_parquet(cache_file)

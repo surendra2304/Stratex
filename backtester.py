@@ -2,7 +2,7 @@ import pandas as pd
 import json
 import os
 from datetime import datetime
-from execution import get_exchange_client
+from data_client import MarketDataClient
 from config import API_KEY, SECRET_KEY, TIMEFRAME, ACTIVE_STRATEGY, SYMBOL
 from config import BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE, RISK_PER_TRADE, STARTING_BALANCE, OOS_TRAIN_PCT, OOS_VAL_PCT
 from data import add_indicators
@@ -18,8 +18,12 @@ from metrics import calculate_metrics
 def fetch_historical_data(days=30):
     """Downloads historical candles from Binance."""
     print(f"Downloading {days} days of {TIMEFRAME} data for {SYMBOL}...")
-    client = get_exchange_client()
+    client = MarketDataClient()
     
+    if not client.is_available():
+        print(f"MarketDataClient is explicitly disabled. DATA_UNAVAILABLE.")
+        return pd.DataFrame()
+        
     start_str = f"{days} days ago UTC"
     raw = client.get_historical_klines(SYMBOL, TIMEFRAME, start_str)
     

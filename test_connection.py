@@ -1,9 +1,9 @@
-from execution import get_exchange_client
+from data_client import MarketDataClient
 
 API_KEY = "REDACTED_API_KEY"
 SECRET_KEY = "REDACTED_SECRET_KEY"
 
-client = get_exchange_client()
+client = MarketDataClient()
 
 try:
     account = client.get_account()

@@ -82,7 +82,7 @@ def test_client_constructor_calls(mock_client):
             except RuntimeError:
                 pass # expected for disabled modes
                 
-            assert mock_client.call_count == expected_calls, f"Failed client count for: {mode}, {safe_mode}, {res_mode}, {testnet_en}, {live_en}"
+            assert mock_client.call_count == expected_calls, f"Failed execution client count for: {mode}, {safe_mode}, {res_mode}, {testnet_en}, {live_en}"
             
             if expected_calls == 1:
                 if mode == "TESTNET":

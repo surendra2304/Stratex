@@ -8,11 +8,15 @@ from research_phase7.data_loader import download_and_verify_data
 from research_phase10.pairs_engine import PairsEngine
 from research_phase10.funding_engine import FundingEngine
 from research_phase9.cost_engine import CostEngine
-from execution import get_exchange_client
+from data_client import MarketDataClient
 
 def fetch_funding_history(symbol):
     try:
-        client = get_exchange_client()
+        client = MarketDataClient()
+        if not client.is_available():
+            print(f"MarketDataClient is unavailable. Cannot fetch funding for {symbol}.")
+            return pd.DataFrame()
+            
         all_funding = []
         limit = 1000
         start_time = 0
@@ -67,7 +71,7 @@ def run_phase10():
     pairs_results = {}
     for a, b in pairs:
         engine = PairsEngine(data[a], data[b], a, b, timeframe='1h') # Use 1h for fast local OLS
-        res = engine.run_walk_forward(entry_z=2.0, exit_z=0.0)
+        res = engine.run_walk_forward()
         pairs_results[f"{a}/{b}"] = res
         if res.get('status') == 'UNAVAILABLE':
             print(f"  -> {a}/{b}: UNAVAILABLE ({res.get('reason')})")
