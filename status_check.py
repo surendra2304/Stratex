@@ -12,7 +12,7 @@ SECRET_KEY = "REDACTED_SECRET_KEY"
 client = Client(API_KEY, SECRET_KEY, testnet=True)
 
 print("=" * 50)
-print("ANTI GRAVITY BOT - LIVE STATUS CHECK")
+print("ALGORITHMIC TRADING BOT — LIVE STATUS CHECK")
 print("=" * 50)
 
 # Check balance

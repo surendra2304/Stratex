@@ -1,92 +1,122 @@
-# Algorithmic Trading Bot Framework
+# Algorithmic Trading Bot
 
-A professional, multi-strategy automated trading system built in Python, connected to the **Binance Testnet** for live simulated trading with zero financial risk.
+A professional, multi-strategy automated trading system built in Python. Connects to the **Binance Testnet** for live paper trading with zero financial risk — a complete framework for building, testing, and deploying quantitative trading strategies.
 
-## Features
+![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
+![Binance](https://img.shields.io/badge/Exchange-Binance-yellow?logo=binance)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-- **4 Live Trading Strategies** running simultaneously
-- **Scalping Bot** — RSI + Bollinger Band mean reversion for high-frequency trading
-- **Swing Trading Bot** — MACD + 200 EMA trend-following for capturing larger moves
-- **Machine Learning Bot** — Random Forest model trained on live market data to predict price direction
-- **Multi-Strategy Engine** — Runs all three strategies concurrently and executes the first valid signal
-- **Automatic Trade Logging** — Every trade is recorded to `trade_log.csv` for performance review
-- **Live Market Data** — Real-time OHLCV candle data streamed directly from Binance
-- **Dynamic Indicators** — RSI, MACD, Bollinger Bands, ATR, EMA (computed fresh on every tick)
+---
+
+## Overview
+
+This project implements a complete algorithmic trading pipeline — from live market data ingestion and technical indicator computation, to signal generation, automated order execution, and trade logging. Four distinct strategies are included, ranging from classical technical analysis to machine learning.
+
+---
+
+## Strategies
+
+| Strategy | Logic | Best For |
+|---|---|---|
+| **Scalper** | RSI + Bollinger Band mean reversion | High-frequency short bursts |
+| **Swing Trader** | MACD crossover filtered by 200 EMA | Medium-term trend following |
+| **ML Predictor** | Random Forest trained on live candle data | AI-driven directional bias |
+| **Multi-Strategy** | Runs all three simultaneously | Maximum signal coverage |
+
+---
 
 ## Project Structure
 
 ```
-python_bot/
-├── bot.py                  # Main entry point — run this to start the bot
-├── config_template.py      # Copy to config.py and fill in your API keys
-├── data.py                 # Market data fetching + technical indicator engine
+.
+├── bot.py                  # Main entry point — start here
+├── config_template.py      # Copy to config.py and add your API keys
+├── data.py                 # Live candle fetching + indicator engine
 ├── execution.py            # Order placement and account management
-├── logger.py               # Trade logging to CSV
+├── logger.py               # Structured trade logging to CSV
 ├── strategy_scalper.py     # High-frequency scalping strategy
-├── strategy_swing.py       # Swing / trend-following strategy
-├── strategy_ml.py          # Machine Learning (Random Forest) strategy
-├── status_check.py         # Live health check and market snapshot
-└── requirements.txt        # Python dependencies
+├── strategy_swing.py       # Trend-following swing strategy
+├── strategy_ml.py          # Machine learning price direction model
+├── status_check.py         # Live market snapshot and health check
+├── requirements.txt        # Dependencies
+└── .gitignore              # Keeps secrets out of version control
 ```
 
-## Setup & Installation
+---
+
+## Getting Started
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.11 or higher
 - A free [Binance Testnet](https://testnet.binance.vision) account
 
-### 1. Install Dependencies
+### Installation
+
 ```bash
+# 1. Clone the repository
+git clone https://github.com/surendra2304/algorithmic-trading-bot.git
+cd algorithmic-trading-bot
+
+# 2. Install dependencies
 pip install -r requirements.txt
-```
 
-### 2. Configure API Keys
-```bash
-# Copy the template
+# 3. Set up your API keys
 cp config_template.py config.py
-
-# Edit config.py and add your Binance Testnet API keys
+# Edit config.py and paste your Binance Testnet keys
 ```
 
-### 3. Run the Bot
+### Running the Bot
+
 ```bash
+# Start the bot
 python bot.py
-```
 
-### 4. Check Live Status
-```bash
+# Check live market status and indicators
 python status_check.py
 ```
 
-## Switching Strategies
+---
 
-Open `config.py` and change the `ACTIVE_STRATEGY` value:
+## Configuration
+
+Open `config.py` to switch strategies or adjust risk parameters:
 
 ```python
+# Choose your active strategy
 ACTIVE_STRATEGY = "scalper"   # High-frequency RSI + Bollinger Band scalping
 ACTIVE_STRATEGY = "swing"     # MACD + 200 EMA trend following
-ACTIVE_STRATEGY = "ml"        # AI-powered Random Forest price prediction
-ACTIVE_STRATEGY = "multi"     # Runs all three simultaneously (default)
+ACTIVE_STRATEGY = "ml"        # Random Forest ML prediction
+ACTIVE_STRATEGY = "multi"     # All three running simultaneously (default)
+
+# Risk parameters
+TRADE_QTY = 0.001             # Trade size in BTC
+MAX_OPEN_TRADES = 1           # Max concurrent open positions
 ```
+
+---
 
 ## Tech Stack
 
-| Technology | Purpose |
+| Library | Purpose |
 |---|---|
-| Python 3.11 | Core language |
-| python-binance | Binance API integration |
-| pandas | Data manipulation and analysis |
-| ta | Technical indicator calculations |
-| scikit-learn | Machine Learning model |
-| numpy | Numerical computing |
+| `python-binance` | Binance REST API and WebSocket integration |
+| `pandas` | Time-series data manipulation |
+| `ta` | Technical indicator library (RSI, MACD, BB, ATR) |
+| `scikit-learn` | Random Forest machine learning model |
+| `numpy` | Numerical computing |
+
+---
 
 ## Security
 
-> **Never commit your `config.py` to GitHub.** It is protected by `.gitignore`. Always use `config_template.py` as the public reference.
+> **Important:** Never commit `config.py` to version control. It is listed in `.gitignore` by default. Use `config_template.py` as the shareable reference — it contains no real credentials.
+
+---
 
 ## Disclaimer
 
-This project uses the **Binance Testnet** (simulated environment — no real funds involved). Always backtest thoroughly before deploying any strategy to a live account.
+This project is built for **educational and research purposes** using the Binance Testnet (simulated environment — no real funds involved). Past performance of any strategy does not guarantee future results. Always conduct thorough backtesting before deploying to a live account.
 
 ---
-Built by [Surendra](https://github.com/surendra2304)
+
+*Built by [Surendra](https://github.com/surendra2304)*
