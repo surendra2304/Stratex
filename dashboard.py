@@ -123,28 +123,77 @@ def get_status():
     data_health = "UNKNOWN"
     
     if TRADING_MODE == "PAPER":
-        bot_health = "OK"
+        bot_health = "OK"  
         data_health = "OK"
-        # read paper portfolio
+        try:
+            from paper_engine.heartbeat import HeartbeatState
+            hb = HeartbeatState()
+            b_health, d_health = hb.get_status()
+            if b_health != "UNKNOWN":
+                bot_health = b_health
+            if d_health != "UNKNOWN":
+                data_health = d_health
+        except:
+            pass
         if os.path.exists("paper_portfolio.json"):
-            with open("paper_portfolio.json", "r") as f:
-                port = json.load(f)
+            try:
+                import json
+                with open("paper_portfolio.json", "r") as f:
+                    port = json.load(f)
+                
+                # Fetch recent market prices to compute true equity
+                try:
+                    from data import get_candles
+                    df = get_candles("BTCUSDT", "1m", 1)
+                    current_price = df['close'].iloc[-1] if not df.empty else 0.0
+                except:
+                    current_price = 0.0
+                
+                # Compute unrealized
+                unrealized = 0.0
+                for pos in port.get("positions", {}).values():
+                    if pos['status'] == "OPEN" and current_price > 0:
+                        if pos['direction'] in ["LONG", "BUY"]:
+                            unrealized += (current_price - pos['entry_price']) * pos['quantity']
+                        else:
+                            unrealized += (pos['entry_price'] - current_price) * pos['quantity']
+                            
+                cash = port.get("cash", 0)
+                equity = cash + unrealized
+                
+                try:
+                    from paper_engine.portfolio import PaperPortfolio
+                    temp_port = PaperPortfolio("paper_portfolio.json")
+                    mdd = temp_port.get_max_drawdown() * 100
+                except Exception as e:
+                    mdd = 0.0
+                
                 return jsonify({
                     "mode": TRADING_MODE,
                     "bot_health": bot_health,
                     "data_health": data_health,
-                    "equity": port.get("cash", 0) + port.get("realized_pnl", 0), # Simplified for dashboard
+                    "equity": equity,
+                    "cash": cash,
                     "realized_pnl": port.get("realized_pnl", 0),
-                    "open_positions": len([p for p in port.get("positions", {}).values() if p["status"] == "OPEN"])
+                    "unrealized_pnl": unrealized,
+                    "fees": port.get("cumulative_fees", 0),
+                    "funding": port.get("cumulative_funding", 0),
+                    "used_margin": port.get("used_margin", 0),
+                    "open_positions": len([p for p in port.get("positions", {}).values() if p["status"] == "OPEN"]),
+                    "max_drawdown": mdd
                 })
+            except Exception as e:
+                pass
     
-    # Fallback / Testnet
+    # Fallback / Testnet / Error
     return jsonify({
         "mode": TRADING_MODE,
-        "bot_health": "OK",
-        "data_health": "OK",
+        "bot_health": "UNKNOWN",
+        "data_health": "UNKNOWN",
         "equity": 0,
+        "cash": 0,
         "realized_pnl": 0,
+        "unrealized_pnl": 0,
         "open_positions": 0
     })
 
@@ -154,40 +203,74 @@ def get_trades():
     from config import TRADING_MODE
     
     if TRADING_MODE == "PAPER":
-        if not os.path.exists("paper_portfolio.json"):
-            return jsonify({"net_pnl": 0, "win_rate": 0, "total_trades": 0, "profit_factor": 0, "positions": []})
-        
-        with open("paper_portfolio.json", "r") as f:
-            port = json.load(f)
-            
-        positions = []
+        import json
+        net_pnl = 0.0
         wins = 0
         losses = 0
         gross_profit = 0.0
         gross_loss = 0.0
+        positions = []
         
-        for pos_id, p in port.get("positions", {}).items():
-            positions.append({
-                "timestamp": p.get("open_time", 0),
-                "symbol": p["symbol"],
-                "action": p["direction"],
-                "entry_price": p["entry_price"],
-                "quantity": p["quantity"],
-                "status": p["status"],
-                "pnl": 0.0, # Realized on close
-                "matched": p["status"] == "CLOSED"
-            })
-            
-            if p["status"] == "CLOSED":
-                # Need to read from paper signals or portfolio pnl array in a real impl
+        # 1. Parse closed trades from ledger
+        if os.path.exists("paper_trade_ledger.jsonl"):
+            with open("paper_trade_ledger.jsonl", "r") as f:
+                for line in f:
+                    try:
+                        trade = json.loads(line)
+                        pnl = trade.get("net_pnl", 0.0)
+                        
+                        if pnl > 0:
+                            wins += 1
+                            gross_profit += pnl
+                        else:
+                            losses += 1
+                            gross_loss += abs(pnl)
+                            
+                        positions.append({
+                            "timestamp": trade.get("entry_time", trade.get("signal_time", 0)),
+                            "symbol": trade.get("symbol", ""),
+                            "action": trade.get("direction", ""),
+                            "entry_price": trade.get("entry_price", 0.0),
+                            "quantity": trade.get("quantity", 0.0),
+                            "status": "CLOSED",
+                            "pnl": pnl,
+                            "matched": True
+                        })
+                    except:
+                        pass
+        
+        # 2. Add open positions from portfolio
+        if os.path.exists("paper_portfolio.json"):
+            try:
+                with open("paper_portfolio.json", "r") as f:
+                    port = json.load(f)
+                net_pnl = port.get("realized_pnl", 0.0)
+                
+                for pos_id, p in port.get("positions", {}).items():
+                    if p["status"] == "OPEN":
+                        positions.append({
+                            "timestamp": p.get("open_time", 0),
+                            "symbol": p["symbol"],
+                            "action": p["direction"],
+                            "entry_price": p["entry_price"],
+                            "quantity": p["quantity"],
+                            "status": p["status"],
+                            "pnl": 0.0, # Unrealized
+                            "matched": False
+                        })
+            except:
                 pass
                 
-        positions.reverse()
+        positions.sort(key=lambda x: x["timestamp"], reverse=True)
+        total_closed = wins + losses
+        win_rate = (wins / total_closed * 100) if total_closed > 0 else 0
+        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else ("Infinity" if gross_profit > 0 else 0)
+        
         return jsonify({
-            "net_pnl": port.get("realized_pnl", 0), 
-            "win_rate": 0,
-            "total_trades": 0,
-            "profit_factor": 0,
+            "net_pnl": net_pnl, 
+            "win_rate": win_rate,
+            "total_trades": total_closed,
+            "profit_factor": profit_factor,
             "positions": positions
         })
 

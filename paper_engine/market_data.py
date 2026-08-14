@@ -1,6 +1,7 @@
 import time
 from datetime import datetime
 import pandas as pd
+import math
 from typing import Dict, Optional, Tuple
 
 class DataException(Exception):
@@ -20,22 +21,47 @@ class MarketDataFeed:
     """
     def __init__(self, max_stale_seconds=60):
         self.max_stale_seconds = max_stale_seconds
-        self.last_update_time: float = 0.0
-        self.last_candle_time: pd.Timestamp = None
-        self.current_prices: Dict[str, float] = {}
-        self.current_spreads: Dict[str, Tuple[float, float]] = {} # (bid, ask)
         
-    def push_tick(self, symbol: str, price: float, bid: float, ask: float, timestamp_sec: float):
+        # We track both the exchange's time and when we got it locally.
+        self.last_received_time: float = 0.0
+        self.last_market_time: float = 0.0
+        
+        self.current_prices: Dict[str, float] = {}
+        self.current_spreads: Dict[str, Tuple[float, float, str]] = {} # (bid, ask, bbo_source)
+        
+    def _validate_data(self, price: float, bid: float, ask: float):
+        if math.isnan(price) or math.isinf(price) or price <= 0:
+            raise DataException(f"Invalid price: {price}")
+        if math.isnan(bid) or math.isinf(bid) or bid <= 0:
+            raise DataException(f"Invalid bid: {bid}")
+        if math.isnan(ask) or math.isinf(ask) or ask <= 0:
+            raise DataException(f"Invalid ask: {ask}")
+        if bid > ask:
+            raise DataException(f"Invalid spread: bid {bid} > ask {ask}")
+
+    def push_tick(self, symbol: str, price: float, bid: float, ask: float, market_timestamp: float, bbo_source: str = "REAL"):
         """
         Receives live updates (e.g. from websocket or polling).
         """
-        if timestamp_sec <= self.last_update_time and self.last_update_time > 0:
-            # Ignore out of order or duplicate
-            return
+        if market_timestamp is None or math.isnan(market_timestamp):
+             raise DataException("Invalid market_timestamp")
+             
+        self._validate_data(price, bid, ask)
+
+        if market_timestamp <= self.last_market_time and self.last_market_time > 0:
+            raise DataException(f"Out of order or duplicate timestamp. Received: {market_timestamp}, Last: {self.last_market_time}")
             
-        self.last_update_time = timestamp_sec
+        self.last_market_time = market_timestamp
+        self.last_received_time = time.time()
+        
         self.current_prices[symbol] = price
-        self.current_spreads[symbol] = (bid, ask)
+        self.current_spreads[symbol] = (bid, ask, bbo_source)
+        
+        try:
+            from paper_engine.heartbeat import HeartbeatState
+            HeartbeatState().ping_data()
+        except:
+            pass
         
     def get_price(self, symbol: str) -> float:
         """
@@ -46,7 +72,7 @@ class MarketDataFeed:
             raise DataException(f"No price available for {symbol}")
         return self.current_prices[symbol]
         
-    def get_bbo(self, symbol: str) -> Tuple[float, float]:
+    def get_bbo(self, symbol: str) -> Tuple[float, float, str]:
         """
         Gets Best Bid and Offer.
         """
@@ -57,10 +83,10 @@ class MarketDataFeed:
         
     def _check_stale(self):
         now = time.time()
-        if self.last_update_time == 0:
+        if self.last_received_time == 0:
             raise DataStaleException("Market Data Feed uninitialized. No ticks received.")
-        if now - self.last_update_time > self.max_stale_seconds:
-            raise DataStaleException(f"Data is stale. Last update was {now - self.last_update_time:.1f}s ago.")
+        if now - self.last_received_time > self.max_stale_seconds:
+            raise DataStaleException(f"Data is stale. Last update was {now - self.last_received_time:.1f}s ago locally.")
 
     def push_candle_df(self, symbol: str, df: pd.DataFrame):
         """
@@ -81,7 +107,9 @@ class MarketDataFeed:
         # Convert timestamp to seconds if needed
         if isinstance(latest_time, pd.Timestamp):
             ts = latest_time.timestamp()
+        elif isinstance(latest_time, (int, float)):
+            ts = float(latest_time)
         else:
-            ts = time.time() # fallback if parsing fails
+            raise DataException(f"Cannot parse market timestamp: {latest_time}")
             
-        self.push_tick(symbol, latest_close, bid, ask, ts)
+        self.push_tick(symbol, latest_close, bid, ask, ts, bbo_source="ESTIMATED")

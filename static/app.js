@@ -49,12 +49,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             const data = await res.json();
             
             // Update Advanced Stats
-            document.getElementById('stat-trades').textContent = data.total_trades;
+            document.getElementById('stat-closed-trades').textContent = data.total_trades;
             document.getElementById('stat-winrate').textContent = data.win_rate.toFixed(1) + '%';
             document.getElementById('stat-winrate').style.color = data.win_rate >= 50 ? '#4caf50' : '#ef5350';
             
-            document.getElementById('stat-pf').textContent = data.profit_factor.toFixed(2);
-            document.getElementById('stat-pf').style.color = data.profit_factor >= 1.5 ? '#4caf50' : (data.profit_factor >= 1 ? '#ff9800' : '#ef5350');
+            const pf = parseFloat(data.profit_factor);
+            if (isNaN(pf)) {
+                document.getElementById('stat-pf').textContent = data.profit_factor;
+                document.getElementById('stat-pf').style.color = '#4caf50';
+            } else {
+                document.getElementById('stat-pf').textContent = pf.toFixed(2);
+                document.getElementById('stat-pf').style.color = pf >= 1.5 ? '#4caf50' : (pf >= 1 ? '#ff9800' : '#ef5350');
+            }
             
             // Fetch Status
             try {
@@ -71,7 +77,22 @@ document.addEventListener('DOMContentLoaded', async () => {
                     mi.style.color = "#ff9800"; // Orange for testnet
                 }
                 
-                document.getElementById('stat-equity').textContent = '$' + statusData.equity.toFixed(2);
+                document.getElementById('stat-equity').textContent = '$' + (statusData.equity || 0).toFixed(2);
+                document.getElementById('stat-cash').textContent = '$' + (statusData.cash || 0).toFixed(2);
+                document.getElementById('stat-margin').textContent = '$' + (statusData.used_margin || 0).toFixed(2);
+                
+                const realPnl = (statusData.realized_pnl || 0);
+                document.getElementById('stat-realized-pnl').textContent = (realPnl >= 0 ? '+$' : '-$') + Math.abs(realPnl).toFixed(2);
+                document.getElementById('stat-realized-pnl').style.color = realPnl >= 0 ? '#4caf50' : '#ef5350';
+                
+                const unPnl = (statusData.unrealized_pnl || 0);
+                document.getElementById('stat-unrealized-pnl').textContent = (unPnl >= 0 ? '+$' : '-$') + Math.abs(unPnl).toFixed(2);
+                document.getElementById('stat-unrealized-pnl').style.color = unPnl >= 0 ? '#4caf50' : '#ef5350';
+                
+                document.getElementById('stat-fees').textContent = '$' + (statusData.fees || 0).toFixed(2);
+                document.getElementById('stat-funding').textContent = '$' + (statusData.funding || 0).toFixed(2);
+                document.getElementById('stat-open-pos').textContent = statusData.open_positions || 0;
+                document.getElementById('stat-mdd').textContent = (statusData.max_drawdown || 0).toFixed(1) + '%';
                 
                 const sb = document.getElementById('status-bot').querySelector('strong');
                 sb.textContent = statusData.bot_health;
@@ -84,11 +105,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             } catch(e) {
                 console.error("Failed to load status:", e);
             }
-            
-            // Update Net PnL (Using the one from trades API or status, fallback to trades if status fails)
-            const pnlElement = document.getElementById('net-pnl-val');
-            pnlElement.textContent = (data.net_pnl >= 0 ? '+$' : '-$') + Math.abs(data.net_pnl).toFixed(2);
-            pnlElement.style.color = data.net_pnl >= 0 ? '#4caf50' : '#ef5350';
             
             tableBody.innerHTML = '';
             

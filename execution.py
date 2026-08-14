@@ -40,6 +40,9 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
     if TRADING_MODE == "PAPER":
         raise RuntimeError("CRITICAL ERROR: PAPER mode attempted to place a real Binance order.")
         
+    if os.environ.get("RESEARCH_MODE") == "1":
+        raise RuntimeError("CRITICAL ERROR: Real execution attempted from a research script.")
+        
     try:
         # 1. Place the entry Market order
         order_side = Client.SIDE_BUY if side == "BUY" else Client.SIDE_SELL

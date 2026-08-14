@@ -12,20 +12,11 @@
     <div class="header">
         <h1>🤖 Algorithmic Trading Bot Dashboard</h1>
         <div class="header-controls">
-            <div class="stat-block">
-                <span>Trades</span> <strong id="stat-trades">0</strong>
-            </div>
-            <div class="stat-block">
-                <span>Equity</span> <strong id="stat-equity">$0.00</strong>
-            </div>
             <div class="stat-block" id="status-bot">
                 <span>Bot</span> <strong>OK</strong>
             </div>
             <div class="stat-block" id="status-data">
                 <span>Data</span> <strong>OK</strong>
-            </div>
-            <div class="net-pnl">
-                Net PnL: <span id="net-pnl-val">$0.00</span>
             </div>
             <div class="status-indicator" id="mode-indicator">
                 <span class="pulse"></span> <span id="trading-mode-label">PAPER</span>
@@ -34,6 +25,21 @@
                 <button id="btn-table" class="toggle-btn active">Ledger</button>
                 <button id="btn-chart" class="toggle-btn">Chart</button>
             </div>
+        </div>
+        
+        <div class="metrics-grid" style="display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; background: #1e222d; border-radius: 5px; margin-top: 10px; font-size: 0.9em;">
+            <div class="stat-block"><span>Equity</span> <strong id="stat-equity">$0.00</strong></div>
+            <div class="stat-block"><span>Cash</span> <strong id="stat-cash">$0.00</strong></div>
+            <div class="stat-block"><span>Used Margin</span> <strong id="stat-margin">$0.00</strong></div>
+            <div class="stat-block"><span>Realized PnL</span> <strong id="stat-realized-pnl">$0.00</strong></div>
+            <div class="stat-block"><span>Unrealized PnL</span> <strong id="stat-unrealized-pnl">$0.00</strong></div>
+            <div class="stat-block"><span>Fees</span> <strong id="stat-fees">$0.00</strong></div>
+            <div class="stat-block"><span>Funding</span> <strong id="stat-funding">$0.00</strong></div>
+            <div class="stat-block"><span>Open Positions</span> <strong id="stat-open-pos">0</strong></div>
+            <div class="stat-block"><span>Closed Trades</span> <strong id="stat-closed-trades">0</strong></div>
+            <div class="stat-block"><span>Win Rate</span> <strong id="stat-winrate">0.0%</strong></div>
+            <div class="stat-block"><span>Profit Factor</span> <strong id="stat-pf">0.00</strong></div>
+            <div class="stat-block"><span>Max Drawdown</span> <strong id="stat-mdd">0.0%</strong></div>
         </div>
     </div>
     

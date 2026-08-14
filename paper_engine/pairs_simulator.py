@@ -52,6 +52,8 @@ class PairsPaperSimulator(PaperSimulator):
             "symbol_b": symbol_b,
             "order_a_id": order_a_id,
             "order_b_id": order_b_id,
+            "leg_a_status": leg_a_status,
+            "leg_b_status": leg_b_status,
             "status": status,
             "open_time": time.time()
         }

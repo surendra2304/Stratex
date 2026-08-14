@@ -56,8 +56,8 @@ def test_paper_trading_lifecycle():
     # Sell market pays bid (10999) - slip (0.0005) = 10999 * 0.9995 = 10993.5005
     assert exit_order['fill_price'] < 10999.0
     
-    portfolio.close_position(pos_id)
     realized = (exit_order['fill_price'] - order['fill_price']) * 1.0
+    portfolio.close_position(pos_id, exit_order['fill_price'], exit_order['fee'], ts + 10)
     
     # Settle realized PnL
     portfolio.add_realized_pnl(realized, f"close_{pos_id}")

@@ -41,7 +41,7 @@ class PaperSimulator:
         # We fetch the exact price at fill_time in a real live loop. 
         # For this simulator, we just use the current BBO.
         try:
-            bid, ask = self.market_data.get_bbo(symbol)
+            bid, ask, bbo_source = self.market_data.get_bbo(symbol)
         except DataException as e:
             raise ValueError(f"Order failed due to data issue: {e}")
             
@@ -57,6 +57,7 @@ class PaperSimulator:
             base_price = bid
             
         # Apply Slippage from CostEngine
+        from paper_engine.config import COST_MODEL
         slippage_bps = self.cost_engine.entry_slip
         if direction == "BUY":
             fill_price = base_price * (1 + slippage_bps)
@@ -77,7 +78,9 @@ class PaperSimulator:
             "order_time": order_time,
             "fill_time": fill_time,
             "fill_price": fill_price,
-            "fee": fee
+            "fee": fee,
+            "cost_scenario": COST_MODEL,
+            "bbo_source": bbo_source
         }
         
         # Settle fees in portfolio immediately
@@ -117,7 +120,7 @@ class PaperSimulator:
                 continue
                 
             try:
-                bid, ask = self.market_data.get_bbo(order['symbol'])
+                bid, ask, bbo_source = self.market_data.get_bbo(order['symbol'])
             except DataException:
                 continue
                 
@@ -137,10 +140,13 @@ class PaperSimulator:
                     fill = True
                     
             if fill:
+                from paper_engine.config import COST_MODEL
                 order['status'] = "FILLED"
                 order['fill_time'] = time.time()
                 # Maker fee usually for limit
                 order['fill_price'] = lp
+                order['cost_scenario'] = COST_MODEL
+                order['bbo_source'] = bbo_source
                 
                 notional = lp * order['quantity']
                 fee = notional * self.cost_engine.entry_fee # Use entry fee to be conservative
