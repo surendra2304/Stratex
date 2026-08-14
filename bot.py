@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from config import ACTIVE_STRATEGY, SYMBOL, TRADE_QTY, MAX_OPEN_TRADES
 from data import get_candles, add_indicators, get_current_price
-from execution import place_market_order, get_open_orders, get_account_balance
+from execution import place_market_order, get_open_orders, get_account_balance, monitor_open_trades
 from logger import init_log
 
 # Fix Windows terminal encoding (prevents crashes on special characters)
@@ -62,6 +62,9 @@ def main():
     try:
         while True:
             print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Checking market...")
+            
+            # 0. Check if any previous trades closed (Win/Loss logging)
+            monitor_open_trades()
 
             # 1. Fetch and prepare data
             df = get_candles()

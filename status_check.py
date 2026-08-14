@@ -5,9 +5,8 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='repla
 from binance.client import Client
 import pandas as pd
 import ta
-
-API_KEY = "REDACTED_API_KEY"
-SECRET_KEY = "REDACTED_SECRET_KEY"
+from config import API_KEY, SECRET_KEY, SYMBOL
+from datetime import datetime
 
 client = Client(API_KEY, SECRET_KEY, testnet=True)
 
@@ -23,13 +22,30 @@ for asset, amount in balances.items():
     print(f"  {asset}: {amount:.4f}")
 
 # Check live price
-ticker = client.get_symbol_ticker(symbol="BTCUSDT")
+ticker = client.get_symbol_ticker(symbol=SYMBOL)
 price = float(ticker['price'])
-print(f"\n[MARKET] BTCUSDT Price: ${price:,.2f}")
+print(f"\n[MARKET] {SYMBOL} Price: ${price:,.2f}")
+
+# Check recent trades
+try:
+    print("\n[ RECENT TRADES ]")
+    trades = client.get_my_trades(symbol=SYMBOL, limit=5)
+    if not trades:
+        print("  No recent trades found on Binance.")
+    else:
+        for t in reversed(trades):
+            side = "BUY" if t['isBuyer'] else "SELL"
+            price = float(t['price'])
+            qty = float(t['qty'])
+            time_str = datetime.fromtimestamp(t['time'] / 1000).strftime('%Y-%m-%d %H:%M:%S')
+            commission = float(t['commission'])
+            print(f"  {time_str} | {side:4} | Price: {price:.2f} | Qty: {qty} | Fee: {commission:.4f} {t['commissionAsset']}")
+except Exception as e:
+    print(f"  Error fetching trades: {e}")
 
 # Fetch candles and compute indicators
 print("\n[DATA] Fetching 300 candles...")
-raw = client.get_klines(symbol="BTCUSDT", interval="1m", limit=300)
+raw = client.get_klines(symbol=SYMBOL, interval="1m", limit=300)
 df = pd.DataFrame(raw, columns=[
     "timestamp","open","high","low","close","volume",
     "close_time","quote_volume","trades","taker_buy_base","taker_buy_quote","ignore"

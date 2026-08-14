@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Trading Bot Dashboard</title>
+    <link rel="stylesheet" href="style.css?v=3">
+    <!-- TradingView Lightweight Charts -->
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+    <div class="header">
+        <h1>🤖 Algorithmic Trading Bot Dashboard</h1>
+        <div class="header-controls">
+            <div class="net-pnl">
+                Net PnL: <span id="net-pnl-val">$0.00</span>
+            </div>
+            <div class="status-indicator">
+                <span class="pulse"></span> LIVE
+            </div>
+            <div class="view-toggle">
+                <button id="btn-table" class="toggle-btn active">Ledger</button>
+                <button id="btn-chart" class="toggle-btn">Chart</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Chart View (Hidden by default based on user request) -->
+    <div id="view-chart" class="chart-container" style="display: none;">
+        <div id="tvchart"></div>
+    </div>
+
+    <!-- Table View -->
+    <div id="view-table" class="table-container">
+        <table id="trade-ledger">
+            <thead>
+                <tr>
+                    <th>Date & Time</th>
+                    <th>Asset</th>
+                    <th>Action</th>
+                    <th>Entry Price</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>PnL</th>
+                </tr>
+            </thead>
+            <tbody id="trade-table-body">
+                <!-- Populated by JS -->
+            </tbody>
+        </table>
+    </div>
+    
+    <script src="app.js?v=4"></script>
+</body>
+</html>
