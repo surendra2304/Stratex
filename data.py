@@ -2,7 +2,6 @@
 # DATA.PY - Market Data Module: live OHLCV candle fetching and indicator engine
 # ==============================================================================
 import pandas as pd
-import ta
 from binance.client import Client
 from config import API_KEY, SECRET_KEY, BASE_URL, TIMEFRAME
 
@@ -60,24 +59,13 @@ def add_indicators(df):
         return df
         
     try:
-        # --- Trend ---
-        df["ema_200"] = ta.trend.ema_indicator(df["close"], window=200)
-        df["ema_50"]  = ta.trend.ema_indicator(df["close"], window=50)
-        df["ema_20"]  = ta.trend.ema_indicator(df["close"], window=20)
-
-        # --- Momentum ---
-        df["rsi"] = ta.momentum.rsi(df["close"], window=14)
-        macd = ta.trend.MACD(df["close"], window_fast=12, window_slow=26, window_sign=9)
-        df["macd"] = macd.macd()
-        df["macd_signal"] = macd.macd_signal()
-        df["macd_hist"] = macd.macd_diff()
-
-        # --- Volatility ---
-        bb = ta.volatility.BollingerBands(df["close"], window=20, window_dev=2)
-        df["bb_upper"] = bb.bollinger_hband()
-        df["bb_lower"] = bb.bollinger_lband()
-        df["bb_mid"] = bb.bollinger_mavg()
-        df["atr"] = ta.volatility.average_true_range(df["high"], df["low"], df["close"], window=14)
+        from features import add_features
+        df = add_features(df)
+        
+        # Keep old column names for backward compatibility with strategies
+        df['rsi'] = df['rsi_14']
+        df['atr'] = df['atr_14']
+        df['bb_mid'] = df['bb_middle']
 
         df.dropna(inplace=True)
         df.reset_index(drop=True, inplace=True)

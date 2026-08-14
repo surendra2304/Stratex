@@ -19,16 +19,18 @@ def get_signal(df):
     close = last["close"]
     bb_upper = last["bb_upper"]
     bb_lower = last["bb_lower"]
+    bb_width = last["bb_width"]
+    ema_200 = last["ema_200"]
     atr = last["atr"]
 
-    # BUY: Price wicked below lower band and RSI is oversold
-    if close <= bb_lower and rsi < 35:
+    # BUY: Price wicked below lower band, RSI is oversold, and overall trend is UP (filter)
+    if close <= bb_lower and rsi < 35 and close > ema_200:
         sl = close - (atr * 1.5)
         tp = close + (atr * 1.0)
         return "BUY", sl, tp
 
-    # SELL: Price wicked above upper band and RSI is overbought
-    if close >= bb_upper and rsi > 65:
+    # SELL: Price wicked above upper band, RSI overbought, and overall trend is DOWN
+    if close >= bb_upper and rsi > 65 and close < ema_200:
         sl = close + (atr * 1.5)
         tp = close - (atr * 1.0)
         return "SELL", sl, tp

@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import uuid
-from datetime import datetime
 
 class DataValidator:
     """Validates the chronological integrity of backtest data."""
@@ -10,32 +9,28 @@ class DataValidator:
         if df is None or df.empty:
             raise ValueError("Data is empty")
         
-        # Check for missing values in core columns
         core_cols = ['open', 'high', 'low', 'close', 'volume', 'timestamp']
         if df[core_cols].isnull().any().any():
             raise ValueError("Data contains NaNs in core OHLCV columns.")
             
-        # Check chronological ordering
         if not df['timestamp'].is_monotonic_increasing:
             raise ValueError("Data is not in chronological order.")
             
-        # Check for duplicate timestamps
         if df['timestamp'].duplicated().any():
             raise ValueError("Data contains duplicate timestamps.")
             
-        # Check valid OHLC relationships
         invalid_ohlc = df[(df['high'] < df['low']) | 
                           (df['open'] > df['high']) | (df['open'] < df['low']) | 
                           (df['close'] > df['high']) | (df['close'] < df['low'])]
         if not invalid_ohlc.empty:
             raise ValueError(f"Data contains {len(invalid_ohlc)} invalid OHLC relationships.")
             
-        print("[VALIDATOR] Data integrity verified successfully.")
         return True
 
 class BacktestEngine:
     def __init__(self, df, strategies, fee_rate=0.001, slippage_rate=0.0005, 
-                 initial_balance=10000.0, risk_per_trade=0.01, max_open_trades=1):
+                 initial_balance=10000.0, risk_per_trade=0.01, max_open_trades=1,
+                 symbol="SIM", long_only=True, intrabar_resolution="conservative"):
         self.df = df
         self.strategies = strategies if isinstance(strategies, list) else [strategies]
         self.fee_rate = fee_rate
@@ -45,10 +40,14 @@ class BacktestEngine:
         self.equity = initial_balance
         self.risk_per_trade = risk_per_trade
         self.max_open_trades = max_open_trades
+        self.symbol = symbol
+        self.long_only = long_only
+        self.intrabar_resolution = intrabar_resolution
         
         self.open_trades = []
         self.trade_history = []
         self.equity_curve = []
+        self.rejected_trades = []
         
     def _calculate_qty(self, entry_price, sl_price):
         """Risk-based position sizing."""
@@ -56,21 +55,14 @@ class BacktestEngine:
         sl_distance = abs(entry_price - sl_price)
         
         if sl_distance == 0:
-            # Fallback if SL is exactly entry price (which shouldn't happen)
-            sl_distance = entry_price * 0.01
+            return 0.0
             
         raw_qty = risk_amount / sl_distance
-        
-        # In a real bot, we'd apply Binance lot size step filters here.
-        # For backtesting, we truncate to 4 decimal places.
         qty = np.floor(raw_qty * 10000) / 10000.0
         
-        # Max leverage check (prevent buying more than we have equity for on spot, or limit leverage)
-        # Assuming spot trading (no leverage): max qty = equity / entry_price
         max_spot_qty = self.equity / entry_price
         qty = min(qty, max_spot_qty)
         
-        # Min qty check (e.g. $10 min notional)
         if qty * entry_price < 10.0:
             return 0.0
             
@@ -78,30 +70,25 @@ class BacktestEngine:
 
     def run(self):
         """Runs the bar-by-bar simulation."""
-        print(f"[ENGINE] Starting backtest. Initial Balance: ${self.initial_balance:.2f}")
         DataValidator.validate(self.df)
         
-        # Warmup period for indicators
         warmup = 200
         if len(self.df) <= warmup:
-            print("[ENGINE] Dataset too short for warmup.")
-            return
+            return [], pd.DataFrame()
             
         for i in range(warmup, len(self.df)):
             current_bar = self.df.iloc[i]
             timestamp = current_bar['timestamp']
             
-            # 1. Update Open Trades (Check for SL/TP hits on CURRENT bar)
+            # 1. Update Open Trades
             self._update_open_trades(current_bar, timestamp)
             
             # 2. Update Equity
             self._update_equity(current_bar)
             self.equity_curve.append({'timestamp': timestamp, 'equity': self.equity})
             
-            # 3. Generate Signals if we have capacity
+            # 3. Generate Signals
             if len(self.open_trades) < self.max_open_trades:
-                # We strictly use data UP TO the current bar (inclusive) for signal generation
-                # In live trading, this simulates evaluating at the close of the bar.
                 window = self.df.iloc[i-100 : i+1]
                 
                 best_signal = None
@@ -112,8 +99,6 @@ class BacktestEngine:
                 for strat in self.strategies:
                     sig, sl, tp = strat.get_signal(window)
                     if sig:
-                        # In this simple iteration, we take the first signal generated
-                        # Multi-strategy can handle its own logic
                         best_signal = sig
                         best_sl = sl
                         best_tp = tp
@@ -121,49 +106,55 @@ class BacktestEngine:
                         break
                 
                 if best_signal:
-                    entry_price = current_bar['close']
-                    
-                    # Apply slippage on entry
-                    if best_signal == 'BUY':
-                        entry_price *= (1 + self.slippage_rate)
-                    else:
-                        entry_price *= (1 - self.slippage_rate)
+                    if self.long_only and best_signal == 'SELL':
+                        self.rejected_trades.append({"time": timestamp, "reason": "LONG_ONLY active. Ignored SELL."})
+                        continue
                         
-                    qty = self._calculate_qty(entry_price, best_sl)
+                    theoretical_entry = current_bar['close']
+                    
+                    if best_signal == 'BUY':
+                        actual_entry = theoretical_entry * (1 + self.slippage_rate)
+                        # Validation
+                        if not (best_sl < actual_entry < best_tp):
+                            self.rejected_trades.append({"time": timestamp, "reason": "Invalid SL/TP after BUY slippage."})
+                            continue
+                    else:
+                        actual_entry = theoretical_entry * (1 - self.slippage_rate)
+                        # Validation
+                        if not (best_sl > actual_entry > best_tp):
+                            self.rejected_trades.append({"time": timestamp, "reason": "Invalid SL/TP after SELL slippage."})
+                            continue
+                            
+                    qty = self._calculate_qty(actual_entry, best_sl)
                     
                     if qty > 0:
-                        fee = entry_price * qty * self.fee_rate
+                        fee = actual_entry * qty * self.fee_rate
                         
                         trade = {
                             'trade_id': str(uuid.uuid4())[:8],
                             'strategy': source_strat,
-                            'symbol': 'SIM', # Replace if tracking multiple
+                            'symbol': self.symbol,
                             'side': best_signal,
                             'entry_time': timestamp,
-                            'entry_price': entry_price,
+                            'entry_price': actual_entry,
                             'quantity': qty,
                             'stop_loss': best_sl,
                             'take_profit': best_tp,
                             'entry_fee': fee
                         }
                         
-                        # Deduct entry fee immediately from balance
                         self.balance -= fee
                         self.open_trades.append(trade)
 
-        # Close out any remaining trades at the last close price
         if self.open_trades:
             last_bar = self.df.iloc[-1]
             last_time = last_bar['timestamp']
-            # We copy the list because we modify it in the loop
             for trade in list(self.open_trades):
                 self._close_trade(trade, last_bar['close'], last_time, 'TIME_EXIT')
 
-        print(f"[ENGINE] Backtest complete. Final Balance: ${self.balance:.2f}")
         return self.trade_history, pd.DataFrame(self.equity_curve)
 
     def _update_open_trades(self, bar, timestamp):
-        """Evaluates SL/TP against the high/low of the bar."""
         high = bar['high']
         low = bar['low']
         
@@ -182,17 +173,19 @@ class BacktestEngine:
                 if high >= sl: sl_hit = True
                 if low <= tp: tp_hit = True
                 
-            # Resolution logic
             if sl_hit and tp_hit:
-                # Conservative: assume SL was hit first
-                self._close_trade(trade, sl, timestamp, 'SL_HIT')
+                if self.intrabar_resolution == "conservative":
+                    self._close_trade(trade, sl, timestamp, 'SL_HIT')
+                elif self.intrabar_resolution == "optimistic":
+                    self._close_trade(trade, tp, timestamp, 'TP_HIT')
+                else:
+                    self._close_trade(trade, sl, timestamp, 'SL_HIT')
             elif sl_hit:
                 self._close_trade(trade, sl, timestamp, 'SL_HIT')
             elif tp_hit:
                 self._close_trade(trade, tp, timestamp, 'TP_HIT')
 
     def _update_equity(self, bar):
-        """Updates MTM equity based on open positions and current close."""
         close = bar['close']
         unrealized_pnl = 0
         for t in self.open_trades:
@@ -204,8 +197,6 @@ class BacktestEngine:
         self.equity = self.balance + unrealized_pnl
 
     def _close_trade(self, trade, exit_price, timestamp, reason):
-        """Closes a trade, applies fees/slippage, calculates PnL and R-multiple."""
-        # Apply slippage on exit (worse price)
         if trade['side'] == 'BUY':
             exit_price *= (1 - self.slippage_rate)
         else:
@@ -221,17 +212,14 @@ class BacktestEngine:
             
         net_pnl = gross_pnl - total_fees
         
-        self.balance += net_pnl
+        # Deduct ONLY the exit fee from balance, as entry fee was already deducted
+        self.balance += (gross_pnl - exit_fee)
         
-        # Calculate R-Multiple
         sl_distance = abs(trade['entry_price'] - trade['stop_loss'])
         r_multiple = (exit_price - trade['entry_price']) / sl_distance if sl_distance > 0 else 0
         if trade['side'] == 'SELL':
             r_multiple = -r_multiple
             
-        # Slippage accounting for record
-        # Approximation of slippage dollar cost:
-        # Slippage cost = qty * entry_price * slippage_rate + qty * exit_price * slippage_rate
         slippage_cost = (trade['entry_price'] * trade['quantity'] * self.slippage_rate) + (exit_price * trade['quantity'] * self.slippage_rate)
             
         completed_trade = {
@@ -252,7 +240,7 @@ class BacktestEngine:
             'net_pnl': net_pnl,
             'result': 'WIN' if net_pnl > 0 else 'LOSS',
             'reason': reason,
-            'holding_time': (timestamp - trade['entry_time']).total_seconds() / 60.0, # minutes
+            'holding_time': (timestamp - trade['entry_time']).total_seconds() / 60.0,
             'r_multiple': r_multiple
         }
         

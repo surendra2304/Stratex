@@ -78,7 +78,7 @@ def test_losing_sell():
     signals = [("SELL", 105, 90)]
     strat = MockStrategy(signals)
     
-    engine = BacktestEngine(df, strat, fee_rate=0, slippage_rate=0)
+    engine = BacktestEngine(df, strat, fee_rate=0, slippage_rate=0, long_only=False)
     trades, equity = engine.run()
     
     assert len(trades) == 1
@@ -110,7 +110,7 @@ def test_position_sizing_max_open():
     rows = [[100, 100, 100, 100]] * 200
     rows.append([100, 105, 95, 100]) # Entry 1
     rows.append([100, 104, 95, 100]) # Bar where Entry 2 would happen if max_open=2
-    rows.append([100, 110, 95, 105]) # TP for Entry 1
+    rows.append([100, 110, 95, 100]) # TP for Entry 1
     
     df = create_mock_data(rows)
     signals = [("BUY", 90, 105), ("BUY", 90, 105), (None, None, None)]
