@@ -271,24 +271,41 @@ class PaperPortfolio:
             return
         try:
             with open(self.filename, 'r') as f:
-                data = json.load(f)
-                self.starting_capital = data.get("starting_capital", STARTING_PAPER_CAPITAL)
-                self.cash = data.get("cash", STARTING_PAPER_CAPITAL)
-                self.realized_pnl = data.get("realized_pnl", 0.0)
-                self.used_margin = data.get("used_margin", 0.0)
-                
-                self.cumulative_fees = data.get("cumulative_fees", 0.0)
-                self.cumulative_slippage = data.get("cumulative_slippage", 0.0)
-                self.cumulative_spread = data.get("cumulative_spread", 0.0)
-                self.cumulative_funding = data.get("cumulative_funding", 0.0)
-                
-                self.positions = data.get("positions", {})
-                self.peak_equity = data.get("peak_equity", STARTING_PAPER_CAPITAL)
-                self.daily_loss = data.get("daily_loss", 0.0)
-                self.daily_realized_pnl = data.get("daily_realized_pnl", 0.0)
-                self.daily_fees = data.get("daily_fees", 0.0)
-                self.daily_funding = data.get("daily_funding", 0.0)
-                self.last_day_ts = data.get("last_day_ts", self._get_day_start(time.time()))
-                self.processed_event_ids = set(data.get("processed_event_ids", []))
-        except:
-            pass
+                raw = f.read().strip()
+            if not raw or raw in ("null", "[]", ""):
+                from paper_engine.exceptions import StateCorruptionError
+                raise StateCorruptionError(
+                    f"Portfolio file '{self.filename}' is empty or null — "
+                    "cannot distinguish between corruption and a genuine zero state."
+                )
+            data = json.loads(raw)
+            if not isinstance(data, dict):
+                from paper_engine.exceptions import StateCorruptionError
+                raise StateCorruptionError(
+                    f"Portfolio file '{self.filename}' does not contain a JSON object — "
+                    f"got {type(data).__name__}."
+                )
+            self.starting_capital = data.get("starting_capital", STARTING_PAPER_CAPITAL)
+            self.cash = data.get("cash", STARTING_PAPER_CAPITAL)
+            self.realized_pnl = data.get("realized_pnl", 0.0)
+            self.used_margin = data.get("used_margin", 0.0)
+
+            self.cumulative_fees = data.get("cumulative_fees", 0.0)
+            self.cumulative_slippage = data.get("cumulative_slippage", 0.0)
+            self.cumulative_spread = data.get("cumulative_spread", 0.0)
+            self.cumulative_funding = data.get("cumulative_funding", 0.0)
+
+            self.positions = data.get("positions", {})
+            self.peak_equity = data.get("peak_equity", STARTING_PAPER_CAPITAL)
+            self.daily_loss = data.get("daily_loss", 0.0)
+            self.daily_realized_pnl = data.get("daily_realized_pnl", 0.0)
+            self.daily_fees = data.get("daily_fees", 0.0)
+            self.daily_funding = data.get("daily_funding", 0.0)
+            self.last_day_ts = data.get("last_day_ts", self._get_day_start(time.time()))
+            self.processed_event_ids = set(data.get("processed_event_ids", []))
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            from paper_engine.exceptions import StateCorruptionError
+            raise StateCorruptionError(
+                f"Portfolio file '{self.filename}' is corrupted and cannot be loaded safely: {e}"
+            ) from e
+
