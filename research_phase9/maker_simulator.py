@@ -6,8 +6,9 @@ class MakerSimulator:
     Part 6 & 7: Realistic Maker Execution Simulator
     Models limit orders resting in the order book.
     """
-    def __init__(self, cost_engine):
-        self.cost = cost_engine
+    def __init__(self, maker_cost_engine, taker_cost_engine):
+        self.maker_cost = maker_cost_engine
+        self.taker_cost = taker_cost_engine
         
     def simulate_maker_trade(self, entry_price, direction, subsequent_data, pt_pct, sl_pct, timeout_limit):
         """
@@ -85,10 +86,10 @@ class MakerSimulator:
         # 3. Apply Costs
         if exit_status == "HIT_PT_MAKER":
             # Maker entry + Maker exit
-            net_pnl = gross_pnl_pct - (self.cost.entry_fee + self.cost.exit_fee)
+            net_pnl = gross_pnl_pct - (self.maker_cost.entry_fee + self.maker_cost.exit_fee)
         elif exit_status == "HIT_SL_TAKER":
             # Maker entry + Taker exit (we pay slippage on the Taker stop loss)
-            net_pnl = gross_pnl_pct - (self.cost.entry_fee + 0.001 + 0.0005) # Assume 0.1% taker fee + 0.05% slip
+            net_pnl = gross_pnl_pct - (self.maker_cost.entry_fee + self.taker_cost.exit_fee + self.taker_cost.exit_slip)
         else: # TIMEOUT
             # If timeout, we must market close
             final_price = subsequent_data.iloc[min(len(subsequent_data)-1, fill_idx + timeout_limit)]['close']
@@ -96,7 +97,7 @@ class MakerSimulator:
                 gross_pnl_pct = (final_price - entry_price) / entry_price
             else:
                 gross_pnl_pct = (entry_price - final_price) / entry_price
-            net_pnl = gross_pnl_pct - (self.cost.entry_fee + 0.001 + 0.0005)
+            net_pnl = gross_pnl_pct - (self.maker_cost.entry_fee + self.taker_cost.exit_fee + self.taker_cost.exit_slip)
             
         return {
             "status": exit_status,

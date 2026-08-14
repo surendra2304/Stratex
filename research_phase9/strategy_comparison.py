@@ -84,7 +84,11 @@ def run_strategy_comparison():
         f.write("### Strategic Pivot Classification\n\n")
         
         def grade(res_key):
-            if results[res_key].get('viable') or results[res_key].get('net_expectancy', -1) > 0:
+            res = results.get(res_key, {})
+            viable = res.get('viable', False)
+            if res_key == 'PAIRS_TRADING' and not res.get('stationary', False):
+                return "C - Inconclusive (Not statistically cointegrated)"
+            if viable or res.get('net_expectancy', -1) > 0:
                 return "A - Strong Candidate"
             else:
                 return "D - Reject (Negative Net Expectancy)"
@@ -92,9 +96,9 @@ def run_strategy_comparison():
         f.write(f"1. Directional Taker: D - Reject\n")
         f.write(f"2. Market Making: {grade('MARKET_MAKING')}\n")
         if fund_res['status'] == 'AVAILABLE':
-            f.write(f"3. Funding Arbitrage: {'A - Strong Candidate' if fund_res['viable'] else 'D - Reject'}\n")
+            f.write(f"3. Funding Arbitrage: {grade('FUNDING_ARBITRAGE')}\n")
         if pairs_res['status'] == 'AVAILABLE':
-            f.write(f"4. Pairs Trading: {'A - Strong Candidate' if pairs_res['viable'] else 'D - Reject'}\n")
+            f.write(f"4. Pairs Trading: {grade('PAIRS_TRADING')}\n")
             
         f.write("\n### Conclusion\n")
         f.write("The fundamental limitation of crypto algorithmic trading on small timeframes is the fee-to-volatility ratio. ")
