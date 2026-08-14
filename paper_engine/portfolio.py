@@ -239,30 +239,32 @@ class PaperPortfolio:
         return max_dd
 
     def _save(self):
-        data = {
-            "starting_capital": self.starting_capital,
-            "cash": self.cash,
-            "realized_pnl": self.realized_pnl,
-            "used_margin": self.used_margin,
-            "cumulative_fees": self.cumulative_fees,
-            "cumulative_slippage": self.cumulative_slippage,
-            "cumulative_spread": self.cumulative_spread,
-            "cumulative_funding": self.cumulative_funding,
-            "positions": self.positions,
-            "peak_equity": self.peak_equity,
-            "daily_loss": self.daily_loss,
-            "daily_realized_pnl": self.daily_realized_pnl,
-            "daily_fees": self.daily_fees,
-            "daily_funding": self.daily_funding,
-            "last_day_ts": self.last_day_ts,
-            "processed_event_ids": list(self.processed_event_ids)
-        }
-        os.makedirs(os.path.dirname(self.filename) or '.', exist_ok=True)
-        # atomic write
-        tmp = self.filename + ".tmp"
-        with open(tmp, 'w') as f:
-            json.dump(data, f, indent=4)
-        os.replace(tmp, self.filename)
+        try:
+            data = {
+                "starting_capital": self.starting_capital,
+                "cash": self.cash,
+                "realized_pnl": self.realized_pnl,
+                "used_margin": self.used_margin,
+                "cumulative_fees": self.cumulative_fees,
+                "cumulative_slippage": self.cumulative_slippage,
+                "cumulative_spread": self.cumulative_spread,
+                "cumulative_funding": self.cumulative_funding,
+                "positions": self.positions,
+                "peak_equity": self.peak_equity,
+                "daily_loss": self.daily_loss,
+                "daily_realized_pnl": self.daily_realized_pnl,
+                "daily_fees": self.daily_fees,
+                "daily_funding": self.daily_funding,
+                "last_day_ts": self.last_day_ts,
+                "processed_event_ids": list(self.processed_event_ids)
+            }
+            tmp_file = self.filename + ".tmp"
+            with open(tmp_file, "w") as f:
+                json.dump(data, f, indent=4)
+            os.replace(tmp_file, self.filename)
+        except Exception as e:
+            from paper_engine.exceptions import PersistenceError
+            raise PersistenceError(f"Failed to atomically save portfolio: {e}")
 
     def _load(self):
         if not os.path.exists(self.filename):

@@ -1,0 +1,9 @@
+{
+    "session_id": "563416d8-7820-4c59-bb93-4a18ee815bef",
+    "status": "STOPPED",
+    "start_time": 1786723331.0256238,
+    "end_time": 1786723474.2289932,
+    "config_snapshot": {
+        "mode": "SIMULATION"
+    }
+}

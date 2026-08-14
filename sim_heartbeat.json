@@ -1,0 +1,37 @@
+{
+    "Bot": {
+        "last_success": 0.0,
+        "last_error": 0.0,
+        "status": "UNKNOWN"
+    },
+    "Market Data": {
+        "last_success": 1786723474.2270405,
+        "last_error": 0.0,
+        "status": "OK"
+    },
+    "Strategy": {
+        "last_success": 0.0,
+        "last_error": 0.0,
+        "status": "UNKNOWN"
+    },
+    "Execution": {
+        "last_success": 0.0,
+        "last_error": 0.0,
+        "status": "UNKNOWN"
+    },
+    "Portfolio": {
+        "last_success": 0.0,
+        "last_error": 0.0,
+        "status": "UNKNOWN"
+    },
+    "Persistence": {
+        "last_success": 0.0,
+        "last_error": 0.0,
+        "status": "UNKNOWN"
+    },
+    "Dashboard": {
+        "last_success": 0.0,
+        "last_error": 0.0,
+        "status": "UNKNOWN"
+    }
+}

@@ -119,82 +119,122 @@ def get_status():
     from config import TRADING_MODE
     import time
     
-    bot_health = "UNKNOWN"
-    data_health = "UNKNOWN"
-    
-    if TRADING_MODE == "PAPER":
-        bot_health = "OK"  
-        data_health = "OK"
+    if TRADING_MODE != "PAPER":
+        return jsonify({
+            "mode": TRADING_MODE,
+            "bot_health": "UNKNOWN",
+            "data_health": "UNKNOWN",
+            "equity": 0,
+            "cash": 0,
+            "realized_pnl": 0,
+            "unrealized_pnl": 0,
+            "open_positions": 0
+        })
+        
+    try:
+        from paper_engine.heartbeat import HeartbeatState
+        hb = HeartbeatState()
+        components = hb.components
+        overall = hb.get_overall_health().value
+    except Exception as e:
+        from logger import get_logger
+        get_logger("dashboard").error(f"Failed to read heartbeat: {e}")
+        components = {}
+        overall = "UNKNOWN"
+        
+    try:
+        from paper_engine.session import SessionState
+        session = SessionState()
+        session_info = {
+            "id": session.session_id,
+            "status": session.status,
+            "start": session.start_time
+        }
+    except Exception as e:
+        from logger import get_logger
+        get_logger("dashboard").error(f"Failed to read session: {e}")
+        session_info = {"status": "UNKNOWN"}
+        
+    try:
+        from paper_engine.alerts import AlertManager
+        alert_mgr = AlertManager()
+        alerts = [v for k, v in alert_mgr.active_alerts.items()]
+    except Exception as e:
+        from logger import get_logger
+        get_logger("dashboard").error(f"Failed to read alerts: {e}")
+        alerts = []
+        
+    equity = 0.0
+    cash = 0.0
+    realized_pnl = 0.0
+    unrealized_pnl = 0.0
+    fees = 0.0
+    funding = 0.0
+    used_margin = 0.0
+    open_positions = 0
+    mdd = 0.0
+
+    if os.path.exists("paper_portfolio.json"):
         try:
-            from paper_engine.heartbeat import HeartbeatState
-            hb = HeartbeatState()
-            b_health, d_health = hb.get_status()
-            if b_health != "UNKNOWN":
-                bot_health = b_health
-            if d_health != "UNKNOWN":
-                data_health = d_health
-        except:
-            pass
-        if os.path.exists("paper_portfolio.json"):
+            import json
+            with open("paper_portfolio.json", "r") as f:
+                port = json.load(f)
+            
+            # Fetch recent market prices to compute true equity
+            current_price = 0.0
             try:
-                import json
-                with open("paper_portfolio.json", "r") as f:
-                    port = json.load(f)
-                
-                # Fetch recent market prices to compute true equity
-                try:
-                    from data import get_candles
-                    df = get_candles("BTCUSDT", "1m", 1)
-                    current_price = df['close'].iloc[-1] if not df.empty else 0.0
-                except:
-                    current_price = 0.0
-                
-                # Compute unrealized
-                unrealized = 0.0
-                for pos in port.get("positions", {}).values():
-                    if pos['status'] == "OPEN" and current_price > 0:
-                        if pos['direction'] in ["LONG", "BUY"]:
-                            unrealized += (current_price - pos['entry_price']) * pos['quantity']
-                        else:
-                            unrealized += (pos['entry_price'] - current_price) * pos['quantity']
-                            
-                cash = port.get("cash", 0)
-                equity = cash + unrealized
-                
-                try:
-                    from paper_engine.portfolio import PaperPortfolio
-                    temp_port = PaperPortfolio("paper_portfolio.json")
-                    mdd = temp_port.get_max_drawdown() * 100
-                except Exception as e:
-                    mdd = 0.0
-                
-                return jsonify({
-                    "mode": TRADING_MODE,
-                    "bot_health": bot_health,
-                    "data_health": data_health,
-                    "equity": equity,
-                    "cash": cash,
-                    "realized_pnl": port.get("realized_pnl", 0),
-                    "unrealized_pnl": unrealized,
-                    "fees": port.get("cumulative_fees", 0),
-                    "funding": port.get("cumulative_funding", 0),
-                    "used_margin": port.get("used_margin", 0),
-                    "open_positions": len([p for p in port.get("positions", {}).values() if p["status"] == "OPEN"]),
-                    "max_drawdown": mdd
-                })
+                from data import get_candles
+                df = get_candles("BTCUSDT", "1m", 1)
+                if not df.empty:
+                    current_price = df['close'].iloc[-1]
             except Exception as e:
-                pass
-    
-    # Fallback / Testnet / Error
+                from logger import get_logger
+                get_logger("dashboard").warning(f"Failed to fetch live price for equity calc: {e}")
+            
+            # Compute unrealized
+            for pos in port.get("positions", {}).values():
+                if pos['status'] == "OPEN" and current_price > 0:
+                    if pos['direction'] in ["LONG", "BUY"]:
+                        unrealized_pnl += (current_price - pos['entry_price']) * pos['quantity']
+                    else:
+                        unrealized_pnl += (pos['entry_price'] - current_price) * pos['quantity']
+                        
+            cash = port.get("cash", 0.0)
+            equity = cash + unrealized_pnl
+            realized_pnl = port.get("realized_pnl", 0.0)
+            fees = port.get("cumulative_fees", 0.0)
+            funding = port.get("cumulative_funding", 0.0)
+            used_margin = port.get("used_margin", 0.0)
+            open_positions = len([p for p in port.get("positions", {}).values() if p["status"] == "OPEN"])
+            
+            try:
+                from paper_engine.portfolio import PaperPortfolio
+                temp_port = PaperPortfolio("paper_portfolio.json")
+                mdd = temp_port.get_max_drawdown() * 100
+            except Exception as e:
+                from logger import get_logger
+                get_logger("dashboard").error(f"Failed to compute drawdown: {e}")
+                
+        except Exception as e:
+            from logger import get_logger
+            get_logger("dashboard").error(f"Failed to process portfolio for dashboard: {e}")
+            overall = "CRITICAL" # We can't read the portfolio!
+
     return jsonify({
         "mode": TRADING_MODE,
-        "bot_health": "UNKNOWN",
-        "data_health": "UNKNOWN",
-        "equity": 0,
-        "cash": 0,
-        "realized_pnl": 0,
-        "unrealized_pnl": 0,
-        "open_positions": 0
+        "overall_health": overall,
+        "components": components,
+        "session": session_info,
+        "alerts": alerts,
+        "equity": equity,
+        "cash": cash,
+        "realized_pnl": realized_pnl,
+        "unrealized_pnl": unrealized_pnl,
+        "fees": fees,
+        "funding": funding,
+        "used_margin": used_margin,
+        "open_positions": open_positions,
+        "max_drawdown": mdd
     })
 
 @app.route('/api/trades')
@@ -236,8 +276,9 @@ def get_trades():
                             "pnl": pnl,
                             "matched": True
                         })
-                    except:
-                        pass
+                    except Exception as e:
+                        from logger import get_logger
+                        get_logger("dashboard").error(f"Failed parsing ledger line: {e}")
         
         # 2. Add open positions from portfolio
         if os.path.exists("paper_portfolio.json"):
@@ -258,8 +299,9 @@ def get_trades():
                             "pnl": 0.0, # Unrealized
                             "matched": False
                         })
-            except:
-                pass
+            except Exception as e:
+                from logger import get_logger
+                get_logger("dashboard").error(f"Failed to read portfolio for trades: {e}")
                 
         positions.sort(key=lambda x: x["timestamp"], reverse=True)
         total_closed = wins + losses

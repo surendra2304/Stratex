@@ -21,6 +21,8 @@ def test_get_open_orders():
         assert count_sol == 0
 
 @patch("execution.TRADING_MODE", "TESTNET")
+@patch("execution.TESTNET_ENABLED", True)
+@patch("execution.PAPER_SAFE_MODE", False)
 @patch("execution.client")
 @patch("execution._save_active_trades")
 @patch("execution._load_active_trades", return_value=[])

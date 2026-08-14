@@ -91,14 +91,14 @@ def test_phase11_1_acceptance():
     
     # 7. Heartbeat
     hb = HeartbeatState(filename="test_heartbeat.json", timeout_seconds=1)
-    hb.ping_process()
-    hb.ping_data()
-    bh, dh = hb.get_status()
-    assert bh == "OK" and dh == "OK"
+    hb.ping("Bot")
+    hb.ping("Market Data")
+    bh = hb.get_overall_health()
+    assert bh.value == "HEALTHY"
     
     time.sleep(1.5)
-    bh2, dh2 = hb.get_status()
-    assert bh2 == "OFFLINE" and dh2 == "STALE"
+    bh2 = hb.get_overall_health()
+    assert bh2.value == "OFFLINE"
     
     # 8. Funding Simulator
     f_sim = FundingPaperSimulator(port, md, cost)

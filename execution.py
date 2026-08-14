@@ -5,8 +5,10 @@ import json
 import os
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
-from config import API_KEY, SECRET_KEY, TRADE_QTY, TRADING_MODE
-from logger import log_trade
+from config import API_KEY, SECRET_KEY, TRADE_QTY, TRADING_MODE, PAPER_SAFE_MODE, TESTNET_ENABLED, LIVE_TRADING_ENABLED
+from logger import log_trade, get_logger
+
+sys_logger = get_logger("execution")
 
 if TRADING_MODE == "PAPER":
     client = None
@@ -37,11 +39,17 @@ def get_open_orders(symbol):
 
 def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None, tp=None):
     """Places a market order and immediately sets SL/TP via an OCO order."""
-    if TRADING_MODE == "PAPER":
+    if TRADING_MODE == "PAPER" or PAPER_SAFE_MODE:
         raise RuntimeError("CRITICAL ERROR: PAPER mode attempted to place a real Binance order.")
         
     if os.environ.get("RESEARCH_MODE") == "1":
         raise RuntimeError("CRITICAL ERROR: Real execution attempted from a research script.")
+        
+    if TRADING_MODE == "TESTNET" and not TESTNET_ENABLED:
+        raise RuntimeError("CRITICAL ERROR: TESTNET execution attempted but TESTNET_ENABLED is false.")
+        
+    if TRADING_MODE == "LIVE" and not LIVE_TRADING_ENABLED:
+        raise RuntimeError("CRITICAL ERROR: LIVE execution attempted but LIVE_TRADING_ENABLED is false.")
         
     try:
         # 1. Place the entry Market order
@@ -54,7 +62,7 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         )
         order_id = order.get("orderId", "N/A")
         price = float(order.get("fills", [{}])[0].get("price", 0)) if order.get("fills") else 0
-        print(f"[{strategy_name}] ✅ {side} order placed! Price: {price:.2f}")
+        sys_logger.info(f"[{strategy_name}] ✅ {side} order placed! Price: {price:.2f}", extra={"strategy": strategy_name, "symbol": symbol})
 
         oco_id = None
         # 2. Place the OCO order for Take Profit and Stop Loss
@@ -74,7 +82,7 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                     stopLimitTimeInForce=Client.TIME_IN_FORCE_GTC
                 )
                 oco_id = oco_order.get("orderListId")
-                print(f"[{strategy_name}] 🛡️  SL/TP OCO order placed! SL: {sl_price} | TP: {tp_price}")
+                sys_logger.info(f"[{strategy_name}] 🛡️  SL/TP OCO order placed! SL: {sl_price} | TP: {tp_price}", extra={"strategy": strategy_name, "symbol": symbol})
                 
                 # Save to active trades for monitoring
                 active = _load_active_trades()
@@ -90,7 +98,7 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                 })
                 _save_active_trades(active)
             except BinanceAPIException as e:
-                print(f"[EXEC] 🚨 CRITICAL: OCO Order Failed! Attempting emergency close. Error: {e}")
+                sys_logger.error(f"[EXEC] 🚨 CRITICAL: OCO Order Failed! Attempting emergency close. Error: {e}", extra={"strategy": strategy_name, "symbol": symbol})
                 # EMERGENCY CLOSE: Close the unprotected market position immediately
                 try:
                     close_side = Client.SIDE_SELL if side == "BUY" else Client.SIDE_BUY
@@ -100,18 +108,18 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                         type=Client.ORDER_TYPE_MARKET,
                         quantity=quantity
                     )
-                    print(f"[{strategy_name}] 🛡️ Emergency close successful.")
+                    sys_logger.info(f"[{strategy_name}] 🛡️ Emergency close successful.", extra={"strategy": strategy_name, "symbol": symbol})
                 except Exception as ce:
-                    print(f"[EXEC] 🚨 FATAL: Emergency close failed! Unprotected position active. Error: {ce}")
+                    sys_logger.critical(f"[EXEC] 🚨 FATAL: Emergency close failed! Unprotected position active. Error: {ce}", extra={"strategy": strategy_name, "symbol": symbol})
                 return None
 
         log_trade(strategy_name, symbol, side, quantity, price, sl, tp, order_id, "FILLED")
         return order
     except BinanceAPIException as e:
-        print(f"[EXEC] ❌ Binance API Error placing entry order: {e}")
+        sys_logger.error(f"[EXEC] ❌ Binance API Error placing entry order: {e}", extra={"strategy": strategy_name, "symbol": symbol})
         return None
     except Exception as e:
-        print(f"[EXEC] ❌ Unexpected error placing entry order: {e}")
+        sys_logger.error(f"[EXEC] ❌ Unexpected error placing entry order: {e}", extra={"strategy": strategy_name, "symbol": symbol})
         return None
 
 def monitor_open_trades():
@@ -148,12 +156,12 @@ def monitor_open_trades():
                 result = "WIN" if tp_filled else "LOSS"
                 pnl = (close_price - t["entry_price"]) * t["quantity"] if t["side"] == "BUY" else (t["entry_price"] - close_price) * t["quantity"]
                 
-                print(f"[MONITOR] Trade Closed: {result}! PnL: ${pnl:.2f}")
+                sys_logger.info(f"[MONITOR] Trade Closed: {result}! PnL: ${pnl:.2f}", extra={"strategy": t["strategy"], "symbol": t["symbol"]})
                 # Log to CSV
                 log_trade(t["strategy"], t["symbol"], f"{t['side']}_CLOSE_{result}", t["quantity"], close_price, t["sl_price"], t["tp_price"], t["oco_id"], f"CLOSED_{result}")
             
             elif status in ["REJECT", "CANCELED", "EXPIRED"]:
-                print(f"[MONITOR] 🚨 OCO Order {t['oco_id']} was {status}! Position may be unprotected.")
+                sys_logger.warning(f"[MONITOR] 🚨 OCO Order {t['oco_id']} was {status}! Position may be unprotected.", extra={"strategy": t["strategy"], "symbol": t["symbol"]})
                 log_trade(t["strategy"], t["symbol"], f"{t['side']}_UNKNOWN_{status}", t["quantity"], t["entry_price"], t["sl_price"], t["tp_price"], t["oco_id"], f"OCO_{status}")
                 # Do not keep it in remaining trades, but user needs to manually resolve
             
@@ -161,12 +169,12 @@ def monitor_open_trades():
                 remaining_trades.append(t)
         except BinanceAPIException as e:
             if "Order does not exist" in str(e):
-                 print(f"[MONITOR] OCO {t['oco_id']} missing from exchange. Purging from local state.")
+                 sys_logger.warning(f"[MONITOR] OCO {t['oco_id']} missing from exchange. Purging from local state.", extra={"strategy": t["strategy"], "symbol": t["symbol"]})
                  log_trade(t["strategy"], t["symbol"], f"{t['side']}_UNKNOWN", t["quantity"], t["entry_price"], t["sl_price"], t["tp_price"], t["oco_id"], "MISSING_EXCHANGE")
             else:
                  remaining_trades.append(t)
         except Exception as e:
-            print(f"[MONITOR] Error checking OCO {t['oco_id']}: {e}")
+            sys_logger.error(f"[MONITOR] Error checking OCO {t['oco_id']}: {e}", extra={"strategy": t["strategy"], "symbol": t["symbol"]})
             remaining_trades.append(t)
             
     _save_active_trades(remaining_trades)
@@ -181,5 +189,5 @@ def get_account_balance():
         balances = {b["asset"]: float(b["free"]) for b in account["balances"] if float(b["free"]) > 0}
         return balances
     except Exception as e:
-        print(f"[EXEC] Error fetching balance: {e}")
+        sys_logger.error(f"[EXEC] Error fetching balance: {e}")
         return {}
