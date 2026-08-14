@@ -17,6 +17,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='repla
 import strategy_scalper as scalper
 import strategy_swing   as swing
 import strategy_ml      as ml
+import strategy_aggressor as aggressor
 
 PYTHON_PATH = r"C:\Users\Surendra\AppData\Local\Programs\Python\Python311\python.exe"
 
@@ -36,9 +37,11 @@ def get_strategy_signal(df):
         return swing.get_signal(df)
     elif ACTIVE_STRATEGY == "ml":
         return ml.get_signal(df)
+    elif ACTIVE_STRATEGY == "aggressor":
+        return aggressor.get_signal(df)
     elif ACTIVE_STRATEGY == "multi":
         # Run all strategies and take the FIRST signal found
-        for name, strat in [("SCALPER", scalper), ("SWING", swing), ("ML", ml)]:
+        for name, strat in [("SCALPER", scalper), ("SWING", swing), ("ML", ml), ("AGGRESSOR", aggressor)]:
             sig, sl, tp = strat.get_signal(df)
             if sig:
                 print(f"[MULTI] Signal from {name}: {sig}")

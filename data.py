@@ -17,9 +17,15 @@ def get_candles(symbol=SYMBOL, interval=TIMEFRAME, limit=300):
             "close_time", "quote_volume", "trades", "taker_buy_base",
             "taker_buy_quote", "ignore"
         ])
-        df = df[["timestamp", "open", "high", "low", "close", "volume"]].copy()
-        df[["open","high","low","close","volume"]] = df[["open","high","low","close","volume"]].astype(float)
+        df = df[["timestamp", "open", "high", "low", "close", "volume", "taker_buy_base"]].copy()
+        df[["open","high","low","close","volume","taker_buy_base"]] = df[["open","high","low","close","volume","taker_buy_base"]].astype(float)
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        
+        # Calculate Volume Delta (Buy Volume - Sell Volume)
+        df["buy_vol"] = df["taker_buy_base"]
+        df["sell_vol"] = df["volume"] - df["buy_vol"]
+        df["vol_delta"] = df["buy_vol"] - df["sell_vol"]
+        
         return df
     except Exception as e:
         print(f"[DATA] Error fetching candles: {e}")

@@ -20,8 +20,9 @@ This project implements a complete algorithmic trading pipeline — from live ma
 |---|---|---|
 | **Scalper** | RSI + Bollinger Band mean reversion | High-frequency short bursts |
 | **Swing Trader** | MACD crossover filtered by 200 EMA | Medium-term trend following |
-| **ML Predictor** | Random Forest trained on live candle data | AI-driven directional bias |
-| **Multi-Strategy** | Runs all three simultaneously | Maximum signal coverage |
+| **ML Predictor** | XGBoost trained on live candle data | AI-driven directional bias |
+| **The Aggressor** | Volume Delta + Order Book Imbalance | High-frequency hyper-scalping |
+| **Multi-Strategy** | Runs all above simultaneously | Maximum signal coverage |
 
 ---
 
@@ -36,8 +37,11 @@ This project implements a complete algorithmic trading pipeline — from live ma
 ├── logger.py               # Structured trade logging to CSV
 ├── strategy_scalper.py     # High-frequency scalping strategy
 ├── strategy_swing.py       # Trend-following swing strategy
-├── strategy_ml.py          # Machine learning price direction model
+├── strategy_ml.py          # Machine learning (XGBoost) model
+├── strategy_aggressor.py   # High-frequency volume delta scalper
+├── backtester.py           # Engine to simulate trades on historical data
 ├── status_check.py         # Live market snapshot and health check
+├── deploy.sh               # Cloud VPS 24/7 deployment script
 ├── requirements.txt        # Dependencies
 └── .gitignore              # Keeps secrets out of version control
 ```
@@ -71,9 +75,23 @@ cp config_template.py config.py
 # Start the bot
 python bot.py
 
+# Run a historical backtest simulation
+python backtester.py
+
 # Check live market status and indicators
 python status_check.py
 ```
+
+### ☁️ Cloud Deployment (24/7)
+
+To run this bot 24/7 without keeping your computer on, deploy it to an Ubuntu VPS (AWS, DigitalOcean, etc.):
+
+```bash
+# Upload or clone to your VPS, then run:
+chmod +x deploy.sh
+./deploy.sh
+```
+This will automatically install dependencies and set up a systemd background service.
 
 ---
 
