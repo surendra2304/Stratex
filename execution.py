@@ -5,7 +5,7 @@ import json
 import os
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
-from config import API_KEY, SECRET_KEY, SYMBOL, TRADE_QTY
+from config import API_KEY, SECRET_KEY, TRADE_QTY
 from logger import log_trade
 
 client = Client(API_KEY, SECRET_KEY, testnet=True)
@@ -24,7 +24,7 @@ def _save_active_trades(trades):
     with open(ACTIVE_TRADES_FILE, "w") as f:
         json.dump(trades, f)
 
-def get_open_orders(symbol=SYMBOL):
+def get_open_orders(symbol):
     """Returns count of open positions/orders."""
     try:
         orders = client.get_open_orders(symbol=symbol)
@@ -33,7 +33,7 @@ def get_open_orders(symbol=SYMBOL):
         print(f"[EXEC] Error fetching open orders: {e}")
         return 0
 
-def place_market_order(strategy_name, side, symbol=SYMBOL, quantity=TRADE_QTY, sl=None, tp=None):
+def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None, tp=None):
     """Places a market order and immediately sets SL/TP via an OCO order."""
     try:
         # 1. Place the entry Market order

@@ -4,11 +4,24 @@
 import pandas as pd
 import ta
 from binance.client import Client
-from config import API_KEY, SECRET_KEY, BASE_URL, SYMBOL, TIMEFRAME
+from config import API_KEY, SECRET_KEY, BASE_URL, TIMEFRAME
 
 client = Client(API_KEY, SECRET_KEY, testnet=True)
 
-def get_candles(symbol=SYMBOL, interval=TIMEFRAME, limit=300):
+def get_top_gainers(limit=5):
+    """Fetches the top gaining USDT pairs from Binance Testnet in the last 24h."""
+    try:
+        tickers = client.get_ticker()
+        usdt_pairs = [t for t in tickers if t['symbol'].endswith('USDT')]
+        sorted_pairs = sorted(usdt_pairs, key=lambda x: float(x['priceChangePercent']), reverse=True)
+        top_symbols = [t['symbol'] for t in sorted_pairs[:limit]]
+        print(f"[DATA] Hot Coins Detected: {', '.join(top_symbols)}")
+        return top_symbols
+    except Exception as e:
+        print(f"[DATA] Error fetching top gainers: {e}")
+        return ["BTCUSDT", "ETHUSDT", "SOLUSDT"]  # Fallback
+
+def get_candles(symbol, interval=TIMEFRAME, limit=300):
     """Fetches the latest candles from Binance Testnet and returns a DataFrame."""
     try:
         raw = client.get_klines(symbol=symbol, interval=interval, limit=limit)
@@ -56,7 +69,7 @@ def add_indicators(df):
     df.reset_index(drop=True, inplace=True)
     return df
 
-def get_current_price(symbol=SYMBOL):
+def get_current_price(symbol):
     """Gets the latest ticker price."""
     try:
         ticker = client.get_symbol_ticker(symbol=symbol)

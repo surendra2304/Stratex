@@ -48,6 +48,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             const res = await fetch('/api/trades');
             const data = await res.json();
             
+            // Update Advanced Stats
+            document.getElementById('stat-trades').textContent = data.total_trades;
+            document.getElementById('stat-winrate').textContent = data.win_rate.toFixed(1) + '%';
+            document.getElementById('stat-winrate').style.color = data.win_rate >= 50 ? '#4caf50' : '#ef5350';
+            
+            document.getElementById('stat-pf').textContent = data.profit_factor.toFixed(2);
+            document.getElementById('stat-pf').style.color = data.profit_factor >= 1.5 ? '#4caf50' : (data.profit_factor >= 1 ? '#ff9800' : '#ef5350');
+            
             // Update Net PnL
             const pnlElement = document.getElementById('net-pnl-val');
             pnlElement.textContent = (data.net_pnl >= 0 ? '+$' : '-$') + Math.abs(data.net_pnl).toFixed(2);

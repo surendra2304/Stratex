@@ -3,7 +3,7 @@ import csv
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from binance.client import Client
-from config import API_KEY, SECRET_KEY, SYMBOL, TIMEFRAME
+from config import API_KEY, SECRET_KEY, TIMEFRAME
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
@@ -20,7 +20,7 @@ def serve_index():
 def get_candles():
     """Fetches live candles for the chart."""
     try:
-        raw = client.get_klines(symbol=SYMBOL, interval=TIMEFRAME, limit=500)
+        raw = client.get_klines(symbol="BTCUSDT", interval=TIMEFRAME, limit=500)
         formatted = []
         for c in raw:
             formatted.append({
@@ -65,12 +65,16 @@ def get_chart_trades():
 
 @app.route('/api/trades')
 def get_trades():
-    """Parses trade_log.csv to return paired positions and Net PnL."""
+    """Parses trade_log.csv to return paired positions and advanced stats."""
     if not os.path.exists(LOG_FILE):
-        return jsonify({"net_pnl": 0, "positions": []})
+        return jsonify({"net_pnl": 0, "win_rate": 0, "total_trades": 0, "profit_factor": 0, "positions": []})
         
     positions = []
     total_pnl = 0.0
+    wins = 0
+    losses = 0
+    gross_profit = 0.0
+    gross_loss = 0.0
     
     try:
         with open(LOG_FILE, 'r') as f:
@@ -94,14 +98,19 @@ def get_trades():
                     })
                 # Check if it's an exit
                 elif "CLOSE" in side:
-                    # Find the oldest unmatched position with the same symbol and correct side
-                    # If side is BUY_CLOSE_WIN, the entry was BUY. 
                     entry_side = side.split("_")[0] 
-                    
                     for p in positions:
                         if not p["matched"] and p["symbol"] == row["symbol"] and p["action"] == entry_side:
                             p["matched"] = True
-                            p["status"] = "WIN" if "WIN" in side else "LOSS"
+                            
+                            is_win = "WIN" in side
+                            p["status"] = "WIN" if is_win else "LOSS"
+                            
+                            if is_win:
+                                wins += 1
+                            else:
+                                losses += 1
+                                
                             # Calculate PnL
                             if p["action"] == "BUY":
                                 p["pnl"] = (price - p["entry_price"]) * p["quantity"]
@@ -109,11 +118,25 @@ def get_trades():
                                 p["pnl"] = (p["entry_price"] - price) * p["quantity"]
                                 
                             total_pnl += p["pnl"]
+                            if p["pnl"] > 0:
+                                gross_profit += p["pnl"]
+                            else:
+                                gross_loss += abs(p["pnl"])
+                                
                             break
                             
-        # Reverse to show newest positions first
         positions.reverse()
-        return jsonify({"net_pnl": total_pnl, "positions": positions})
+        total_closed = wins + losses
+        win_rate = (wins / total_closed * 100) if total_closed > 0 else 0
+        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0)
+        
+        return jsonify({
+            "net_pnl": total_pnl, 
+            "win_rate": win_rate,
+            "total_trades": total_closed,
+            "profit_factor": profit_factor,
+            "positions": positions
+        })
     except Exception as e:
         import traceback
         traceback.print_exc()

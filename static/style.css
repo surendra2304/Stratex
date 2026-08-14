@@ -215,3 +215,19 @@ tbody tr:hover td {
     font-weight: 700;
     font-size: 18px;
 }
+
+.stat-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-size: 11px;
+    color: #8b92a5;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-block strong {
+    font-size: 16px;
+    color: #d1d4dc;
+    margin-top: 4px;
+}
