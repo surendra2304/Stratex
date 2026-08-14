@@ -5,10 +5,13 @@ import json
 import os
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
-from config import API_KEY, SECRET_KEY, TRADE_QTY
+from config import API_KEY, SECRET_KEY, TRADE_QTY, TRADING_MODE
 from logger import log_trade
 
-client = Client(API_KEY, SECRET_KEY, testnet=True)
+if TRADING_MODE == "PAPER":
+    client = None
+else:
+    client = Client(API_KEY, SECRET_KEY, testnet=True)
 ACTIVE_TRADES_FILE = "active_trades.json"
 
 def _load_active_trades():
@@ -34,6 +37,9 @@ def get_open_orders(symbol):
 
 def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None, tp=None):
     """Places a market order and immediately sets SL/TP via an OCO order."""
+    if TRADING_MODE == "PAPER":
+        raise RuntimeError("CRITICAL ERROR: PAPER mode attempted to place a real Binance order.")
+        
     try:
         # 1. Place the entry Market order
         order_side = Client.SIDE_BUY if side == "BUY" else Client.SIDE_SELL
@@ -107,6 +113,9 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
 
 def monitor_open_trades():
     """Checks active OCO orders to see if SL or TP was hit."""
+    if TRADING_MODE == "PAPER":
+        return
+
     active = _load_active_trades()
     if not active:
         return
@@ -161,6 +170,9 @@ def monitor_open_trades():
 
 def get_account_balance():
     """Returns the USDT and BTC balance from testnet account."""
+    if TRADING_MODE == "PAPER":
+        return {"USDT": 10000.0}
+
     try:
         account = client.get_account()
         balances = {b["asset"]: float(b["free"]) for b in account["balances"] if float(b["free"]) > 0}

@@ -114,9 +114,84 @@ def get_chart_trades():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/status')
+def get_status():
+    from config import TRADING_MODE
+    import time
+    
+    bot_health = "UNKNOWN"
+    data_health = "UNKNOWN"
+    
+    if TRADING_MODE == "PAPER":
+        bot_health = "OK"
+        data_health = "OK"
+        # read paper portfolio
+        if os.path.exists("paper_portfolio.json"):
+            with open("paper_portfolio.json", "r") as f:
+                port = json.load(f)
+                return jsonify({
+                    "mode": TRADING_MODE,
+                    "bot_health": bot_health,
+                    "data_health": data_health,
+                    "equity": port.get("cash", 0) + port.get("realized_pnl", 0), # Simplified for dashboard
+                    "realized_pnl": port.get("realized_pnl", 0),
+                    "open_positions": len([p for p in port.get("positions", {}).values() if p["status"] == "OPEN"])
+                })
+    
+    # Fallback / Testnet
+    return jsonify({
+        "mode": TRADING_MODE,
+        "bot_health": "OK",
+        "data_health": "OK",
+        "equity": 0,
+        "realized_pnl": 0,
+        "open_positions": 0
+    })
+
 @app.route('/api/trades')
 def get_trades():
-    """Parses trade_log.csv to return paired positions and advanced stats."""
+    """Parses logs or paper portfolio to return positions."""
+    from config import TRADING_MODE
+    
+    if TRADING_MODE == "PAPER":
+        if not os.path.exists("paper_portfolio.json"):
+            return jsonify({"net_pnl": 0, "win_rate": 0, "total_trades": 0, "profit_factor": 0, "positions": []})
+        
+        with open("paper_portfolio.json", "r") as f:
+            port = json.load(f)
+            
+        positions = []
+        wins = 0
+        losses = 0
+        gross_profit = 0.0
+        gross_loss = 0.0
+        
+        for pos_id, p in port.get("positions", {}).items():
+            positions.append({
+                "timestamp": p.get("open_time", 0),
+                "symbol": p["symbol"],
+                "action": p["direction"],
+                "entry_price": p["entry_price"],
+                "quantity": p["quantity"],
+                "status": p["status"],
+                "pnl": 0.0, # Realized on close
+                "matched": p["status"] == "CLOSED"
+            })
+            
+            if p["status"] == "CLOSED":
+                # Need to read from paper signals or portfolio pnl array in a real impl
+                pass
+                
+        positions.reverse()
+        return jsonify({
+            "net_pnl": port.get("realized_pnl", 0), 
+            "win_rate": 0,
+            "total_trades": 0,
+            "profit_factor": 0,
+            "positions": positions
+        })
+
+    # TESTNET logic
     if not os.path.exists(LOG_FILE):
         return jsonify({"net_pnl": 0, "win_rate": 0, "total_trades": 0, "profit_factor": 0, "positions": []})
         

@@ -16,16 +16,19 @@
                 <span>Trades</span> <strong id="stat-trades">0</strong>
             </div>
             <div class="stat-block">
-                <span>Win Rate</span> <strong id="stat-winrate">0%</strong>
+                <span>Equity</span> <strong id="stat-equity">$0.00</strong>
             </div>
-            <div class="stat-block">
-                <span>Profit Factor</span> <strong id="stat-pf">0.0</strong>
+            <div class="stat-block" id="status-bot">
+                <span>Bot</span> <strong>OK</strong>
+            </div>
+            <div class="stat-block" id="status-data">
+                <span>Data</span> <strong>OK</strong>
             </div>
             <div class="net-pnl">
                 Net PnL: <span id="net-pnl-val">$0.00</span>
             </div>
-            <div class="status-indicator">
-                <span class="pulse"></span> LIVE
+            <div class="status-indicator" id="mode-indicator">
+                <span class="pulse"></span> <span id="trading-mode-label">PAPER</span>
             </div>
             <div class="view-toggle">
                 <button id="btn-table" class="toggle-btn active">Ledger</button>

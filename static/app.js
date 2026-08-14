@@ -56,7 +56,36 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('stat-pf').textContent = data.profit_factor.toFixed(2);
             document.getElementById('stat-pf').style.color = data.profit_factor >= 1.5 ? '#4caf50' : (data.profit_factor >= 1 ? '#ff9800' : '#ef5350');
             
-            // Update Net PnL
+            // Fetch Status
+            try {
+                const statusRes = await fetch('/api/status');
+                const statusData = await statusRes.json();
+                
+                document.getElementById('trading-mode-label').textContent = statusData.mode;
+                const mi = document.getElementById('mode-indicator');
+                if (statusData.mode === "PAPER") {
+                    mi.style.color = "#2196F3"; // Blue for paper
+                } else if (statusData.mode === "LIVE") {
+                    mi.style.color = "#ef5350"; // Red for live
+                } else {
+                    mi.style.color = "#ff9800"; // Orange for testnet
+                }
+                
+                document.getElementById('stat-equity').textContent = '$' + statusData.equity.toFixed(2);
+                
+                const sb = document.getElementById('status-bot').querySelector('strong');
+                sb.textContent = statusData.bot_health;
+                sb.style.color = statusData.bot_health === "OK" ? "#4caf50" : "#ef5350";
+                
+                const sd = document.getElementById('status-data').querySelector('strong');
+                sd.textContent = statusData.data_health;
+                sd.style.color = statusData.data_health === "OK" ? "#4caf50" : "#ef5350";
+                
+            } catch(e) {
+                console.error("Failed to load status:", e);
+            }
+            
+            // Update Net PnL (Using the one from trades API or status, fallback to trades if status fails)
             const pnlElement = document.getElementById('net-pnl-val');
             pnlElement.textContent = (data.net_pnl >= 0 ? '+$' : '-$') + Math.abs(data.net_pnl).toFixed(2);
             pnlElement.style.color = data.net_pnl >= 0 ? '#4caf50' : '#ef5350';
