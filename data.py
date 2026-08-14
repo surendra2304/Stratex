@@ -2,13 +2,16 @@
 # DATA.PY - Market Data Module: live OHLCV candle fetching and indicator engine
 # ==============================================================================
 import pandas as pd
-from binance.client import Client
+from execution import get_exchange_client
 from config import API_KEY, SECRET_KEY, BASE_URL, TIMEFRAME
-
-client = Client(API_KEY, SECRET_KEY, testnet=True)
 
 def get_top_gainers(limit=5):
     """Fetches the top gaining USDT pairs from Binance Testnet in the last 24h."""
+    client = get_exchange_client()
+    if client is None:
+        print("[DATA] Exchange client disabled. Using fallback top gainers.")
+        return ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+
     try:
         tickers = client.get_ticker()
         usdt_pairs = [t for t in tickers if t['symbol'].endswith('USDT')]
@@ -22,6 +25,11 @@ def get_top_gainers(limit=5):
 
 def get_candles(symbol, interval=TIMEFRAME, limit=300):
     """Fetches the latest candles from Binance Testnet and returns a DataFrame."""
+    client = get_exchange_client()
+    if client is None:
+        print(f"[DATA] Exchange client disabled. Cannot fetch live candles for {symbol}.")
+        return pd.DataFrame()
+
     try:
         raw = client.get_klines(symbol=symbol, interval=interval, limit=limit)
         if not raw or len(raw) == 0:
@@ -76,6 +84,10 @@ def add_indicators(df):
 
 def get_current_price(symbol):
     """Gets the latest ticker price."""
+    client = get_exchange_client()
+    if client is None:
+        return None
+        
     try:
         ticker = client.get_symbol_ticker(symbol=symbol)
         return float(ticker["price"])

@@ -1,5 +1,5 @@
 import pandas as pd
-from binance.client import Client
+from execution import get_exchange_client
 from config import API_KEY, SECRET_KEY
 
 def run_funding_arbitrage_research(symbol="BTCUSDT"):
@@ -8,7 +8,7 @@ def run_funding_arbitrage_research(symbol="BTCUSDT"):
     Evaluates Cash-and-Carry (Long Spot + Short Perp) or purely directional funding captures.
     """
     try:
-        client = Client(API_KEY, SECRET_KEY, testnet=True)
+        client = get_exchange_client()
         # Fetch funding rate history (limit 1000 per request, we just grab latest 500)
         funding = client.futures_funding_rate(symbol=symbol, limit=500)
         

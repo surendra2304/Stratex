@@ -8,11 +8,11 @@ from research_phase7.data_loader import download_and_verify_data
 from research_phase10.pairs_engine import PairsEngine
 from research_phase10.funding_engine import FundingEngine
 from research_phase9.cost_engine import CostEngine
-from binance.client import Client
+from execution import get_exchange_client
 
 def fetch_funding_history(symbol):
     try:
-        client = Client(testnet=True)
+        client = get_exchange_client()
         all_funding = []
         limit = 1000
         start_time = 0

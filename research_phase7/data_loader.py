@@ -3,7 +3,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
-from binance.client import Client
+from execution import get_exchange_client
 from config import API_KEY, SECRET_KEY, TIMEFRAME, SYMBOL
 
 def download_and_verify_data(symbol=SYMBOL, timeframe=TIMEFRAME, days=90, use_cache=True):
@@ -23,7 +23,7 @@ def download_and_verify_data(symbol=SYMBOL, timeframe=TIMEFRAME, days=90, use_ca
         return df
         
     print(f"[DATA LOADER] Downloading {days} days of {timeframe} data for {symbol} from Binance Testnet...")
-    client = Client(API_KEY, SECRET_KEY, testnet=True)
+    client = get_exchange_client()
     
     start_str = f"{days} days ago UTC"
     raw = client.get_historical_klines(symbol, timeframe, start_str)

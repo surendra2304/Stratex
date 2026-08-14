@@ -1,9 +1,7 @@
-# ==============================================================================
-# EXECUTION.PY - Order Execution Engine
-# ==============================================================================
 import json
 import os
 import shutil
+import math
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from config import API_KEY, SECRET_KEY, TRADE_QTY, TRADING_MODE, PAPER_SAFE_MODE, TESTNET_ENABLED, LIVE_TRADING_ENABLED
@@ -12,18 +10,6 @@ from paper_engine.exceptions import StateCorruptionError
 
 sys_logger = get_logger("execution")
 ACTIVE_TRADES_FILE = "active_trades.json"
-
-# ==============================================================================
-# CLIENT INITIALIZATION
-# ==============================================================================
-if TRADING_MODE == "PAPER":
-    client = None
-elif TRADING_MODE == "TESTNET":
-    client = Client(API_KEY, SECRET_KEY, testnet=True)
-elif TRADING_MODE == "LIVE":
-    client = Client(API_KEY, SECRET_KEY)
-else:
-    client = None
 
 # ==============================================================================
 # EXECUTION POLICY
@@ -51,6 +37,35 @@ class ExecutionPolicy:
         return False, "UNKNOWN_MODE"
 
 # ==============================================================================
+# CLIENT INITIALIZATION
+# ==============================================================================
+def get_exchange_client():
+    """Lazily evaluates ExecutionPolicy to construct and return the Binance Client."""
+    if TRADING_MODE == "PAPER":
+        return None
+        
+    allowed, reason = ExecutionPolicy.can_place_order()
+    
+    if not allowed:
+        if "TESTNET_DISABLED" in reason:
+            raise RuntimeError("CRITICAL ERROR: TESTNET execution attempted but TESTNET_ENABLED is false.")
+        if "LIVE_DISABLED" in reason:
+            raise RuntimeError("CRITICAL ERROR: LIVE execution attempted but LIVE_TRADING_ENABLED is false.")
+        if "RESEARCH_BLOCKED" in reason:
+            return None # Must return None so data.py doesn't crash on import, but client won't be created
+        if "PAPER_BLOCKED" in reason:
+            return None # Safe to return None in Paper path
+            
+        raise RuntimeError(f"CRITICAL ERROR: Client creation blocked. ({reason})")
+
+    if TRADING_MODE == "TESTNET":
+        return Client(API_KEY, SECRET_KEY, testnet=True)
+    elif TRADING_MODE == "LIVE":
+        return Client(API_KEY, SECRET_KEY)
+        
+    return None
+
+# ==============================================================================
 # STATE MANAGEMENT
 # ==============================================================================
 def _validate_trade_schema(trade: dict):
@@ -59,25 +74,42 @@ def _validate_trade_schema(trade: dict):
         if field not in trade:
             raise StateCorruptionError(f"Missing required field '{field}' in active trade.")
     
+    if not isinstance(trade["strategy"], str) or not trade["strategy"].strip():
+        raise StateCorruptionError("Invalid strategy: must be a non-empty string.")
+        
+    if not isinstance(trade["symbol"], str) or not trade["symbol"].strip():
+        raise StateCorruptionError("Invalid symbol: must be a non-empty string.")
+        
     if trade["side"] not in ["BUY", "SELL"]:
         raise StateCorruptionError(f"Invalid side '{trade['side']}' in active trade.")
         
     try:
         qty = float(trade["quantity"])
-        if qty <= 0:
-            raise StateCorruptionError(f"Invalid quantity {qty} in active trade.")
-    except ValueError:
-        raise StateCorruptionError("Quantity must be a number.")
+        if not math.isfinite(qty) or qty <= 0:
+            raise StateCorruptionError(f"Invalid quantity {trade['quantity']} in active trade.")
+    except (ValueError, TypeError):
+        raise StateCorruptionError("Quantity must be a positive finite number.")
         
-    for p_field in ["entry_price", "tp_price", "sl_price"]:
-        try:
-            val = float(trade[p_field])
-            if val < 0:
-                raise StateCorruptionError(f"Negative price {val} not allowed for {p_field}.")
-        except ValueError:
-            pass # allow None if not strictly numbers, but actually we require floats or None for sl/tp
-            if trade[p_field] is not None:
-                raise StateCorruptionError(f"Field {p_field} must be a number.")
+    try:
+        ep = float(trade["entry_price"])
+        if not math.isfinite(ep) or ep <= 0:
+            raise StateCorruptionError(f"Invalid entry_price {trade['entry_price']}.")
+    except (ValueError, TypeError):
+        raise StateCorruptionError("entry_price must be a positive finite number.")
+        
+    for p_field in ["tp_price", "sl_price"]:
+        val = trade[p_field]
+        if val is not None:
+            try:
+                f_val = float(val)
+                if not math.isfinite(f_val) or f_val <= 0:
+                    raise StateCorruptionError(f"Invalid {p_field} {val}.")
+            except (ValueError, TypeError):
+                raise StateCorruptionError(f"Field {p_field} must be a positive finite number or None.")
+                
+    if trade.get("oco_id") is None:
+        if trade.get("tp_price") is not None or trade.get("sl_price") is not None:
+            raise StateCorruptionError("oco_id cannot be None if tp_price or sl_price are set.")
 
 def _load_active_trades():
     if not os.path.exists(ACTIVE_TRADES_FILE):
@@ -96,9 +128,9 @@ def _load_active_trades():
     seen_ids = set()
     for t in data:
         _validate_trade_schema(t)
-        if t["oco_id"] in seen_ids and t["oco_id"] is not None:
-            raise StateCorruptionError(f"Duplicate OCO ID {t['oco_id']} found in active trades.")
         if t["oco_id"] is not None:
+            if t["oco_id"] in seen_ids:
+                raise StateCorruptionError(f"Duplicate OCO ID {t['oco_id']} found in active trades.")
             seen_ids.add(t["oco_id"])
             
     return data
@@ -116,13 +148,10 @@ def _save_active_trades(trades):
 
 def get_open_orders(symbol):
     """Returns the count of locally tracked active trades for a symbol."""
-    try:
-        active_trades = _load_active_trades()
-        count = sum(1 for t in active_trades if t["symbol"] == symbol)
-        return count
-    except StateCorruptionError as e:
-        sys_logger.critical(f"State corruption detected in get_open_orders: {e}")
-        return 0
+    # We DO NOT catch StateCorruptionError here. It must propagate.
+    active_trades = _load_active_trades()
+    count = sum(1 for t in active_trades if t["symbol"] == symbol)
+    return count
 
 # ==============================================================================
 # EXECUTION
@@ -148,6 +177,8 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
     except StateCorruptionError as e:
         sys_logger.critical(f"State corruption prevents new orders: {e}")
         return None
+
+    client = get_exchange_client()
 
     try:
         # 1. Place the entry Market order
@@ -234,6 +265,7 @@ def monitor_open_trades():
     if not active:
         return
         
+    client = get_exchange_client()
     remaining_trades = []
     
     for t in active:
@@ -290,6 +322,7 @@ def get_account_balance():
     if TRADING_MODE == "PAPER":
         return {"USDT": 10000.0}
 
+    client = get_exchange_client()
     try:
         account = client.get_account()
         balances = {b["asset"]: float(b["free"]) for b in account["balances"] if float(b["free"]) > 0}

@@ -52,3 +52,40 @@ def test_live_requires_explicit_enable():
             
         with pytest.raises(RuntimeError, match="LIVE execution attempted"):
             execution.place_market_order("test", "BUY", "BTCUSDT")
+
+@patch("execution.Client")
+def test_client_constructor_calls(mock_client):
+    cases = [
+        # (Mode, SafeMode, ResMode, TestnetEn, LiveEn, ExpectedCalls)
+        ("PAPER", True, "0", False, False, 0),
+        ("PAPER", False, "0", True, True, 0),
+        ("TESTNET", False, "0", False, True, 0), # Testnet disabled
+        ("LIVE", False, "0", False, False, 0),   # Live disabled
+        ("LIVE", False, "1", True, True, 0),     # Research mode blocks live
+        ("TESTNET", False, "0", True, False, 1), # Testnet enabled
+        ("LIVE", False, "0", False, True, 1),    # Live fully enabled
+    ]
+    
+    for mode, safe_mode, res_mode, testnet_en, live_en, expected_calls in cases:
+        mock_client.reset_mock()
+        with patch("execution.TRADING_MODE", mode), \
+             patch("execution.PAPER_SAFE_MODE", safe_mode), \
+             patch.dict(os.environ, {"RESEARCH_MODE": res_mode}), \
+             patch("execution.TESTNET_ENABLED", testnet_en), \
+             patch("execution.LIVE_TRADING_ENABLED", live_en):
+             
+            try:
+                client = execution.get_exchange_client()
+                if client is not None:
+                    # if client was created, it returned the mock instance
+                    pass
+            except RuntimeError:
+                pass # expected for disabled modes
+                
+            assert mock_client.call_count == expected_calls, f"Failed client count for: {mode}, {safe_mode}, {res_mode}, {testnet_en}, {live_en}"
+            
+            if expected_calls == 1:
+                if mode == "TESTNET":
+                    mock_client.assert_called_with(execution.API_KEY, execution.SECRET_KEY, testnet=True)
+                elif mode == "LIVE":
+                    mock_client.assert_called_with(execution.API_KEY, execution.SECRET_KEY)

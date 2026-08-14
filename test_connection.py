@@ -1,9 +1,9 @@
-from binance.client import Client
+from execution import get_exchange_client
 
 API_KEY = "REDACTED_API_KEY"
 SECRET_KEY = "REDACTED_SECRET_KEY"
 
-client = Client(API_KEY, SECRET_KEY, testnet=True)
+client = get_exchange_client()
 
 try:
     account = client.get_account()
