@@ -54,8 +54,8 @@ This project implements a complete algorithmic trading pipeline — from live ma
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/surendra2304/algorithmic-trading-bot.git
-cd algorithmic-trading-bot
+git clone https://github.com/surendra2304/python-trading-bot.git
+cd python-trading-bot
 
 # 2. Install dependencies
 pip install -r requirements.txt
