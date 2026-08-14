@@ -218,7 +218,7 @@ def get_status():
         except Exception as e:
             from logger import get_logger
             get_logger("dashboard").error(f"Failed to process portfolio for dashboard: {e}")
-            overall = "CRITICAL" # We can't read the portfolio!
+            overall = "STATE CORRUPTED" # We can't read the portfolio!
 
     return jsonify({
         "mode": TRADING_MODE,

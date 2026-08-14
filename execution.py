@@ -1,31 +1,114 @@
 # ==============================================================================
-# EXECUTION.PY - Order Execution Engine for Binance Testnet
+# EXECUTION.PY - Order Execution Engine
 # ==============================================================================
 import json
 import os
+import shutil
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from config import API_KEY, SECRET_KEY, TRADE_QTY, TRADING_MODE, PAPER_SAFE_MODE, TESTNET_ENABLED, LIVE_TRADING_ENABLED
 from logger import log_trade, get_logger
+from paper_engine.exceptions import StateCorruptionError
 
 sys_logger = get_logger("execution")
+ACTIVE_TRADES_FILE = "active_trades.json"
 
+# ==============================================================================
+# CLIENT INITIALIZATION
+# ==============================================================================
 if TRADING_MODE == "PAPER":
     client = None
-else:
+elif TRADING_MODE == "TESTNET":
     client = Client(API_KEY, SECRET_KEY, testnet=True)
-ACTIVE_TRADES_FILE = "active_trades.json"
+elif TRADING_MODE == "LIVE":
+    client = Client(API_KEY, SECRET_KEY)
+else:
+    client = None
+
+# ==============================================================================
+# EXECUTION POLICY
+# ==============================================================================
+class ExecutionPolicy:
+    @staticmethod
+    def can_place_order() -> tuple[bool, str]:
+        """Returns (is_allowed, reason) for placing a real order."""
+        if TRADING_MODE == "PAPER" or PAPER_SAFE_MODE:
+            return False, "PAPER_BLOCKED"
+            
+        if os.environ.get("RESEARCH_MODE") == "1":
+            return False, "RESEARCH_BLOCKED"
+            
+        if TRADING_MODE == "TESTNET":
+            if not TESTNET_ENABLED:
+                return False, "TESTNET_DISABLED"
+            return True, "ALLOWED_TESTNET"
+            
+        if TRADING_MODE == "LIVE":
+            if not LIVE_TRADING_ENABLED:
+                return False, "LIVE_DISABLED"
+            return True, "ALLOWED_LIVE"
+            
+        return False, "UNKNOWN_MODE"
+
+# ==============================================================================
+# STATE MANAGEMENT
+# ==============================================================================
+def _validate_trade_schema(trade: dict):
+    required_fields = ["strategy", "symbol", "side", "quantity", "entry_price", "oco_id", "tp_price", "sl_price"]
+    for field in required_fields:
+        if field not in trade:
+            raise StateCorruptionError(f"Missing required field '{field}' in active trade.")
+    
+    if trade["side"] not in ["BUY", "SELL"]:
+        raise StateCorruptionError(f"Invalid side '{trade['side']}' in active trade.")
+        
+    try:
+        qty = float(trade["quantity"])
+        if qty <= 0:
+            raise StateCorruptionError(f"Invalid quantity {qty} in active trade.")
+    except ValueError:
+        raise StateCorruptionError("Quantity must be a number.")
+        
+    for p_field in ["entry_price", "tp_price", "sl_price"]:
+        try:
+            val = float(trade[p_field])
+            if val < 0:
+                raise StateCorruptionError(f"Negative price {val} not allowed for {p_field}.")
+        except ValueError:
+            pass # allow None if not strictly numbers, but actually we require floats or None for sl/tp
+            if trade[p_field] is not None:
+                raise StateCorruptionError(f"Field {p_field} must be a number.")
 
 def _load_active_trades():
     if not os.path.exists(ACTIVE_TRADES_FILE):
         return []
-    with open(ACTIVE_TRADES_FILE, "r") as f:
-        try:
-            return json.load(f)
-        except:
-            return []
+    
+    try:
+        with open(ACTIVE_TRADES_FILE, "r") as f:
+            data = json.load(f)
+    except Exception as e:
+        sys_logger.error(f"Failed to load JSON from {ACTIVE_TRADES_FILE}: {e}")
+        raise StateCorruptionError("Active trades JSON is corrupt.")
+        
+    if not isinstance(data, list):
+        raise StateCorruptionError("Active trades state must be a list.")
+        
+    seen_ids = set()
+    for t in data:
+        _validate_trade_schema(t)
+        if t["oco_id"] in seen_ids and t["oco_id"] is not None:
+            raise StateCorruptionError(f"Duplicate OCO ID {t['oco_id']} found in active trades.")
+        if t["oco_id"] is not None:
+            seen_ids.add(t["oco_id"])
+            
+    return data
 
 def _save_active_trades(trades):
+    if os.path.exists(ACTIVE_TRADES_FILE):
+        backup_dir = "backup"
+        os.makedirs(backup_dir, exist_ok=True)
+        shutil.copy(ACTIVE_TRADES_FILE, os.path.join(backup_dir, "active_trades.json.bak"))
+        
     temp_file = ACTIVE_TRADES_FILE + ".tmp"
     with open(temp_file, "w") as f:
         json.dump(trades, f)
@@ -33,24 +116,39 @@ def _save_active_trades(trades):
 
 def get_open_orders(symbol):
     """Returns the count of locally tracked active trades for a symbol."""
-    active_trades = _load_active_trades()
-    count = sum(1 for t in active_trades if t["symbol"] == symbol)
-    return count
+    try:
+        active_trades = _load_active_trades()
+        count = sum(1 for t in active_trades if t["symbol"] == symbol)
+        return count
+    except StateCorruptionError as e:
+        sys_logger.critical(f"State corruption detected in get_open_orders: {e}")
+        return 0
 
+# ==============================================================================
+# EXECUTION
+# ==============================================================================
 def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None, tp=None):
     """Places a market order and immediately sets SL/TP via an OCO order."""
-    if TRADING_MODE == "PAPER" or PAPER_SAFE_MODE:
-        raise RuntimeError("CRITICAL ERROR: PAPER mode attempted to place a real Binance order.")
-        
-    if os.environ.get("RESEARCH_MODE") == "1":
-        raise RuntimeError("CRITICAL ERROR: Real execution attempted from a research script.")
-        
-    if TRADING_MODE == "TESTNET" and not TESTNET_ENABLED:
-        raise RuntimeError("CRITICAL ERROR: TESTNET execution attempted but TESTNET_ENABLED is false.")
-        
-    if TRADING_MODE == "LIVE" and not LIVE_TRADING_ENABLED:
-        raise RuntimeError("CRITICAL ERROR: LIVE execution attempted but LIVE_TRADING_ENABLED is false.")
-        
+    allowed, reason = ExecutionPolicy.can_place_order()
+    
+    if not allowed:
+        if "PAPER" in reason or "SAFE_MODE" in reason:
+            raise RuntimeError(f"CRITICAL ERROR: PAPER mode attempted to place a real Binance order. ({reason})")
+        if "RESEARCH" in reason:
+            raise RuntimeError(f"CRITICAL ERROR: Real execution attempted from a research script. ({reason})")
+        if "TESTNET_DISABLED" in reason:
+            raise RuntimeError("CRITICAL ERROR: TESTNET execution attempted but TESTNET_ENABLED is false.")
+        if "LIVE_DISABLED" in reason:
+            raise RuntimeError("CRITICAL ERROR: LIVE execution attempted but LIVE_TRADING_ENABLED is false.")
+        raise RuntimeError(f"CRITICAL ERROR: Order blocked. ({reason})")
+
+    try:
+        # Validate state BEFORE placing the order to prevent saving into a broken state file
+        _load_active_trades()
+    except StateCorruptionError as e:
+        sys_logger.critical(f"State corruption prevents new orders: {e}")
+        return None
+
     try:
         # 1. Place the entry Market order
         order_side = Client.SIDE_BUY if side == "BUY" else Client.SIDE_SELL
@@ -127,7 +225,12 @@ def monitor_open_trades():
     if TRADING_MODE == "PAPER":
         return
 
-    active = _load_active_trades()
+    try:
+        active = _load_active_trades()
+    except StateCorruptionError as e:
+        sys_logger.critical(f"[MONITOR] State corrupted! Cannot monitor trades: {e}")
+        return
+
     if not active:
         return
         
@@ -177,10 +280,13 @@ def monitor_open_trades():
             sys_logger.error(f"[MONITOR] Error checking OCO {t['oco_id']}: {e}", extra={"strategy": t["strategy"], "symbol": t["symbol"]})
             remaining_trades.append(t)
             
-    _save_active_trades(remaining_trades)
+    try:
+        _save_active_trades(remaining_trades)
+    except Exception as e:
+        sys_logger.error(f"[MONITOR] Failed to save active trades: {e}")
 
 def get_account_balance():
-    """Returns the USDT and BTC balance from testnet account."""
+    """Returns the USDT and BTC balance from account."""
     if TRADING_MODE == "PAPER":
         return {"USDT": 10000.0}
 

@@ -20,6 +20,14 @@ env/
 # Trade logs and local state
 trade_log.csv
 active_trades.json
+paper_trade_ledger.jsonl
+paper_equity_curve.jsonl
+paper_portfolio.json
+heartbeat.json
+sim_*.json
+sim_*.json.tmp
+bot.log
+session/
 
 # Testing artifacts
 .pytest_cache/

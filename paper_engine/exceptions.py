@@ -37,3 +37,7 @@ class ConfigError(TradingException):
 class SystemError(TradingException):
     """Raised for unknown critical failures like OS out-of-memory."""
     pass
+
+class StateCorruptionError(TradingException):
+    """Raised when stored JSON state (like active trades) fails schema validation or is malformed."""
+    pass
