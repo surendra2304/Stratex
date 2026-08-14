@@ -1,5 +1,5 @@
 # ==============================================================================
-# DATA.PY - Market Data Module: fetches OHLCV candles from Binance Testnet
+# DATA.PY - Market Data Module: live OHLCV candle fetching and indicator engine
 # ==============================================================================
 import pandas as pd
 import ta

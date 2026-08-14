@@ -1,5 +1,5 @@
 # ==============================================================================
-# STRATEGY_SCALPER.PY - High-Frequency RSI + Bollinger Band Mean Reversion
+# STRATEGY_SCALPER.PY - High-Frequency Mean Reversion: RSI + Bollinger Bands
 # ==============================================================================
 
 def get_signal(df):

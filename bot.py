@@ -1,5 +1,5 @@
 # ==============================================================================
-# BOT.PY - Main Entry Point: runs the selected strategy in a live loop
+# BOT.PY - Main Entry Point: orchestrates data, strategy, and execution modules
 # ==============================================================================
 import sys
 import io
@@ -22,7 +22,7 @@ PYTHON_PATH = r"C:\Users\Surendra\AppData\Local\Programs\Python\Python311\python
 
 def print_banner():
     print("=" * 60)
-    print("  [BOT] ANTI GRAVITY TRADING BOT FRAMEWORK")
+    print("  ALGORITHMIC TRADING BOT FRAMEWORK")
     print(f"  Strategy : {ACTIVE_STRATEGY.upper()}")
     print(f"  Symbol   : {SYMBOL}")
     print(f"  Started  : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
