@@ -89,13 +89,13 @@ class MLStrategy:
         close = last_bar['close'].iloc[0]
         atr = last_bar['atr'].iloc[0]
         
-        # Threshold to fire a signal (e.g., > 65% confidence)
-        if prob_up > 0.65:
+        # Lowered threshold to populate confidence buckets and capture more trades
+        if prob_up > 0.52:
             sl = close - (atr * 1.5)
             tp = close + (atr * 3.0)
-            return "BUY", sl, tp
+            return "BUY", sl, tp, prob_up
             
-        return None, None, None
+        return None, None, None, None
 
 # Singleton instance for backwards compatibility with the MultiStrategyWrapper
 _instance = MLStrategy()

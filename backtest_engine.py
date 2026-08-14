@@ -76,18 +76,68 @@ class BacktestEngine:
         if len(self.df) <= warmup:
             return [], pd.DataFrame()
             
+        pending_signal = None
+        pending_sl = None
+        pending_tp = None
+        pending_strat = None
+        pending_conf = None
+            
         for i in range(warmup, len(self.df)):
             current_bar = self.df.iloc[i]
             timestamp = current_bar['timestamp']
             
-            # 1. Update Open Trades
+            # 1. Execute Pending Signal at Open
+            if pending_signal and len(self.open_trades) < self.max_open_trades:
+                theoretical_entry = current_bar['open']
+                
+                if pending_signal == 'BUY':
+                    actual_entry = theoretical_entry * (1 + self.slippage_rate)
+                    if not (pending_sl < actual_entry < pending_tp):
+                        self.rejected_trades.append({"time": timestamp, "reason": "Invalid SL/TP after gap/slippage on BUY."})
+                        pending_signal = None
+                else:
+                    actual_entry = theoretical_entry * (1 - self.slippage_rate)
+                    if not (pending_sl > actual_entry > pending_tp):
+                        self.rejected_trades.append({"time": timestamp, "reason": "Invalid SL/TP after gap/slippage on SELL."})
+                        pending_signal = None
+                
+                if pending_signal:
+                    qty = self._calculate_qty(actual_entry, pending_sl)
+                    if qty > 0:
+                        fee = actual_entry * qty * self.fee_rate
+                        
+                        trade = {
+                            'trade_id': str(uuid.uuid4())[:8],
+                            'strategy': pending_strat,
+                            'symbol': self.symbol,
+                            'side': pending_signal,
+                            'entry_time': timestamp,
+                            'entry_price': actual_entry,
+                            'quantity': qty,
+                            'stop_loss': pending_sl,
+                            'take_profit': pending_tp,
+                            'entry_fee': fee,
+                            'regime': current_bar.get('regime', 'UNKNOWN'),
+                            'volatility_state': current_bar.get('volatility_state', 'UNKNOWN'),
+                            'confidence': pending_conf
+                        }
+                        
+                        self.balance -= fee
+                        self.open_trades.append(trade)
+                
+                pending_signal = None
+            else:
+                # If we had a pending signal but reached max trades, discard it
+                pending_signal = None
+            
+            # 2. Update Open Trades
             self._update_open_trades(current_bar, timestamp)
             
-            # 2. Update Equity
+            # 3. Update Equity
             self._update_equity(current_bar)
             self.equity_curve.append({'timestamp': timestamp, 'equity': self.equity})
             
-            # 3. Generate Signals
+            # 4. Generate Signals (Evaluated at Close)
             if len(self.open_trades) < self.max_open_trades:
                 window = self.df.iloc[i-100 : i+1]
                 
@@ -97,54 +147,25 @@ class BacktestEngine:
                 source_strat = None
                 
                 for strat in self.strategies:
-                    sig, sl, tp = strat.get_signal(window)
-                    if sig:
-                        best_signal = sig
-                        best_sl = sl
-                        best_tp = tp
+                    res = strat.get_signal(window)
+                    if res[0]:
+                        best_signal = res[0]
+                        best_sl = res[1]
+                        best_tp = res[2]
+                        if len(res) > 3:
+                            pending_conf = res[3]
                         source_strat = strat.__name__.split('_')[-1]
                         break
                 
                 if best_signal:
                     if self.long_only and best_signal == 'SELL':
                         self.rejected_trades.append({"time": timestamp, "reason": "LONG_ONLY active. Ignored SELL."})
-                        continue
-                        
-                    theoretical_entry = current_bar['close']
-                    
-                    if best_signal == 'BUY':
-                        actual_entry = theoretical_entry * (1 + self.slippage_rate)
-                        # Validation
-                        if not (best_sl < actual_entry < best_tp):
-                            self.rejected_trades.append({"time": timestamp, "reason": "Invalid SL/TP after BUY slippage."})
-                            continue
                     else:
-                        actual_entry = theoretical_entry * (1 - self.slippage_rate)
-                        # Validation
-                        if not (best_sl > actual_entry > best_tp):
-                            self.rejected_trades.append({"time": timestamp, "reason": "Invalid SL/TP after SELL slippage."})
-                            continue
-                            
-                    qty = self._calculate_qty(actual_entry, best_sl)
-                    
-                    if qty > 0:
-                        fee = actual_entry * qty * self.fee_rate
-                        
-                        trade = {
-                            'trade_id': str(uuid.uuid4())[:8],
-                            'strategy': source_strat,
-                            'symbol': self.symbol,
-                            'side': best_signal,
-                            'entry_time': timestamp,
-                            'entry_price': actual_entry,
-                            'quantity': qty,
-                            'stop_loss': best_sl,
-                            'take_profit': best_tp,
-                            'entry_fee': fee
-                        }
-                        
-                        self.balance -= fee
-                        self.open_trades.append(trade)
+                        pending_signal = best_signal
+                        pending_sl = best_sl
+                        pending_tp = best_tp
+                        pending_strat = source_strat
+                        # pending_conf is already set in the loop
 
         if self.open_trades:
             last_bar = self.df.iloc[-1]
@@ -241,7 +262,10 @@ class BacktestEngine:
             'result': 'WIN' if net_pnl > 0 else 'LOSS',
             'reason': reason,
             'holding_time': (timestamp - trade['entry_time']).total_seconds() / 60.0,
-            'r_multiple': r_multiple
+            'r_multiple': r_multiple,
+            'regime': trade.get('regime', 'UNKNOWN'),
+            'volatility_state': trade.get('volatility_state', 'UNKNOWN'),
+            'confidence': trade.get('confidence', None)
         }
         
         self.trade_history.append(completed_trade)

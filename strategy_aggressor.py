@@ -27,13 +27,13 @@ def get_signal(df):
     # BUY: Massive buy volume delta AND RSI confirms upward momentum
     if vol_delta > extreme_vol_threshold and rsi > 55:
         sl = close - (atr * 1.5)  # Give a bit more breathing room
-        tp = close + (atr * 2.0)  # Aim for higher R:R
+        tp = close + (atr * 4.0)  # Aim for higher R:R
         return "BUY", sl, tp
 
     # SELL: Massive sell volume delta AND RSI confirms downward momentum
     if vol_delta < -extreme_vol_threshold and rsi < 45:
         sl = close + (atr * 1.5)
-        tp = close - (atr * 2.0)
+        tp = close - (atr * 4.0)
         return "SELL", sl, tp
 
     return None, None, None
