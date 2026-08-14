@@ -1,0 +1,30 @@
+# ==============================================================================
+# .gitignore - Files to NEVER commit to GitHub
+# ==============================================================================
+
+# SECRET: API keys - NEVER push this to GitHub!
+config.py
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Trade logs (personal trading data)
+trade_log.csv
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
