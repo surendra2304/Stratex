@@ -22,3 +22,11 @@ MAX_OPEN_TRADES = 5         # Allow more trades to open concurrently
 # --- Strategy to Run ---
 # Options: "scalper", "swing", "ml", "aggressor", "multi"
 ACTIVE_STRATEGY = "multi"
+
+# --- Backtesting Engine ---
+BACKTEST_FEE_RATE = 0.001          # 0.1% fee per trade
+BACKTEST_SLIPPAGE_RATE = 0.0005    # 0.05% slippage
+RISK_PER_TRADE = 0.01              # 1% risk of equity per trade
+STARTING_BALANCE = 10000.0         # Initial balance
+OOS_TRAIN_PCT = 0.60               # Walk-forward train %
+OOS_VAL_PCT = 0.20                 # Walk-forward validation %

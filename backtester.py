@@ -1,16 +1,19 @@
-# ==============================================================================
-# BACKTESTER.PY - Simulates strategies over historical data
-# ==============================================================================
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 from binance.client import Client
-from config import API_KEY, SECRET_KEY, SYMBOL, TIMEFRAME, ACTIVE_STRATEGY
+from config import API_KEY, SECRET_KEY, TIMEFRAME, ACTIVE_STRATEGY
+from config import BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE, RISK_PER_TRADE, STARTING_BALANCE, OOS_TRAIN_PCT, OOS_VAL_PCT
 from data import add_indicators
 
 import strategy_scalper as scalper
 import strategy_swing   as swing
 import strategy_ml      as ml
 import strategy_aggressor as aggressor
+
+from backtest_engine import BacktestEngine
+from metrics import calculate_metrics
+
+SYMBOL = "BTCUSDT"
 
 def fetch_historical_data(days=30):
     """Downloads historical candles from Binance."""
@@ -25,10 +28,14 @@ def fetch_historical_data(days=30):
         "close_time","quote_volume","trades","taker_buy_base","taker_buy_quote","ignore"
     ])
     df = df[["timestamp","open","high","low","close","volume","taker_buy_base"]].copy()
-    df[["open","high","low","close","volume","taker_buy_base"]] = df[["open","high","low","close","volume","taker_buy_base"]].astype(float)
+    
+    numeric_cols = ["open", "high", "low", "close", "volume", "taker_buy_base"]
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+    df.dropna(subset=numeric_cols, inplace=True)
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
     
-    # Calculate Volume Delta
     df["buy_vol"] = df["taker_buy_base"]
     df["sell_vol"] = df["volume"] - df["buy_vol"]
     df["vol_delta"] = df["buy_vol"] - df["sell_vol"]
@@ -36,111 +43,130 @@ def fetch_historical_data(days=30):
     print(f"Downloaded {len(df)} candles.")
     return df
 
-def run_backtest(df, strategy_name):
-    """Simulates trading bar-by-bar through history."""
-    print(f"Running backtest for strategy: {strategy_name.upper()}...")
+class MultiStrategyWrapper:
+    """Wrapper that runs all strategies and returns the first signal found."""
+    __name__ = "multi"
     
-    # Calculate indicators over the entire history at once for speed
-    df = add_indicators(df)
-    
-    initial_balance = 10000.0
-    balance = initial_balance
-    position = None
-    trades = []
-    
-    # We need a warmup period for indicators (e.g. 200 EMA needs 200 candles)
-    warmup = 200
-    
-    for i in range(warmup, len(df)):
-        # Provide the strategy with data up to the current candle
-        window = df.iloc[i-100 : i+1].copy() 
-        current_candle = window.iloc[-1]
+    def __init__(self):
+        self.strats = [
+            ("SCALPER", scalper),
+            ("SWING", swing),
+            ("ML", ml),
+            ("AGGRESSOR", aggressor)
+        ]
         
-        # Check if we are in a trade and hit SL or TP
-        if position:
-            if position['side'] == 'BUY':
-                if current_candle['low'] <= position['sl']:
-                    # SL Hit
-                    loss = position['price'] - position['sl']
-                    balance -= loss * position['qty']
-                    trades.append({'result': 'LOSS', 'pnl': -loss * position['qty']})
-                    position = None
-                elif current_candle['high'] >= position['tp']:
-                    # TP Hit
-                    profit = position['tp'] - position['price']
-                    balance += profit * position['qty']
-                    trades.append({'result': 'WIN', 'pnl': profit * position['qty']})
-                    position = None
-            elif position['side'] == 'SELL':
-                if current_candle['high'] >= position['sl']:
-                    # SL Hit
-                    loss = position['sl'] - position['price']
-                    balance -= loss * position['qty']
-                    trades.append({'result': 'LOSS', 'pnl': -loss * position['qty']})
-                    position = None
-                elif current_candle['low'] <= position['tp']:
-                    # TP Hit
-                    profit = position['price'] - position['tp']
-                    balance += profit * position['qty']
-                    trades.append({'result': 'WIN', 'pnl': profit * position['qty']})
-                    position = None
-            continue # Can't open a new trade while one is active
-            
-        # If not in a trade, look for a signal
-        signal = None
-        sl = None
-        tp = None
-        
-        if strategy_name == "scalper":
-            signal, sl, tp = scalper.get_signal(window)
-        elif strategy_name == "swing":
-            signal, sl, tp = swing.get_signal(window)
-        elif strategy_name == "ml":
-            signal, sl, tp = ml.get_signal(window)
-        elif strategy_name == "aggressor":
-            signal, sl, tp = aggressor.get_signal(window)
-        elif strategy_name == "multi":
-            for name, strat in [("SCALPER", scalper), ("SWING", swing), ("ML", ml), ("AGGRESSOR", aggressor)]:
-                sig, sl_temp, tp_temp = strat.get_signal(window)
-                if sig:
-                    signal, sl, tp = sig, sl_temp, tp_temp
-                    break
-            
-        if signal:
-            # Fixed trade qty of 1 BTC equivalent for simple math, or based on config
-            qty = 0.001 
-            position = {
-                'side': signal,
-                'price': current_candle['close'],
-                'sl': sl,
-                'tp': tp,
-                'qty': qty
-            }
+    def get_signal(self, df):
+        for name, strat in self.strats:
+            sig, sl, tp = strat.get_signal(df)
+            if sig:
+                # We rename the wrapper temporarily so the engine picks up the source
+                self.__name__ = f"multi_{name}"
+                return sig, sl, tp
+        return None, None, None
 
-    # Calculate metrics
-    wins = [t for t in trades if t['result'] == 'WIN']
-    losses = [t for t in trades if t['result'] == 'LOSS']
-    win_rate = (len(wins) / len(trades)) * 100 if trades else 0
-    net_profit = balance - initial_balance
+def get_strategy_by_name(name):
+    if name == "scalper": return [scalper]
+    if name == "swing": return [swing]
+    if name == "ml": return [ml]
+    if name == "aggressor": return [aggressor]
+    if name == "multi": return [MultiStrategyWrapper()]
+    return []
+
+def split_data(df, train_pct, val_pct):
+    """Splits data for Out-of-Sample testing."""
+    total = len(df)
+    train_end = int(total * train_pct)
+    val_end = train_end + int(total * val_pct)
     
-    print("=" * 40)
-    print(" BACKTEST RESULTS")
-    print("=" * 40)
-    print(f" Strategy    : {strategy_name.upper()}")
-    print(f" Total Trades: {len(trades)}")
-    print(f" Wins        : {len(wins)}")
-    print(f" Losses      : {len(losses)}")
-    print(f" Win Rate    : {win_rate:.2f}%")
-    print(f" Net PnL     : ${net_profit:.2f}")
-    print(f" Final Bal   : ${balance:.2f}")
-    print("=" * 40)
+    train_df = df.iloc[:train_end].copy()
+    val_df = df.iloc[train_end:val_end].copy()
+    test_df = df.iloc[val_end:].copy()
+    return train_df, val_df, test_df
+
+def print_report(metrics_data, strategy_name, period_name):
+    print("=" * 50)
+    print(f" BACKTEST RESULTS: {strategy_name.upper()} ({period_name})")
+    print("=" * 50)
+    print(f" Initial Balance: ${metrics_data['initial_balance']:.2f}")
+    print(f" Final Balance  : ${metrics_data['final_balance']:.2f}")
+    print(f" Net PnL        : ${metrics_data['net_pnl']:.2f}")
+    print(f" Return         : {metrics_data['return_pct']:.2f}%")
+    print(f" Trades         : {metrics_data['total_trades']}")
+    print(f" Win Rate       : {metrics_data['win_rate']:.2f}%")
+    print(f" Profit Factor  : {metrics_data['profit_factor']:.2f}")
+    print(f" Expectancy     : ${metrics_data['expectancy']:.2f}")
+    print(f" Max Drawdown   : {metrics_data['max_dd_pct']:.2f}%")
+    print(f" Sharpe Ratio   : {metrics_data['sharpe']:.2f}")
+    print(f" Sortino Ratio  : {metrics_data['sortino']:.2f}")
+    print(f" Calmar Ratio   : {metrics_data['calmar']:.2f}")
+    print(f" Largest Win    : ${metrics_data['largest_win']:.2f}")
+    print(f" Largest Loss   : ${metrics_data['largest_loss']:.2f}")
+    print("=" * 50)
+
+def run_strategy_comparison(df):
+    """Runs all strategies and outputs a comparison table."""
+    print("\n[COMPARISON] Running strategy comparison...\n")
+    results = []
+    strats_to_test = ["scalper", "swing", "ml", "aggressor", "multi"]
+    
+    for s_name in strats_to_test:
+        strats = get_strategy_by_name(s_name)
+        engine = BacktestEngine(df, strats, BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE, STARTING_BALANCE, RISK_PER_TRADE)
+        trades, equity = engine.run()
+        metrics = calculate_metrics(trades, equity, STARTING_BALANCE)
+        
+        results.append({
+            "Strategy": s_name.upper(),
+            "Trades": metrics["total_trades"],
+            "WinRate": f"{metrics['win_rate']:.1f}%",
+            "PF": f"{metrics['profit_factor']:.2f}",
+            "NetPnL": f"${metrics['net_pnl']:.2f}",
+            "MaxDD": f"{metrics['max_dd_pct']:.1f}%",
+            "Sharpe": f"{metrics['sharpe']:.2f}",
+            "Exp": f"${metrics['expectancy']:.2f}"
+        })
+        
+    res_df = pd.DataFrame(results)
+    print(res_df.to_string(index=False))
+
+def run_walk_forward(df, strategy_name):
+    """Executes a simple Walk-Forward Train/Val/Test evaluation."""
+    print("\n[WALK-FORWARD] Splitting data into Train/Val/Test...")
+    train_df, val_df, test_df = split_data(df, OOS_TRAIN_PCT, OOS_VAL_PCT)
+    print(f"  Train: {len(train_df)} bars | Val: {len(val_df)} bars | Test: {len(test_df)} bars")
+    
+    strats = get_strategy_by_name(strategy_name)
+    
+    print("\n>>> TRAINING PERIOD")
+    e_train = BacktestEngine(train_df, strats, BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE, STARTING_BALANCE, RISK_PER_TRADE)
+    t_train, eq_train = e_train.run()
+    m_train = calculate_metrics(t_train, eq_train, STARTING_BALANCE)
+    print_report(m_train, strategy_name, "TRAINING")
+    
+    print("\n>>> VALIDATION PERIOD")
+    e_val = BacktestEngine(val_df, strats, BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE, STARTING_BALANCE, RISK_PER_TRADE)
+    t_val, eq_val = e_val.run()
+    m_val = calculate_metrics(t_val, eq_val, STARTING_BALANCE)
+    print_report(m_val, strategy_name, "VALIDATION")
+    
+    print("\n>>> OUT-OF-SAMPLE TEST PERIOD")
+    e_test = BacktestEngine(test_df, strats, BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE, STARTING_BALANCE, RISK_PER_TRADE)
+    t_test, eq_test = e_test.run()
+    m_test = calculate_metrics(t_test, eq_test, STARTING_BALANCE)
+    print_report(m_test, strategy_name, "OOS TEST")
 
 if __name__ == "__main__":
     import sys
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
     
-    data = fetch_historical_data(days=30) # Test on 30 days of 1m candles
+    data = fetch_historical_data(days=30)
     if data is not None and not data.empty:
-        # Run backtest on active strategy from config
-        run_backtest(data, ACTIVE_STRATEGY)
+        # Pre-calculate indicators on the entire dataset safely (backward-looking only)
+        data = add_indicators(data)
+        
+        # 1. Run Strategy Comparison
+        run_strategy_comparison(data)
+        
+        # 2. Run Walk-Forward on the Active Strategy
+        run_walk_forward(data, ACTIVE_STRATEGY)

@@ -43,6 +43,48 @@ def get_candles():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/backtest')
+def get_backtest():
+    """Runs a rapid backtest on the last 7 days and returns the equity curve and metrics."""
+    try:
+        from backtester import fetch_historical_data, get_strategy_by_name
+        from data import add_indicators
+        from backtest_engine import BacktestEngine
+        from metrics import calculate_metrics
+        from config import BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE, STARTING_BALANCE, RISK_PER_TRADE, ACTIVE_STRATEGY
+        
+        symbol = request.args.get('symbol', 'BTCUSDT')
+        
+        # We fetch less data for the dashboard to keep it snappy
+        raw = fetch_historical_data(days=7)
+        if raw.empty:
+            return jsonify({"error": "No data"}), 500
+            
+        df = add_indicators(raw)
+        strats = get_strategy_by_name(ACTIVE_STRATEGY)
+        
+        engine = BacktestEngine(df, strats, BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE, STARTING_BALANCE, RISK_PER_TRADE)
+        trades, equity_df = engine.run()
+        metrics = calculate_metrics(trades, equity_df, STARTING_BALANCE)
+        
+        eq_curve = []
+        if not equity_df.empty:
+            for _, row in equity_df.iterrows():
+                eq_curve.append({
+                    "time": int(row['timestamp'].timestamp()),
+                    "value": float(row['equity'])
+                })
+                
+        return jsonify({
+            "metrics": metrics,
+            "equity_curve": eq_curve,
+            "recent_trades": trades[-10:] if trades else [] # Last 10 trades
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/chart_trades')
 def get_chart_trades():
     """Parses trade_log.csv to return markers specifically formatted for the chart."""
