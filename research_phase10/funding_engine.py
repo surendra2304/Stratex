@@ -22,88 +22,110 @@ class FundingEngine:
         df_perp = df_perp.set_index('timestamp')
         
         results = []
-        total_net_pnl = 0.0
         
-        for i in range(len(df_funding) - hold_epochs):
-            entry_event = df_funding.iloc[i]
-            exit_event = df_funding.iloc[i + hold_epochs]
-            
-            entry_time = entry_event['fundingTime']
-            exit_time = exit_event['fundingTime']
-            
-            # We enter 1 minute BEFORE the funding epoch to guarantee capture
-            # In a real environment, we'd enter earlier to avoid the pre-funding spread widening,
-            # but for research, we assume entry near the epoch.
-            
-            # Use closest available timestamp in spot/perp
-            try:
-                spot_entry = df_spot.loc[:entry_time].iloc[-1]['close']
-                perp_entry = df_perp.loc[:entry_time].iloc[-1]['close']
+        # Explicit Capital Accounting
+        starting_capital = 10000.0
+        current_capital = starting_capital
+        
+        in_position = False
+        entry_idx = -1
+        entry_time = None
+        spot_entry = 0
+        perp_entry = 0
+        notional_allocation = 0
+        accumulated_funding_pct = 0.0
+        epochs_held = 0
+        
+        for i, row in df_funding.iterrows():
+            if not in_position:
+                # ENTRY CONDITION
+                # Check if we can enter (we need valid spot/perp data)
+                entry_time = row['fundingTime']
+                try:
+                    spot_entry = df_spot.loc[:entry_time].iloc[-1]['close']
+                    perp_entry = df_perp.loc[:entry_time].iloc[-1]['close']
+                except IndexError:
+                    continue # Missing data, skip
+                    
+                in_position = True
+                entry_idx = i
+                epochs_held = 0
+                accumulated_funding_pct = 0.0
                 
-                spot_exit = df_spot.loc[:exit_time].iloc[-1]['close']
-                perp_exit = df_perp.loc[:exit_time].iloc[-1]['close']
-            except IndexError:
-                continue # Missing data
-                
-            # 1. Entry Friction
-            # We pay Taker on Spot, Taker on Perp
-            entry_friction = (self.cost.entry_fee * 2) + (self.cost.entry_slip * 2)
-            
-            # 2. Accrue Funding
-            # We hold for `hold_epochs` epochs.
-            # We are SHORT perp. If funding rate is POSITIVE, shorts get paid.
-            # If funding rate is NEGATIVE, shorts pay longs.
-            collected_funding = 0.0
-            for j in range(hold_epochs):
-                rate = df_funding.iloc[i + j]['fundingRate']
-                collected_funding += rate # Positive rate = income for short
-                
-            # 3. Basis PnL
-            # Spot PnL (Long)
-            spot_pnl = (spot_exit - spot_entry) / spot_entry
-            # Perp PnL (Short)
-            perp_pnl = (perp_entry - perp_exit) / perp_entry
-            
-            # Gross Basis Convergence PnL (Since it's 1-to-1 hedged, this is pure basis change)
-            basis_pnl = spot_pnl + perp_pnl
-            
-            # 4. Exit Friction
-            exit_friction = (self.cost.exit_fee * 2) + (self.cost.exit_slip * 2)
-            
-            # 5. Margin Liquidation Check
-            # If the perp price spikes drastically, our short could be liquidated before we can unwind the spot.
-            # Max leverage is 3x, so a 33% adverse move in the Perp liquidates us.
-            max_perp_price = df_perp.loc[entry_time:exit_time]['high'].max()
-            max_adverse_move = (max_perp_price - perp_entry) / perp_entry
-            
-            liquidated = False
-            if max_adverse_move >= (1.0 / self.max_leverage):
-                liquidated = True
-                
-            # 6. Calculate Net PnL
-            if liquidated:
-                # If liquidated, we lose the entire short margin (-33% of notional)
-                # plus whatever the spot leg is currently worth. 
-                # For simplicity, we assign a massive penalty to represent ruin.
-                net_pnl = -1.0 # 100% loss of allocated capital
+                # We allocate 100% of current_capital to this trade
+                notional_allocation = current_capital
             else:
-                gross_pnl = basis_pnl + collected_funding
-                net_pnl = gross_pnl - (entry_friction + exit_friction)
+                # IN POSITION - ACCRUE FUNDING
+                rate = row['fundingRate']
+                accumulated_funding_pct += rate
+                epochs_held += 1
                 
-            total_net_pnl += net_pnl
-            results.append({
-                "entry_time": entry_time,
-                "hold_epochs": hold_epochs,
-                "collected_funding": collected_funding,
-                "basis_pnl": basis_pnl,
-                "net_pnl": net_pnl,
-                "liquidated": liquidated
-            })
-            
+                # Check Exit Condition (Hold for exactly `hold_epochs`)
+                if epochs_held >= hold_epochs:
+                    exit_time = row['fundingTime']
+                    try:
+                        spot_exit = df_spot.loc[:exit_time].iloc[-1]['close']
+                        perp_exit = df_perp.loc[:exit_time].iloc[-1]['close']
+                    except IndexError:
+                        # If data is missing at exit, we are trapped. 
+                        # In a real sim, we'd exit at next available. Here we assume zero basis change for the gap.
+                        spot_exit = spot_entry
+                        perp_exit = perp_entry
+                        
+                    # Calculate PnL Components
+                    # We are Long Spot, Short Perp
+                    spot_return = (spot_exit - spot_entry) / spot_entry
+                    perp_return = (perp_entry - perp_exit) / perp_entry
+                    basis_pnl_pct = spot_return + perp_return
+                    
+                    # Margin Liquidation Check
+                    max_perp_price = df_perp.loc[entry_time:exit_time]['high'].max() if entry_time in df_perp.index and exit_time in df_perp.index else perp_entry
+                    max_adverse_move = (max_perp_price - perp_entry) / perp_entry
+                    
+                    liquidated = max_adverse_move >= (1.0 / self.max_leverage)
+                    
+                    # Friction
+                    entry_friction_pct = (self.cost.entry_fee * 2) + (self.cost.entry_slip * 2)
+                    exit_friction_pct = (self.cost.exit_fee * 2) + (self.cost.exit_slip * 2)
+                    
+                    if liquidated:
+                        # 100% loss of the allocated capital
+                        net_pnl_dollar = -notional_allocation
+                        basis_pnl_dollar = -notional_allocation
+                        funding_pnl_dollar = 0
+                    else:
+                        basis_pnl_dollar = notional_allocation * basis_pnl_pct
+                        funding_pnl_dollar = notional_allocation * accumulated_funding_pct
+                        friction_dollar = notional_allocation * (entry_friction_pct + exit_friction_pct)
+                        
+                        net_pnl_dollar = basis_pnl_dollar + funding_pnl_dollar - friction_dollar
+                        
+                    current_capital += net_pnl_dollar
+                    
+                    results.append({
+                        "entry_time": entry_time,
+                        "exit_time": exit_time,
+                        "hold_epochs": epochs_held,
+                        "starting_capital": notional_allocation,
+                        "basis_pnl": basis_pnl_dollar,
+                        "funding_pnl": funding_pnl_dollar,
+                        "net_pnl": net_pnl_dollar,
+                        "ending_capital": current_capital,
+                        "liquidated": liquidated
+                    })
+                    
+                    # Reset State
+                    in_position = False
+                    
+        total_return_pct = (current_capital - starting_capital) / starting_capital
+        
         return {
             "status": "AVAILABLE",
             "trades": len(results),
-            "total_net_pnl_pct": total_net_pnl,
+            "total_return_pct": total_return_pct,
+            "starting_capital": starting_capital,
+            "ending_capital": current_capital,
             "liquidations": sum(1 for r in results if r['liquidated']),
-            "viable": total_net_pnl > 0 and sum(1 for r in results if r['liquidated']) == 0
+            "viable": total_return_pct > 0 and sum(1 for r in results if r['liquidated']) == 0,
+            "ledger": results
         }

@@ -1,0 +1,62 @@
+{
+    "git_commit": "f668c493a2fe4141e0bab2ca4863ec68ec3205cc",
+    "phase": "10.1",
+    "pairs_results": {
+        "BTCUSDT/ETHUSDT": {
+            "status": "UNAVAILABLE",
+            "reason": "Only 213 overlapping candles."
+        },
+        "BTCUSDT/BNBUSDT": {
+            "status": "UNAVAILABLE",
+            "reason": "Only 213 overlapping candles."
+        },
+        "ETHUSDT/SOLUSDT": {
+            "status": "UNAVAILABLE",
+            "reason": "Only 214 overlapping candles."
+        }
+    },
+    "funding_results": {
+        "BTCUSDT": {
+            "status": "AVAILABLE",
+            "trades": 4,
+            "total_return_pct": -0.022153085538192136,
+            "starting_capital": 10000.0,
+            "ending_capital": 9778.469144618079,
+            "liquidations": 0,
+            "viable": false
+        },
+        "ETHUSDT": {
+            "status": "AVAILABLE",
+            "trades": 4,
+            "total_return_pct": -0.02203257141476206,
+            "starting_capital": 10000.0,
+            "ending_capital": 9779.67428585238,
+            "liquidations": 0,
+            "viable": false
+        },
+        "BNBUSDT": {
+            "status": "AVAILABLE",
+            "trades": 4,
+            "total_return_pct": -0.023385252341580055,
+            "starting_capital": 10000.0,
+            "ending_capital": 9766.1474765842,
+            "liquidations": 0,
+            "viable": false
+        },
+        "SOLUSDT": {
+            "status": "AVAILABLE",
+            "trades": 4,
+            "total_return_pct": -0.02219741760840243,
+            "starting_capital": 10000.0,
+            "ending_capital": 9778.025823915976,
+            "liquidations": 0,
+            "viable": false
+        }
+    },
+    "cost_assumptions": {
+        "entry_fee": 0.001,
+        "exit_fee": 0.001,
+        "entry_slip": 0.0005,
+        "exit_slip": 0.0005
+    }
+}

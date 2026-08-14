@@ -13,10 +13,31 @@ from binance.client import Client
 def fetch_funding_history(symbol):
     try:
         client = Client(testnet=True)
-        funding = client.futures_funding_rate(symbol=symbol, limit=1000)
-        df = pd.DataFrame(funding)
+        all_funding = []
+        limit = 1000
+        start_time = 0
+        
+        while True:
+            funding = client.futures_funding_rate(symbol=symbol, limit=limit, startTime=start_time)
+            if not funding:
+                break
+                
+            all_funding.extend(funding)
+            
+            # The last element's fundingTime will be the new start_time
+            last_time = funding[-1]['fundingTime']
+            if len(funding) < limit:
+                break
+                
+            # Increment start_time by 1ms to avoid fetching the exact same record again
+            start_time = last_time + 1
+            
+        df = pd.DataFrame(all_funding)
         df['fundingTime'] = pd.to_datetime(df['fundingTime'], unit='ms')
         df['fundingRate'] = pd.to_numeric(df['fundingRate'])
+        
+        # Remove duplicates just in case
+        df = df.drop_duplicates(subset=['fundingTime'])
         return df
     except Exception as e:
         print(f"Error fetching funding for {symbol}: {e}")
