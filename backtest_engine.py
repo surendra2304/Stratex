@@ -81,6 +81,7 @@ class BacktestEngine:
         pending_tp = None
         pending_strat = None
         pending_conf = None
+        pending_signal_time = None
             
         for i in range(warmup, len(self.df)):
             current_bar = self.df.iloc[i]
@@ -111,6 +112,7 @@ class BacktestEngine:
                             'strategy': pending_strat,
                             'symbol': self.symbol,
                             'side': pending_signal,
+                            'signal_time': pending_signal_time,
                             'entry_time': timestamp,
                             'entry_price': actual_entry,
                             'quantity': qty,
@@ -125,10 +127,21 @@ class BacktestEngine:
                         self.balance -= fee
                         self.open_trades.append(trade)
                 
+                # Strict state reset after execution attempt (Part 2)
                 pending_signal = None
+                pending_sl = None
+                pending_tp = None
+                pending_strat = None
+                pending_conf = None
+                pending_signal_time = None
             else:
-                # If we had a pending signal but reached max trades, discard it
+                # If we had a pending signal but reached max trades, discard it entirely
                 pending_signal = None
+                pending_sl = None
+                pending_tp = None
+                pending_strat = None
+                pending_conf = None
+                pending_signal_time = None
             
             # 2. Update Open Trades
             self._update_open_trades(current_bar, timestamp)
@@ -139,7 +152,8 @@ class BacktestEngine:
             
             # 4. Generate Signals (Evaluated at Close)
             if len(self.open_trades) < self.max_open_trades:
-                window = self.df.iloc[i-100 : i+1]
+                window_start = max(0, i - warmup)
+                window = self.df.iloc[window_start : i+1]
                 
                 best_signal = None
                 best_sl = None
@@ -165,6 +179,7 @@ class BacktestEngine:
                         pending_sl = best_sl
                         pending_tp = best_tp
                         pending_strat = source_strat
+                        pending_signal_time = timestamp
                         # pending_conf is already set in the loop
 
         if self.open_trades:
@@ -248,6 +263,7 @@ class BacktestEngine:
             'strategy': trade['strategy'],
             'symbol': trade['symbol'],
             'side': trade['side'],
+            'signal_time': trade.get('signal_time', None),
             'entry_time': trade['entry_time'],
             'exit_time': timestamp,
             'entry_price': trade['entry_price'],

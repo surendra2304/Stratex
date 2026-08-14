@@ -252,3 +252,61 @@ def test_O_known_returns():
     assert metrics['sharpe'] != 0.0
     assert metrics['sortino'] != 0.0
     assert metrics['calmar'] != 0.0
+
+class MockStrategyWithConf:
+    def __init__(self, signals):
+        self.signals = signals
+        self.idx = 0
+        self.__name__ = "mock_conf"
+    def get_signal(self, df):
+        if self.idx < len(self.signals):
+            res = self.signals[self.idx]
+            self.idx += 1
+            return res
+        return None, None, None
+
+def test_P_no_confidence_leakage():
+    # TEST P: ML gives confidence, next strategy gives none. Ensure no leakage.
+    rows = [[100, 100, 100, 100]] * 200
+    rows.append([100, 100, 100, 100]) # Bar 200: Signal 1 (with conf)
+    rows.append([100, 100, 100, 100]) # Bar 201: Entry 1.
+    rows.append([100, 110, 100, 110]) # Bar 202: TP 1 hit. Signal 2 (NO conf).
+    rows.append([100, 100, 100, 100]) # Bar 203: Entry 2.
+    rows.append([100, 100, 100, 100]) # Bar 204: Exit 2
+    
+    df = create_mock_data(rows)
+    # Signal 1 returns 4 elements (has conf), Signal 2 returns 3 elements (no conf)
+    strat = MockStrategyWithConf([("BUY", 90, 110, 0.95), ("BUY", 90, 110)])
+    
+    engine = BacktestEngine(df, strat, fee_rate=0, slippage_rate=0)
+    trades, _ = engine.run()
+    
+    assert len(trades) == 2
+    assert trades[0]['confidence'] == 0.95
+    assert trades[1]['confidence'] is None
+
+def test_Q_ml_barrier_logic():
+    # TEST Q: Verify ML barrier logic without lookahead bias.
+    from strategy_ml import MLStrategy
+    strat = MLStrategy()
+    
+    # We create 17 rows. Max holding is 15.
+    # Entry at i=0 (Close = 100).
+    # +0.5% is 100.5, -0.5% is 99.5
+    # Row 5 hits 101. Row 6 hits 90. Target should be 1.
+    rows = [[100, 100, 100, 100]] * 17
+    rows[5] = [100, 101, 100, 100] # Hits upper barrier
+    rows[6] = [100, 100, 90, 100]  # Hits lower barrier later
+    
+    df = create_mock_data(rows)
+    df_labeled = strat._create_labels(df)
+    
+    assert df_labeled['target'].iloc[0] == 1.0
+    
+    # Scenario 2: Hits lower barrier first
+    rows[5] = [100, 100, 90, 100]
+    rows[6] = [100, 101, 100, 100]
+    df = create_mock_data(rows)
+    df_labeled = strat._create_labels(df)
+    
+    assert df_labeled['target'].iloc[0] == 0.0

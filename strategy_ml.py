@@ -18,12 +18,52 @@ class MLStrategy:
         
     def _create_labels(self, df):
         """
-        Creates binary labels. 
-        1 = Price hits +0.5% before hitting -0.5% in the next 15 candles.
-        For simplicity, we'll just check if the return 15 bars from now is > 0.2%.
+        Creates binary labels using a barrier simulation.
+        1 = Price hits +0.5% (upper barrier) before -0.5% (lower barrier) within 15 candles.
+        0 = Hits lower barrier first, or times out.
         """
-        future_return = (df['close'].shift(-15) - df['close']) / df['close']
-        df['target'] = (future_return > 0.002).astype(int)
+        df = df.copy()
+        df['target'] = np.nan
+        
+        upper_threshold = 0.005  # +0.5%
+        lower_threshold = -0.005 # -0.5%
+        max_holding = 15
+        
+        closes = df['close'].values
+        highs = df['high'].values
+        lows = df['low'].values
+        
+        n = len(df)
+        targets = np.full(n, np.nan)
+        
+        for i in range(n - max_holding):
+            entry_price = closes[i]
+            upper_barrier = entry_price * (1 + upper_threshold)
+            lower_barrier = entry_price * (1 + lower_threshold)
+            
+            target_val = 0 # Default to 0 (loss or timeout)
+            
+            for j in range(i + 1, i + 1 + max_holding):
+                curr_high = highs[j]
+                curr_low = lows[j]
+                
+                hit_upper = curr_high >= upper_barrier
+                hit_lower = curr_low <= lower_barrier
+                
+                if hit_upper and hit_lower:
+                    # Ambiguous candle: assume conservative (loss)
+                    target_val = 0
+                    break
+                elif hit_upper:
+                    target_val = 1
+                    break
+                elif hit_lower:
+                    target_val = 0
+                    break
+                    
+            targets[i] = target_val
+            
+        df['target'] = targets
         return df
         
     def train(self, train_df, val_df):
