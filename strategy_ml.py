@@ -13,7 +13,7 @@ def get_signal(df: pd.DataFrame):
     Returns (signal, stop_loss, take_profit)
     signal: 'BUY', 'SELL', or None
     """
-    if len(df) < 50:
+    if df is None or df.empty or len(df) < 50:
         return None, None, None
 
     # Calculate ADX (Average Directional Index) for Regime Filtering

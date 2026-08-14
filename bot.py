@@ -19,7 +19,7 @@ import strategy_swing   as swing
 import strategy_ml      as ml
 import strategy_aggressor as aggressor
 
-PYTHON_PATH = r"C:\Users\Surendra\AppData\Local\Programs\Python\Python311\python.exe"
+# Remove machine-specific python paths; use sys.executable if necessary.
 
 def print_banner():
     print("=" * 60)

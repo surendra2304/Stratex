@@ -11,14 +11,14 @@ SECRET_KEY = "YOUR_BINANCE_TESTNET_SECRET_KEY_HERE"
 BASE_URL = "https://testnet.binance.vision"
 WS_URL = "wss://ws-api.testnet.binance.vision/ws-api/v3"
 
-# --- Trading Symbol ---
-SYMBOL = "BTCUSDT"          # Trading pair
+# --- Dynamic Market Scanner ---
+TOP_COINS_LIMIT = 5  # Number of top trending coins to scan
 TIMEFRAME = "1m"            # Candle interval (1m, 5m, 15m, 1h)
 
 # --- Risk Management ---
 TRADE_QTY = 0.001           # BTC quantity per trade (small for safety)
-MAX_OPEN_TRADES = 1         # Only 1 open trade at a time per strategy
+MAX_OPEN_TRADES = 5         # Allow more trades to open concurrently
 
 # --- Strategy to Run ---
-# Options: "scalper", "swing", "ml", "multi"
+# Options: "scalper", "swing", "ml", "aggressor", "multi"
 ACTIVE_STRATEGY = "multi"

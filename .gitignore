@@ -17,10 +17,14 @@ venv/
 env/
 .venv/
 
-# Trade logs (personal trading data)
+# Trade logs and local state
 trade_log.csv
+active_trades.json
 
-# IDE files
+# Testing artifacts
+.pytest_cache/
+htmlcov/
+.coverage
 .vscode/
 .idea/
 *.swp

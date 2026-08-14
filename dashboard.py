@@ -1,14 +1,13 @@
 import os
 import csv
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
-from binance.client import Client
-from config import API_KEY, SECRET_KEY, TIMEFRAME
+from data import get_candles as fetch_candles
+from config import TIMEFRAME
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
 
-client = Client(API_KEY, SECRET_KEY, testnet=True)
 LOG_FILE = "trade_log.csv"
 
 @app.route('/')
@@ -18,17 +17,22 @@ def serve_index():
 
 @app.route('/api/candles')
 def get_candles():
-    """Fetches live candles for the chart."""
+    """Fetches live candles for the chart via the centralized data module."""
     try:
-        raw = client.get_klines(symbol="BTCUSDT", interval=TIMEFRAME, limit=500)
+        symbol = request.args.get('symbol', 'BTCUSDT')
+        df = fetch_candles(symbol, TIMEFRAME, 500)
+        
+        if df.empty:
+            return jsonify({"error": "No data returned"}), 500
+            
         formatted = []
-        for c in raw:
+        for _, row in df.iterrows():
             formatted.append({
-                "time": int(c[0] / 1000), # Lightweight charts wants integer seconds
-                "open": float(c[1]),
-                "high": float(c[2]),
-                "low": float(c[3]),
-                "close": float(c[4])
+                "time": int(row["timestamp"].timestamp()),
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"])
             })
         return jsonify(formatted)
     except Exception as e:
@@ -149,4 +153,5 @@ def serve_static(path):
 if __name__ == '__main__':
     print("🚀 Starting Live Dashboard...")
     print("👉 Open http://127.0.0.1:5000 in your browser")
-    app.run(debug=True, port=5000)
+    is_debug = os.environ.get('FLASK_DEBUG') == '1'
+    app.run(debug=is_debug, port=5000)

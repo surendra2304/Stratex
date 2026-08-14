@@ -9,8 +9,8 @@ def get_signal(df):
     - SELL when price touches the upper Bollinger Band AND RSI is overbought (>70)
     Returns: "BUY", "SELL", or None
     """
-    if df is None or len(df) < 2:
-        return None
+    if df is None or df.empty or len(df) < 2:
+        return None, None, None
 
     last = df.iloc[-1]
     prev = df.iloc[-2]
