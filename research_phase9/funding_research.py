@@ -1,6 +1,6 @@
 import pandas as pd
 from data_client import MarketDataClient
-from config import API_KEY, SECRET_KEY
+# config not needed for MarketDataClient
 
 def run_funding_arbitrage_research(symbol="BTCUSDT"):
     """

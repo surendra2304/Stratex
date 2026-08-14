@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime
 from data_client import MarketDataClient
-from config import API_KEY, SECRET_KEY, TIMEFRAME, ACTIVE_STRATEGY, SYMBOL
+from config import TIMEFRAME, ACTIVE_STRATEGY, SYMBOL
 from config import BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE, RISK_PER_TRADE, STARTING_BALANCE, OOS_TRAIN_PCT, OOS_VAL_PCT
 from data import add_indicators
 

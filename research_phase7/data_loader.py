@@ -4,7 +4,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
 from data_client import MarketDataClient
-from config import API_KEY, SECRET_KEY, TIMEFRAME, SYMBOL
+from config import TIMEFRAME, SYMBOL
 
 def download_and_verify_data(symbol=SYMBOL, timeframe=TIMEFRAME, days=90, use_cache=True):
     """

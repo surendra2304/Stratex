@@ -3,7 +3,7 @@
 # ==============================================================================
 import pandas as pd
 from data_client import MarketDataClient
-from config import API_KEY, SECRET_KEY, BASE_URL, TIMEFRAME
+from config import BASE_URL, TIMEFRAME
 
 def get_top_gainers(limit=5):
     """Fetches the top gaining USDT pairs from Binance Testnet in the last 24h."""

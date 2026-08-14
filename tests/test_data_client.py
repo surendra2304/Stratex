@@ -39,7 +39,7 @@ def test_market_data_client_paper_mode():
         
         # When unavailable, reads return None
         assert client.get_ticker() is None
-        assert client.get_historical_klines() is None
+        assert client.get_historical_klines("BTCUSDT", "1m", "1 day ago UTC") is None
 
 def test_market_data_client_research_mode():
     """
@@ -55,7 +55,7 @@ def test_market_data_client_research_mode():
         
         client = MarketDataClient()
         assert client.is_available() is True
-        assert client.data_source == "BINANCE_READ_ONLY"
+        assert client.data_source == "BINANCE_TESTNET_READ_ONLY"
         
         # Verify read operations pass through
         res = client.get_ticker()
