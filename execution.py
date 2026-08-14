@@ -18,8 +18,9 @@ def get_open_orders(symbol=SYMBOL):
         return 0
 
 def place_market_order(strategy_name, side, symbol=SYMBOL, quantity=TRADE_QTY, sl=None, tp=None):
-    """Places a market order on Binance Testnet."""
+    """Places a market order and immediately sets SL/TP via an OCO order."""
     try:
+        # 1. Place the entry Market order
         order_side = Client.SIDE_BUY if side == "BUY" else Client.SIDE_SELL
         order = client.create_order(
             symbol=symbol,
@@ -29,8 +30,27 @@ def place_market_order(strategy_name, side, symbol=SYMBOL, quantity=TRADE_QTY, s
         )
         order_id = order.get("orderId", "N/A")
         price = float(order.get("fills", [{}])[0].get("price", 0)) if order.get("fills") else 0
-        
-        print(f"[{strategy_name}] ✅ {side} order placed! OrderID: {order_id} | Price: {price:.2f}")
+        print(f"[{strategy_name}] ✅ {side} order placed! Price: {price:.2f}")
+
+        # 2. Place the OCO order for Take Profit and Stop Loss
+        if sl and tp:
+            oco_side = Client.SIDE_SELL if side == "BUY" else Client.SIDE_BUY
+            
+            # Format prices to match exchange rules (e.g. 2 decimal places for USDT pairs)
+            tp_price = f"{tp:.2f}"
+            sl_price = f"{sl:.2f}"
+            
+            oco_order = client.create_oco_order(
+                symbol=symbol,
+                side=oco_side,
+                quantity=quantity,
+                price=tp_price,            # Take profit price
+                stopPrice=sl_price,        # Stop loss trigger
+                stopLimitPrice=sl_price,   # Stop loss execution price
+                stopLimitTimeInForce=Client.TIME_IN_FORCE_GTC
+            )
+            print(f"[{strategy_name}] 🛡️  SL/TP OCO order placed! SL: {sl_price} | TP: {tp_price}")
+
         log_trade(strategy_name, symbol, side, quantity, price, sl, tp, order_id, "FILLED")
         return order
     except BinanceAPIException as e:
