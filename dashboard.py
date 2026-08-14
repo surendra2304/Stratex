@@ -1,5 +1,10 @@
 import os
 import csv
+import sys
+import io
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 from data import get_candles as fetch_candles
