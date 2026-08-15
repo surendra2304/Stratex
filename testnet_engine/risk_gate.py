@@ -101,12 +101,14 @@ class RiskGate:
         if current_equity > self.peak_equity:
             self.peak_equity = current_equity
 
-    def calculate_position_size(self, current_equity, entry_price, sl_price, filters):
+    def calculate_position_size(self, current_equity, entry_price, sl_price, filters=None):
         """
         Calculates position size strictly capped at MAX_TESTNET_RISK_PER_TRADE,
         and floors the value strictly to Binance's LOT_SIZE stepSize.
         Returns 0.0 if the rounded size is below MIN_NOTIONAL.
         """
+        if filters is None:
+            filters = {"stepSize": 0.00001, "minNotional": 10.0}
         risk_per_unit = abs(entry_price - sl_price)
         if risk_per_unit == 0:
             return 0.0

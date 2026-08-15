@@ -1,8 +1,8 @@
 {
-    "market_data": "CRITICAL",
+    "market_data": "OK",
     "strategy": "OK",
     "portfolio": "OK",
     "persistence": "OK",
-    "reconciliation": "RECONCILIATION_ERROR",
-    "last_update": 1786785194.70492
+    "reconciliation": "OK",
+    "last_update": 1786825935.5412447
 }

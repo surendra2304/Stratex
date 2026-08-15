@@ -1,5 +1,8 @@
 import os
+import sys
 import tempfile
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Create a global temporary directory for tests
 test_dir = tempfile.mkdtemp(prefix="mt5_test_")
@@ -10,5 +13,6 @@ os.environ["TESTNET_OPPORTUNITY_LOG"] = os.path.join(test_dir, "testnet_opportun
 os.environ["TESTNET_PORTFOLIO_FILE"] = os.path.join(test_dir, "testnet_portfolio.json")
 os.environ["TESTNET_EQUITY_HISTORY_FILE"] = os.path.join(test_dir, "testnet_equity_history.jsonl")
 os.environ["ACTIVE_TRADES_FILE"] = os.path.join(test_dir, "active_trades.json")
+os.environ["FORWARD_RECONCILIATION_FILE"] = os.path.join(test_dir, "forward_reconciliation.jsonl")
 os.environ["TRADING_MODE"] = "TESTNET"
 os.environ["TESTNET_ONLY"] = "TRUE"

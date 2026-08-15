@@ -46,8 +46,8 @@
     "required_win_rate": 0.0,
     "required_sharpe": 0.5,
     "max_acceptable_drawdown_pct": 0.2,
-    "status": "RUNNING",
+    "status": "ABORTED",
     "started_at": 1786784178.0904524,
-    "completed_at": null,
-    "abort_reason": null
+    "completed_at": 1786825016.2213473,
+    "abort_reason": "Runner halted on startup due to duplicate trade_id 'pos_1' in pre-UUID paper trade ledger. Aborted to ensure honest 30-day forward validation clock."
 }

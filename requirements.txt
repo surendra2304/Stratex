@@ -7,5 +7,6 @@ ta>=0.10.0
 requests>=2.28.0
 flask
 flask-cors
+python-dotenv>=1.0.0
 pytest>=7.0.0
 pytest-mock>=3.10.0

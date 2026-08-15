@@ -1,0 +1,7 @@
+[
+  {
+    "trade_id": "660ac44c",
+    "strategy": "ema200",
+    "symbol": "SIM",
+    "side": "SELL",
+    "signal_time": 

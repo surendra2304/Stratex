@@ -135,3 +135,84 @@ def test_signal_funnel_math():
     errors = verify_funnel(stats, open_positions, closed_positions)
     assert len(errors) == 1
     assert "TOTAL_SIGNALS" in errors[0]
+
+
+def test_paper_reconciliation_isolated_path(tmp_path):
+    """Ensure PaperReconciliation writes records to the explicitly passed path and isolates production files."""
+    from paper_engine.reconciliation import PaperReconciliation
+
+    prod_file = "forward_reconciliation.jsonl"
+    prod_size_before = os.path.getsize(prod_file) if os.path.exists(prod_file) else 0
+
+    ledger_file = str(tmp_path / "paper_ledger.jsonl")
+    rec_file = str(tmp_path / "isolated_reconciliation.jsonl")
+
+    with open(ledger_file, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"trade_id": "t1", "signal_id": "s1", "status": "CLOSED"}) + "\n")
+        f.write(json.dumps({"trade_id": "t2", "signal_id": "s2", "status": "CLOSED"}) + "\n")
+
+    reconciler = PaperReconciliation(ledger_file, reconciliation_file=rec_file)
+    ok = reconciler.run()
+
+    assert ok is True
+    assert os.path.exists(rec_file), "Isolated reconciliation file should have been created"
+
+    with open(rec_file, "r", encoding="utf-8") as f:
+        records = [json.loads(line) for line in f if line.strip()]
+
+    assert len(records) == 1
+    assert records[0]["status"] == "OK"
+    assert records[0]["detail"] == "OK"
+
+    prod_size_after = os.path.getsize(prod_file) if os.path.exists(prod_file) else 0
+    assert prod_size_after == prod_size_before, "Production forward_reconciliation.jsonl must not be modified by isolated test"
+
+
+def test_paper_reconciliation_env_var_override(tmp_path, monkeypatch):
+    """Ensure PaperReconciliation respects FORWARD_RECONCILIATION_FILE env var."""
+    from paper_engine.reconciliation import PaperReconciliation
+
+    ledger_file = str(tmp_path / "paper_ledger.jsonl")
+    rec_file = str(tmp_path / "env_reconciliation.jsonl")
+
+    with open(ledger_file, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"trade_id": "t1", "signal_id": "s1"}) + "\n")
+
+    monkeypatch.setenv("FORWARD_RECONCILIATION_FILE", rec_file)
+
+    reconciler = PaperReconciliation(ledger_file)
+    assert reconciler.reconciliation_file == rec_file
+
+    ok = reconciler.run()
+    assert ok is True
+    assert os.path.exists(rec_file)
+
+    with open(rec_file, "r", encoding="utf-8") as f:
+        records = [json.loads(line) for line in f if line.strip()]
+    assert len(records) == 1
+    assert records[0]["status"] == "OK"
+
+
+def test_paper_reconciliation_duplicate_detection_isolated(tmp_path):
+    """Ensure duplicate detection writes RECONCILIATION_ERROR to isolated file."""
+    from paper_engine.reconciliation import PaperReconciliation
+
+    ledger_file = str(tmp_path / "paper_ledger.jsonl")
+    rec_file = str(tmp_path / "dup_reconciliation.jsonl")
+
+    with open(ledger_file, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"trade_id": "dup_1", "signal_id": "s1"}) + "\n")
+        f.write(json.dumps({"trade_id": "dup_1", "signal_id": "s2"}) + "\n")
+
+    reconciler = PaperReconciliation(ledger_file, reconciliation_file=rec_file)
+    ok = reconciler.run()
+
+    assert ok is False
+    assert os.path.exists(rec_file)
+
+    with open(rec_file, "r", encoding="utf-8") as f:
+        records = [json.loads(line) for line in f if line.strip()]
+    assert len(records) == 1
+    assert records[0]["status"] == "RECONCILIATION_ERROR"
+    assert "DUPLICATE_TRADE_IDS" in records[0]["detail"]
+

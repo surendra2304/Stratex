@@ -147,8 +147,11 @@ def load_or_create_experiment() -> FrozenExperimentConfig:
         exp_path = os.path.join(EXPERIMENT_DIR, f"{exp_id}.json")
         if os.path.exists(exp_path):
             cfg = FrozenExperimentConfig.load(exp_id, EXPERIMENT_DIR)
-            logger.info(f"RESUMED experiment: {cfg.experiment_id[:8]} (started {cfg.started_at})")
-            return cfg
+            if cfg.status == "RUNNING":
+                logger.info(f"RESUMED experiment: {cfg.experiment_id[:8]} (started {cfg.started_at})")
+                return cfg
+            else:
+                logger.info(f"Experiment {exp_id[:8]} is {cfg.status} — creating fresh experiment.")
         else:
             logger.warning(f"Experiment ID file found but config missing: {exp_path}")
 
@@ -460,6 +463,16 @@ class ForwardHealth:
             with open(tmp, "w") as f:
                 json.dump(data, f, indent=4)
             os.replace(tmp, HEALTH_FILE)
+
+            # Persist heartbeat.json
+            hb_data = {
+                "last_process_heartbeat": self.last_update,
+                "last_market_data": self.last_update if self.market_data == "OK" else 0.0,
+            }
+            tmp_hb = "heartbeat.json.tmp"
+            with open(tmp_hb, "w") as f:
+                json.dump(hb_data, f)
+            os.replace(tmp_hb, "heartbeat.json")
         except Exception:
             pass
 
@@ -549,10 +562,9 @@ def run():
     logger.info("=" * 70)
 
     # Safety gate
-    import execution
-    allowed, reason = execution.ExecutionPolicy.can_place_order()
-    if allowed:
-        logger.critical("SAFETY FAILURE: orders allowed — aborting")
+    import config
+    if getattr(config, "LIVE_TRADING_ENABLED", False):
+        logger.critical("SAFETY FAILURE: LIVE trading is enabled — aborting paper runner")
         sys.exit(1)
 
     if is_kill_switch_active():

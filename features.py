@@ -49,6 +49,7 @@ def add_features(df):
     tr3 = abs(df['low'] - df['close'].shift(1))
     df['tr'] = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
     df['atr_14'] = df['tr'].rolling(window=14).mean()
+    df['atr'] = df['atr_14']
     df['atr_pct'] = df['atr_14'] / df['close']
     
     df['bb_middle'] = df['close'].rolling(window=20).mean()

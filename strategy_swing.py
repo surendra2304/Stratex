@@ -17,7 +17,7 @@ def get_signal(df):
 
     close     = last["close"]
     ema_200   = last["ema_200"]
-    atr       = last["atr"]
+    atr       = last.get("atr", last.get("atr_14", 0.0))
     macd_now  = last["macd"]
     sig_now   = last["macd_signal"]
     macd_prev = prev["macd"]

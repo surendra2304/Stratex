@@ -12,7 +12,7 @@ import json
 import math
 import os
 import time
-from typing import List, Dict
+from typing import List, Dict, Optional
 from logger import get_logger
 from paper_engine.portfolio import PaperPortfolio
 
@@ -60,8 +60,12 @@ class PaperReconciliation:
     Checks for duplicate trade IDs and duplicate signal IDs in the ledger.
     """
 
-    def __init__(self, ledger_file: str):
+    def __init__(self, ledger_file: str, reconciliation_file: Optional[str] = None):
         self.ledger_file = ledger_file
+        self.reconciliation_file = (
+            reconciliation_file
+            or os.getenv("FORWARD_RECONCILIATION_FILE", "forward_reconciliation.jsonl")
+        )
 
     def _read_ledger(self) -> List[Dict]:
         if not os.path.exists(self.ledger_file):
@@ -94,7 +98,9 @@ class PaperReconciliation:
             logger.error(
                 f"RECONCILIATION ERROR: {len(duplicates)} duplicate trade IDs: {duplicates[:5]}"
             )
-            _write_reconciliation_record(False, f"DUPLICATE_TRADE_IDS: {duplicates[:5]}")
+            _write_reconciliation_record(
+                False, f"DUPLICATE_TRADE_IDS: {duplicates[:5]}", filename=self.reconciliation_file
+            )
             return False
 
         # 2. Check for duplicate signal IDs
@@ -108,10 +114,12 @@ class PaperReconciliation:
 
         if dup_sigs:
             logger.error(f"RECONCILIATION ERROR: {len(dup_sigs)} duplicate signal IDs")
-            _write_reconciliation_record(False, f"DUPLICATE_SIGNAL_IDS: count={len(dup_sigs)}")
+            _write_reconciliation_record(
+                False, f"DUPLICATE_SIGNAL_IDS: count={len(dup_sigs)}", filename=self.reconciliation_file
+            )
             return False
 
-        _write_reconciliation_record(True, "OK")
+        _write_reconciliation_record(True, "OK", filename=self.reconciliation_file)
         logger.info(
             f"Reconciliation PASS: {len(records)} ledger records, "
             f"{len(seen_ids)} unique trade IDs, {len(seen_sigs)} unique signal IDs"
@@ -119,14 +127,15 @@ class PaperReconciliation:
         return True
 
 
-def _write_reconciliation_record(ok: bool, detail: str):
+def _write_reconciliation_record(ok: bool, detail: str, filename: Optional[str] = None):
+    out_file = filename or os.getenv("FORWARD_RECONCILIATION_FILE", "forward_reconciliation.jsonl")
     record = {
         "reconciled_at": time.time(),
         "status": "OK" if ok else "RECONCILIATION_ERROR",
         "detail": detail,
     }
     try:
-        with open("forward_reconciliation.jsonl", "a", encoding="utf-8") as f:
+        with open(out_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(record) + "\n")
     except Exception as e:
         logger.error(f"Failed to write reconciliation record: {e}")

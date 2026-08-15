@@ -1,74 +1,144 @@
 #!/bin/bash
 # ==============================================================================
-# DEPLOY.SH - Automated Cloud Deployment Script (Ubuntu VPS)
+# DEPLOY.SH - Automated Cloud Deployment Script (Ubuntu/Debian VPS)
+# ==============================================================================
+# Deploys:
+#   1. tradingbot.service       -> Python Testnet Engine (bot.py)
+#   2. tradingdashboard.service -> Web Dashboard UI (dashboard.py)
 # ==============================================================================
 
-echo "🚀 Starting Automated Deployment for Python Trading Bot..."
+set -e
 
-# 1. System Updates
+echo "=========================================================="
+echo "🚀 Python Trading Bot - Automated VPS Deployment"
+echo "=========================================================="
+
+# 1. System Updates & Core Dependencies
 echo "📦 Updating system packages..."
 sudo apt update && sudo apt upgrade -y
+sudo apt install -y python3.11 python3.11-venv python3-pip git curl ufw
 
-# 2. Install Python 3.11 and dependencies
-echo "🐍 Installing Python 3.11 and Git..."
-sudo apt install -y python3.11 python3.11-venv python3-pip git screen
+# 2. Configure Firewall
+echo "🛡️  Configuring Firewall (UFW)..."
+sudo ufw allow 22/tcp    # SSH
+sudo ufw allow 5000/tcp  # Dashboard UI
+sudo ufw --force enable
 
-# 3. Clone Repository (if not already cloned)
-if [ ! -d "python-trading-bot" ]; then
-    echo "📥 Cloning repository..."
-    git clone https://github.com/surendra2304/python-trading-bot.git
+APP_DIR=$(pwd)
+echo "📂 Application Directory: $APP_DIR"
+
+# 3. Create Python Virtual Environment
+if [ ! -d "venv" ]; then
+    echo "🔧 Setting up Python 3.11 virtual environment..."
+    python3.11 -m venv venv
 fi
 
-cd python-trading-bot
-
-# 4. Create Virtual Environment
-echo "🔧 Setting up Python virtual environment..."
-python3.11 -m venv venv
 source venv/bin/activate
 
-# 5. Install Python Packages
-echo "📚 Installing required libraries (this may take a minute)..."
+# 4. Install Python Packages
+echo "📚 Installing dependencies from requirements.txt..."
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# 6. Check for Configuration
-if [ ! -f "config.py" ]; then
-    echo "⚠️  WARNING: config.py not found!"
-    echo "Creating from template..."
-    cp config_template.py config.py
-    echo "❌ DEPLOYMENT PAUSED: Please edit config.py to add your Binance API keys, then run this script again."
+# 5. Check & Validate Environment Configuration (.env)
+if [ ! -f ".env" ]; then
+    echo "⚠️  .env file not found!"
+    if [ -f ".env.example" ]; then
+        cp .env.example .env
+        echo "Created .env from .env.example."
+    fi
+    echo ""
+    echo "❌ ACTION REQUIRED: Please edit .env with your Binance Testnet keys:"
+    echo "   nano .env"
+    echo "Then run ./deploy.sh again."
     exit 1
 fi
 
-# 7. Start the Bot using Systemd or Screen
-echo "🔄 Creating background daemon to run bot 24/7..."
+# Ensure mandatory Testnet safety settings in .env
+grep -q "TRADING_MODE=" .env || echo 'TRADING_MODE="TESTNET"' >> .env
+grep -q "TESTNET_ENABLED=" .env || echo 'TESTNET_ENABLED="True"' >> .env
+grep -q "LIVE_TRADING_ENABLED=" .env || echo 'LIVE_TRADING_ENABLED="False"' >> .env
 
-cat <<EOF > tradingbot.service
+# 6. Run Test Suite before deploying
+echo "🧪 Running full test suite..."
+pytest
+
+# 7. Create Systemd Services
+
+# Service 1: Trading Bot
+echo "⚙️  Configuring tradingbot.service..."
+cat <<EOF | sudo tee /etc/systemd/system/tradingbot.service > /dev/null
 [Unit]
-Description=Python Trading Bot
+Description=Binance Testnet Quantitative Trading Engine
 After=network.target
 
 [Service]
+Type=simple
 User=$USER
-WorkingDirectory=$(pwd)
-ExecStart=$(pwd)/venv/bin/python bot.py
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$APP_DIR/.env
+Environment=TRADING_MODE=TESTNET
+Environment=TESTNET_ONLY=TRUE
+ExecStart=$APP_DIR/venv/bin/python bot.py
 Restart=always
 RestartSec=10
+StandardOutput=append:$APP_DIR/bot.log
+StandardError=append:$APP_DIR/bot.log
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-sudo mv tradingbot.service /etc/systemd/system/
+# Service 2: Dashboard UI
+echo "⚙️  Configuring tradingdashboard.service..."
+cat <<EOF | sudo tee /etc/systemd/system/tradingdashboard.service > /dev/null
+[Unit]
+Description=Binance Testnet Trading Terminal Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$APP_DIR/.env
+Environment=TRADING_MODE=TESTNET
+Environment=TESTNET_ONLY=TRUE
+ExecStart=$APP_DIR/venv/bin/python dashboard.py
+Restart=always
+RestartSec=10
+StandardOutput=append:$APP_DIR/dashboard.log
+StandardError=append:$APP_DIR/dashboard.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 8. Reload and Enable Services
+echo "🔄 Reloading systemd daemon and starting services..."
 sudo systemctl daemon-reload
+
 sudo systemctl enable tradingbot
-sudo systemctl start tradingbot
+sudo systemctl restart tradingbot
+
+sudo systemctl enable tradingdashboard
+sudo systemctl restart tradingdashboard
 
 echo "=========================================================="
-echo "✅ DEPLOYMENT SUCCESSFUL!"
-echo "Your bot is now running in the background 24/7."
-echo ""
-echo "To view live logs: sudo journalctl -u tradingbot -f"
-echo "To stop the bot  : sudo systemctl stop tradingbot"
-echo "To check status  : sudo systemctl status tradingbot"
+echo "✅ DEPLOYMENT COMPLETE & RUNNING 24/7"
 echo "=========================================================="
+echo ""
+echo "📊 Services Status:"
+sudo systemctl status tradingbot --no-pager -l
+echo ""
+sudo systemctl status tradingdashboard --no-pager -l
+echo ""
+echo "🔗 Dashboard Access: http://$(curl -s ifconfig.me || echo 'YOUR_VPS_IP'):5000"
+echo ""
+echo "🛠️  Useful Management Commands:"
+echo "   View Bot Logs       : sudo journalctl -u tradingbot -f"
+echo "   View Dashboard Logs : sudo journalctl -u tradingdashboard -f"
+echo "   Restart Bot         : sudo systemctl restart tradingbot"
+echo "   Stop Bot            : sudo systemctl stop tradingbot"
+echo "   Check Bot Status    : sudo systemctl status tradingbot"
+echo "=========================================================="
+

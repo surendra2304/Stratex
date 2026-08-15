@@ -1,1 +1,1 @@
-[{"strategy": "ml", "symbol": "BTCUSDT", "side": "BUY", "quantity": 0.5, "entry_price": 50000.0, "oco_id": 200, "tp_price": 55000, "sl_price": 48000, "state": "PROTECTED", "entry_client_id": "27da2dae-718a-4216-886d-3ac50fc3c070"}]
+[{"strategy": "TEST", "symbol": "BTCUSDT", "side": "BUY", "quantity": 0.5, "entry_price": 50000.0, "sl_price": 49000.0, "tp_price": 52000.0, "oco_id": 999, "state": 1, "signal_id": "test_mock_123", "entry_timestamp": "2026-08-15T12:00:00Z"}]

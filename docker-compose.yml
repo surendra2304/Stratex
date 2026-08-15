@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Trading Engine (Binance Spot Testnet Execution Daemon)
+  # ----------------------------------------------------------------------------
+  trading-bot:
+    build: .
+    container_name: binance_testnet_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - TRADING_MODE=TESTNET
+      - TESTNET_ONLY=TRUE
+      - TESTNET_ENABLED=True
+      - LIVE_TRADING_ENABLED=False
+    volumes:
+      # Persist state files, ledgers, portfolios, and logs across container restarts
+      - ./testnet_portfolio.json:/app/testnet_portfolio.json
+      - ./testnet_trade_ledger.jsonl:/app/testnet_trade_ledger.jsonl
+      - ./testnet_opportunity_log.jsonl:/app/testnet_opportunity_log.jsonl
+      - ./testnet_equity_history.jsonl:/app/testnet_equity_history.jsonl
+      - ./active_trades.json:/app/active_trades.json
+      - ./bot.log:/app/bot.log
+    command: python bot.py
+
+  # ----------------------------------------------------------------------------
+  # 2. Web Dashboard UI (Real-time Telemetry Terminal)
+  # ----------------------------------------------------------------------------
+  dashboard:
+    build: .
+    container_name: binance_testnet_dashboard
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - TRADING_MODE=TESTNET
+      - TESTNET_ONLY=TRUE
+    volumes:
+      - ./testnet_portfolio.json:/app/testnet_portfolio.json:ro
+      - ./testnet_trade_ledger.jsonl:/app/testnet_trade_ledger.jsonl:ro
+      - ./testnet_opportunity_log.jsonl:/app/testnet_opportunity_log.jsonl:ro
+      - ./testnet_equity_history.jsonl:/app/testnet_equity_history.jsonl:ro
+      - ./active_trades.json:/app/active_trades.json:ro
+    command: python dashboard.py
