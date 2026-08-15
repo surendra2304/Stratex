@@ -281,6 +281,7 @@ def get_trades():
     # 1. Parse closed trades from ledger
     debug_log = []
     ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl") if TRADING_MODE == "TESTNET" else "paper_trade_ledger.jsonl"
+    seen_exit_ids = set()
     
     debug_log.append(f"Mode is {TRADING_MODE}, looking for {ledger_file}")
     if os.path.exists(ledger_file):
@@ -308,6 +309,13 @@ def get_trades():
                             else:
                                 continue
                                 
+                    # Prevent duplicate accounting of identical completed trades
+                    exit_id = str(exit_oid) if exit_oid else (str(trade.get("exit_client_id")) if trade.get("exit_client_id") else None)
+                    if exit_id:
+                        if exit_id in seen_exit_ids:
+                            continue
+                        seen_exit_ids.add(exit_id)
+
                     pnl = trade.get("pnl", trade.get("net_pnl", 0.0))
                     
                     if pnl > 0:
@@ -338,12 +346,11 @@ def get_trades():
         f.write("\n".join(debug_log))
     
     # 2. Add open positions from portfolio
-    port_file = "testnet_portfolio.json" if TRADING_MODE == "TESTNET" else "paper_portfolio.json"
+    port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json") if TRADING_MODE == "TESTNET" else "paper_portfolio.json"
     if os.path.exists(port_file):
         try:
             with open(port_file, "r") as f:
                 port = json.load(f)
-            net_pnl = port.get("realized_pnl", 0.0)
             
             # testnet_portfolio uses a dict for positions: {"BTCUSDT": {...}}
             # paper used a list. Handle both.
@@ -374,6 +381,7 @@ def get_trades():
             
     positions.sort(key=lambda x: x["timestamp"], reverse=True)
     total_closed = wins + losses
+    net_pnl = gross_profit - gross_loss
     win_rate = (wins / total_closed * 100) if total_closed > 0 else "N/A"
     profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else ("Infinity" if gross_profit > 0 else ("N/A" if total_closed == 0 else 0))
     

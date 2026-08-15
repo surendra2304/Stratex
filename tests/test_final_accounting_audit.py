@@ -249,3 +249,84 @@ def test_m_dashboard_pnl_and_authoritative_accounting_reconcile(client, tmp_path
         
         sum_closed_pnl = sum([p["pnl"] for p in res_trades["positions"] if p["status"] == "CLOSED"])
         assert res_status["realized_pnl"] == sum_closed_pnl == 1.50
+        assert res_trades["net_pnl"] == 1.50
+        assert res_trades["total_trades"] == 1
+
+def test_duplicate_exit_order_id_deduplication(client, tmp_path, monkeypatch):
+    """Proves duplicate identical exit_order_id in ledger is counted only once in /api/trades and risk restore."""
+    portfolio_file = tmp_path / "testnet_portfolio.json"
+    ledger_file = tmp_path / "testnet_trade_ledger.jsonl"
+    
+    monkeypatch.setenv("TESTNET_PORTFOLIO_FILE", str(portfolio_file))
+    monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger_file))
+    monkeypatch.setattr("config.TRADING_MODE", "TESTNET")
+    
+    today_utc = datetime.datetime.utcnow().date().isoformat()
+    records = [
+        {"timestamp": f"{today_utc}T10:00:00Z", "symbol": "BTCUSDT", "strategy": "ADX_EMA", "source": "BINANCE_EXECUTION", "action": "CLOSE_WIN", "quantity": 0.001, "entry_price": 60000.0, "exit_price": 61000.0, "pnl": 1.00, "net_pnl": 1.00, "entry_order_id": "1001", "exit_order_id": "2001"},
+        {"timestamp": f"{today_utc}T10:00:01Z", "symbol": "BTCUSDT", "strategy": "ADX_EMA", "source": "BINANCE_EXECUTION", "action": "CLOSE_WIN", "quantity": 0.001, "entry_price": 60000.0, "exit_price": 61000.0, "pnl": 1.00, "net_pnl": 1.00, "entry_order_id": "1001", "exit_order_id": "2001"}
+    ]
+    with open(ledger_file, "w") as f:
+        for r in records:
+            f.write(json.dumps(r) + "\n")
+            
+    res_trades = client.get("/api/trades").get_json()
+    assert res_trades["total_trades"] == 1
+    assert res_trades["net_pnl"] == 1.00
+    assert len(res_trades["positions"]) == 1
+    
+    mock_client = MagicMock()
+    mock_client.get_account.return_value = {'balances': [{'asset': 'USDT', 'free': '10000.0', 'locked': '0.0'}]}
+    mock_client.get_open_orders.return_value = []
+    with patch("testnet_engine.service.get_exchange_client", return_value=mock_client), \
+         patch("execution.get_exchange_client", return_value=mock_client):
+        service = TestnetService()
+        assert service.risk_gate.daily_realized_loss == 1.00
+
+def test_original_plus_recovery_representation_deduplication(client, tmp_path, monkeypatch):
+    """Proves original Binance execution and recovery record of same trade (same exit_order_id) are not double counted."""
+    portfolio_file = tmp_path / "testnet_portfolio.json"
+    ledger_file = tmp_path / "testnet_trade_ledger.jsonl"
+    
+    monkeypatch.setenv("TESTNET_PORTFOLIO_FILE", str(portfolio_file))
+    monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger_file))
+    monkeypatch.setattr("config.TRADING_MODE", "TESTNET")
+    
+    today_utc = datetime.datetime.utcnow().date().isoformat()
+    records = [
+        {"timestamp": f"{today_utc}T09:00:00Z", "symbol": "BTCUSDT", "strategy": "ADX_EMA", "source": "BINANCE_EXECUTION", "action": "CLOSE_WIN", "quantity": 0.001, "entry_price": 60000.0, "exit_price": 61500.0, "pnl": 1.50, "net_pnl": 1.50, "entry_order_id": "3001", "exit_order_id": "4001"},
+        {"timestamp": f"{today_utc}T09:00:00Z", "symbol": "BTCUSDT", "strategy": "RECOVERED", "source": "RECOVERY_FROM_BINANCE", "action": "CLOSE_WIN", "quantity": 0.001, "entry_price": 60000.0, "exit_price": 61500.0, "pnl": 1.50, "net_pnl": 1.50, "entry_order_id": "3001", "exit_order_id": "4001"}
+    ]
+    with open(ledger_file, "w") as f:
+        for r in records:
+            f.write(json.dumps(r) + "\n")
+            
+    res_trades = client.get("/api/trades").get_json()
+    assert res_trades["total_trades"] == 1
+    assert res_trades["net_pnl"] == 1.50
+    assert len(res_trades["positions"]) == 1
+
+def test_synthetic_test_record_zero_influence_on_all_metrics(client, tmp_path, monkeypatch):
+    """Proves TEST +$974 record cannot change net_pnl, total_trades, wins/losses, or profit factor."""
+    portfolio_file = tmp_path / "testnet_portfolio.json"
+    ledger_file = tmp_path / "testnet_trade_ledger.jsonl"
+    
+    monkeypatch.setenv("TESTNET_PORTFOLIO_FILE", str(portfolio_file))
+    monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger_file))
+    monkeypatch.setattr("config.TRADING_MODE", "TESTNET")
+    
+    records = [
+        {"timestamp": "2026-08-15T19:00:00Z", "symbol": "BTCUSDT", "strategy": "TEST", "source": "TEST", "action": "CLOSE_WIN", "quantity": 0.5, "entry_price": 50000.0, "exit_price": 52000.0, "pnl": 974.0, "net_pnl": 974.0, "entry_order_id": None, "exit_order_id": None},
+        {"timestamp": "2026-08-14T11:00:00Z", "symbol": "BTCUSDT", "strategy": "ADX_EMA", "source": "BINANCE_EXECUTION", "action": "CLOSE_WIN", "quantity": 0.001, "entry_price": 60000.0, "exit_price": 62000.0, "pnl": 2.00, "net_pnl": 2.00, "entry_order_id": "7001", "exit_order_id": "7002"}
+    ]
+    with open(ledger_file, "w") as f:
+        for r in records:
+            f.write(json.dumps(r) + "\n")
+            
+    res_trades = client.get("/api/trades").get_json()
+    assert res_trades["net_pnl"] == 2.00
+    assert res_trades["total_trades"] == 1
+    assert res_trades["win_rate"] == 100.0
+    assert len(res_trades["positions"]) == 1
+    assert res_trades["positions"][0]["pnl"] == 2.00
+

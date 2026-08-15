@@ -152,6 +152,7 @@ class TestnetService:
                 return
             today_str = datetime.datetime.utcnow().date().isoformat()
             daily_loss = 0.0
+            seen_exit_ids = set()
             
             with open(ledger_file, 'r') as f:
                 for line in f:
@@ -173,6 +174,13 @@ class TestnetService:
                                 source = "RECOVERY_FROM_BINANCE"
                             else:
                                 continue
+
+                        # Prevent duplicate accounting of identical completed trades
+                        exit_id = str(exit_oid) if exit_oid else (str(record.get("exit_client_id")) if record.get("exit_client_id") else None)
+                        if exit_id:
+                            if exit_id in seen_exit_ids:
+                                continue
+                            seen_exit_ids.add(exit_id)
 
                         if "CLOSE" in record.get("action", ""):
                             # Parse date from timestamp
