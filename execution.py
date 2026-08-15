@@ -2,12 +2,15 @@ import json
 import os
 import shutil
 import math
+import datetime
+import time
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from config import API_KEY, SECRET_KEY, TRADE_QTY, TRADING_MODE, PAPER_SAFE_MODE, TESTNET_ENABLED, LIVE_TRADING_ENABLED
 from logger import log_trade, get_logger
+from paper_engine.exceptions import StateCorruptionError, ZeroFillError
 from enum import Enum
-from paper_engine.exceptions import StateCorruptionError
+from testnet_engine.protection import place_oco_protection, emergency_market_close
 
 sys_logger = get_logger("execution")
 ACTIVE_TRADES_FILE = os.getenv("ACTIVE_TRADES_FILE", "active_trades.json")
@@ -88,7 +91,11 @@ def get_exchange_client():
 # STATE MANAGEMENT
 # ==============================================================================
 def _validate_trade_schema(trade: dict):
-    required_fields = ["strategy", "symbol", "side", "quantity", "entry_price", "oco_id", "tp_price", "sl_price", "state", "entry_client_id"]
+    required_fields = [
+        "strategy", "symbol", "side", "quantity", 
+        "entry_price", "oco_id", "tp_price", "sl_price", 
+        "state", "signal_id", "entry_timestamp"
+    ]
     for field in required_fields:
         if field not in trade:
             raise StateCorruptionError(f"Missing required field '{field}' in active trade.")
@@ -199,7 +206,7 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         active_trades = _load_active_trades()
         if client_order_id:
             for t in active_trades:
-                if t.get("entry_client_id") == client_order_id:
+                if t.get("signal_id") == client_order_id or t.get("entry_client_id") == client_order_id:
                     sys_logger.warning(f"[{strategy_name}] 🚫 Duplicate Client ID {client_order_id} rejected.")
                     return None
     except StateCorruptionError as e:
@@ -244,106 +251,93 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         else:
             state = OrderState.FAILED
             sys_logger.warning(f"[{strategy_name}] ⚠️ Zero fill for entry order {order_id}.")
-            return None
+            raise ZeroFillError(f"Order {order_id} filled 0 quantity.")
 
-        sys_logger.info(f"[{strategy_name}] ✅ {side} order {state}! Avg Price: {actual_price:.2f}, Executed Qty: {executed_qty}, Fees: {total_fee}", extra={"strategy": strategy_name, "symbol": symbol})
+        sys_logger.info(
+            f"[{strategy_name}] \u2705 {side} order {state}! "
+            f"Avg Price: {actual_price:.2f}, Executed Qty: {executed_qty}, Fees: {total_fee}",
+            extra={"strategy": strategy_name, "symbol": symbol}
+        )
 
-        oco_id = None
-        # 2. Place the OCO order for Take Profit and Stop Loss
+        oco_order_list_id = None
+        tp_order_id = None
+        sl_order_id = None
+
+        # 2. Place OCO protection (TP + SL) immediately after fill
         if sl and tp:
             state = OrderState.PROTECTION_PENDING
-            oco_side = Client.SIDE_SELL if side == "BUY" else Client.SIDE_BUY
-            
+            protection_client_id = f"prot-{client_order_id}" if client_order_id else None
+
             try:
-                # Recalculate SL/TP relative to the actual fill price to prevent relationship errors due to slippage
-                # If BUY (Long), SL < entry, TP > entry.
-                # If SELL (Short), SL > entry, TP < entry.
-                # Original risk distances:
-                # (We don't know the exact entry the strategy used, but we know SL/TP are absolute.)
-                # However, since the strategy passes absolute SL/TP, if we filled worse than SL, it's immediately broken.
-                # Let's adjust them by the slippage amount.
-                # Wait, if we just adjust by slippage, it's safer. Or we can just calculate the percentage.
-                # Actually, the simplest fix is to just check if SL/TP are on the correct side of actual_price, and if not, push them out.
-                if side == "BUY":
-                    if sl >= actual_price: sl = actual_price * 0.99
-                    if tp <= actual_price: tp = actual_price * 1.01
-                else:
-                    if sl <= actual_price: sl = actual_price * 1.01
-                    if tp >= actual_price: tp = actual_price * 0.99
+                prot = place_oco_protection(
+                    client=client,
+                    symbol=symbol,
+                    entry_side=side,
+                    executed_qty=executed_qty,
+                    actual_fill_price=actual_price,
+                    sl_price=sl,
+                    tp_price=tp,
+                    list_client_order_id=protection_client_id,
+                )
+                oco_order_list_id = prot["oco_order_list_id"]
+                tp_order_id       = prot["tp_order_id"]
+                sl_order_id       = prot["sl_order_id"]
+                state             = OrderState.PROTECTED
 
-                # Fetch tick size to ensure proper precision
-                info = client.get_symbol_info(symbol)
-                price_filter = next((f for f in info['filters'] if f['filterType'] == 'PRICE_FILTER'), None)
-                tick_size = float(price_filter['tickSize']) if price_filter else 0.01
-                precision = max(0, int(round(-math.log10(tick_size))))
-                
-                tp_price = f"{tp:.{precision}f}"
-                sl_price = f"{sl:.{precision}f}"
-                
-                oco_params = {
-                    "symbol": symbol,
-                    "side": oco_side,
-                    "quantity": executed_qty,
-                }
-                
-                if side == "BUY":
-                    # Closing a LONG: side=SELL.
-                    # Limit Maker (Take Profit) is above current price -> `price`
-                    # Stop Loss is below current price -> `stopPrice` & `stopLimitPrice`
-                    oco_params.update({
-                        "price": tp_price,
-                        "stopPrice": sl_price,
-                        "stopLimitPrice": sl_price,
-                        "stopLimitTimeInForce": Client.TIME_IN_FORCE_GTC
-                    })
-                else:
-                    # Closing a SHORT: side=BUY.
-                    # Limit Maker (Take Profit) is below current price -> `price`
-                    # Stop Loss is above current price -> `stopPrice` & `stopLimitPrice`
-                    oco_params.update({
-                        "price": tp_price,
-                        "stopPrice": sl_price,
-                        "stopLimitPrice": sl_price,
-                        "stopLimitTimeInForce": Client.TIME_IN_FORCE_GTC
-                    })
+                sys_logger.info(
+                    f"[{strategy_name}] ⛵  Protection placed! "
+                    f"OCO_ListId={oco_order_list_id} "
+                    f"TP_orderId={tp_order_id} (@ {prot['tp_price_sent']}) "
+                    f"SL_orderId={sl_order_id} (@ {prot['sl_price_sent']})",
+                    extra={"strategy": strategy_name, "symbol": symbol}
+                )
 
-                oco_order = client.create_oco_order(**oco_params)
-                oco_id = oco_order.get("orderListId")
-                
-                sys_logger.info(f"[{strategy_name}] 🛡️  SL/TP OCO order placed successfully! SL: {sl_price} | TP: {tp_price}", extra={"strategy": strategy_name, "symbol": symbol})
-                state = OrderState.PROTECTED
-                
-                # Save to active trades for monitoring
+                # Save to active trades including both order IDs and entry fee
                 active = _load_active_trades()
                 active.append({
-                    "strategy": strategy_name,
-                    "symbol": symbol,
-                    "side": side,
-                    "quantity": executed_qty,
-                    "entry_price": actual_price,
-                    "oco_id": oco_id,
-                    "tp_price": tp,
-                    "sl_price": sl,
-                    "state": state,
-                    "entry_client_id": client_order_id
+                    "strategy":          strategy_name,
+                    "symbol":            symbol,
+                    "side":              side,
+                    "quantity":          executed_qty,
+                    "entry_price":       actual_price,
+                    "entry_fee":         total_fee,
+                    "entry_timestamp":   datetime.datetime.utcnow().isoformat() + "Z",
+                    "signal_id":         client_order_id or f"MANUAL_{int(time.time())}",
+                    "oco_id":            oco_order_list_id,
+                    "tp_order_id":       tp_order_id,
+                    "sl_order_id":       sl_order_id,
+                    "tp_price":          tp,
+                    "sl_price":          sl,
+                    "state":             state.value,
+                    "entry_client_id":   client_order_id,
+                    "entry_order_id":    order_id
                 })
                 _save_active_trades(active)
-            except Exception as e:
+
+            except (BinanceAPIException, ValueError, Exception) as e:
                 state = OrderState.PROTECTION_FAILED
-                sys_logger.error(f"[EXEC] 🚨 CRITICAL: OCO Order Failed! Attempting emergency close. Error: {e}", extra={"strategy": strategy_name, "symbol": symbol})
-                # EMERGENCY CLOSE: Close the unprotected market position immediately
+                sys_logger.error(
+                    f"[EXEC] 🚨 CRITICAL: OCO Protection Failed! "
+                    f"Error: {e}. Attempting emergency MARKET close.",
+                    extra={"strategy": strategy_name, "symbol": symbol}
+                )
+                # EMERGENCY CLOSE: verified market close
                 try:
-                    close_side = Client.SIDE_SELL if side == "BUY" else Client.SIDE_BUY
-                    client.create_order(
-                        symbol=symbol,
-                        side=close_side,
-                        type=Client.ORDER_TYPE_MARKET,
-                        quantity=executed_qty
-                    )
+                    ec = emergency_market_close(client, symbol, side, executed_qty)
+                    ec_qty = float(ec.get("executedQty", 0))
                     state = OrderState.EMERGENCY_CLOSE
-                    sys_logger.info(f"[{strategy_name}] 🛡️ Emergency close successful.", extra={"strategy": strategy_name, "symbol": symbol})
+                    sys_logger.info(
+                        f"[{strategy_name}] Emergency close FILLED: qty={ec_qty}.",
+                        extra={"strategy": strategy_name, "symbol": symbol}
+                    )
+                    log_trade(strategy_name, symbol, f"{side}_EMERGENCY_CLOSE",
+                              ec_qty, actual_price, sl, tp, order_id, state)
                 except Exception as ce:
-                    sys_logger.critical(f"[EXEC] 🚨 FATAL: Emergency close failed! Unprotected position active. Error: {ce}", extra={"strategy": strategy_name, "symbol": symbol})
+                    sys_logger.critical(
+                        f"[EXEC] 🚨 FATAL: Emergency close also failed! "
+                        f"UNPROTECTED POSITION ACTIVE for {symbol}. Error: {ce}",
+                        extra={"strategy": strategy_name, "symbol": symbol}
+                    )
                 return None
 
         log_trade(strategy_name, symbol, side, executed_qty, actual_price, sl, tp, order_id, state)
@@ -361,9 +355,12 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         return None
 
 def monitor_open_trades():
-    """Checks active OCO orders to see if SL or TP was hit."""
+    """Checks active OCO orders to see if SL or TP was hit. Uses actual fill prices for PnL."""
     if TRADING_MODE == "PAPER":
         return
+
+    from testnet_engine.protection import check_oco_status, compute_net_pnl, LEDGER_WRITE_LOCK
+    import datetime
 
     try:
         active = _load_active_trades()
@@ -373,54 +370,198 @@ def monitor_open_trades():
 
     if not active:
         return
-        
+
     client = get_exchange_client()
     remaining_trades = []
-    
+    ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
+
     for t in active:
-        try:
-            oco = client.v3_get_order_list(orderListId=t["oco_id"])
-            status = oco.get("listOrderStatus")
-            
-            if status in ["ALL_DONE", "DONE"]:
-                # The OCO was triggered. Let's find out if it was TP or SL
-                tp_filled = False
-                sl_filled = False
-                close_price = 0
-                
-                for o in oco.get("orders", []):
-                    details = client.get_order(symbol=t["symbol"], orderId=o["orderId"])
-                    if details["status"] == "FILLED":
-                        close_price = float(details.get("price", 0))
-                        if details["type"] == "STOP_LOSS_LIMIT":
-                            sl_filled = True
-                        else:
-                            tp_filled = True
-                
-                result = "WIN" if tp_filled else "LOSS"
-                pnl = (close_price - t["entry_price"]) * t["quantity"] if t["side"] == "BUY" else (t["entry_price"] - close_price) * t["quantity"]
-                
-                sys_logger.info(f"[MONITOR] Trade Closed: {result}! PnL: ${pnl:.2f}", extra={"strategy": t["strategy"], "symbol": t["symbol"]})
-                # Log to CSV
-                log_trade(t["strategy"], t["symbol"], f"{t['side']}_CLOSE_{result}", t["quantity"], close_price, t["sl_price"], t["tp_price"], t["oco_id"], f"CLOSED_{result}")
-            
-            elif status in ["REJECT", "CANCELED", "EXPIRED"]:
-                sys_logger.warning(f"[MONITOR] 🚨 OCO Order {t['oco_id']} was {status}! Position may be unprotected.", extra={"strategy": t["strategy"], "symbol": t["symbol"]})
-                log_trade(t["strategy"], t["symbol"], f"{t['side']}_UNKNOWN_{status}", t["quantity"], t["entry_price"], t["sl_price"], t["tp_price"], t["oco_id"], f"OCO_{status}")
-                # Do not keep it in remaining trades, but user needs to manually resolve
-            
-            else:
-                remaining_trades.append(t)
-        except BinanceAPIException as e:
-            if "Order does not exist" in str(e):
-                 sys_logger.warning(f"[MONITOR] OCO {t['oco_id']} missing from exchange. Purging from local state.", extra={"strategy": t["strategy"], "symbol": t["symbol"]})
-                 log_trade(t["strategy"], t["symbol"], f"{t['side']}_UNKNOWN", t["quantity"], t["entry_price"], t["sl_price"], t["tp_price"], t["oco_id"], "MISSING_EXCHANGE")
-            else:
-                 remaining_trades.append(t)
-        except Exception as e:
-            sys_logger.error(f"[MONITOR] Error checking OCO {t['oco_id']}: {e}", extra={"strategy": t["strategy"], "symbol": t["symbol"]})
+        oco_id = t.get("oco_id")
+        if not oco_id:
             remaining_trades.append(t)
-            
+            continue
+        try:
+            result = check_oco_status(client, t["symbol"], oco_id)
+            status = result["list_status"]
+
+            if status in ("ALL_DONE", "DONE"):
+                close_price = result["close_avg_price"]   # actual average fill price
+                close_qty   = result["close_qty"]
+                tp_filled   = result["tp_filled"]
+                sl_filled   = result["sl_filled"]
+                outcome     = "WIN" if tp_filled else "LOSS"
+
+                entry_price = float(t.get("entry_price", 0))
+                entry_qty   = float(t.get("quantity", close_qty))
+                entry_fee   = float(t.get("entry_fee", 0.0))
+                # Estimate exit fee at 0.1% of exit notional if not provided
+                exit_fee    = close_price * close_qty * 0.001
+
+                gross_pnl, net_pnl = compute_net_pnl(
+                    t["side"], entry_qty, entry_price, entry_fee,
+                    close_qty, close_price, exit_fee
+                )
+
+                sys_logger.info(
+                    f"[MONITOR] {t['symbol']} {outcome} | "
+                    f"Gross PnL: ${gross_pnl:.4f} | Net PnL: ${net_pnl:.4f} | "
+                    f"Close price: {close_price:.4f} (actual fill, not limit)",
+                    extra={"strategy": t["strategy"], "symbol": t["symbol"]}
+                )
+
+                ledger_entry = {
+                    "signal_id":      t.get("signal_id", "UNKNOWN"),
+                    "symbol":         t["symbol"],
+                    "strategy":       t["strategy"],
+                    "side":           t["side"],
+                    "entry_order_id": t.get("entry_order_id"),
+                    "entry_price":    entry_price,
+                    "entry_executed_quantity": entry_qty,
+                    "entry_fee":      entry_fee,
+                    "exit_order_id":  result.get("tp_order_id") if tp_filled else result.get("sl_order_id"),
+                    "exit_price":     close_price,
+                    "exit_executed_quantity": close_qty,
+                    "exit_fee":       exit_fee,
+                    "exit_reason":    outcome,
+                    "gross_pnl":      gross_pnl,
+                    "total_fees":     entry_fee + exit_fee,
+                    "net_pnl":        net_pnl,
+                    "pnl":            net_pnl,      # dashboard compat
+                    "fees":           entry_fee + exit_fee, # dashboard compat
+                    "entry_timestamp": t.get("entry_timestamp"),
+                    "exit_timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                    "timestamp":      datetime.datetime.utcnow().isoformat() + "Z", # dashboard compat
+                    "action":         f"CLOSE_{outcome}", # dashboard compat
+                    "quantity":       close_qty, # dashboard compat
+                    "oco_id":         oco_id
+                }
+                # Atomic append to ledger
+                with LEDGER_WRITE_LOCK:
+                    with open(ledger_file, "a") as lf:
+                        lf.write(json.dumps(ledger_entry) + "\n")
+
+                log_trade(
+                    t["strategy"], t["symbol"],
+                    f"{t['side']}_CLOSE_{outcome}",
+                    close_qty, close_price,
+                    t.get("sl_price"), t.get("tp_price"),
+                    oco_id, f"CLOSED_{outcome}"
+                )
+                # Trade is closed — do NOT add to remaining_trades
+
+            elif status in ("REJECT", "CANCELED", "EXPIRED"):
+                sys_logger.warning(
+                    f"[MONITOR] \U0001f6a8 OCO {oco_id} for {t['symbol']} is {status}! "
+                    f"Position may be unprotected. Attempting emergency close.",
+                    extra={"strategy": t["strategy"], "symbol": t["symbol"]}
+                )
+                try:
+                    from testnet_engine.protection import emergency_market_close
+                    ec = emergency_market_close(
+                        client, t["symbol"], t["side"], float(t["quantity"])
+                    )
+                    ec_qty = float(ec.get("executedQty", 0))
+                    ec_price = float(ec.get("cummulativeQuoteQty", 0)) / ec_qty if ec_qty > 0 else 0
+                    ec_fee = ec_qty * ec_price * 0.001
+                    
+                    # Calculate PnL accurately
+                    gross_pnl, net_pnl = compute_net_pnl(
+                        t["side"], float(t.get("quantity", ec_qty)), float(t.get("entry_price", 0)), 
+                        float(t.get("entry_fee", 0)), ec_qty, ec_price, ec_fee
+                    )
+                    
+                    sys_logger.info(
+                        f"[MONITOR] Emergency close after OCO {status}: filled {ec_qty}",
+                        extra={"strategy": t["strategy"], "symbol": t["symbol"]}
+                    )
+                    
+                    # Log to authoritative ledger
+                    ledger_entry = {
+                        "signal_id":      t.get("signal_id", "UNKNOWN"),
+                        "symbol":         t["symbol"],
+                        "strategy":       t["strategy"],
+                        "side":           t["side"],
+                        "entry_order_id": t.get("entry_order_id"),
+                        "entry_price":    float(t.get("entry_price", 0)),
+                        "entry_executed_quantity": float(t.get("quantity", ec_qty)),
+                        "entry_fee":      float(t.get("entry_fee", 0)),
+                        "exit_order_id":  ec.get("orderId", "EMERGENCY"),
+                        "exit_price":     ec_price,
+                        "exit_executed_quantity": ec_qty,
+                        "exit_fee":       ec_fee,
+                        "exit_reason":    "EMERGENCY",
+                        "gross_pnl":      gross_pnl,
+                        "total_fees":     float(t.get("entry_fee", 0)) + ec_fee,
+                        "net_pnl":        net_pnl,
+                        "pnl":            net_pnl,
+                        "fees":           float(t.get("entry_fee", 0)) + ec_fee,
+                        "entry_timestamp": t.get("entry_timestamp"),
+                        "exit_timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                        "timestamp":      datetime.datetime.utcnow().isoformat() + "Z",
+                        "action":         "EMERGENCY_CLOSE",
+                        "quantity":       ec_qty,
+                        "reason":         f"OCO_{status}"
+                    }
+                    with LEDGER_WRITE_LOCK:
+                        with open(ledger_file, "a") as lf:
+                            lf.write(json.dumps(ledger_entry) + "\n")
+                            
+                except Exception as ec_err:
+                    sys_logger.critical(
+                        f"[MONITOR] \U0001f6a8 FATAL: Emergency close failed for {t['symbol']}: {ec_err}",
+                        extra={"strategy": t["strategy"], "symbol": t["symbol"]}
+                    )
+                log_trade(
+                    t["strategy"], t["symbol"],
+                    f"{t['side']}_OCO_{status}",
+                    t["quantity"], t["entry_price"],
+                    t.get("sl_price"), t.get("tp_price"),
+                    oco_id, f"OCO_{status}"
+                )
+                # Remove from remaining regardless — OCO is dead
+            else:
+                # Still executing
+                remaining_trades.append(t)
+
+        except BinanceAPIException as e:
+            if "Order does not exist" in str(e) or "-2013" in str(e):
+                # Check balance to see if we missed a successful exit or if it's orphaned
+                try:
+                    asset = t['symbol'].replace("USDT", "")
+                    asset_info = client.get_asset_balance(asset=asset)
+                    asset_bal = float(asset_info['free']) + float(asset_info['locked'])
+                    if asset_bal < 0.0001: # Essentially 0
+                        sys_logger.warning(f"[MONITOR] OCO {oco_id} missing but balance is 0. Position closed.")
+                    else:
+                        sys_logger.critical(f"[MONITOR] OCO {oco_id} missing but balance > 0! Attempting emergency close.")
+                        from testnet_engine.protection import emergency_market_close
+                        emergency_market_close(client, t["symbol"], t["side"], float(t["quantity"]))
+                except Exception as balance_err:
+                    pass
+                
+                sys_logger.warning(
+                    f"[MONITOR] OCO {oco_id} for {t['symbol']} missing from exchange. Purging.",
+                    extra={"strategy": t["strategy"], "symbol": t["symbol"]}
+                )
+                log_trade(
+                    t["strategy"], t["symbol"], f"{t['side']}_UNKNOWN",
+                    t["quantity"], t["entry_price"],
+                    t.get("sl_price"), t.get("tp_price"),
+                    oco_id, "MISSING_EXCHANGE"
+                )
+            else:
+                sys_logger.error(
+                    f"[MONITOR] Binance error checking OCO {oco_id}: {e}",
+                    extra={"strategy": t["strategy"], "symbol": t["symbol"]}
+                )
+                remaining_trades.append(t)
+        except Exception as e:
+            sys_logger.error(
+                f"[MONITOR] Error checking OCO {oco_id}: {e}",
+                extra={"strategy": t["strategy"], "symbol": t["symbol"]}
+            )
+            remaining_trades.append(t)
+
     try:
         _save_active_trades(remaining_trades)
     except Exception as e:

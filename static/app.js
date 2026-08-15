@@ -1,4 +1,4 @@
-// Dashboard Javascript
+// Dashboard Javascript (Redesign)
 
 const formatCurrency = (val) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
@@ -14,32 +14,101 @@ const formatTime = (ts) => {
     return d.toLocaleTimeString('en-US', { hour12: false });
 };
 
+// ==========================================
+// 1. CLOCK ARCHITECTURE (CLIENT-SIDE)
+// ==========================================
+let serverTimeOffset = 0;
+let lastRenderedSecond = -1;
+let isClockRunning = false;
+let startTimestamp = Date.now(); // For uptime approximation
+
+function renderFormattedTime(ms) {
+    const d = new Date(ms);
+    const timeStr = d.toLocaleTimeString('en-US', { hour12: false });
+    
+    const navClock = document.getElementById('nav-clock');
+    if (navClock) navClock.innerText = timeStr + ' UTC';
+    
+    const ftServerTime = document.getElementById('ft-server-time');
+    if (ftServerTime) ftServerTime.innerText = timeStr;
+    
+    // Uptime approximation
+    const uptimeSecs = Math.floor((ms - startTimestamp) / 1000);
+    const hrs = Math.floor(uptimeSecs / 3600).toString().padStart(2, '0');
+    const mins = Math.floor((uptimeSecs % 3600) / 60).toString().padStart(2, '0');
+    const secs = (uptimeSecs % 60).toString().padStart(2, '0');
+    
+    const pbUptime = document.getElementById('pb-uptime');
+    if (pbUptime) pbUptime.innerText = `${hrs}:${mins}:${secs}`;
+    
+    const ftUptime = document.getElementById('ft-uptime');
+    if (ftUptime) ftUptime.innerText = `${hrs}:${mins}:${secs}`;
+}
+
+function renderClock() {
+    const correctedNow = Date.now() + serverTimeOffset;
+    const second = Math.floor(correctedNow / 1000);
+
+    if (second !== lastRenderedSecond) {
+        lastRenderedSecond = second;
+        renderFormattedTime(correctedNow);
+    }
+
+    requestAnimationFrame(renderClock);
+}
+
+function startClockLoop() {
+    if (!isClockRunning) {
+        isClockRunning = true;
+        requestAnimationFrame(renderClock);
+    }
+}
+
+// ==========================================
+// 2. DATA POLLING
+// ==========================================
+
 async function fetchDashboardData() {
+    const requestStart = Date.now();
     try {
-        const res = await fetch('/api/status');
+        const res = await fetch('/api/status', { cache: 'no-store' });
+        const requestEnd = Date.now();
         const data = await res.json();
         
-        // Status Indicators
-        document.getElementById('val-status').innerText = `${data.mode} ONLINE`;
+        // --- Sync Clock ---
+        if (data.server_time) {
+            const serverMs = new Date(data.server_time).getTime();
+            const midpoint = (requestStart + requestEnd) / 2;
+            serverTimeOffset = serverMs - midpoint;
+            
+            const latency = Math.floor(requestEnd - requestStart);
+            const ftLatency = document.getElementById('ft-latency');
+            if(ftLatency) ftLatency.innerText = `${latency} ms`;
+        }
+
+        // --- Bind Top Performance Bar ---
+        document.getElementById('pb-balance').innerText = formatCurrency(data.cash); // Total balance
+        document.getElementById('pb-today').innerText = formatCurrency(data.realized_pnl);
         
-        // Metrics
-        document.getElementById('val-balance').innerText = formatCurrency(data.equity);
-        document.getElementById('val-equity').innerText = formatCurrency(data.equity);
-        document.getElementById('val-cash').innerText = formatCurrency(data.cash);
-        
-        // PnLs
-        const r_pnl = document.getElementById('val-realized');
+        const r_pnl = document.getElementById('pb-realized');
         r_pnl.innerText = formatCurrency(data.realized_pnl);
-        r_pnl.className = data.realized_pnl >= 0 ? 'metric-value val-green' : 'metric-value val-red';
+        r_pnl.className = data.realized_pnl >= 0 ? 'perf-value val-green' : 'perf-value val-red';
         
-        const u_pnl = document.getElementById('val-unrealized');
+        const u_pnl = document.getElementById('pb-unrealized');
         u_pnl.innerText = formatCurrency(data.unrealized_pnl);
-        u_pnl.className = data.unrealized_pnl >= 0 ? 'metric-value val-green' : 'metric-value val-red';
+        u_pnl.className = data.unrealized_pnl >= 0 ? 'perf-value val-green' : 'perf-value val-red';
         
-        document.getElementById('val-today').innerText = formatCurrency(data.realized_pnl); // Today = realized for now
-        document.getElementById('val-fees').innerText = formatCurrency(data.fees);
-        document.getElementById('val-funding').innerText = formatCurrency(data.funding);
-        document.getElementById('val-mdd').innerText = data.max_drawdown.toFixed(2) + '%';
+        document.getElementById('pb-fees').innerText = formatCurrency(data.fees);
+        document.getElementById('pb-mdd').innerText = (data.max_drawdown || 0).toFixed(2) + '%';
+        
+        // --- Equity Box ---
+        document.getElementById('eq-current').innerText = formatCurrency(data.equity);
+        // (High/Low mocked as we don't have historical series in /api/status yet)
+        document.getElementById('eq-high').innerText = formatCurrency(data.equity);
+        document.getElementById('eq-low').innerText = formatCurrency(data.equity);
+        
+        // --- Health Panel (Mapping from components) ---
+        // Just as an example, map what we can
         
     } catch (e) {
         console.error("Failed to fetch status:", e);
@@ -48,18 +117,15 @@ async function fetchDashboardData() {
 
 async function fetchTrades() {
     try {
-        const res = await fetch('/api/trades');
+        const res = await fetch('/api/trades', { cache: 'no-store' });
         const data = await res.json();
-        
         const positions = data.positions || [];
-        
         const openPos = positions.filter(p => p.status === 'OPEN');
-        const closedPos = positions.filter(p => p.status === 'CLOSED').reverse().slice(0, 5); // Last 5 closed
         
-        // Active Positions Table
+        // --- Active Positions ---
         const posBody = document.getElementById('positions-body');
         if (openPos.length === 0) {
-            posBody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">NO OPEN POSITIONS</td></tr>';
+            posBody.innerHTML = '<tr><td colspan="9" class="empty-state">NO OPEN POSITIONS</td></tr>';
         } else {
             posBody.innerHTML = openPos.map(p => {
                 const uPnlStr = p.pnl >= 0 ? `<span class="val-green">${formatCurrency(p.pnl)}</span>` : `<span class="val-red">${formatCurrency(p.pnl)}</span>`;
@@ -68,7 +134,7 @@ async function fetchTrades() {
                 return `<tr>
                     <td>${p.symbol}</td>
                     <td class="${sideClass}">${p.action}</td>
-                    <td>${p.entry_price.toFixed(4)}</td>
+                    <td>${Number(p.entry_price).toFixed(4)}</td>
                     <td>-</td>
                     <td>${p.quantity}</td>
                     <td>${uPnlStr}</td>
@@ -79,21 +145,21 @@ async function fetchTrades() {
             }).join('');
         }
         
-        // Live Trade Feed Table (All executed orders)
+        // --- Live Trade Feed ---
         const tradesBody = document.getElementById('trades-body');
         if (positions.length === 0) {
-            tradesBody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">NO TRADES YET</td></tr>';
+            tradesBody.innerHTML = '<tr><td colspan="8" class="empty-state">NO TRADES YET</td></tr>';
         } else {
-            // Sort all positions (open and closed) by timestamp descending, take top 10
             const allPos = [...positions].sort((a, b) => {
                 return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-            }).slice(0, 10);
+            }).slice(0, 15);
             
             tradesBody.innerHTML = allPos.map(p => {
                 const sideClass = (p.action === 'LONG' || p.action === 'BUY') ? 'tag-long' : 'tag-short';
                 const tsShort = p.timestamp ? String(p.timestamp).substring(11, 19) : '-';
-                const orderIdStr = p.order_id ? p.order_id.substring(0, 8) + '...' : '-';
+                const orderIdStr = p.order_id ? String(p.order_id).substring(0, 8) + '...' : '-';
                 const statClass = p.status === 'OPEN' ? 'val-green' : 'val-red';
+                const pnlClass = p.pnl >= 0 ? 'val-green' : 'val-red';
                 
                 return `<tr>
                     <td>${tsShort}</td>
@@ -101,13 +167,12 @@ async function fetchTrades() {
                     <td class="${sideClass}">${p.action}</td>
                     <td title="${p.order_id}">${orderIdStr}</td>
                     <td>${p.quantity}</td>
-                    <td>${p.quantity}</td>
                     <td>${Number(p.entry_price).toFixed(4)}</td>
+                    <td class="${pnlClass}">${formatCurrency(p.pnl)}</td>
                     <td class="${statClass}">${p.status}</td>
                 </tr>`;
             }).join('');
         }
-        
     } catch (e) {
         console.error("Failed to fetch trades:", e);
     }
@@ -115,15 +180,14 @@ async function fetchTrades() {
 
 async function fetchScanner() {
     try {
-        const res = await fetch('/api/scanner');
+        const res = await fetch('/api/scanner', { cache: 'no-store' });
         const data = await res.json();
         
-        document.getElementById('scan-total').innerText = data.symbols_scanned || 0;
-        document.getElementById('scan-signals').innerText = data.signals_detected || 0;
-        document.getElementById('scan-qual').innerText = data.orders_submitted || 0;
-        document.getElementById('scan-rej').innerText = data.signals_rejected || 0;
+        document.getElementById('sc-total').innerText = data.symbols_scanned || 0;
+        document.getElementById('sc-signals').innerText = data.signals_detected || 0;
+        document.getElementById('sc-qual').innerText = data.orders_submitted || 0;
+        document.getElementById('sc-rej').innerText = data.signals_rejected || 0;
         
-        // Ratios and Timestamps
         let dataReceivingCount = 0;
         let evaluatedCount = 0;
         let lastMarketTs = 0;
@@ -146,19 +210,26 @@ async function fetchScanner() {
             }
         }
         
-        document.getElementById('scan-data-ratio').innerText = `${dataReceivingCount}/${totalSyms}`;
-        document.getElementById('scan-eval-ratio').innerText = `${evaluatedCount}/${totalSyms}`;
+        document.getElementById('sc-data-ratio').innerText = `${dataReceivingCount}/${totalSyms}`;
+        document.getElementById('sc-eval-ratio').innerText = `${evaluatedCount}/${totalSyms}`;
         
-        document.getElementById('scan-last-update').innerText = lastMarketTs > 0 ? formatTime(lastMarketTs) : '-';
-        document.getElementById('scan-last-eval').innerText = lastEvalTs > 0 ? formatTime(lastEvalTs) : '-';
+        if(lastMarketTs > 0) document.getElementById('st-last-market').innerText = formatTime(lastMarketTs);
+        if(lastEvalTs > 0) document.getElementById('st-last-eval').innerText = formatTime(lastEvalTs);
+        
+        // Delay approximation
+        const ftDelay = document.getElementById('ft-delay');
+        if(ftDelay && lastMarketTs > 0) {
+            const delay = Math.max(0, Date.now() + serverTimeOffset - lastMarketTs);
+            ftDelay.innerText = `${delay} ms`;
+        }
         
         const oppBody = document.getElementById('opportunities-body');
         if (!data.top_opportunities || data.top_opportunities.length === 0) {
-            oppBody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted);">NO OPPORTUNITIES YET</td></tr>';
+            oppBody.innerHTML = '<tr><td colspan="10" class="empty-state">NO OPPORTUNITIES AT THE MOMENT</td></tr>';
         } else {
             oppBody.innerHTML = data.top_opportunities.map(o => {
                 const sideClass = o.side === 'BUY' ? 'tag-long' : 'tag-short';
-                const tsShort = o.timestamp ? o.timestamp.substring(11, 19) : '-'; // HH:MM:SS
+                const tsShort = o.timestamp ? String(o.timestamp).substring(11, 19) : '-';
                 const confStr = o.confidence ? formatPct(o.confidence) : '-';
                 const grossStr = o.expected_gross_return ? formatPct(o.expected_gross_return) : '-';
                 const netStr = o.expected_net_return ? (o.expected_net_return > 0 ? `<span class="val-green">+${formatPct(o.expected_net_return)}</span>` : `<span class="val-red">${formatPct(o.expected_net_return)}</span>`) : '-';
@@ -187,11 +258,22 @@ async function fetchScanner() {
 }
 
 function updateDashboard() {
-    fetchDashboardData();
-    fetchTrades();
-    fetchScanner();
+    const spinner = document.getElementById('refresh-spinner');
+    if(spinner) spinner.classList.add('spinning');
+    
+    Promise.all([
+        fetchDashboardData(),
+        fetchTrades(),
+        fetchScanner()
+    ]).finally(() => {
+        if(spinner) spinner.classList.remove('spinning');
+    });
 }
 
-// Initial fetch and 5-second polling
-updateDashboard();
-setInterval(updateDashboard, 5000);
+// ==========================================
+// 3. INITIALIZATION
+// ==========================================
+startClockLoop(); // Start the 1-second clock loop immediately (runs on requestAnimationFrame)
+
+updateDashboard(); // Initial fetch
+setInterval(updateDashboard, 2000); // Decoupled polling interval

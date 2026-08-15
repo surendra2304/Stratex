@@ -41,3 +41,7 @@ class SystemError(TradingException):
 class StateCorruptionError(TradingException):
     """Raised when stored JSON state (like active trades) fails schema validation or is malformed."""
     pass
+
+class ZeroFillError(TradingException):
+    """Raised when an entry order receives a fill quantity of 0."""
+    pass

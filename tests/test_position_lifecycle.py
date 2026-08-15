@@ -32,8 +32,8 @@ def test_duplicate_client_order_id_protection():
         "tp_price": 55000.0,
         "sl_price": 48000.0,
         "state": execution.OrderState.PROTECTED,
-        "entry_client_id": client_id
-    }]
+        "signal_id": client_id
+    , "entry_timestamp": "2026-08-15T12:00:00Z"}]
     
     # Pre-populate active trades
     execution._save_active_trades(trade_data)

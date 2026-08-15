@@ -4,502 +4,235 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Algorithmic Trading Bot - Testnet</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-dark: #0f172a;
-            --bg-panel: #1e293b;
-            --text-light: #f8fafc;
-            --text-muted: #94a3b8;
-            --accent-blue: #3b82f6;
-            --green: #22c55e;
-            --red: #ef4444;
-            --border: #334155;
-            --radius: 6px;
-        }
-
-        *, *::before, *::after { box-sizing: border-box; }
-
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-dark);
-            color: var(--text-light);
-        }
-
-        /* ─── MASTER LAYOUT ─── */
-        .dashboard {
-            display: grid;
-            grid-template-rows: auto auto 1fr auto;
-            height: 100vh;
-            max-height: 100vh;
-            padding: 8px 10px;
-            gap: 6px;
-        }
-
-        /* ─── HEADER ─── */
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: var(--bg-panel);
-            padding: 6px 16px;
-            border-radius: var(--radius);
-            border: 1px solid var(--border);
-            min-height: 44px;
-        }
-
-        .top-bar h1 {
-            margin: 0;
-            font-size: 1rem;
-            color: var(--accent-blue);
-            white-space: nowrap;
-        }
-
-        .status-indicators {
-            display: flex;
-            gap: 20px;
-            align-items: center;
-        }
-
-        .status-item {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
-        .status-label {
-            font-size: 0.65rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-
-        .status-value {
-            font-size: 0.82rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .dot {
-            height: 7px;
-            width: 7px;
-            background-color: var(--green);
-            border-radius: 50%;
-            display: inline-block;
-            flex-shrink: 0;
-        }
-
-        .dot.offline { background-color: var(--red); }
-        .dot.warning  { background-color: #eab308; }
-
-        .balance-box {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--green);
-        }
-
-        /* ─── ROW 1: Performance + Scanner ─── */
-        .row-top {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-        }
-
-        /* ─── ROW 2: Active Positions (full width) ─── */
-        .row-mid {
-            /* grid row, takes remaining flex space */
-        }
-
-        /* ─── ROW 3: Trade Feed + Bot Health ─── */
-        .row-bot {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-        }
-
-        /* ─── PANEL BASE ─── */
-        .panel {
-            background: var(--bg-panel);
-            border-radius: var(--radius);
-            border: 1px solid var(--border);
-            padding: 10px 14px;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            min-height: 0;
-        }
-
-        .panel h2 {
-            margin: 0 0 6px 0;
-            font-size: 0.7rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 5px;
-            flex-shrink: 0;
-        }
-
-        /* ─── METRICS (Live Performance) ─── */
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 6px 10px;
-        }
-
-        .metric {
-            display: flex;
-            flex-direction: column;
-            gap: 1px;
-        }
-
-        .metric-label {
-            font-size: 0.68rem;
-            color: var(--text-muted);
-            white-space: nowrap;
-        }
-
-        .metric-value {
-            font-size: 0.95rem;
-            font-weight: 600;
-        }
-
-        .val-green { color: var(--green); }
-        .val-red   { color: var(--red); }
-
-        /* ─── SCANNER ─── */
-        .scanner-stats {
-            display: flex;
-            justify-content: space-around;
-            margin-bottom: 6px;
-            flex-shrink: 0;
-        }
-
-        .scanner-stat {
-            text-align: center;
-        }
-
-        .scanner-stat span {
-            display: block;
-            font-size: 1.05rem;
-            font-weight: 600;
-        }
-
-        .scanner-meta {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 2px 10px;
-            font-size: 0.72rem;
-            color: var(--text-muted);
-            margin-bottom: 6px;
-            flex-shrink: 0;
-        }
-
-        .scanner-meta span {
-            color: var(--text-light);
-        }
-
-        /* ─── TABLES ─── */
-        .table-wrap {
-            overflow-y: auto;
-            flex: 1;
-            min-height: 0;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.8rem;
-        }
-
-        th, td {
-            text-align: left;
-            padding: 5px 4px;
-            border-bottom: 1px solid var(--border);
-            white-space: nowrap;
-        }
-
-        th {
-            color: var(--text-muted);
-            font-weight: 400;
-            text-transform: uppercase;
-            font-size: 0.65rem;
-            position: sticky;
-            top: 0;
-            background: var(--bg-panel);
-        }
-
-        tbody tr:last-child td { border-bottom: none; }
-        .tag-long  { color: var(--green); font-weight: 600; }
-        .tag-short { color: var(--red);   font-weight: 600; }
-
-        /* ─── OPPORTUNITIES TABLE (in scanner) ─── */
-        .opp-label {
-            font-size: 0.65rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 3px;
-            flex-shrink: 0;
-        }
-
-        /* ─── BOT HEALTH ─── */
-        .health-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 5px;
-        }
-
-        .health-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #293548;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 0.78rem;
-        }
-
-        /* ─── ACTIVE POSITIONS row-mid fills remaining space ─── */
-        .row-mid .panel {
-            height: 100%;
-        }
-
-        /* ─── RESPONSIVE: 1366x768 and laptop ─── */
-        @media (max-height: 800px) {
-            .dashboard { padding: 5px 8px; gap: 4px; }
-            .top-bar   { padding: 4px 14px; min-height: 38px; }
-            .panel     { padding: 7px 12px; }
-            .panel h2  { margin-bottom: 4px; padding-bottom: 4px; }
-            .metrics-grid { gap: 4px 8px; }
-            .metric-value { font-size: 0.85rem; }
-            th, td    { padding: 4px 3px; }
-            .health-item  { padding: 4px 8px; font-size: 0.73rem; }
-        }
-
-        @media (max-height: 680px) {
-            .metrics-grid { grid-template-columns: repeat(4, 1fr); }
-            .metric-value { font-size: 0.78rem; }
-            .scanner-stat span { font-size: 0.9rem; }
-        }
-
-        @media (max-width: 1024px) {
-            .metrics-grid { grid-template-columns: repeat(2, 1fr); }
-            .row-top      { grid-template-columns: 1fr 1fr; }
-        }
-
-        @media (max-width: 768px) {
-            .row-top, .row-bot { grid-template-columns: 1fr; }
-            .dashboard { height: auto; overflow: auto; }
-        }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-
-<div class="dashboard">
-
-    <!-- ─── HEADER ─── -->
-    <div class="top-bar">
-        <h1>Algorithmic Trading Bot</h1>
-
-        <div class="status-indicators">
-            <div class="status-item">
-                <span class="status-label">Status</span>
-                <span class="status-value"><span class="dot" id="dot-status"></span><span id="val-status">TESTNET ONLINE</span></span>
+    <div class="dashboard-wrapper">
+        <!-- HEADER -->
+        <header class="top-nav">
+            <div class="nav-left">
+                <h1>Algorithmic Trading Bot</h1>
+                <span class="badge badge-testnet">TESTNET</span>
             </div>
-            <div class="status-item">
-                <span class="status-label">Market Data</span>
-                <span class="status-value"><span class="dot" id="dot-data"></span> CONNECTED</span>
+            <nav class="nav-links">
+                <a href="#" class="active">Dashboard</a>
+                <a href="#">Positions</a>
+                <a href="#">Trades</a>
+                <a href="#">Market</a>
+                <a href="#">Risk</a>
+                <a href="#">Settings</a>
+            </nav>
+            <div class="nav-right">
+                <div class="status-indicator">
+                    <span class="dot dot-green"></span>
+                    <span>TESTNET ONLINE</span>
+                </div>
+                <div class="live-clock" id="nav-clock">--:--:-- UTC</div>
+                <div class="refresh-indicator" id="refresh-spinner">⟳</div>
             </div>
-            <div class="status-item">
-                <span class="status-label">Execution</span>
-                <span class="status-value"><span class="dot" id="dot-exec"></span> READY</span>
-            </div>
-        </div>
+        </header>
 
-        <div class="status-item" style="align-items:flex-end;">
-            <span class="status-label">Balance</span>
-            <span class="balance-box" id="val-balance">$0.00</span>
-        </div>
+        <!-- TOP PERFORMANCE BAR -->
+        <section class="performance-bar">
+            <div class="perf-card">
+                <span class="perf-label">Balance</span>
+                <span class="perf-value" id="pb-balance">$0.00</span>
+            </div>
+            <div class="perf-card">
+                <span class="perf-label">Today's PnL</span>
+                <span class="perf-value" id="pb-today">$0.00</span>
+            </div>
+            <div class="perf-card">
+                <span class="perf-label">Realized PnL</span>
+                <span class="perf-value" id="pb-realized">$0.00</span>
+            </div>
+            <div class="perf-card">
+                <span class="perf-label">Unrealized PnL</span>
+                <span class="perf-value" id="pb-unrealized">$0.00</span>
+            </div>
+            <div class="perf-card">
+                <span class="perf-label">Fees Paid</span>
+                <span class="perf-value" id="pb-fees">$0.00</span>
+            </div>
+            <div class="perf-card">
+                <span class="perf-label">Max Drawdown</span>
+                <span class="perf-value" id="pb-mdd">0.00%</span>
+            </div>
+            <div class="perf-card">
+                <span class="perf-label">Bot Uptime</span>
+                <span class="perf-value" id="pb-uptime">--:--:--</span>
+            </div>
+        </section>
+
+        <!-- MAIN DASHBOARD -->
+        <section class="main-dashboard">
+            <!-- LEFT: BOT STATUS -->
+            <div class="panel status-panel">
+                <h2>BOT STATUS</h2>
+                <div class="status-grid">
+                    <div class="status-row"><span>Status</span><span class="val-green">TESTNET ONLINE</span></div>
+                    <div class="status-row"><span>Market Data</span><span class="val-green">CONNECTED</span></div>
+                    <div class="status-row"><span>Execution</span><span class="val-green">READY</span></div>
+                    <div class="status-row"><span>Strategy</span><span>ADX + EMA Trend Following</span></div>
+                    <div class="status-row"><span>Timeframe</span><span>4H</span></div>
+                    <div class="status-row"><span>Last Market Update</span><span id="st-last-market">--:--:--</span></div>
+                    <div class="status-row"><span>Last Signal Eval</span><span id="st-last-eval">--:--:--</span></div>
+                </div>
+                
+                <h2 style="margin-top:20px;">BOT HEALTH</h2>
+                <div class="health-grid">
+                    <div class="health-row"><span>Market Data</span><span class="dot dot-green"></span></div>
+                    <div class="health-row"><span>Strategy Engine</span><span class="dot dot-green"></span></div>
+                    <div class="health-row"><span>Execution Engine</span><span class="dot dot-green"></span></div>
+                    <div class="health-row"><span>Portfolio Manager</span><span class="dot dot-green"></span></div>
+                    <div class="health-row"><span>Risk Management</span><span class="dot dot-green"></span></div>
+                    <div class="health-row"><span>Position Monitor</span><span class="dot dot-green"></span></div>
+                    <div class="health-row"><span>Persistence</span><span class="dot dot-green"></span></div>
+                    <div class="health-row"><span>WebSocket</span><span class="dot dot-green"></span></div>
+                    <div class="health-row"><span>Reconciliation</span><span class="dot dot-green"></span></div>
+                </div>
+            </div>
+
+            <!-- CENTER: MARKET SCANNER -->
+            <div class="panel scanner-panel">
+                <h2>MARKET SCANNER</h2>
+                <div class="scanner-metrics">
+                    <div class="sc-metric"><span>Scanning</span><span id="sc-total">0</span></div>
+                    <div class="sc-metric"><span>Signals</span><span id="sc-signals">0</span></div>
+                    <div class="sc-metric"><span>Qualified</span><span id="sc-qual">0</span></div>
+                    <div class="sc-metric"><span>Rejected</span><span id="sc-rej">0</span></div>
+                </div>
+                <div class="scanner-progress">
+                    <div class="prog-row"><span>Symbols receiving data</span><span id="sc-data-ratio">0/0</span></div>
+                    <div class="prog-row"><span>Symbols evaluated</span><span id="sc-eval-ratio">0/0</span></div>
+                </div>
+
+                <h3 class="section-title">STRONGEST OPPORTUNITIES</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>TIME</th>
+                                <th>SYMBOL</th>
+                                <th>SIDE</th>
+                                <th>PRICE</th>
+                                <th>CONF</th>
+                                <th>GROSS EDGE</th>
+                                <th>FEES</th>
+                                <th>NET EDGE</th>
+                                <th>DECISION</th>
+                                <th>REASON</th>
+                            </tr>
+                        </thead>
+                        <tbody id="opportunities-body">
+                            <tr><td colspan="10" class="empty-state">NO OPPORTUNITIES AT THE MOMENT</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- RIGHT: EQUITY CURVE -->
+            <div class="panel equity-panel">
+                <h2>EQUITY CURVE</h2>
+                <div class="chart-container" id="equity-chart">
+                    <!-- Placeholder for actual chart -->
+                    <div class="empty-state">Awaiting equity data</div>
+                </div>
+                <div class="equity-metrics">
+                    <div class="eq-metric"><span>Equity</span><span id="eq-current">$0.00</span></div>
+                    <div class="eq-metric"><span>High</span><span id="eq-high">$0.00</span></div>
+                    <div class="eq-metric"><span>Low</span><span id="eq-low">$0.00</span></div>
+                    <div class="eq-metric"><span>Change</span><span id="eq-change">0.00%</span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- LOWER SECTION -->
+        <section class="lower-dashboard">
+            <!-- LEFT: LIVE TRADE FEED -->
+            <div class="panel feed-panel">
+                <h2>LIVE TRADE FEED</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>TIME</th>
+                                <th>SYMBOL</th>
+                                <th>SIDE</th>
+                                <th>ORDER ID</th>
+                                <th>QTY</th>
+                                <th>PRICE</th>
+                                <th>PNL</th>
+                                <th>STATUS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trades-body">
+                            <tr><td colspan="8" class="empty-state">NO TRADES YET</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- CENTER/RIGHT: ACTIVE POSITIONS -->
+            <div class="panel active-panel">
+                <h2>ACTIVE POSITIONS</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>SYMBOL</th>
+                                <th>SIDE</th>
+                                <th>ENTRY</th>
+                                <th>CURRENT</th>
+                                <th>QTY</th>
+                                <th>UNREALIZED PNL</th>
+                                <th>STOP LOSS</th>
+                                <th>TAKE PROFIT</th>
+                                <th>DURATION</th>
+                            </tr>
+                        </thead>
+                        <tbody id="positions-body">
+                            <tr><td colspan="9" class="empty-state">NO OPEN POSITIONS</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- BOTTOM STATUS BAR -->
+        <footer class="bottom-bar">
+            <div class="ft-section">
+                <strong>TESTNET MODE</strong>
+                <span class="ft-sub">No real funds at risk</span>
+            </div>
+            <div class="ft-section">
+                <span>Server Time</span>
+                <strong id="ft-server-time">--:--:--</strong>
+            </div>
+            <div class="ft-section">
+                <span>Uptime</span>
+                <strong id="ft-uptime">--:--:--</strong>
+            </div>
+            <div class="ft-section">
+                <span>Latency</span>
+                <strong id="ft-latency">-- ms</strong>
+            </div>
+            <div class="ft-section">
+                <span>Data Delay</span>
+                <strong id="ft-delay">-- ms</strong>
+            </div>
+            <div class="ft-section">
+                <span>Price Source</span>
+                <strong>BINANCE WS</strong>
+            </div>
+            <div class="ft-section">
+                <span>Version</span>
+                <strong>2.0.0</strong>
+            </div>
+        </footer>
     </div>
-
-    <!-- ─── ROW 1: Live Performance + Market Scanner ─── -->
-    <div class="row-top">
-
-        <!-- Live Performance -->
-        <div class="panel">
-            <h2>Live Performance</h2>
-            <div class="metrics-grid">
-                <div class="metric">
-                    <span class="metric-label">Equity</span>
-                    <span class="metric-value" id="val-equity">$0.00</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">Available Balance</span>
-                    <span class="metric-value" id="val-cash">$0.00</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">Realized PnL</span>
-                    <span class="metric-value" id="val-realized">$0.00</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">Unrealized PnL</span>
-                    <span class="metric-value" id="val-unrealized">$0.00</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">Today's PnL</span>
-                    <span class="metric-value" id="val-today">$0.00</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">Fees Paid</span>
-                    <span class="metric-value" id="val-fees">$0.00</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">Funding Paid</span>
-                    <span class="metric-value" id="val-funding">$0.00</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">Max Drawdown</span>
-                    <span class="metric-value val-red" id="val-mdd">0.00%</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Market Scanner -->
-        <div class="panel">
-            <h2>Market Scanner</h2>
-            <div class="scanner-stats">
-                <div class="scanner-stat">
-                    <span class="metric-label">Scanning</span>
-                    <span id="scan-total">0</span>
-                </div>
-                <div class="scanner-stat">
-                    <span class="metric-label">Signals</span>
-                    <span id="scan-signals">0</span>
-                </div>
-                <div class="scanner-stat">
-                    <span class="metric-label">Qualified</span>
-                    <span id="scan-qual" class="val-green">0</span>
-                </div>
-                <div class="scanner-stat">
-                    <span class="metric-label">Rejected</span>
-                    <span id="scan-rej" class="val-red">0</span>
-                </div>
-            </div>
-
-            <div class="scanner-meta">
-                <div>Symbols receiving data: <span id="scan-data-ratio">0/0</span></div>
-                <div>Last Market Update: <span id="scan-last-update">-</span></div>
-                <div>Symbols evaluated: <span id="scan-eval-ratio">0/0</span></div>
-                <div>Last Signal Eval: <span id="scan-last-eval">-</span></div>
-            </div>
-
-            <div class="opp-label">Strongest Opportunities</div>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>Symbol</th>
-                            <th>Side</th>
-                            <th>Price</th>
-                            <th>Conf</th>
-                            <th>Gross</th>
-                            <th>Fees</th>
-                            <th>Net</th>
-                            <th>Decision</th>
-                            <th>Reason</th>
-                        </tr>
-                    </thead>
-                    <tbody id="opportunities-body">
-                        <tr><td colspan="10" style="text-align:center;color:var(--text-muted);">NO OPPORTUNITIES YET</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- ─── ROW 2: Active Positions (full width) ─── -->
-    <div class="row-mid">
-        <div class="panel">
-            <h2>Active Positions</h2>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Symbol</th>
-                            <th>Side</th>
-                            <th>Entry</th>
-                            <th>Current</th>
-                            <th>Quantity</th>
-                            <th>Unrealized PnL</th>
-                            <th>Stop Loss</th>
-                            <th>Take Profit</th>
-                            <th>Duration</th>
-                        </tr>
-                    </thead>
-                    <tbody id="positions-body">
-                        <tr><td colspan="9" style="text-align:center;color:var(--text-muted);">NO OPEN POSITIONS</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- ─── ROW 3: Live Trade Feed + Bot Health ─── -->
-    <div class="row-bot">
-
-        <!-- Live Trade Feed -->
-        <div class="panel">
-            <h2>Live Trade Feed</h2>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>Symbol</th>
-                            <th>Side</th>
-                            <th>Order ID</th>
-                            <th>Req Qty</th>
-                            <th>Exec Qty</th>
-                            <th>Entry</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="trades-body">
-                        <tr><td colspan="8" style="text-align:center;color:var(--text-muted);">NO TRADES YET</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Bot Health -->
-        <div class="panel">
-            <h2>Bot Health</h2>
-            <div class="health-grid">
-                <div class="health-item"><span>Market Data</span>  <span class="dot"></span></div>
-                <div class="health-item"><span>Strategy</span>     <span class="dot"></span></div>
-                <div class="health-item"><span>Execution</span>    <span class="dot"></span></div>
-                <div class="health-item"><span>Portfolio</span>    <span class="dot"></span></div>
-                <div class="health-item"><span>Risk Limit</span>   <span class="dot"></span></div>
-                <div class="health-item"><span>Persistence</span>  <span class="dot"></span></div>
-            </div>
-        </div>
-
-    </div>
-
-</div>
-
-<script src="app.js"></script>
+    
+    <script src="/static/app.js"></script>
 </body>
 </html>

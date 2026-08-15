@@ -39,8 +39,8 @@ def test_validate_trade_schema_valid():
         "tp_price": 51000.0,
         "sl_price": 49000.0,
         "state": execution.OrderState.PROTECTED,
-        "entry_client_id": "test-uuid-001"
-    }
+        "signal_id": "test-uuid-001"
+    , "entry_timestamp": "2026-08-15T12:00:00Z"}
     execution._validate_trade_schema(trade) # Should not raise
 
 def test_validate_trade_schema_invalid():
@@ -55,8 +55,8 @@ def test_validate_trade_schema_invalid():
         "tp_price": 51000.0,
         "sl_price": 49000.0,
         "state": execution.OrderState.PROTECTED,
-        "entry_client_id": "test-uuid-001"
-    }
+        "signal_id": "test-uuid-001"
+    , "entry_timestamp": "2026-08-15T12:00:00Z"}
     with pytest.raises(StateCorruptionError, match="Invalid strategy"):
         execution._validate_trade_schema(trade)
         

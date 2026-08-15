@@ -135,7 +135,7 @@ def get_status():
                 
                 # Compute unrealized
                 for pos in port.get("positions", {}).values():
-                    if pos['status'] == "OPEN" and current_price > 0:
+                    if pos.get('status', 'OPEN') == "OPEN" and current_price > 0:
                         ep = float(pos['entry_price'])
                         qty = float(pos['quantity'])
                         if pos['direction'] in ["LONG", "BUY"]:
@@ -148,7 +148,7 @@ def get_status():
                     
                 realized_pnl = float(port.get("realized_pnl", 0.0))
                 fees = float(port.get("cumulative_fees", 0.0))
-                open_positions = len([p for p in port.get("positions", {}).values() if p["status"] == "OPEN"])
+                open_positions = len([p for p in port.get("positions", {}).values() if p.get("status", "OPEN") == "OPEN"])
                 mdd = float(port.get("max_drawdown", 0.0)) * 100
                 
             except Exception as e:
@@ -189,6 +189,7 @@ def get_status():
                 mdd = temp_port.get_max_drawdown() * 100
             except: pass
 
+    import datetime
     return jsonify({
         "mode": TRADING_MODE,
         "overall_health": overall,
@@ -203,7 +204,8 @@ def get_status():
         "funding": funding,
         "used_margin": used_margin,
         "open_positions": open_positions,
-        "max_drawdown": mdd
+        "max_drawdown": mdd,
+        "server_time": datetime.datetime.utcnow().isoformat() + "Z"
     })
 
 @app.route('/api/trades')
@@ -242,16 +244,16 @@ def get_trades():
                         gross_loss += abs(pnl)
                         
                     positions.append({
-                        "timestamp": trade.get("timestamp", trade.get("entry_time", 0)),
+                        "timestamp": trade.get("exit_timestamp", trade.get("timestamp", trade.get("entry_time", 0))),
                         "symbol": trade.get("symbol", ""),
-                        "action": trade.get("action", trade.get("direction", "")).replace("CLOSED_", ""),
+                        "action": trade.get("action", trade.get("exit_reason", trade.get("direction", ""))).replace("CLOSED_", ""),
                         "entry_price": trade.get("entry_price", 0.0),
                         "exit_price": trade.get("exit_price", 0.0),
-                        "quantity": trade.get("quantity", 0.0),
+                        "quantity": trade.get("exit_executed_quantity", trade.get("quantity", 0.0)),
                         "status": "CLOSED",
                         "pnl": pnl,
-                        "fees": trade.get("fees", 0.0),
-                        "order_id": trade.get("entry_client_id", trade.get("order_id", "CLOSED-ORDER")),
+                        "fees": trade.get("total_fees", trade.get("fees", 0.0)),
+                        "order_id": trade.get("signal_id", trade.get("entry_client_id", trade.get("order_id", "CLOSED-ORDER"))),
                         "matched": True
                     })
                 except Exception as e:
@@ -312,6 +314,33 @@ def get_trades():
 def serve_static(path):
     return send_from_directory('static', path)
 
+def verify_funnel(s, open_count, closed_count):
+    errors = []
+    
+    # 1. TOTAL_SIGNALS
+    sum_rejections = (s.get("PROFITABILITY_REJECTED", 0) + s.get("RISK_REJECTED", 0) + 
+                      s.get("COOLDOWN_REJECTED", 0) + s.get("JIT_REJECTED", 0) + 
+                      s.get("OTHER_REJECTED", 0) + s.get("QUALIFIED", 0))
+    if s.get("TOTAL_SIGNALS", 0) != sum_rejections:
+        errors.append(f"TOTAL_SIGNALS {s.get('TOTAL_SIGNALS')} != sum {sum_rejections}")
+        
+    # 2. QUALIFIED
+    sum_qual = s.get("ORDERS_SUBMITTED", 0) + s.get("EXECUTION_REJECTED", 0)
+    if s.get("QUALIFIED", 0) != sum_qual:
+        errors.append(f"QUALIFIED {s.get('QUALIFIED')} != sum {sum_qual}")
+        
+    # 3. ORDERS_SUBMITTED
+    sum_sub = s.get("ORDERS_FILLED", 0) + s.get("ORDERS_FAILED", 0)
+    if s.get("ORDERS_SUBMITTED", 0) != sum_sub:
+        errors.append(f"ORDERS_SUBMITTED {s.get('ORDERS_SUBMITTED')} != sum {sum_sub}")
+        
+    # 4. ORDERS_FILLED
+    sum_fill = open_count + closed_count
+    if s.get("ORDERS_FILLED", 0) != sum_fill:
+        errors.append(f"ORDERS_FILLED {s.get('ORDERS_FILLED')} != sum {sum_fill} (Open: {open_count}, Closed: {closed_count})")
+        
+    return errors
+
 @app.route('/api/scanner')
 def get_scanner():
     from config import TRADING_MODE
@@ -370,6 +399,26 @@ def get_scanner():
         except Exception as e:
             from logger import get_logger
             get_logger("dashboard").error(f"Failed to read opportunity log: {e}")
+            
+    # Mathematically Verify Funnel
+    closed_positions_count = 0
+    if os.path.exists("testnet_trade_ledger.jsonl"):
+        with open("testnet_trade_ledger.jsonl", "r") as f:
+            closed_positions_count = sum(1 for line in f if line.strip())
+            
+    open_positions_count = 0
+    if os.path.exists("testnet_portfolio.json"):
+        with open("testnet_portfolio.json", "r") as f:
+            port_temp = json.load(f)
+            open_positions_count = len([p for p in port_temp.get("positions", {}).values() if p.get("status") == "OPEN"])
+
+    funnel_errors = verify_funnel(stats, open_positions_count, closed_positions_count)
+    if funnel_errors:
+        stats["FUNNEL_ERRORS"] = funnel_errors
+        with open("dashboard_debug.txt", "a") as f:
+            f.write(f"{datetime.datetime.utcnow().isoformat()}Z - FUNNEL DISCREPANCY: {funnel_errors}\n")
+    else:
+        stats["FUNNEL_ERRORS"] = ["Verified OK"]
             
     return jsonify(stats)
 
