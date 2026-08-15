@@ -2,10 +2,13 @@
 # .gitignore - Files to NEVER commit to GitHub
 # ==============================================================================
 
-# SECRET: API keys - NEVER push this to GitHub!
+# SECRET: API keys and runtime mode — NEVER push to GitHub!
 config.py
 .env
 .env.*
+
+# Non-secret strategy configuration — safe to version control
+# config_strategy.py is intentionally NOT listed here (tracked by git)
 
 # Python cache files
 __pycache__/

@@ -233,33 +233,35 @@ class TestnetService:
                 self.last_evaluation[symbol] = datetime.datetime.utcnow().isoformat() + "Z"
                 self.stats["strategy_evaluations"] += 1
                 
-                signal_res = get_signal(df)
-                if len(signal_res) == 4:
-                    side, sl, tp, conf = signal_res
-                else:
-                    side, sl, tp = signal_res
-                    conf = 1.0  # Default confidence
-                    
+                signal_result = get_signal(df)
+                # Unpack from SignalResult namedtuple or legacy tuple — never assign fake confidence
+                side = getattr(signal_result, 'side', signal_result[0] if signal_result else None)
+                sl   = getattr(signal_result, 'sl',   signal_result[1] if signal_result else None)
+                tp   = getattr(signal_result, 'tp',   signal_result[2] if signal_result else None)
+
                 if not side:
                     self.stats["HOLD_SIGNALS"] += 1
                     return
-                    
+
                 if side == "BUY":
                     self.stats["BUY_SIGNALS"] += 1
                     self.stats["buy_predictions"] += 1
                 elif side == "SELL":
                     self.stats["SELL_SIGNALS"] += 1
                     self.stats["sell_predictions"] += 1
-                    
+
                 # Generate deterministic client order ID for duplicate protection
                 candle_timestamp = df.index[-1]
                 deterministic_str = f"{symbol}_{side}_{candle_timestamp}"
                 signal_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, deterministic_str))
-                
+
                 self.stats["TOTAL_SIGNALS"] += 1
-                
-                # 1. Profitability Gate
-                passed_profit, p_metrics = self.profitability_gate.evaluate_signal(symbol, side, current_price, sl, tp, conf)
+
+                # 1. Profitability Gate — pass the full signal_result so the gate can
+                #    read strategy_type and win_rate_prior; never invent a confidence float.
+                passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
+                    symbol, side, current_price, sl, tp, signal_result
+                )
                 
                 if not passed_profit:
                     self.stats["PROFITABILITY_REJECTED"] += 1
@@ -274,6 +276,7 @@ class TestnetService:
                     "sl": sl,
                     "tp": tp,
                     "metrics": p_metrics,
+                    "signal_result": signal_result,   # preserved for JIT re-validation
                     "timestamp": datetime.datetime.utcnow().timestamp()
                 }
                 self.opportunity_pool.put(candidate)
@@ -339,8 +342,10 @@ class TestnetService:
                     data_health = self.scanner.data_health_status.get(symbol, "OK")
                     
                     # Re-validate Profitability Gate (Price may have moved)
+                    # Pass signal_result from original candidate — preserves strategy_type metadata.
                     passed_profit, fresh_metrics = self.profitability_gate.evaluate_signal(
-                        symbol, side, current_price, sl, tp, p_metrics["confidence"]
+                        symbol, side, current_price, sl, tp,
+                        candidate.get("signal_result", p_metrics["prob_win"])
                     )
                     
                     if not passed_profit:

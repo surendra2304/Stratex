@@ -120,25 +120,24 @@ class TestnetRunner:
         try:
             df = get_candles(SYMBOL, TIMEFRAME, limit=100)
             df = add_indicators(df)
-            signal_res = get_signal(df)
-            if len(signal_res) == 4:
-                side, sl, tp, conf = signal_res
-            else:
-                side, sl, tp = signal_res
-                conf = 1.0
-            
-            # If no signal natively, mock one for dry run validation
+            signal_result = get_signal(df)
+            side = getattr(signal_result, 'side', signal_result[0] if signal_result else None)
+            sl   = getattr(signal_result, 'sl',   signal_result[1] if signal_result else None)
+            tp   = getattr(signal_result, 'tp',   signal_result[2] if signal_result else None)
+
+            # If no signal natively, use a mock RULE_BASED signal for dry-run only
             if not side:
+                from strategy_adx_ema import SignalResult as _SR, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO
                 side = "BUY"
                 current_price = df['close'].iloc[-1]
                 atr = df['atr'].iloc[-1] if 'atr' in df.columns and not pd.isna(df['atr'].iloc[-1]) else current_price * 0.01
                 sl = current_price - (atr * 1.5)
                 tp = current_price + (atr * 3.0)
-                conf = 0.52
-                
+                signal_result = _SR(side, sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+
             entry_price = df['close'].iloc[-1]
-            
-            passed_profit, p_metrics = self.profitability_gate.evaluate_signal(SYMBOL, side, entry_price, sl, tp, conf)
+
+            passed_profit, p_metrics = self.profitability_gate.evaluate_signal(SYMBOL, side, entry_price, sl, tp, signal_result)
             
             print(f"Signal: {side} {SYMBOL}")
             print(f"Expected Gross Return: {p_metrics['expected_gross_return']:.5f}")
@@ -177,19 +176,17 @@ class TestnetRunner:
         current_price = df['close'].iloc[-1]
         
         # 3. Generate Signal
-        signal_res = get_signal(df)
-        if len(signal_res) == 4:
-            side, sl, tp, conf = signal_res
-        else:
-            side, sl, tp = signal_res
-            conf = 1.0
+        signal_result = get_signal(df)
+        side = getattr(signal_result, 'side', signal_result[0] if signal_result else None)
+        sl   = getattr(signal_result, 'sl',   signal_result[1] if signal_result else None)
+        tp   = getattr(signal_result, 'tp',   signal_result[2] if signal_result else None)
         if not side:
             return
-            
+
         signal_id = str(uuid.uuid4())
-        
-        # 4. Profitability Gate
-        passed_profit, p_metrics = self.profitability_gate.evaluate_signal(SYMBOL, side, current_price, sl, tp, conf)
+
+        # 4. Profitability Gate — pass full signal_result (never a bare float)
+        passed_profit, p_metrics = self.profitability_gate.evaluate_signal(SYMBOL, side, current_price, sl, tp, signal_result)
         
         if not passed_profit:
             self.log_opportunity(signal_id, SYMBOL, side, p_metrics["expected_gross_return"], p_metrics["expected_net_return"], p_metrics, "REJECTED", p_metrics["reason"])

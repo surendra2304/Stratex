@@ -51,62 +51,66 @@ def ranking_service(mocker):
 
 def test_opportunity_ranking_and_limits(ranking_service, mocker):
     service = ranking_service
-    
+
     # Mock the profitability gate to return different expected net returns
-    # BTC = 0.05 (Rank 1)
-    # ETH = 0.03 (Rank 2)
-    # SOL = 0.01 (Rank 3)
-    def mock_eval(symbol, side, entry, sl, tp, conf):
+    # BTC = 0.05 (Rank 1), ETH = 0.03 (Rank 2), SOL = 0.01 (Rank 3)
+    def mock_eval(symbol, side, entry, sl, tp, signal_result):
         edge = {"BTCUSDT": 0.05, "ETHUSDT": 0.03, "SOLUSDT": 0.01}.get(symbol, 0.0)
-        return True, {"expected_net_return": edge, "reason": "OK", "confidence": 0.9}
-        
+        return True, {"expected_net_return": edge, "reason": "OK",
+                      "prob_win": 0.9, "confidence": 0.9,
+                      "strategy_type": "RULE_BASED", "prob_source": "TEST"}
+
     mocker.patch.object(service.profitability_gate, "evaluate_signal", side_effect=mock_eval)
-    
+
     # Add three candidates simultaneously to the pool (bypassing on_candle_closed)
     service.opportunity_pool.put({
         "signal_id": "sol", "symbol": "SOLUSDT", "side": "BUY", "sl": 90, "tp": 110,
-        "metrics": {"expected_net_return": 0.01, "confidence": 0.9}, "timestamp": time.time()
+        "signal_result": None,
+        "metrics": {"expected_net_return": 0.01, "confidence": 0.9, "prob_win": 0.9}, "timestamp": time.time()
     })
     service.opportunity_pool.put({
         "signal_id": "btc", "symbol": "BTCUSDT", "side": "BUY", "sl": 49000, "tp": 52000,
-        "metrics": {"expected_net_return": 0.05, "confidence": 0.9}, "timestamp": time.time()
+        "signal_result": None,
+        "metrics": {"expected_net_return": 0.05, "confidence": 0.9, "prob_win": 0.9}, "timestamp": time.time()
     })
     service.opportunity_pool.put({
         "signal_id": "eth", "symbol": "ETHUSDT", "side": "BUY", "sl": 2900, "tp": 3200,
-        "metrics": {"expected_net_return": 0.03, "confidence": 0.9}, "timestamp": time.time()
+        "signal_result": None,
+        "metrics": {"expected_net_return": 0.03, "confidence": 0.9, "prob_win": 0.9}, "timestamp": time.time()
     })
-    
+
     # We trigger the execution thread event manually
     service.pool_event.set()
-    
+
     # Wait for execution loop to process them
     time.sleep(0.5)
-    
-    # Check the result. BTC should be evaluated first, then ETH, then SOL.
-    # Because MAX_TESTNET_EXPOSURE is 0.02 (200 USDT), BTC takes up the exposure limit.
-    # The others should be rejected by the Risk Gate.
+
+    # BTC ranked first; MAX_TESTNET_EXPOSURE=0.02 means ETH/SOL get risk-rejected
     assert "BTCUSDT" in service.active_positions
     assert "ETHUSDT" not in service.active_positions
     assert "SOLUSDT" not in service.active_positions
 
 def test_revalidation_spread_expansion(ranking_service, mocker):
     service = ranking_service
-    
-    # Just before execution loop processes, the revalidation evaluate_signal returns FALSE (spread expansion)
-    def mock_eval_revalidation(symbol, side, entry, sl, tp, conf):
-        return False, {"expected_net_return": -0.01, "reason": "NEGATIVE_EDGE", "confidence": 0.9}
-        
+
+    # Before execution loop processes: revalidation returns FALSE (spread expansion)
+    def mock_eval_revalidation(symbol, side, entry, sl, tp, signal_result):
+        return False, {"expected_net_return": -0.01, "reason": "NEGATIVE_EXPECTED_NET_RETURN",
+                       "prob_win": 0.9, "confidence": 0.9,
+                       "strategy_type": "RULE_BASED", "prob_source": "TEST"}
+
     service.profitability_gate.evaluate_signal = mock_eval_revalidation
-    
+
     # Queue BTC
     service.opportunity_pool.put({
         "signal_id": "btc", "symbol": "BTCUSDT", "side": "BUY", "sl": 49000, "tp": 52000,
-        "metrics": {"expected_net_return": 0.05, "confidence": 0.9}, "timestamp": time.time()
+        "signal_result": None,
+        "metrics": {"expected_net_return": 0.05, "confidence": 0.9, "prob_win": 0.9}, "timestamp": time.time()
     })
-    
+
     service.pool_event.set()
     time.sleep(0.5)
-    
+
     # Should not execute because revalidation failed
     assert "BTCUSDT" not in service.active_positions
     assert service.stats["JIT_REJECTED"] > 0

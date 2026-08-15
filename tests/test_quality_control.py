@@ -47,20 +47,21 @@ def test_profitability_gate_edge_minimum():
         spread=0.0005, entry_slip=0.0005, exit_slip=0.0005
     ) # Total friction = 0.0035
     # Actually taker_fee=0.1%, entry + exit = 0.2%. spread = 0.05%. slippage=0.1%. Total = 0.35%
-    
+
     gate = ProfitabilityGate(cost_engine=cost_engine)
     import config
     config.MINIMUM_EXPECTED_EDGE = 0.0010 # 0.1% minimum edge
-    
-    # Gross expected: reward 1%, risk 1%, prob 0.6 -> (0.6 * 0.01) - (0.4 * 0.01) = 0.002
-    # Net: 0.002 - 0.0035 = -0.0015 -> Should Reject
+
+    # Gross expected: reward 1%, risk 1%, prob 0.6 ->
+    # (0.6 * 0.01) - (0.4 * 0.01) = 0.002; Net: 0.002 - 0.0035 = -0.0015 -> Reject
+    # Pass as float (legacy PROBABILISTIC path)
     passed, metrics = gate.evaluate_signal("BTCUSDT", "BUY", 100, 99, 101, 0.6)
     assert passed is False
-    assert metrics["reason"] == "NEGATIVE_EDGE"
+    assert metrics["reason"] == "NEGATIVE_EXPECTED_NET_RETURN"
     assert metrics["decision"] == "REJECTED"
-    
-    # Gross expected: reward 2%, risk 1%, prob 0.8 -> (0.8 * 0.02) - (0.2 * 0.01) = 0.016 - 0.002 = 0.014
-    # Net: 0.014 - 0.0035 = 0.0105 -> Should Accept (0.0105 > 0.0010)
+
+    # Gross expected: reward 2%, risk 1%, prob 0.8 ->
+    # (0.8 * 0.02) - (0.2 * 0.01) = 0.016 - 0.002 = 0.014; Net: 0.014 - 0.0035 = 0.0105 -> Accept
     passed, metrics = gate.evaluate_signal("BTCUSDT", "BUY", 100, 99, 102, 0.8)
     assert passed is True
     assert metrics["reason"] == "POSITIVE_EDGE"

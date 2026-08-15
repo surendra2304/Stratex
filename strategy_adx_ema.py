@@ -1,81 +1,137 @@
+"""
+strategy_adx_ema.py — ADX + EMA Trend Following
+
+STRATEGY TYPE: RULE_BASED (deterministic, no probabilistic output)
+
+Validated OOS statistics (used as structural expectancy priors by ProfitabilityGate):
+  Win rate         : 0.494  (49.4% from multi-asset OOS benchmark)
+  Risk:Reward      : 1:1.5  (2×ATR stop, 3×ATR target)
+  ADX threshold    : 25
+  EMA periods      : Fast=20, Slow=50, Direction=200
+  ATR period       : 14 (for SL/TP sizing)
+
+These values are FROZEN from the validated benchmark.
+Do NOT modify them based on live Testnet results.
+"""
+
+from collections import namedtuple
 import pandas as pd
 import numpy as np
 
-def compute_atr(df, period=14):
-    tr = pd.concat([
-        df['high'] - df['low'], 
-        abs(df['high'] - df['close'].shift(1)), 
-        abs(df['low'] - df['close'].shift(1))
-    ], axis=1).max(axis=1)
-    return tr.ewm(alpha=1/period, adjust=False).mean()
+# ------------------------------------------------------------------
+# Signal metadata — carried through execution pipeline
+# ------------------------------------------------------------------
+SignalResult = namedtuple(
+    "SignalResult",
+    ["side", "sl", "tp", "strategy_type", "win_rate_prior", "rr_ratio"]
+)
 
-def true_range(df):
-    return pd.concat([
-        df['high'] - df['low'], 
-        abs(df['high'] - df['close'].shift(1)), 
-        abs(df['low'] - df['close'].shift(1))
+# Structural parameters frozen from OOS validation
+_STRATEGY_TYPE       = "RULE_BASED"
+_OOS_WIN_RATE_PRIOR  = 0.494   # 49.4% — multi-asset OOS validated win rate
+_RR_RATIO            = 1.5     # reward/risk: 3×ATR tp / 2×ATR sl
+
+
+def compute_atr(df, period=14):
+    """ATR(period) using EWM smoothing — identical to benchmark."""
+    tr = pd.concat([
+        df['high'] - df['low'],
+        abs(df['high'] - df['close'].shift(1)),
+        abs(df['low']  - df['close'].shift(1))
     ], axis=1).max(axis=1)
+    return tr.ewm(alpha=1 / period, adjust=False).mean()
+
+
+def _true_range(df):
+    return pd.concat([
+        df['high'] - df['low'],
+        abs(df['high'] - df['close'].shift(1)),
+        abs(df['low']  - df['close'].shift(1))
+    ], axis=1).max(axis=1)
+
 
 def compute_adx(df, period=14):
-    plus_dm = df['high'].diff()
+    """Pure-pandas Wilder-smoothed ADX — identical to benchmark."""
+    plus_dm  = df['high'].diff()
     minus_dm = df['low'].diff(-1).shift(1)
-    plus_dm = np.where((plus_dm > minus_dm) & (plus_dm > 0), plus_dm, 0.0)
-    minus_dm = np.where((minus_dm > plus_dm) & (minus_dm > 0), minus_dm, 0.0)
-    
-    tr = true_range(df)
-    
-    tr_smooth = tr.ewm(alpha=1/period, adjust=False).mean()
-    plus_di = pd.Series(plus_dm, index=df.index).ewm(alpha=1/period, adjust=False).mean() / tr_smooth * 100
-    minus_di = pd.Series(minus_dm, index=df.index).ewm(alpha=1/period, adjust=False).mean() / tr_smooth * 100
-    
-    dx = (abs(plus_di - minus_di) / (plus_di + minus_di + 1e-9)) * 100
-    adx = dx.ewm(alpha=1/period, adjust=False).mean()
-    return adx
+    plus_dm  = np.where((plus_dm  > minus_dm) & (plus_dm  > 0), plus_dm,  0.0)
+    minus_dm = np.where((minus_dm > plus_dm)  & (minus_dm > 0), minus_dm, 0.0)
+
+    tr         = _true_range(df)
+    tr_smooth  = tr.ewm(alpha=1 / period, adjust=False).mean()
+    plus_di    = pd.Series(plus_dm,  index=df.index).ewm(alpha=1 / period, adjust=False).mean() / tr_smooth * 100
+    minus_di   = pd.Series(minus_dm, index=df.index).ewm(alpha=1 / period, adjust=False).mean() / tr_smooth * 100
+    dx         = (abs(plus_di - minus_di) / (plus_di + minus_di + 1e-9)) * 100
+    return dx.ewm(alpha=1 / period, adjust=False).mean()
+
 
 def add_features(df):
     """
-    Computes all necessary features for the ADX+EMA strategy.
+    Computes all strategy-specific features in-place.
     Called by the execution engine prior to get_signal().
+    All computations are strictly causal (no look-ahead).
     """
     df = df.copy()
-    df['ema_20'] = df['close'].ewm(span=20, adjust=False).mean()
-    df['ema_50'] = df['close'].ewm(span=50, adjust=False).mean()
-    df['ema_200'] = df['close'].ewm(span=200, adjust=False).mean()
+    df['ema_20']      = df['close'].ewm(span=20,  adjust=False).mean()
+    df['ema_50']      = df['close'].ewm(span=50,  adjust=False).mean()
+    df['ema_200']     = df['close'].ewm(span=200, adjust=False).mean()
     df['atr_adx_ema'] = compute_atr(df, 14)
-    df['adx'] = compute_adx(df, 14)
+    df['adx']         = compute_adx(df, 14)
     return df
+
 
 def get_signal(df):
     """
-    ADX + EMA Trend Following Strategy:
-    - Fast EMA=20, Slow EMA=50, Direction=200 EMA
-    - Buy on EMA20 crossing above EMA50, if price > EMA200 AND ADX > 25
-    - Sell on EMA20 crossing below EMA50, if price < EMA200 AND ADX > 25
-    """
-    if df is None or len(df) < 200:
-        return None, None, None
+    ADX + EMA Trend Following Strategy.
 
-    # Calculate strategy-specific features if they don't exist
+    Rules (closed-candle, next-candle execution):
+      BUY  — EMA20 crosses above EMA50, close > EMA200, ADX > 25
+      SELL — EMA20 crosses below EMA50, close < EMA200, ADX > 25
+
+    Returns:
+        SignalResult namedtuple with:
+            side           : "BUY" | "SELL" | None
+            sl             : stop-loss price
+            tp             : take-profit price
+            strategy_type  : "RULE_BASED"  (never probabilistic)
+            win_rate_prior : OOS-validated win rate (0.494)
+            rr_ratio       : reward/risk (1.5)
+
+    IMPORTANT: strategy_type="RULE_BASED" means the ProfitabilityGate MUST
+    NOT treat win_rate_prior as an ML confidence score — it is a
+    historically observed prior from the OOS benchmark, used only to
+    estimate structural expected value.
+    """
+    _NO_SIGNAL = SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+
+    if df is None or len(df) < 200:
+        return _NO_SIGNAL
+
+    # Ensure features are computed
     if 'atr_adx_ema' not in df.columns or 'adx' not in df.columns:
         df = add_features(df)
 
     last = df.iloc[-1]
     prev = df.iloc[-2]
 
-    cross_up = last['ema_20'] > last['ema_50'] and prev['ema_20'] <= prev['ema_50']
-    cross_dn = last['ema_20'] < last['ema_50'] and prev['ema_20'] >= prev['ema_50']
+    # Guard NaN
+    required = ['ema_20', 'ema_50', 'ema_200', 'atr_adx_ema', 'adx']
+    if any(pd.isna(last[c]) for c in required):
+        return _NO_SIGNAL
 
-    # ADX strength requirement
-    trend_strong = pd.notna(last['adx']) and last['adx'] > 25
+    cross_up = (last['ema_20'] > last['ema_50']) and (prev['ema_20'] <= prev['ema_50'])
+    cross_dn = (last['ema_20'] < last['ema_50']) and (prev['ema_20'] >= prev['ema_50'])
+
+    trend_strong = last['adx'] > 25  # ADX strength filter (benchmark: 25)
 
     if cross_up and last['close'] > last['ema_200'] and trend_strong:
-        sl = last['close'] - (2 * last['atr_adx_ema'])
-        tp = last['close'] + (3 * last['atr_adx_ema'])
-        return "BUY", sl, tp
+        sl = last['close'] - (2.0 * last['atr_adx_ema'])
+        tp = last['close'] + (3.0 * last['atr_adx_ema'])
+        return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     if cross_dn and last['close'] < last['ema_200'] and trend_strong:
-        sl = last['close'] + (2 * last['atr_adx_ema'])
-        tp = last['close'] - (3 * last['atr_adx_ema'])
-        return "SELL", sl, tp
+        sl = last['close'] + (2.0 * last['atr_adx_ema'])
+        tp = last['close'] - (3.0 * last['atr_adx_ema'])
+        return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
-    return None, None, None
+    return _NO_SIGNAL
