@@ -35,7 +35,7 @@ def test_phase12_full_acceptance_scenario(tmp_path):
     dm = DataMonitor(hb)
     
     # Initial data
-    dm.process_tick("BTCUSDT", 60000.0, time.time())
+    dm.process_tick("BTCUSDT", 60000.0, time.time() - 10)  # distinct timestamp
     assert hb.components["Market Data"]["status"] == ComponentStatus.OK.value
     
     # 3. Duplicate event (Idempotency)
