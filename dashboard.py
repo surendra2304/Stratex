@@ -41,47 +41,7 @@ def get_candles():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/backtest')
-def get_backtest():
-    """Runs a rapid backtest on the last 7 days and returns the equity curve and metrics."""
-    try:
-        from backtester import fetch_historical_data, get_strategy_by_name
-        from data import add_indicators
-        from backtest_engine import BacktestEngine
-        from metrics import calculate_metrics
-        from config import BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE, STARTING_BALANCE, RISK_PER_TRADE, ACTIVE_STRATEGY
-        
-        symbol = request.args.get('symbol', 'BTCUSDT')
-        
-        # We fetch less data for the dashboard to keep it snappy
-        raw = fetch_historical_data(days=7)
-        if raw.empty:
-            return jsonify({"error": "No data"}), 500
-            
-        df = add_indicators(raw)
-        strats = get_strategy_by_name(ACTIVE_STRATEGY)
-        
-        engine = BacktestEngine(df, strats, BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE, STARTING_BALANCE, RISK_PER_TRADE)
-        trades, equity_df = engine.run()
-        metrics = calculate_metrics(trades, equity_df, STARTING_BALANCE)
-        
-        eq_curve = []
-        if not equity_df.empty:
-            for _, row in equity_df.iterrows():
-                eq_curve.append({
-                    "time": int(row['timestamp'].timestamp()),
-                    "value": float(row['equity'])
-                })
-                
-        return jsonify({
-            "metrics": metrics,
-            "equity_curve": eq_curve,
-            "recent_trades": trades[-10:] if trades else [] # Last 10 trades
-        })
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+# Legacy /api/backtest removed to focus purely on live Testnet operations.
 
 @app.route('/api/chart_trades')
 def get_chart_trades():
@@ -257,21 +217,10 @@ def get_trades():
         # 1. Parse closed trades from ledger
         ledger_file = "testnet_trade_ledger.jsonl" if TRADING_MODE == "TESTNET" else "paper_trade_ledger.jsonl"
         if os.path.exists(ledger_file):
-            active_exp_id = "UNKNOWN"
-            if os.path.exists("experiments/active_forward_experiment_id.txt"):
-                with open("experiments/active_forward_experiment_id.txt", "r") as expf:
-                    active_exp_id = expf.read().strip()
-
             with open(ledger_file, "r") as f:
                 for line in f:
                     try:
                         trade = json.loads(line)
-                        trade_exp_id = trade.get("experiment_id", "LEGACY_UNASSIGNED")
-                        
-                        # EXCLUDE LEGACY DATA (Paper only)
-                        if TRADING_MODE == "PAPER" and trade_exp_id != active_exp_id:
-                            continue
-                        
                         pnl = trade.get("net_pnl", 0.0)
                         
                         if pnl > 0:

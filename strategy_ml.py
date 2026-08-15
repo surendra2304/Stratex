@@ -134,6 +134,11 @@ class MLStrategy:
             sl = close - (atr * 1.5)
             tp = close + (atr * 3.0)
             return "BUY", sl, tp, prob_up
+        elif prob_up < 0.48:
+            sl = close + (atr * 1.5)
+            tp = close - (atr * 3.0)
+            # For SELL, confidence is the probability of going DOWN (1 - prob_up)
+            return "SELL", sl, tp, (1.0 - prob_up)
             
         return None, None, None, None
 

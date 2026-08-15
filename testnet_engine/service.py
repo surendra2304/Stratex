@@ -64,6 +64,7 @@ class TestnetService:
         self.last_evaluation = {}
         self.safety_halt = False
         self.observe_only = False
+        self.cooldowns = {} # symbol -> timestamp (float)
         
         # Phase 3: Restore daily risk state from ledger if restarting mid-day
         self._restore_daily_risk_state()
@@ -257,6 +258,12 @@ class TestnetService:
                 tp = candidate["tp"]
                 
                 with self.lock:
+                    # Enforce per-symbol cooldown (60 seconds)
+                    now_ts = datetime.datetime.utcnow().timestamp()
+                    if symbol in self.cooldowns and now_ts - self.cooldowns[symbol] < 60:
+                        self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "ON_COOLDOWN")
+                        continue
+                        
                     # Re-validate with absolute latest price
                     if not hasattr(self, 'scanner') or symbol not in self.scanner.candle_cache:
                         self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "NO_MARKET_DATA")
@@ -324,9 +331,11 @@ class TestnetService:
                             "tp": tp,
                             "entry_client_id": signal_id
                         }
+                        self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
                     else:
                         self.stats["signals_rejected"] += 1
                         self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", "ORDER_FAILED")
+                        self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
                         
                     self._save_state()
 
@@ -357,9 +366,25 @@ class TestnetService:
                 if usdt_balance:
                     self.current_equity = float(usdt_balance['free']) + float(usdt_balance['locked'])
                     
-                # 2. Reconcile Positions (Simplified for demonstration)
-                # In production, query client.get_open_orders() to see if OCOs hit.
-                # If hit, move position from self.active_positions to testnet_trade_ledger.jsonl
+                # 2. Reconcile Positions
+                from execution import monitor_open_trades, _load_active_trades
+                # This queries Binance for OCO status and updates active_trades.json
+                monitor_open_trades()
+                
+                # Sync memory with disk
+                try:
+                    active = _load_active_trades()
+                    new_active_positions = {t['symbol']: t for t in active}
+                    
+                    # Update local risk gate if a trade closed
+                    for sym in list(self.active_positions.keys()):
+                        if sym not in new_active_positions:
+                            logger.info(f"[SERVICE] Position for {sym} closed. Risk bounds will update on next PnL parse.")
+                            self._restore_daily_risk_state()
+                            
+                    self.active_positions = new_active_positions
+                except Exception as e:
+                    logger.error(f"[SERVICE] Failed to sync active positions: {e}")
                 
                 # Phase 5: Degradation Control
                 self._check_degradation()
