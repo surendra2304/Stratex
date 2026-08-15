@@ -51,7 +51,17 @@ class ProfitabilityGate:
         # Phase 5: Expected Net Edge Threshold
         min_edge = getattr(config, "MINIMUM_EXPECTED_EDGE", 0.0005)
         is_accepted = expected_net_return >= min_edge
-
+        reason = "PASSED" if is_accepted else "NEGATIVE_EXPECTED_NET_RETURN"
+        
+        # DIAGNOSTIC: Log profitability calculations directly to system logger for transparency
+        logger.info(f"--- [PROFIT GATE: {symbol} {side}] ---")
+        logger.info(f"  Confidence (Prob Win): {prob_win:.4f} | Prob Loss: {prob_loss:.4f}")
+        logger.info(f"  Reward Pct: {reward_pct:.5f} | Risk Pct: {risk_pct:.5f}")
+        logger.info(f"  Expected Gross Return: ({prob_win:.4f} * {reward_pct:.5f}) - ({prob_loss:.4f} * {risk_pct:.5f}) = {expected_gross_return:.6f}")
+        logger.info(f"  Total Friction (Fees+Slippage): {total_friction_pct:.6f}")
+        logger.info(f"  Expected Net Edge: {expected_gross_return:.6f} - {total_friction_pct:.6f} = {expected_net_return:.6f}")
+        logger.info(f"  Threshold: >= {min_edge:.5f} | Result: {'ACCEPTED' if is_accepted else 'REJECTED'}")
+        logger.info(f"---------------------------------------")
         # 6. Evaluation Output
         metrics = {
             "expected_gross_return": expected_gross_return,

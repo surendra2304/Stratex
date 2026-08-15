@@ -27,9 +27,9 @@ class MarketScanner:
         self._health_thread = None
         
     def _fetch_historical_candles(self, symbol):
-        """Initializes the cache with 100 historical candles via REST."""
+        """Initializes the cache with 250 historical candles via REST."""
         try:
-            klines = self.client.get_klines(symbol=symbol, interval=self.timeframe, limit=100)
+            klines = self.client.get_klines(symbol=symbol, interval=self.timeframe, limit=250)
             df = pd.DataFrame(klines, columns=[
                 'timestamp', 'open', 'high', 'low', 'close', 'volume',
                 'close_time', 'quote_asset_volume', 'number_of_trades',
@@ -137,6 +137,9 @@ class MarketScanner:
         
         # Track market update time
         self.last_market_update[symbol] = datetime.datetime.utcnow()
+        if not hasattr(self, 'tick_counts'):
+            self.tick_counts = {}
+        self.tick_counts[symbol] = self.tick_counts.get(symbol, 0) + 1
         
         # Only process fully closed candles for signals
         if not is_closed:
@@ -154,9 +157,9 @@ class MarketScanner:
         
         if symbol in self.candle_cache:
             df = self.candle_cache[symbol]
-            # Append new row and drop oldest to keep size fixed (e.g. 100)
+            # Append new row and drop oldest to keep size fixed (e.g. 250)
             df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-            if len(df) > 100:
+            if len(df) > 250:
                 df = df.iloc[1:]
             self.candle_cache[symbol] = df
         else:

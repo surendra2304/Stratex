@@ -289,24 +289,28 @@ def test_Q_ml_barrier_logic():
     # TEST Q: Verify ML barrier logic without lookahead bias.
     from strategy_ml import MLStrategy
     strat = MLStrategy()
-    
-    # We create 17 rows. Max holding is 15.
+
+    # We create 75 rows. Max holding is 72.
     # Entry at i=0 (Close = 100).
-    # +0.5% is 100.5, -0.5% is 99.5
-    # Row 5 hits 101. Row 6 hits 90. Target should be 1.
-    rows = [[100, 100, 100, 100]] * 17
-    rows[5] = [100, 101, 100, 100] # Hits upper barrier
-    rows[6] = [100, 100, 90, 100]  # Hits lower barrier later
-    
+    # BUY: TP is 1.5% (101.5), SL is 0.5% (99.5)
+    # Row 5 hits 102. Row 6 hits 90. Target_buy should be 1.
+    rows = [[100, 100, 100, 100]] * 75
+    rows[5] = [100, 102, 100, 100] # Hits upper barrier (TP)
+    rows[6] = [100, 100, 90, 100]  # Hits lower barrier later (SL)
+
     df = create_mock_data(rows)
     df_labeled = strat._create_labels(df)
-    
-    assert df_labeled['target'].iloc[0] == 1.0
-    
+
+    assert df_labeled['target_buy'].iloc[0] == 1.0
+    assert df_labeled['target_sell'].iloc[0] == 0.0
+
     # Scenario 2: Hits lower barrier first
     rows[5] = [100, 100, 90, 100]
-    rows[6] = [100, 101, 100, 100]
+    rows[6] = [100, 102, 100, 100]
     df = create_mock_data(rows)
     df_labeled = strat._create_labels(df)
-    
-    assert df_labeled['target'].iloc[0] == 0.0
+
+    assert df_labeled['target_buy'].iloc[0] == 0.0
+    # SELL model expects to make 1.5% when it drops to 98.5, and loses when it rises to 100.5
+    # Since it dropped to 90 at row 5, sell is successful!
+    assert df_labeled['target_sell'].iloc[0] == 1.0

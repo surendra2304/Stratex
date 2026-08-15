@@ -11,7 +11,7 @@ def reload_modules():
     importlib.reload(execution)
     return config, execution
 
-@patch.dict(os.environ, {"TRADING_MODE": "PAPER", "PAPER_SAFE_MODE": "True"}, clear=True)
+@patch.dict(os.environ, {"TRADING_MODE": "PAPER", "PAPER_SAFE_MODE": "True"})
 
 def test_paper_mode_execution_block():
     """

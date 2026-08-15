@@ -22,7 +22,7 @@ def reload_modules():
     importlib.reload(testnet_engine.risk_gate)
     return testnet_engine.service, testnet_engine.market_scanner, testnet_engine.risk_gate
 
-@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"}, clear=True)
+@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"})
 def test_chaos_daily_risk_reset():
     svc, msc, rsg = reload_modules()
     gate = rsg.RiskGate(starting_balance=10000.0)
@@ -41,7 +41,7 @@ def test_chaos_daily_risk_reset():
         assert gate.daily_realized_loss == 0.0, "Daily PnL should reset on UTC boundary crossing"
         assert gate.current_trading_day == future_date.date()
 
-@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"}, clear=True)
+@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"})
 def test_chaos_data_staleness_blocks_entries():
     svc, msc, rsg = reload_modules()
     
@@ -62,7 +62,7 @@ def test_chaos_data_staleness_blocks_entries():
         assert passed is False
         assert reason == "DATA_DEGRADED"
 
-@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"}, clear=True)
+@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"})
 def test_chaos_ws_reconnect_logic():
     svc, msc, rsg = reload_modules()
     
@@ -109,7 +109,7 @@ def test_chaos_ws_reconnect_logic():
         assert mock_twm.stop.call_count >= 1
         assert mock_twm_class.call_count == 2 # Initial + Reconnect
         
-@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"}, clear=True)
+@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"})
 def test_atomic_save_state():
     svc, msc, rsg = reload_modules()
     
@@ -124,4 +124,5 @@ def test_atomic_save_state():
         with patch("testnet_engine.service.os.replace") as mock_replace:
             service._save_state()
             # Assert os.replace was called with the tmp file
-            mock_replace.assert_called_once_with("testnet_portfolio.json.tmp", "testnet_portfolio.json")
+            from testnet_engine.service import TESTNET_PORTFOLIO_FILE
+            mock_replace.assert_called_once_with(TESTNET_PORTFOLIO_FILE + ".tmp", TESTNET_PORTFOLIO_FILE)

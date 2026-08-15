@@ -11,6 +11,7 @@ import strategy_scalper as scalper
 import strategy_swing   as swing
 import strategy_ml      as ml
 import strategy_aggressor as aggressor
+import strategy_supertrend as supertrend
 
 from backtest_engine import BacktestEngine
 from metrics import calculate_metrics
@@ -72,6 +73,7 @@ def get_strategy_by_name(name):
     if name == "swing": return [swing]
     if name == "ml": return [ml]
     if name == "aggressor": return [aggressor]
+    if name == "supertrend": return [supertrend]
     if name == "multi": return [MultiStrategyWrapper()]
     return []
 
@@ -137,7 +139,7 @@ def run_rolling_walk_forward(df, strategy_name, num_windows=5):
 def generate_baseline(df):
     """Runs a baseline for all strategies and exports results."""
     print("\n[BASELINE] Generating Baseline Strategy Report...\n")
-    strats_to_test = ["scalper", "swing", "ml", "aggressor", "multi"]
+    strats_to_test = ["supertrend"]
     
     results = {}
     table_data = []
@@ -184,7 +186,7 @@ def generate_baseline(df):
 def generate_phase5_reports(df):
     """Runs Phase 5 validation and exports comprehensive diagnostic reports with Cost Sensitivity."""
     print("\n[PHASE 5] Generating Diagnostics & Reports...\n")
-    strats_to_test = ["scalper", "swing", "ml", "aggressor", "multi"]
+    strats_to_test = ["supertrend"]
     
     os.makedirs('backtest_results/phase5', exist_ok=True)
     

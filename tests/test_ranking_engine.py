@@ -109,4 +109,4 @@ def test_revalidation_spread_expansion(ranking_service, mocker):
     
     # Should not execute because revalidation failed
     assert "BTCUSDT" not in service.active_positions
-    assert service.stats["signals_rejected"] > 0
+    assert service.stats["JIT_REJECTED"] > 0

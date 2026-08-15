@@ -76,52 +76,14 @@ def get_chart_trades():
 def get_status():
     from config import TRADING_MODE
     import time
+    from logger import get_logger
+    logger = get_logger("dashboard")
     
-    if TRADING_MODE != "PAPER":
-        return jsonify({
-            "mode": TRADING_MODE,
-            "bot_health": "UNKNOWN",
-            "data_health": "UNKNOWN",
-            "equity": 0,
-            "cash": 0,
-            "realized_pnl": 0,
-            "unrealized_pnl": 0,
-            "open_positions": 0
-        })
-        
-    try:
-        from paper_engine.heartbeat import HeartbeatState
-        hb = HeartbeatState()
-        components = hb.components
-        overall = hb.get_overall_health().value
-    except Exception as e:
-        from logger import get_logger
-        get_logger("dashboard").error(f"Failed to read heartbeat: {e}")
-        components = {}
-        overall = "UNKNOWN"
-        
-    try:
-        from paper_engine.session import SessionState
-        session = SessionState()
-        session_info = {
-            "id": session.session_id,
-            "status": session.status,
-            "start": session.start_time
-        }
-    except Exception as e:
-        from logger import get_logger
-        get_logger("dashboard").error(f"Failed to read session: {e}")
-        session_info = {"status": "UNKNOWN"}
-        
-    try:
-        from paper_engine.alerts import AlertManager
-        alert_mgr = AlertManager()
-        alerts = [v for k, v in alert_mgr.active_alerts.items()]
-    except Exception as e:
-        from logger import get_logger
-        get_logger("dashboard").error(f"Failed to read alerts: {e}")
-        alerts = []
-        
+    # Defaults
+    overall = "OK"
+    components = {}
+    session_info = {"status": "ACTIVE"}
+    alerts = []
     equity = 10000.0
     cash = 10000.0
     realized_pnl = 0.0
@@ -131,57 +93,101 @@ def get_status():
     used_margin = 0.0
     open_positions = 0
     mdd = 0.0
-    
-    from config import TRADING_MODE
-    portfolio_file = "testnet_portfolio.json" if TRADING_MODE == "TESTNET" else "paper_portfolio.json"
-    if os.path.exists(portfolio_file):
+
+    if TRADING_MODE == "TESTNET":
+        # 1. Real Testnet Balance
+        from execution import get_exchange_client
         try:
-            import json
-            with open(portfolio_file, "r") as f:
-                port = json.load(f)
-            
-            # Fetch recent market prices to compute true equity
-            current_price = 0.0
-            try:
-                from data import get_candles
-                df = get_candles("BTCUSDT", "1m", 1)
-                if not df.empty:
-                    current_price = df['close'].iloc[-1]
-            except Exception as e:
-                from logger import get_logger
-                get_logger("dashboard").warning(f"Failed to fetch live price for equity calc: {e}")
-            
-            # Compute unrealized
-            for pos in port.get("positions", {}).values():
-                if pos['status'] == "OPEN" and current_price > 0:
-                    if pos['direction'] in ["LONG", "BUY"]:
-                        unrealized_pnl += (current_price - pos['entry_price']) * pos['quantity']
-                    else:
-                        unrealized_pnl += (pos['entry_price'] - current_price) * pos['quantity']
-                        
-            cash = port.get("cash", 10000.0)
-            equity = cash + unrealized_pnl
-            realized_pnl = port.get("realized_pnl", 0.0)
-            fees = port.get("cumulative_fees", 0.0)
-            funding = port.get("cumulative_funding", 0.0)
-            used_margin = port.get("used_margin", 0.0)
-            open_positions = len([p for p in port.get("positions", {}).values() if p["status"] == "OPEN"])
-            
-            try:
-                if TRADING_MODE in ["PAPER", "TESTNET"]:
-                    from paper_engine.portfolio import PaperPortfolio
-                    temp_port = PaperPortfolio("paper_portfolio.json")
-                    mdd = temp_port.get_max_drawdown() * 100
+            client = get_exchange_client()
+            if not client:
+                equity = "DATA UNAVAILABLE"
+                cash = "DATA UNAVAILABLE"
+            else:
+                account = client.get_account()
+                usdt = next((item for item in account['balances'] if item['asset'] == 'USDT'), None)
+                if usdt:
+                    cash = float(usdt['free']) + float(usdt['locked'])
+                    equity = cash # Will add unrealized later
                 else:
-                    mdd = port.get("max_drawdown", 0.0) * 100
-            except Exception as e:
-                from logger import get_logger
-                get_logger("dashboard").error(f"Failed to compute drawdown: {e}")
-                
+                    equity = "DATA UNAVAILABLE"
+                    cash = "DATA UNAVAILABLE"
         except Exception as e:
-            from logger import get_logger
-            get_logger("dashboard").error(f"Failed to process portfolio for dashboard: {e}")
-            overall = "STATE CORRUPTED" # We can't read the portfolio!
+            logger.error(f"[EXEC] Error fetching balance: {e}")
+            equity = "DATA UNAVAILABLE"
+            cash = "DATA UNAVAILABLE"
+
+        # 2. Read Testnet Portfolio
+        if os.path.exists("testnet_portfolio.json"):
+            try:
+                import json
+                with open("testnet_portfolio.json", "r") as f:
+                    port = json.load(f)
+                
+                # Fetch recent market prices to compute true equity
+                current_price = 0.0
+                try:
+                    from data import get_candles
+                    df = fetch_candles("BTCUSDT", TIMEFRAME, 1)
+                    if not df.empty:
+                        current_price = float(df['close'].iloc[-1])
+                except Exception as e:
+                    logger.warning(f"Failed to fetch live price for equity calc: {e}")
+                
+                # Compute unrealized
+                for pos in port.get("positions", {}).values():
+                    if pos['status'] == "OPEN" and current_price > 0:
+                        ep = float(pos['entry_price'])
+                        qty = float(pos['quantity'])
+                        if pos['direction'] in ["LONG", "BUY"]:
+                            unrealized_pnl += (current_price - ep) * qty
+                        else:
+                            unrealized_pnl += (ep - current_price) * qty
+                            
+                if isinstance(equity, float):
+                    equity += unrealized_pnl
+                    
+                realized_pnl = float(port.get("realized_pnl", 0.0))
+                fees = float(port.get("cumulative_fees", 0.0))
+                open_positions = len([p for p in port.get("positions", {}).values() if p["status"] == "OPEN"])
+                mdd = float(port.get("max_drawdown", 0.0)) * 100
+                
+            except Exception as e:
+                logger.error(f"Failed to process Testnet portfolio: {e}")
+                
+    elif TRADING_MODE == "PAPER":
+        try:
+            from paper_engine.heartbeat import HeartbeatState
+            hb = HeartbeatState()
+            components = hb.components
+            overall = hb.get_overall_health().value
+        except: pass
+            
+        try:
+            from paper_engine.session import SessionState
+            session = SessionState()
+            session_info = {"id": session.session_id, "status": session.status, "start": session.start_time}
+        except: pass
+            
+        try:
+            from paper_engine.alerts import AlertManager
+            alerts = [v for k, v in AlertManager().active_alerts.items()]
+        except: pass
+            
+        if os.path.exists("paper_portfolio.json"):
+            try:
+                import json
+                with open("paper_portfolio.json", "r") as f:
+                    port = json.load(f)
+                    
+                cash = port.get("cash", 10000.0)
+                equity = cash
+                realized_pnl = port.get("realized_pnl", 0.0)
+                fees = port.get("cumulative_fees", 0.0)
+                
+                from paper_engine.portfolio import PaperPortfolio
+                temp_port = PaperPortfolio("paper_portfolio.json")
+                mdd = temp_port.get_max_drawdown() * 100
+            except: pass
 
     return jsonify({
         "mode": TRADING_MODE,
@@ -204,169 +210,107 @@ def get_status():
 def get_trades():
     """Parses logs or paper portfolio to return positions."""
     from config import TRADING_MODE
+    from logger import get_logger
+    logger = get_logger("dashboard")
     
-    if TRADING_MODE in ["PAPER", "TESTNET"]:
-        import json
-        net_pnl = 0.0
-        wins = 0
-        losses = 0
-        gross_profit = 0.0
-        gross_loss = 0.0
-        positions = []
-        
-        # 1. Parse closed trades from ledger
-        ledger_file = "testnet_trade_ledger.jsonl" if TRADING_MODE == "TESTNET" else "paper_trade_ledger.jsonl"
-        if os.path.exists(ledger_file):
-            with open(ledger_file, "r") as f:
-                for line in f:
-                    try:
-                        trade = json.loads(line)
-                        pnl = trade.get("net_pnl", 0.0)
-                        
-                        if pnl > 0:
-                            wins += 1
-                            gross_profit += pnl
-                        elif pnl < 0:
-                            losses += 1
-                            gross_loss += abs(pnl)
-                            
-                        positions.append({
-                            "timestamp": trade.get("entry_time", trade.get("signal_time", 0)),
-                            "symbol": trade.get("symbol", ""),
-                            "action": trade.get("direction", ""),
-                            "entry_price": trade.get("entry_price", 0.0),
-                            "quantity": trade.get("quantity", 0.0),
-                            "status": "CLOSED",
-                            "pnl": pnl,
-                            "matched": True
-                        })
-                    except Exception as e:
-                        from logger import get_logger
-                        get_logger("dashboard").error(f"Failed parsing ledger line: {e}")
-        
-        # 2. Add open positions from portfolio
-        port_file = "testnet_portfolio.json" if TRADING_MODE == "TESTNET" else "paper_portfolio.json"
-        if os.path.exists(port_file):
-            try:
-                with open(port_file, "r") as f:
-                    port = json.load(f)
-                net_pnl = port.get("realized_pnl", 0.0)
-                
-                for pos_id, p in port.get("positions", {}).items():
-                    if p["status"] == "OPEN":
-                        positions.append({
-                            "timestamp": p.get("open_time", 0),
-                            "symbol": p["symbol"],
-                            "action": p["direction"],
-                            "entry_price": p["entry_price"],
-                            "quantity": p["quantity"],
-                            "status": p["status"],
-                            "pnl": 0.0, # Unrealized
-                            "matched": False
-                        })
-            except Exception as e:
-                from logger import get_logger
-                get_logger("dashboard").error(f"Failed to read portfolio for trades: {e}")
-                
-        positions.sort(key=lambda x: x["timestamp"], reverse=True)
-        total_closed = wins + losses
-        win_rate = (wins / total_closed * 100) if total_closed > 0 else "N/A"
-        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else ("Infinity" if gross_profit > 0 else ("N/A" if total_closed == 0 else 0))
-        
-        return jsonify({
-            "net_pnl": net_pnl, 
-            "win_rate": win_rate,
-            "total_trades": total_closed,
-            "profit_factor": profit_factor,
-            "positions": positions
-        })
-
-    # TESTNET logic
-    if not os.path.exists(LOG_FILE):
-        return jsonify({"net_pnl": 0, "win_rate": 0, "total_trades": 0, "profit_factor": 0, "positions": []})
-        
-    positions = []
-    total_pnl = 0.0
+    import json
+    net_pnl = 0.0
     wins = 0
     losses = 0
     gross_profit = 0.0
     gross_loss = 0.0
+    positions = []
     
-    try:
-        with open(LOG_FILE, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                side = row["side"].upper()
-                price = float(row["price"])
-                qty = float(row["quantity"])
-                
-                # Check if it's an entry
-                if side in ["BUY", "SELL"]:
+    # 1. Parse closed trades from ledger
+    debug_log = []
+    ledger_file = "testnet_trade_ledger.jsonl" if TRADING_MODE == "TESTNET" else "paper_trade_ledger.jsonl"
+    
+    debug_log.append(f"Mode is {TRADING_MODE}, looking for {ledger_file}")
+    if os.path.exists(ledger_file):
+        debug_log.append("File exists")
+        with open(ledger_file, "r") as f:
+            for line in f:
+                try:
+                    trade = json.loads(line)
+                    pnl = trade.get("pnl", trade.get("net_pnl", 0.0))
+                    
+                    if pnl > 0:
+                        wins += 1
+                        gross_profit += pnl
+                    elif pnl < 0:
+                        losses += 1
+                        gross_loss += abs(pnl)
+                        
                     positions.append({
-                        "timestamp": row["timestamp"],
-                        "symbol": row["symbol"],
-                        "action": side,
-                        "entry_price": price,
-                        "quantity": qty,
-                        "status": "ACTIVE",
-                        "pnl": 0.0,
-                        "matched": False
+                        "timestamp": trade.get("timestamp", trade.get("entry_time", 0)),
+                        "symbol": trade.get("symbol", ""),
+                        "action": trade.get("action", trade.get("direction", "")).replace("CLOSED_", ""),
+                        "entry_price": trade.get("entry_price", 0.0),
+                        "exit_price": trade.get("exit_price", 0.0),
+                        "quantity": trade.get("quantity", 0.0),
+                        "status": "CLOSED",
+                        "pnl": pnl,
+                        "fees": trade.get("fees", 0.0),
+                        "order_id": trade.get("entry_client_id", trade.get("order_id", "CLOSED-ORDER")),
+                        "matched": True
                     })
-                # Check if it's an exit
-                elif "CLOSE" in side:
-                    entry_side = side.split("_")[0] 
-                    for p in positions:
-                        if not p["matched"] and p["symbol"] == row["symbol"] and p["action"] == entry_side:
-                            p["matched"] = True
-                            
-                            is_win = "WIN" in side
-                            p["status"] = "WIN" if is_win else "LOSS"
-                            
-                            if is_win:
-                                wins += 1
-                            else:
-                                losses += 1
-                                
-                            # Calculate PnL
-                            if p["action"] == "BUY":
-                                p["pnl"] = (price - p["entry_price"]) * p["quantity"]
-                            else:
-                                p["pnl"] = (p["entry_price"] - price) * p["quantity"]
-                                
-                            total_pnl += p["pnl"]
-                            if p["pnl"] > 0:
-                                gross_profit += p["pnl"]
-                            else:
-                                gross_loss += abs(p["pnl"])
-                                
-                            break
-                            
-        positions.reverse()
-        total_closed = wins + losses
-        win_rate = (wins / total_closed * 100) if total_closed > 0 else 0
-        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0)
-        
-        return jsonify({
-            "net_pnl": total_pnl, 
-            "win_rate": win_rate,
-            "total_trades": total_closed,
-            "profit_factor": profit_factor,
-            "positions": positions
-        })
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+                except Exception as e:
+                    logger.error(f"Failed parsing ledger line: {e}")
+                        
+    with open("dashboard_debug.txt", "w") as f:
+        f.write("\n".join(debug_log))
+    
+    # 2. Add open positions from portfolio
+    port_file = "testnet_portfolio.json" if TRADING_MODE == "TESTNET" else "paper_portfolio.json"
+    if os.path.exists(port_file):
+        try:
+            with open(port_file, "r") as f:
+                port = json.load(f)
+            net_pnl = port.get("realized_pnl", 0.0)
+            
+            # testnet_portfolio uses a dict for positions: {"BTCUSDT": {...}}
+            # paper used a list. Handle both.
+            pos_data = port.get("positions", {})
+            if isinstance(pos_data, dict):
+                pos_list = pos_data.values()
+            else:
+                pos_list = pos_data
+                
+            for p in pos_list:
+                # In testnet, if it's in this dict, it's OPEN
+                status = p.get("status", "OPEN")
+                if status == "OPEN":
+                    positions.append({
+                        "timestamp": p.get("timestamp", p.get("open_time", 0)),
+                        "symbol": p.get("symbol", ""),
+                        "action": p.get("side", p.get("direction", "")),
+                        "entry_price": p.get("entry_price", 0.0),
+                        "quantity": p.get("quantity", 0.0),
+                        "status": "OPEN",
+                        "pnl": p.get("unrealized_pnl", 0.0),
+                        "order_id": p.get("entry_client_id", "LIVE-ORDER"),
+                        "sl": p.get("sl", 0.0),
+                        "tp": p.get("tp", 0.0)
+                    })
+        except Exception as e:
+            logger.error(f"Failed parsing portfolio for trades: {e}")
+            
+    positions.sort(key=lambda x: x["timestamp"], reverse=True)
+    total_closed = wins + losses
+    win_rate = (wins / total_closed * 100) if total_closed > 0 else "N/A"
+    profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else ("Infinity" if gross_profit > 0 else ("N/A" if total_closed == 0 else 0))
+    
+    return jsonify({
+        "net_pnl": net_pnl, 
+        "win_rate": win_rate,
+        "total_trades": total_closed,
+        "profit_factor": profit_factor,
+        "positions": positions
+    })
 
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)
-
-if __name__ == '__main__':
-    print("🚀 Starting Live Dashboard...")
-    print("👉 Open http://127.0.0.1:5000 in your browser")
-    is_debug = os.environ.get('FLASK_DEBUG') == '1'
-    app.run(debug=is_debug, port=5000)
 
 @app.route('/api/scanner')
 def get_scanner():
@@ -379,9 +323,17 @@ def get_scanner():
     from flask import jsonify
     stats = {
         "symbols_scanned": 0,
-        "signals_detected": 0,
-        "signals_rejected": 0,
-        "orders_submitted": 0,
+        "TOTAL_SIGNALS": 0,
+        "PROFITABILITY_REJECTED": 0,
+        "RISK_REJECTED": 0,
+        "COOLDOWN_REJECTED": 0,
+        "JIT_REJECTED": 0,
+        "OTHER_REJECTED": 0,
+        "QUALIFIED": 0,
+        "ORDERS_SUBMITTED": 0,
+        "EXECUTION_REJECTED": 0,
+        "ORDERS_FILLED": 0,
+        "ORDERS_FAILED": 0,
         "top_opportunities": []
     }
     
@@ -395,14 +347,34 @@ def get_scanner():
             
     if os.path.exists("testnet_opportunity_log.jsonl"):
         try:
+            import datetime
             opps = []
+            now = datetime.datetime.utcnow()
             with open("testnet_opportunity_log.jsonl", "r") as f:
                 for line in f:
+                    if not line.strip(): continue
                     opp = json.loads(line)
-                    if opp.get("decision") == "ACCEPTED":
-                        opps.append(opp)
-            stats["top_opportunities"] = sorted(opps, key=lambda x: x.get("expected_net_return", 0), reverse=True)[:3]
-        except:
-            pass
+                    ts_str = opp.get("timestamp", "")
+                    try:
+                        # Try parsing ISO 8601
+                        # Example: 2026-08-15T13:28:16.650863Z
+                        ts = datetime.datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                        if (now - ts).total_seconds() < 300: # Last 5 minutes only
+                            opp["current_price"] = opp.get("current_price", 0.0) # Not present in old logs, but requested
+                            opps.append(opp)
+                    except:
+                        pass
+            
+            # Sort by timestamp descending
+            stats["top_opportunities"] = sorted(opps, key=lambda x: x.get("timestamp", ""), reverse=True)[:5]
+        except Exception as e:
+            from logger import get_logger
+            get_logger("dashboard").error(f"Failed to read opportunity log: {e}")
             
     return jsonify(stats)
+
+if __name__ == '__main__':
+    print("🚀 Starting Live Dashboard...")
+    print("👉 Open http://127.0.0.1:5000 in your browser")
+    is_debug = os.environ.get('FLASK_DEBUG') == '1'
+    app.run(debug=is_debug, port=5000, load_dotenv=False)

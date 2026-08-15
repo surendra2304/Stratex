@@ -6,7 +6,9 @@ import datetime
 from config import TRADING_MODE, ACTIVE_STRATEGY, SYMBOL, TIMEFRAME
 from logger import get_logger
 from data import get_candles, add_indicators
-from strategy_ml import get_signal
+import importlib
+strategy_module = importlib.import_module(f"strategy_{ACTIVE_STRATEGY}")
+get_signal = strategy_module.get_signal
 from testnet_engine.profitability_gate import ProfitabilityGate
 from testnet_engine.risk_gate import RiskGate
 from execution import place_market_order, get_exchange_client
@@ -15,7 +17,9 @@ from paper_engine.cost_engine import CostEngine
 
 logger = get_logger("testnet_runner")
 
-TESTNET_LEDGER_FILE = "testnet_trade_ledger.jsonl"
+TESTNET_LEDGER_FILE = os.environ.get("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
+TESTNET_OPPORTUNITY_LOG = os.environ.get("TESTNET_OPPORTUNITY_LOG", "testnet_opportunity_log.jsonl")
+TESTNET_PORTFOLIO_FILE = os.environ.get("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
 TESTNET_SESSION_ID = str(uuid.uuid4())
 
 class TestnetRunner:
@@ -71,33 +75,26 @@ class TestnetRunner:
             "reasons": {}
         }
 
-    def log_opportunity(self, signal_id, symbol, side, expected_gross, expected_net, metrics, decision, reason):
+    def log_opportunity(self, signal_id, symbol, side, metrics, decision, reason):
         log_entry = {
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
             "signal_id": signal_id,
             "symbol": symbol,
             "side": side,
-            "strategy": ACTIVE_STRATEGY,
             "confidence": metrics.get("confidence"),
-            "reward_pct": metrics.get("reward_pct"),
-            "expected_gross_return": expected_gross,
-            "estimated_friction": metrics.get("total_friction"),
-            "expected_net_return": expected_net,
+            "predicted_move": metrics.get("predicted_move"),
+            "holding_horizon": metrics.get("holding_horizon"),
+            "expected_gross_return": metrics.get("gross_edge") or metrics.get("expected_gross_return"),
+            "expected_net_return": metrics.get("expected_net_return"),
             "decision": decision,
             "reason": reason
         }
-        
-        self.stats["signals_detected"] += 1
-        if decision == "REJECTED":
-            self.stats["signals_rejected"] += 1
-            self.stats["reasons"][reason] = self.stats["reasons"].get(reason, 0) + 1
-        elif decision == "ACCEPTED":
-            self.stats["signals_executed"] += 1
+        try:
+            with open(TESTNET_OPPORTUNITY_LOG, "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+        except:
+            pass
             
-        # Append to opportunity log
-        with open("testnet_opportunity_log.jsonl", "a") as f:
-            f.write(json.dumps(log_entry) + "\n")
-
     def _save_state(self):
         state = {
             "cash": self.current_equity, # For Testnet, we just use equity as cash when flat
@@ -109,7 +106,7 @@ class TestnetRunner:
             "open_positions": len(self.active_positions),
             "max_drawdown": (self.risk_gate.peak_equity - self.current_equity) / self.risk_gate.peak_equity if self.risk_gate.peak_equity > 0 else 0
         }
-        with open("testnet_portfolio.json", "w") as f:
+        with open(TESTNET_PORTFOLIO_FILE, "w") as f:
             json.dump(state, f)
 
     def record_trade(self, trade_info):
@@ -123,7 +120,12 @@ class TestnetRunner:
         try:
             df = get_candles(SYMBOL, TIMEFRAME, limit=100)
             df = add_indicators(df)
-            side, sl, tp, conf = get_signal(df)
+            signal_res = get_signal(df)
+            if len(signal_res) == 4:
+                side, sl, tp, conf = signal_res
+            else:
+                side, sl, tp = signal_res
+                conf = 1.0
             
             # If no signal natively, mock one for dry run validation
             if not side:
@@ -175,7 +177,12 @@ class TestnetRunner:
         current_price = df['close'].iloc[-1]
         
         # 3. Generate Signal
-        side, sl, tp, conf = get_signal(df)
+        signal_res = get_signal(df)
+        if len(signal_res) == 4:
+            side, sl, tp, conf = signal_res
+        else:
+            side, sl, tp = signal_res
+            conf = 1.0
         if not side:
             return
             

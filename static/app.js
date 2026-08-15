@@ -79,20 +79,31 @@ async function fetchTrades() {
             }).join('');
         }
         
-        // Live Trade Feed Table
+        // Live Trade Feed Table (All executed orders)
         const tradesBody = document.getElementById('trades-body');
-        if (closedPos.length === 0) {
-            tradesBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">NO TRADES YET</td></tr>';
+        if (positions.length === 0) {
+            tradesBody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">NO TRADES YET</td></tr>';
         } else {
-            tradesBody.innerHTML = closedPos.map(p => {
+            // Sort all positions (open and closed) by timestamp descending, take top 10
+            const allPos = [...positions].sort((a, b) => {
+                return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+            }).slice(0, 10);
+            
+            tradesBody.innerHTML = allPos.map(p => {
                 const sideClass = (p.action === 'LONG' || p.action === 'BUY') ? 'tag-long' : 'tag-short';
-                const pnlStr = p.pnl >= 0 ? `<span class="val-green">+${formatCurrency(p.pnl)}</span>` : `<span class="val-red">${formatCurrency(p.pnl)}</span>`;
+                const tsShort = p.timestamp ? String(p.timestamp).substring(11, 19) : '-';
+                const orderIdStr = p.order_id ? p.order_id.substring(0, 8) + '...' : '-';
+                const statClass = p.status === 'OPEN' ? 'val-green' : 'val-red';
+                
                 return `<tr>
-                    <td>${formatTime(p.timestamp)}</td>
+                    <td>${tsShort}</td>
                     <td>${p.symbol}</td>
                     <td class="${sideClass}">${p.action}</td>
-                    <td>CLOSED</td>
-                    <td>${pnlStr}</td>
+                    <td title="${p.order_id}">${orderIdStr}</td>
+                    <td>${p.quantity}</td>
+                    <td>${p.quantity}</td>
+                    <td>${Number(p.entry_price).toFixed(4)}</td>
+                    <td class="${statClass}">${p.status}</td>
                 </tr>`;
             }).join('');
         }
@@ -143,14 +154,30 @@ async function fetchScanner() {
         
         const oppBody = document.getElementById('opportunities-body');
         if (!data.top_opportunities || data.top_opportunities.length === 0) {
-            oppBody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">NO OPPORTUNITIES YET</td></tr>';
+            oppBody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted);">NO OPPORTUNITIES YET</td></tr>';
         } else {
             oppBody.innerHTML = data.top_opportunities.map(o => {
                 const sideClass = o.side === 'BUY' ? 'tag-long' : 'tag-short';
+                const tsShort = o.timestamp ? o.timestamp.substring(11, 19) : '-'; // HH:MM:SS
+                const confStr = o.confidence ? formatPct(o.confidence) : '-';
+                const grossStr = o.expected_gross_return ? formatPct(o.expected_gross_return) : '-';
+                const netStr = o.expected_net_return ? (o.expected_net_return > 0 ? `<span class="val-green">+${formatPct(o.expected_net_return)}</span>` : `<span class="val-red">${formatPct(o.expected_net_return)}</span>`) : '-';
+                const feeStr = o.estimated_fees ? formatPct(o.estimated_fees) : '0.00%';
+                const priceStr = o.current_price ? Number(o.current_price).toFixed(2) : '-';
+                const decClass = o.decision === 'ACCEPTED' ? 'val-green' : 'val-red';
+                const shortReason = o.reason ? (o.reason.length > 25 ? o.reason.substring(0, 25) + '...' : o.reason) : '-';
+                
                 return `<tr>
+                    <td>${tsShort}</td>
                     <td>${o.symbol}</td>
                     <td class="${sideClass}">${o.side}</td>
-                    <td class="val-green">+${formatPct(o.expected_net_return)}</td>
+                    <td>${priceStr}</td>
+                    <td>${confStr}</td>
+                    <td>${grossStr}</td>
+                    <td>${feeStr}</td>
+                    <td>${netStr}</td>
+                    <td class="${decClass}">${o.decision || '-'}</td>
+                    <td title="${o.reason}">${shortReason}</td>
                 </tr>`;
             }).join('');
         }

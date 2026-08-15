@@ -60,6 +60,40 @@ def add_features(df):
     # Position inside Bollinger Bands (0 = at lower band, 1 = at upper band)
     df['bb_pos'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'] + 1e-9)
     
+    # --- Supertrend Features ---
+    # Requires ATR which is already calculated as 'atr_14'
+    # Actually standard Supertrend uses ATR(10) and multiplier 3.0
+    df['hl2'] = (df['high'] + df['low']) / 2
+    tr = pd.concat([df['high'] - df['low'], abs(df['high'] - df['close'].shift(1)), abs(df['low'] - df['close'].shift(1))], axis=1).max(axis=1)
+    atr_10 = tr.ewm(alpha=1/10, adjust=False).mean()
+    
+    multiplier = 3.0
+    final_upperband = df['hl2'] + (multiplier * atr_10)
+    final_lowerband = df['hl2'] - (multiplier * atr_10)
+    
+    supertrend = [True] * len(df)
+    
+    # Optimization: using numpy arrays instead of pandas iloc for the loop
+    close_arr = np.array(df['close'].values)
+    ub_arr = np.array(final_upperband.values)
+    lb_arr = np.array(final_lowerband.values)
+    
+    for i in range(1, len(df)):
+        if close_arr[i] > ub_arr[i-1]:
+            supertrend[i] = True
+        elif close_arr[i] < lb_arr[i-1]:
+            supertrend[i] = False
+        else:
+            supertrend[i] = supertrend[i-1]
+            if supertrend[i] == True and lb_arr[i] < lb_arr[i-1]:
+                lb_arr[i] = lb_arr[i-1]
+            if supertrend[i] == False and ub_arr[i] > ub_arr[i-1]:
+                ub_arr[i] = ub_arr[i-1]
+                
+    df['supertrend'] = supertrend
+    df['st_upper'] = final_upperband
+    df['st_lower'] = final_lowerband
+    
     # --- Volume Features ---
     df['vol_sma_20'] = df['volume'].rolling(window=20).mean()
     df['rel_volume'] = df['volume'] / (df['vol_sma_20'] + 1e-9)

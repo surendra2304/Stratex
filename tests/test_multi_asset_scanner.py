@@ -39,6 +39,7 @@ class TestMultiAssetEngine:
 
     def test_discovery_fallback(self, mocker):
         """Test that SymbolDiscoveryService falls back safely if Binance API fails."""
+        mocker.patch('binance.client.Client.ping')
         service = SymbolDiscoveryService(testnet=True)
         
         # Mock client to raise exception
@@ -53,9 +54,10 @@ class TestMultiAssetEngine:
         # Mock TWM to prevent real connection
         mocker.patch('testnet_engine.market_scanner.ThreadedWebsocketManager.start')
         mocker.patch('testnet_engine.market_scanner.ThreadedWebsocketManager.start_multiplex_socket')
+        mocker.patch('binance.client.Client.ping')
         
         scanner = MarketScanner(["BTCUSDT"])
-        scanner.candle_cache["BTCUSDT"] = pd.DataFrame(index=range(100)) # Fake 100 items
+        scanner.candle_cache["BTCUSDT"] = pd.DataFrame(index=range(250)) # Fake 250 items
         
         # Inject new websocket message
         msg = {
@@ -72,5 +74,5 @@ class TestMultiAssetEngine:
         
         scanner._handle_socket_message(msg)
         
-        # Cache must remain exactly 100
-        assert len(scanner.candle_cache["BTCUSDT"]) == 100
+        # Cache must remain exactly 250
+        assert len(scanner.candle_cache["BTCUSDT"]) == 250

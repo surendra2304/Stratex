@@ -16,7 +16,7 @@ def reload_modules():
     importlib.reload(testnet_engine.service)
     return testnet_engine.service.TestnetService
 
-@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy"}, clear=True)
+@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy"})
 def test_duplicate_client_order_id_protection():
     reload_modules()
     
@@ -45,7 +45,7 @@ def test_duplicate_client_order_id_protection():
         assert order is None, "Order with duplicate client ID should be rejected before submission"
         mock_get_client.assert_not_called()
 
-@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy"}, clear=True)
+@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy"})
 def test_partial_fill_and_pnl_accounting():
     reload_modules()
     
@@ -88,7 +88,7 @@ def test_partial_fill_and_pnl_accounting():
         assert active[0]["quantity"] == 0.5
         assert active[0]["entry_price"] == 50000.0
 
-@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"}, clear=True)
+@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"})
 def test_restart_recovery_missing_protection_safety_halt():
     TestnetService_dynamic = reload_modules()
     
@@ -113,7 +113,7 @@ def test_restart_recovery_missing_protection_safety_halt():
         # Because we hold 1 BTC but have no open orders, it must trigger SAFETY_HALT
         assert service.safety_halt is True, "Service should halt on missing protection"
         
-@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"}, clear=True)
+@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"})
 def test_restart_recovery_matched_state():
     TestnetService_dynamic = reload_modules()
     

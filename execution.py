@@ -10,17 +10,19 @@ from enum import Enum
 from paper_engine.exceptions import StateCorruptionError
 
 sys_logger = get_logger("execution")
-ACTIVE_TRADES_FILE = "active_trades.json"
+ACTIVE_TRADES_FILE = os.getenv("ACTIVE_TRADES_FILE", "active_trades.json")
 
 class OrderState(str, Enum):
     SIGNAL = "SIGNAL"
     APPROVED = "APPROVED"
-    SUBMITTED = "SUBMITTED"
-    ACKNOWLEDGED = "ACKNOWLEDGED"
+    ENTRY_SUBMITTED = "ENTRY_SUBMITTED"
+    ENTRY_FILLED = "ENTRY_FILLED"
     PARTIALLY_FILLED = "PARTIALLY_FILLED"
-    FILLED = "FILLED"
+    PROTECTION_PENDING = "PROTECTION_PENDING"
+    PROTECTION_FAILED = "PROTECTION_FAILED"
     PROTECTED = "PROTECTED"
     CLOSING = "CLOSING"
+    EMERGENCY_CLOSE = "EMERGENCY_CLOSE"
     CLOSED = "CLOSED"
     REJECTED = "REJECTED"
     CANCELLED = "CANCELLED"
@@ -205,7 +207,7 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         return None
 
     client = get_exchange_client()
-    state = OrderState.SUBMITTED
+    state = OrderState.ENTRY_SUBMITTED
 
     try:
         # 1. Place the entry Market order
@@ -220,7 +222,6 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
             order_params["newClientOrderId"] = client_order_id
 
         order = client.create_order(**order_params)
-        state = OrderState.ACKNOWLEDGED
         
         order_id = order.get("orderId", "N/A")
         
@@ -239,7 +240,7 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
             if float(order.get("origQty", quantity)) > executed_qty:
                 state = OrderState.PARTIALLY_FILLED
             else:
-                state = OrderState.FILLED
+                state = OrderState.ENTRY_FILLED
         else:
             state = OrderState.FAILED
             sys_logger.warning(f"[{strategy_name}] ⚠️ Zero fill for entry order {order_id}.")
@@ -250,22 +251,66 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         oco_id = None
         # 2. Place the OCO order for Take Profit and Stop Loss
         if sl and tp:
+            state = OrderState.PROTECTION_PENDING
             oco_side = Client.SIDE_SELL if side == "BUY" else Client.SIDE_BUY
-            tp_price = f"{tp:.2f}"
-            sl_price = f"{sl:.2f}"
             
             try:
-                oco_order = client.create_oco_order(
-                    symbol=symbol,
-                    side=oco_side,
-                    quantity=quantity,
-                    price=tp_price,            # Take profit price
-                    stopPrice=sl_price,        # Stop loss trigger
-                    stopLimitPrice=sl_price,   # Stop loss execution price
-                    stopLimitTimeInForce=Client.TIME_IN_FORCE_GTC
-                )
+                # Recalculate SL/TP relative to the actual fill price to prevent relationship errors due to slippage
+                # If BUY (Long), SL < entry, TP > entry.
+                # If SELL (Short), SL > entry, TP < entry.
+                # Original risk distances:
+                # (We don't know the exact entry the strategy used, but we know SL/TP are absolute.)
+                # However, since the strategy passes absolute SL/TP, if we filled worse than SL, it's immediately broken.
+                # Let's adjust them by the slippage amount.
+                # Wait, if we just adjust by slippage, it's safer. Or we can just calculate the percentage.
+                # Actually, the simplest fix is to just check if SL/TP are on the correct side of actual_price, and if not, push them out.
+                if side == "BUY":
+                    if sl >= actual_price: sl = actual_price * 0.99
+                    if tp <= actual_price: tp = actual_price * 1.01
+                else:
+                    if sl <= actual_price: sl = actual_price * 1.01
+                    if tp >= actual_price: tp = actual_price * 0.99
+
+                # Fetch tick size to ensure proper precision
+                info = client.get_symbol_info(symbol)
+                price_filter = next((f for f in info['filters'] if f['filterType'] == 'PRICE_FILTER'), None)
+                tick_size = float(price_filter['tickSize']) if price_filter else 0.01
+                precision = max(0, int(round(-math.log10(tick_size))))
+                
+                tp_price = f"{tp:.{precision}f}"
+                sl_price = f"{sl:.{precision}f}"
+                
+                oco_params = {
+                    "symbol": symbol,
+                    "side": oco_side,
+                    "quantity": executed_qty,
+                }
+                
+                if side == "BUY":
+                    # Closing a LONG: side=SELL.
+                    # Limit Maker (Take Profit) is above current price -> `price`
+                    # Stop Loss is below current price -> `stopPrice` & `stopLimitPrice`
+                    oco_params.update({
+                        "price": tp_price,
+                        "stopPrice": sl_price,
+                        "stopLimitPrice": sl_price,
+                        "stopLimitTimeInForce": Client.TIME_IN_FORCE_GTC
+                    })
+                else:
+                    # Closing a SHORT: side=BUY.
+                    # Limit Maker (Take Profit) is below current price -> `price`
+                    # Stop Loss is above current price -> `stopPrice` & `stopLimitPrice`
+                    oco_params.update({
+                        "price": tp_price,
+                        "stopPrice": sl_price,
+                        "stopLimitPrice": sl_price,
+                        "stopLimitTimeInForce": Client.TIME_IN_FORCE_GTC
+                    })
+
+                oco_order = client.create_oco_order(**oco_params)
                 oco_id = oco_order.get("orderListId")
-                sys_logger.info(f"[{strategy_name}] 🛡️  SL/TP OCO order placed! SL: {sl_price} | TP: {tp_price}", extra={"strategy": strategy_name, "symbol": symbol})
+                
+                sys_logger.info(f"[{strategy_name}] 🛡️  SL/TP OCO order placed successfully! SL: {sl_price} | TP: {tp_price}", extra={"strategy": strategy_name, "symbol": symbol})
                 state = OrderState.PROTECTED
                 
                 # Save to active trades for monitoring
@@ -283,7 +328,8 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                     "entry_client_id": client_order_id
                 })
                 _save_active_trades(active)
-            except BinanceAPIException as e:
+            except Exception as e:
+                state = OrderState.PROTECTION_FAILED
                 sys_logger.error(f"[EXEC] 🚨 CRITICAL: OCO Order Failed! Attempting emergency close. Error: {e}", extra={"strategy": strategy_name, "symbol": symbol})
                 # EMERGENCY CLOSE: Close the unprotected market position immediately
                 try:
@@ -294,6 +340,7 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                         type=Client.ORDER_TYPE_MARKET,
                         quantity=executed_qty
                     )
+                    state = OrderState.EMERGENCY_CLOSE
                     sys_logger.info(f"[{strategy_name}] 🛡️ Emergency close successful.", extra={"strategy": strategy_name, "symbol": symbol})
                 except Exception as ce:
                     sys_logger.critical(f"[EXEC] 🚨 FATAL: Emergency close failed! Unprotected position active. Error: {ce}", extra={"strategy": strategy_name, "symbol": symbol})
@@ -304,6 +351,7 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         order["_actual_price"] = actual_price
         order["_executed_qty"] = executed_qty
         order["_total_fee"] = total_fee
+        order["_final_state"] = state
         return order
     except BinanceAPIException as e:
         sys_logger.error(f"[EXEC] ❌ Binance API Error placing entry order: {e}", extra={"strategy": strategy_name, "symbol": symbol})
@@ -331,7 +379,7 @@ def monitor_open_trades():
     
     for t in active:
         try:
-            oco = client.get_oco_order(orderListId=t["oco_id"])
+            oco = client.v3_get_order_list(orderListId=t["oco_id"])
             status = oco.get("listOrderStatus")
             
             if status in ["ALL_DONE", "DONE"]:

@@ -125,7 +125,8 @@ def test_market_data_client_no_execution_methods():
     from unittest.mock import patch
 
     with patch("data_client.TRADING_MODE", "TESTNET"):
-        client = MarketDataClient()
+        with patch("binance.client.Client.ping"):
+            client = MarketDataClient()
 
     blocked = ["create_order", "cancel_order", "create_oco_order", "withdraw", "transfer", "get_account"]
     for method in blocked:

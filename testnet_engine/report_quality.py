@@ -1,8 +1,8 @@
 import json
 import os
 
-OPPORTUNITY_LOG = "testnet_opportunity_log.jsonl"
-LEDGER_LOG = "testnet_trade_ledger.jsonl"
+OPPORTUNITY_LOG = os.getenv("TESTNET_OPPORTUNITY_LOG", "testnet_opportunity_log.jsonl")
+LEDGER_LOG = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
 
 def generate_report():
     print("========================================")
