@@ -79,6 +79,22 @@
             "git_sha": "e0909032fb894de712eb55c705d4d938dd8478db",
             "created_at": 1786784377.660991,
             "status": "NOT_STARTED"
+        },
+        {
+            "experiment_id": "6da65eb1-8bf9-40bd-8ea3-1b9e96d29bf2",
+            "experiment_name": "test_sha_exp",
+            "strategy_name": "test",
+            "git_sha": "b1b4d9b1e6ca94e79a4fa520e6298e4535011149",
+            "created_at": 1786785015.3824325,
+            "status": "NOT_STARTED"
+        },
+        {
+            "experiment_id": "1ba2171e-ca04-40d3-8a5d-aeef2a68dff7",
+            "experiment_name": "test_sha_exp",
+            "strategy_name": "test",
+            "git_sha": "b1b4d9b1e6ca94e79a4fa520e6298e4535011149",
+            "created_at": 1786785029.7476356,
+            "status": "NOT_STARTED"
         }
     ]
 }

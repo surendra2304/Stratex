@@ -165,24 +165,156 @@ def compute_max_drawdown(equity_curve: List[float]) -> float:
     return max_dd
 
 
+def can_classify(
+    config,
+    elapsed_days: float,
+    n_closed_trades: int,
+) -> dict:
+    """
+    CLASSIFICATION GATE — must be called before evaluate_against_acceptance_criteria.
+
+    Classification is ONLY permitted when BOTH conditions are satisfied:
+      1. Wall-clock duration >= planned_duration_days (default 30)
+      2. Closed trades >= min_required_trades (default 30)
+
+    If EITHER condition is not met, classification is BLOCKED.
+
+    Returns
+    -------
+    dict with:
+      allowed       : bool — True only when BOTH gates pass
+      verdict       : "ALLOWED" | "BLOCKED_DURATION" | "BLOCKED_TRADES" | "BLOCKED_BOTH"
+      message       : human-readable explanation
+      elapsed_days  : float
+      n_closed_trades: int
+      duration_gate : bool
+      trade_gate    : bool
+    """
+    duration_gate = elapsed_days >= config.planned_duration_days
+    trade_gate = n_closed_trades >= config.min_required_trades
+
+    if duration_gate and trade_gate:
+        verdict = "ALLOWED"
+        message = (
+            f"Both gates satisfied: {elapsed_days:.1f} days >= {config.planned_duration_days} days "
+            f"AND {n_closed_trades} trades >= {config.min_required_trades}. "
+            "Proceed with full statistical evaluation."
+        )
+        allowed = True
+    elif not duration_gate and not trade_gate:
+        verdict = "BLOCKED_BOTH"
+        remaining_days = config.planned_duration_days - elapsed_days
+        remaining_trades = config.min_required_trades - n_closed_trades
+        message = (
+            f"CLASSIFICATION BLOCKED: "
+            f"Need {remaining_days:.1f} more days (have {elapsed_days:.1f}/{config.planned_duration_days}) "
+            f"AND {remaining_trades} more trades (have {n_closed_trades}/{config.min_required_trades})."
+        )
+        allowed = False
+    elif not duration_gate:
+        verdict = "BLOCKED_DURATION"
+        remaining_days = config.planned_duration_days - elapsed_days
+        message = (
+            f"CLASSIFICATION BLOCKED: Duration gate not met. "
+            f"Need {remaining_days:.1f} more days (have {elapsed_days:.1f}/{config.planned_duration_days}). "
+            f"Trades gate satisfied ({n_closed_trades} >= {config.min_required_trades}). "
+            "CONTINUE RUNNING — do NOT classify early on trade count alone."
+        )
+        allowed = False
+    else:
+        # duration_gate but not trade_gate — experiment has expired with insufficient trades
+        verdict = "BLOCKED_TRADES"
+        message = (
+            f"Duration gate satisfied ({elapsed_days:.1f} >= {config.planned_duration_days} days). "
+            f"Trade gate NOT met: only {n_closed_trades} closed trades "
+            f"(required {config.min_required_trades}). "
+            "Result will be INCONCLUSIVE — INSUFFICIENT SAMPLE."
+        )
+        allowed = True  # allowed to classify — but result will be INCONCLUSIVE
+
+    return {
+        "allowed": allowed,
+        "verdict": verdict,
+        "message": message,
+        "elapsed_days": elapsed_days,
+        "n_closed_trades": n_closed_trades,
+        "duration_gate": duration_gate,
+        "trade_gate": trade_gate,
+        "planned_duration_days": config.planned_duration_days,
+        "min_required_trades": config.min_required_trades,
+    }
+
+
 def evaluate_against_acceptance_criteria(
     config,  # FrozenExperimentConfig
     trade_returns: List[float],
     equity_curve: List[float],
     benchmark_result: Dict,
+    elapsed_days: float = None,
 ) -> Dict:
     """
     Evaluate forward experiment results against pre-registered acceptance criteria.
-    Returns explicit PASS / FAIL / INCONCLUSIVE for each criterion.
+
+    CRITICAL: This function MUST NOT be called unless can_classify() returns allowed=True.
+    Callers must enforce this. If elapsed_days is provided, an internal check is performed.
+
+    Final classification requires BOTH:
+      >= planned_duration_days wall-clock days (default 30)
+      >= min_required_trades closed trades (default 30)
+
+    If 30 trades accumulate before 30 days:  CONTINUE RUNNING, do not call this function.
+    If 30 days pass with < 30 trades:         result = INCONCLUSIVE — INSUFFICIENT SAMPLE.
+    If 30 days AND >= 30 trades:              apply all pre-registered criteria below.
     """
     n = len(trade_returns)
+
+    # ── Duration check (if elapsed_days provided) ─────────────────────────
+    if elapsed_days is not None:
+        gate = can_classify(config, elapsed_days, n)
+        if not gate["allowed"]:
+            return {
+                "overall_verdict": "CLASSIFICATION_BLOCKED",
+                "reason": gate["message"],
+                "duration_gate": gate["duration_gate"],
+                "trade_gate": gate["trade_gate"],
+                "elapsed_days": elapsed_days,
+                "n_closed_trades": n,
+                "disclaimer": (
+                    "Final classification requires BOTH >= "
+                    f"{config.planned_duration_days} wall-clock days AND >= "
+                    f"{config.min_required_trades} closed trades. "
+                    "Neither condition alone is sufficient."
+                ),
+            }
+
+    # ── Duration expired but insufficient trades → INCONCLUSIVE ──────────
+    if elapsed_days is not None and elapsed_days >= config.planned_duration_days:
+        if n < config.min_required_trades:
+            return {
+                "overall_verdict": "INCONCLUSIVE",
+                "inconclusive_reason": "INSUFFICIENT_SAMPLE",
+                "message": (
+                    f"Experiment ran for {elapsed_days:.1f} days but only produced "
+                    f"{n} closed trades (minimum {config.min_required_trades} required). "
+                    "Statistical inference is not possible."
+                ),
+                "n_closed_trades": n,
+                "min_required_trades": config.min_required_trades,
+                "elapsed_days": elapsed_days,
+                "disclaimer": (
+                    "INCONCLUSIVE is a valid research outcome. "
+                    "Reduce holding period or trade frequency to generate more signals."
+                ),
+            }
+
+    # ── Full evaluation ───────────────────────────────────────────────────
     stats_result = compute_trade_stats(trade_returns)
     significance = t_test_positive_expectancy(trade_returns)
     max_dd = compute_max_drawdown(equity_curve)
 
     criteria = {}
 
-    # 1. Minimum sample size
+    # 1. Minimum sample size (re-checked)
     criteria["min_trades"] = {
         "required": config.min_required_trades,
         "actual": n,
@@ -196,14 +328,17 @@ def evaluate_against_acceptance_criteria(
     else:
         criteria["expectancy"] = {
             "required": "> 0%",
-            "actual": f"{exp:.4f}%",
+            "actual": f"{exp:.4f}%" if exp is not None else "N/A",
             "verdict": "PASS" if exp is not None and exp > 0 else "FAIL",
         }
 
     # 3. Profit factor
     pf = stats_result.get("profit_factor", 0.0)
     if n < MIN_TRADES_FOR_INFERENCE:
-        criteria["profit_factor"] = {"verdict": "INCONCLUSIVE", "required": f">= {config.required_profit_factor}"}
+        criteria["profit_factor"] = {
+            "verdict": "INCONCLUSIVE",
+            "required": f">= {config.required_profit_factor}",
+        }
     else:
         criteria["profit_factor"] = {
             "required": f">= {config.required_profit_factor}",
@@ -233,11 +368,12 @@ def evaluate_against_acceptance_criteria(
     # 6. Beats random benchmark
     frac = benchmark_result.get("fraction_beating_strategy")
     if frac is not None:
-        # fraction_beating_strategy = fraction of random sims that BEAT the strategy
-        # So if 90% of random sims beat us, we are WORSE than random
         criteria["beats_random"] = {
             "fraction_of_sims_beating_strategy": frac,
-            "verdict": "PASS" if frac < 0.5 else ("INCONCLUSIVE" if n < MIN_TRADES_FOR_INFERENCE else "FAIL"),
+            "verdict": (
+                "PASS" if frac < 0.5
+                else ("INCONCLUSIVE" if n < MIN_TRADES_FOR_INFERENCE else "FAIL")
+            ),
             "note": "< 50% means strategy outperforms the median random entry.",
         }
     else:
@@ -255,13 +391,22 @@ def evaluate_against_acceptance_criteria(
     return {
         "overall_verdict": overall,
         "evaluated_at": time.time(),
+        "elapsed_days": elapsed_days,
+        "n_closed_trades": n,
         "criteria": criteria,
         "statistics": stats_result,
         "significance_test": significance,
         "max_drawdown": round(max_dd, 6),
+        "classification_rule": (
+            "Final classification requires BOTH >= "
+            f"{config.planned_duration_days} wall-clock days AND >= "
+            f"{config.min_required_trades} closed trades. "
+            "Neither condition alone is sufficient for early classification."
+        ),
         "disclaimer": (
             "PASS does not mean the system will be profitable in future. "
             "It means the forward experiment met pre-registered minimum criteria. "
             "Live deployment requires additional human review."
         ),
     }
+

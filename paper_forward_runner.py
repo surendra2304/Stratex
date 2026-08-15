@@ -3,6 +3,15 @@ paper_forward_runner.py
 
 Genuine 30-day PAPER Forward Validation Experiment Runner.
 
+CLASSIFICATION RULE (IMMUTABLE):
+  Final classification requires BOTH conditions satisfied simultaneously:
+    1. Wall-clock duration >= 30 complete calendar days
+    2. Closed trades >= 30
+
+  30 trades before 30 days → CONTINUE RUNNING — do NOT classify early.
+  30 days with < 30 trades  → INCONCLUSIVE — INSUFFICIENT SAMPLE.
+  30 days AND >= 30 trades  → perform full statistical evaluation.
+
 EXPERIMENT: forward_exp_001
 STRATEGY: Swing MACD + 200 EMA (1H BTCUSDT)
 MODE: PAPER ONLY — zero Binance orders placed
@@ -103,6 +112,7 @@ from paper_engine.experiment_config import (
 )
 from paper_engine.reconciliation import PaperReconciliation
 from paper_engine.heartbeat import HeartbeatState, ComponentStatus
+from paper_engine.statistical_report import can_classify
 from research_phase9.cost_engine import CostEngine
 
 logger = get_logger("paper_forward_runner")
@@ -594,6 +604,40 @@ def run():
                         last_day_str, daily_signals, daily_trades, data_events,
                     )
                     run_reconciliation(portfolio, health)
+
+                    # ── Classification gate (dual condition check) ────────
+                    elapsed_days = (time.time() - cfg.started_at) / 86400.0
+                    n_closed = len([p for p in portfolio.positions.values()
+                                    if p.get("status") == "CLOSED"])
+                    gate = can_classify(cfg, elapsed_days, n_closed)
+                    if gate["verdict"] == "BLOCKED_DURATION":
+                        # Trade count met but duration not — CONTINUE RUNNING
+                        logger.info(
+                            f"CLASSIFICATION GATE: {gate['message']} "
+                            "CONTINUE RUNNING — early classification PROHIBITED."
+                        )
+                    elif gate["verdict"] == "BLOCKED_BOTH":
+                        remaining_days = cfg.planned_duration_days - elapsed_days
+                        remaining_trades = cfg.min_required_trades - n_closed
+                        logger.info(
+                            f"CLASSIFICATION GATE: BLOCKED — "
+                            f"{remaining_days:.1f} days and {remaining_trades} trades remaining."
+                        )
+                    elif gate["verdict"] == "BLOCKED_TRADES":
+                        # 30 days passed but < 30 trades — experiment ends, INCONCLUSIVE
+                        logger.warning(
+                            f"EXPERIMENT DURATION REACHED: {elapsed_days:.1f} days. "
+                            f"Only {n_closed} closed trades (< {cfg.min_required_trades}). "
+                            "Final result: INCONCLUSIVE — INSUFFICIENT SAMPLE. "
+                            "Runner will continue logging but experiment is concluded."
+                        )
+                    elif gate["verdict"] == "ALLOWED":
+                        logger.info(
+                            f"CLASSIFICATION GATE: ALLOWED — "
+                            f"{elapsed_days:.1f} days AND {n_closed} trades. "
+                            "Awaiting human operator to trigger final evaluation."
+                        )
+
                 last_day_str = today_str
                 daily_signals = 0
                 daily_trades = 0
