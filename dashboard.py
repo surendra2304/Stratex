@@ -94,6 +94,11 @@ def get_status():
     open_positions = 0
     mdd = 0.0
 
+    bot_start_time = None
+    equity_high = None
+    equity_low = None
+    equity_change = None
+
     if TRADING_MODE == "TESTNET":
         # 1. Real Testnet Balance
         from execution import get_exchange_client
@@ -123,6 +128,8 @@ def get_status():
                 with open("testnet_portfolio.json", "r") as f:
                     port = json.load(f)
                 
+                bot_start_time = port.get("service_start_time")
+                
                 # Fetch recent market prices to compute true equity
                 current_price = 0.0
                 try:
@@ -136,9 +143,8 @@ def get_status():
                 # Compute unrealized
                 for pos in port.get("positions", {}).values():
                     if pos.get('status', 'OPEN') == "OPEN" and current_price > 0:
-                        ep = float(pos['entry_price'])
-                        qty = float(pos['quantity'])
-                        if pos['direction'] in ["LONG", "BUY"]:
+                        side = pos.get('direction', pos.get('side', 'BUY'))
+                        if side in ["LONG", "BUY"]:
                             unrealized_pnl += (current_price - ep) * qty
                         else:
                             unrealized_pnl += (ep - current_price) * qty
@@ -153,6 +159,27 @@ def get_status():
                 
             except Exception as e:
                 logger.error(f"Failed to process Testnet portfolio: {e}")
+
+        # 3. Read Real Equity History for High/Low/Change
+        hist_file = "testnet_equity_history.jsonl"
+        if os.path.exists(hist_file):
+            try:
+                import json
+                eq_points = []
+                with open(hist_file, "r") as f:
+                    for line in f:
+                        if line.strip():
+                            snap = json.loads(line.strip())
+                            eq_points.append(float(snap.get("equity", 0.0)))
+                if len(eq_points) >= 2:
+                    equity_high = max(eq_points)
+                    equity_low = min(eq_points)
+                    start_eq = eq_points[0]
+                    curr_eq = eq_points[-1]
+                    if start_eq > 0:
+                        equity_change = ((curr_eq - start_eq) / start_eq) * 100
+            except Exception as e:
+                logger.error(f"Failed reading equity history: {e}")
                 
     elif TRADING_MODE == "PAPER":
         try:
@@ -166,6 +193,7 @@ def get_status():
             from paper_engine.session import SessionState
             session = SessionState()
             session_info = {"id": session.session_id, "status": session.status, "start": session.start_time}
+            bot_start_time = session.start_time
         except: pass
             
         try:
@@ -205,7 +233,11 @@ def get_status():
         "used_margin": used_margin,
         "open_positions": open_positions,
         "max_drawdown": mdd,
-        "server_time": datetime.datetime.utcnow().isoformat() + "Z"
+        "server_time": datetime.datetime.utcnow().isoformat() + "Z",
+        "bot_start_time": bot_start_time,
+        "equity_high": equity_high,
+        "equity_low": equity_low,
+        "equity_change": equity_change
     })
 
 @app.route('/api/trades')
@@ -225,7 +257,7 @@ def get_trades():
     
     # 1. Parse closed trades from ledger
     debug_log = []
-    ledger_file = "testnet_trade_ledger.jsonl" if TRADING_MODE == "TESTNET" else "paper_trade_ledger.jsonl"
+    ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl") if TRADING_MODE == "TESTNET" else "paper_trade_ledger.jsonl"
     
     debug_log.append(f"Mode is {TRADING_MODE}, looking for {ledger_file}")
     if os.path.exists(ledger_file):
@@ -234,6 +266,25 @@ def get_trades():
             for line in f:
                 try:
                     trade = json.loads(line)
+                    source = trade.get("source", "")
+                    strategy = trade.get("strategy", "")
+                    entry_oid = trade.get("entry_order_id")
+                    exit_oid = trade.get("exit_order_id")
+                    
+                    # Provenance classification & filtering
+                    if TRADING_MODE == "TESTNET":
+                        # Exclude synthetic/test trades strictly
+                        if source == "TEST" or strategy == "TEST":
+                            continue
+                        if not (entry_oid or exit_oid):
+                            continue
+                        if source not in ["BINANCE_EXECUTION", "RECOVERY_FROM_BINANCE"]:
+                            # Infer if unclassified legacy
+                            if "RECOVERED" in str(trade.get("signal_id", "")) or "RECOVERED" in str(strategy):
+                                source = "RECOVERY_FROM_BINANCE"
+                            else:
+                                continue
+                                
                     pnl = trade.get("pnl", trade.get("net_pnl", 0.0))
                     
                     if pnl > 0:
@@ -254,6 +305,7 @@ def get_trades():
                         "pnl": pnl,
                         "fees": trade.get("total_fees", trade.get("fees", 0.0)),
                         "order_id": trade.get("signal_id", trade.get("entry_client_id", trade.get("order_id", "CLOSED-ORDER"))),
+                        "source": source,
                         "matched": True
                     })
                 except Exception as e:

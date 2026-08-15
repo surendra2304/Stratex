@@ -68,7 +68,9 @@ class TestnetService:
                 except:
                     pass
                     
+            self.service_start_time = datetime.datetime.utcnow().isoformat() + "Z"
             self.starting_equity = self.initial_deposit # Keep for compatibility
+            self.last_equity_snapshot = 0.0
             logger.info(f"[SERVICE] Actual Binance Balance: {actual_binance_balance} | Local Initial Deposit: {self.initial_deposit}")
         except Exception as e:
             raise RuntimeError(f"CRITICAL ERROR: Failed to fetch Testnet account balance. Valid Testnet credentials are REQUIRED. Reason: {e}")
@@ -80,6 +82,7 @@ class TestnetService:
         
         # State
         self.current_equity = self.starting_equity
+        self.service_start_time = datetime.datetime.utcnow().isoformat() + "Z"
         self.active_positions = {} # Keep track of open OCOs per symbol
         self.symbol_filters = {}
         self.last_evaluation = {}
@@ -300,6 +303,7 @@ class TestnetService:
                 
         state = {
             "initial_deposit": self.initial_deposit,
+            "service_start_time": getattr(self, 'service_start_time', datetime.datetime.utcnow().isoformat() + "Z"),
             "cash": self.current_equity,
             "equity": self.current_equity,
             "realized_pnl": getattr(self, 'total_reconciled_pnl', self.risk_gate.daily_realized_loss),
@@ -321,6 +325,19 @@ class TestnetService:
             with open(tmp_file, "w") as f:
                 json.dump(state, f)
             os.replace(tmp_file, TESTNET_PORTFOLIO_FILE)
+            
+            # Record periodic equity history snapshot (at most once every 60s)
+            now_ts = time.time()
+            if now_ts - getattr(self, 'last_equity_snapshot', 0) >= 60:
+                self.last_equity_snapshot = now_ts
+                hist_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
+                snap = {
+                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                    "equity": self.current_equity,
+                    "balance": self.current_equity
+                }
+                with open(hist_file, "a") as hf:
+                    hf.write(json.dumps(snap) + "\n")
         except Exception as e:
             logger.error(f"[SERVICE] Failed to save state atomically: {e}")
 

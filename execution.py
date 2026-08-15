@@ -409,10 +409,12 @@ def monitor_open_trades():
                     extra={"strategy": t["strategy"], "symbol": t["symbol"]}
                 )
 
+                source = t.get("source", "TEST" if t.get("strategy") == "TEST" else "BINANCE_EXECUTION")
                 ledger_entry = {
                     "signal_id":      t.get("signal_id", "UNKNOWN"),
                     "symbol":         t["symbol"],
                     "strategy":       t["strategy"],
+                    "source":         source,
                     "side":           t["side"],
                     "entry_order_id": t.get("entry_order_id"),
                     "entry_price":    entry_price,
