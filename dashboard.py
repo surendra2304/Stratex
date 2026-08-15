@@ -122,62 +122,85 @@ def get_status():
             cash = "DATA UNAVAILABLE"
 
         # 2. Read Testnet Portfolio
-        if os.path.exists("testnet_portfolio.json"):
+        port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+        if os.path.exists(port_file):
             try:
                 import json
-                with open("testnet_portfolio.json", "r") as f:
+                with open(port_file, "r") as f:
                     port = json.load(f)
                 
                 bot_start_time = port.get("service_start_time")
                 
-                # Fetch recent market prices to compute true equity
-                current_price = 0.0
-                try:
-                    from data import get_candles
-                    df = fetch_candles("BTCUSDT", TIMEFRAME, 1)
-                    if not df.empty:
-                        current_price = float(df['close'].iloc[-1])
-                except Exception as e:
-                    logger.warning(f"Failed to fetch live price for equity calc: {e}")
-                
-                # Compute unrealized
+                # Compute unrealized PnL across all open positions independently
                 for pos in port.get("positions", {}).values():
-                    if pos.get('status', 'OPEN') == "OPEN" and current_price > 0:
-                        side = pos.get('direction', pos.get('side', 'BUY'))
-                        if side in ["LONG", "BUY"]:
-                            unrealized_pnl += (current_price - ep) * qty
-                        else:
-                            unrealized_pnl += (ep - current_price) * qty
+                    if not isinstance(pos, dict):
+                        continue
+                    if pos.get('status', 'OPEN') != "OPEN":
+                        continue
+                    try:
+                        sym = pos.get("symbol", "BTCUSDT")
+                        entry_price = float(pos.get("entry_price", 0.0))
+                        quantity = float(pos.get("quantity", 0.0))
+                        direction = pos.get("direction", pos.get("side", "BUY"))
+                        
+                        # Fetch recent market price for this specific symbol
+                        current_price = 0.0
+                        try:
+                            df = fetch_candles(sym, TIMEFRAME, 1)
+                            if not df.empty:
+                                current_price = float(df['close'].iloc[-1])
+                        except Exception as pe:
+                            logger.warning(f"Failed to fetch live price for {sym}: {pe}")
+                            
+                        if current_price > 0 and entry_price > 0 and quantity > 0:
+                            if direction in ["LONG", "BUY"]:
+                                unrealized_pnl += (current_price - entry_price) * quantity
+                            else:
+                                unrealized_pnl += (entry_price - current_price) * quantity
+                    except Exception as pos_err:
+                        logger.error(f"Failed calculating unrealized PnL for position {pos}: {pos_err}")
+                        continue
                             
                 if isinstance(equity, float):
                     equity += unrealized_pnl
                     
                 realized_pnl = float(port.get("realized_pnl", 0.0))
-                fees = float(port.get("cumulative_fees", 0.0))
-                open_positions = len([p for p in port.get("positions", {}).values() if p.get("status", "OPEN") == "OPEN"])
+                fees = float(port.get("cumulative_fees", port.get("fees", 0.0)))
+                open_positions = len([p for p in port.get("positions", {}).values() if isinstance(p, dict) and p.get("status", "OPEN") == "OPEN"])
                 mdd = float(port.get("max_drawdown", 0.0)) * 100
                 
             except Exception as e:
                 logger.error(f"Failed to process Testnet portfolio: {e}")
 
-        # 3. Read Real Equity History for High/Low/Change
-        hist_file = "testnet_equity_history.jsonl"
+        # 3. Read Genuine UTC-Day Equity History for Daily High/Low/Change
+        hist_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
         if os.path.exists(hist_file):
             try:
                 import json
-                eq_points = []
+                import datetime
+                today_utc = datetime.datetime.utcnow().date().isoformat()
+                today_pts = []
                 with open(hist_file, "r") as f:
                     for line in f:
-                        if line.strip():
+                        if not line.strip():
+                            continue
+                        try:
                             snap = json.loads(line.strip())
-                            eq_points.append(float(snap.get("equity", 0.0)))
-                if len(eq_points) >= 2:
-                    equity_high = max(eq_points)
-                    equity_low = min(eq_points)
-                    start_eq = eq_points[0]
-                    curr_eq = eq_points[-1]
-                    if start_eq > 0:
-                        equity_change = ((curr_eq - start_eq) / start_eq) * 100
+                            ts_str = snap.get("timestamp", "")
+                            # Verify timestamp belongs to today's UTC date
+                            if ts_str.startswith(today_utc):
+                                eq_val = float(snap.get("equity", 0.0))
+                                if eq_val > 0:
+                                    today_pts.append(eq_val)
+                        except Exception:
+                            pass
+                if len(today_pts) >= 2:
+                    equity_high = max(today_pts)
+                    equity_low = min(today_pts)
+                    start_today = today_pts[0]
+                    curr_today = today_pts[-1]
+                    if start_today > 0:
+                        equity_change = ((curr_today - start_today) / start_today) * 100
             except Exception as e:
                 logger.error(f"Failed reading equity history: {e}")
                 

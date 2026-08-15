@@ -145,23 +145,40 @@ class TestnetService:
                 logger.error(f"[SERVICE] Failed to restore persistent stats: {e}")
 
     def _restore_daily_risk_state(self):
-        """Parse today's ledger entries to accurately restore the daily realized PnL limit."""
+        """Parse today's ledger entries to accurately restore the daily realized PnL limit with strict provenance checking."""
         try:
-            if not os.path.exists(TESTNET_LEDGER_FILE):
+            ledger_file = os.getenv("TESTNET_LEDGER_FILE", TESTNET_LEDGER_FILE)
+            if not os.path.exists(ledger_file):
                 return
             today_str = datetime.datetime.utcnow().date().isoformat()
             daily_loss = 0.0
             
-            with open(TESTNET_LEDGER_FILE, 'r') as f:
+            with open(ledger_file, 'r') as f:
                 for line in f:
                     if not line.strip(): continue
                     try:
                         record = json.loads(line)
+                        source = record.get("source", "")
+                        strategy = record.get("strategy", "")
+                        entry_oid = record.get("entry_order_id")
+                        exit_oid = record.get("exit_order_id")
+
+                        # Reject synthetic/test/paper records
+                        if source == "TEST" or strategy == "TEST" or source == "PAPER":
+                            continue
+                        if not (entry_oid or exit_oid):
+                            continue
+                        if source not in ["BINANCE_EXECUTION", "RECOVERY_FROM_BINANCE"]:
+                            if "RECOVERED" in str(record.get("signal_id", "")) or "RECOVERED" in str(strategy):
+                                source = "RECOVERY_FROM_BINANCE"
+                            else:
+                                continue
+
                         if "CLOSE" in record.get("action", ""):
                             # Parse date from timestamp
                             trade_date = record.get("timestamp", "").split("T")[0]
                             if trade_date == today_str:
-                                pnl = record.get("pnl", 0.0)
+                                pnl = record.get("pnl", record.get("net_pnl", 0.0))
                                 daily_loss += pnl
                     except Exception:
                         pass
@@ -714,6 +731,7 @@ class TestnetService:
                                     "signal_id": f"RECOVERED_{entry['order_id']}",
                                     "symbol": sym,
                                     "strategy": "RECOVERED",
+                                    "source": "RECOVERY_FROM_BINANCE",
                                     "side": entry['side'],
                                     "entry_order_id": entry['order_id'],
                                     "entry_price": entry['price'],
@@ -747,9 +765,10 @@ class TestnetService:
 
             # 1. Append missing trades to the ledger (do not overwrite)
             import os
+            ledger_file = os.getenv("TESTNET_LEDGER_FILE", TESTNET_LEDGER_FILE)
             existing_exit_ids = set()
-            if os.path.exists(TESTNET_LEDGER_FILE):
-                with open(TESTNET_LEDGER_FILE, "r") as f:
+            if os.path.exists(ledger_file):
+                with open(ledger_file, "r") as f:
                     for line in f:
                         if not line.strip(): continue
                         try:
@@ -764,7 +783,7 @@ class TestnetService:
             # Atomic append
             from testnet_engine.protection import LEDGER_WRITE_LOCK
             with LEDGER_WRITE_LOCK:
-                with open(TESTNET_LEDGER_FILE, "a") as f:
+                with open(ledger_file, "a") as f:
                     for ct in completed_trades:
                         if str(ct["exit_order_id"]) not in existing_exit_ids:
                             f.write(json.dumps(ct) + "\n")
