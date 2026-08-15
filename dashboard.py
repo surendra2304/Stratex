@@ -172,10 +172,12 @@ def get_status():
     open_positions = 0
     mdd = 0.0
     
-    if os.path.exists("paper_portfolio.json"):
+    from config import TRADING_MODE
+    portfolio_file = "testnet_portfolio.json" if TRADING_MODE == "TESTNET" else "paper_portfolio.json"
+    if os.path.exists(portfolio_file):
         try:
             import json
-            with open("paper_portfolio.json", "r") as f:
+            with open(portfolio_file, "r") as f:
                 port = json.load(f)
             
             # Fetch recent market prices to compute true equity
@@ -206,9 +208,12 @@ def get_status():
             open_positions = len([p for p in port.get("positions", {}).values() if p["status"] == "OPEN"])
             
             try:
-                from paper_engine.portfolio import PaperPortfolio
-                temp_port = PaperPortfolio("paper_portfolio.json")
-                mdd = temp_port.get_max_drawdown() * 100
+                if TRADING_MODE in ["PAPER", "TESTNET"]:
+                    from paper_engine.portfolio import PaperPortfolio
+                    temp_port = PaperPortfolio("paper_portfolio.json")
+                    mdd = temp_port.get_max_drawdown() * 100
+                else:
+                    mdd = port.get("max_drawdown", 0.0) * 100
             except Exception as e:
                 from logger import get_logger
                 get_logger("dashboard").error(f"Failed to compute drawdown: {e}")
@@ -240,7 +245,7 @@ def get_trades():
     """Parses logs or paper portfolio to return positions."""
     from config import TRADING_MODE
     
-    if TRADING_MODE == "PAPER":
+    if TRADING_MODE in ["PAPER", "TESTNET"]:
         import json
         net_pnl = 0.0
         wins = 0
@@ -250,20 +255,21 @@ def get_trades():
         positions = []
         
         # 1. Parse closed trades from ledger
-        if os.path.exists("paper_trade_ledger.jsonl"):
+        ledger_file = "testnet_trade_ledger.jsonl" if TRADING_MODE == "TESTNET" else "paper_trade_ledger.jsonl"
+        if os.path.exists(ledger_file):
             active_exp_id = "UNKNOWN"
             if os.path.exists("experiments/active_forward_experiment_id.txt"):
                 with open("experiments/active_forward_experiment_id.txt", "r") as expf:
                     active_exp_id = expf.read().strip()
 
-            with open("paper_trade_ledger.jsonl", "r") as f:
+            with open(ledger_file, "r") as f:
                 for line in f:
                     try:
                         trade = json.loads(line)
                         trade_exp_id = trade.get("experiment_id", "LEGACY_UNASSIGNED")
                         
-                        # EXCLUDE LEGACY DATA
-                        if trade_exp_id != active_exp_id:
+                        # EXCLUDE LEGACY DATA (Paper only)
+                        if TRADING_MODE == "PAPER" and trade_exp_id != active_exp_id:
                             continue
                         
                         pnl = trade.get("net_pnl", 0.0)
@@ -290,9 +296,10 @@ def get_trades():
                         get_logger("dashboard").error(f"Failed parsing ledger line: {e}")
         
         # 2. Add open positions from portfolio
-        if os.path.exists("paper_portfolio.json"):
+        port_file = "testnet_portfolio.json" if TRADING_MODE == "TESTNET" else "paper_portfolio.json"
+        if os.path.exists(port_file):
             try:
-                with open("paper_portfolio.json", "r") as f:
+                with open(port_file, "r") as f:
                     port = json.load(f)
                 net_pnl = port.get("realized_pnl", 0.0)
                 
@@ -411,3 +418,42 @@ if __name__ == '__main__':
     print("👉 Open http://127.0.0.1:5000 in your browser")
     is_debug = os.environ.get('FLASK_DEBUG') == '1'
     app.run(debug=is_debug, port=5000)
+
+@app.route('/api/scanner')
+def get_scanner():
+    from config import TRADING_MODE
+    if TRADING_MODE != "TESTNET":
+        from flask import jsonify
+        return jsonify({})
+        
+    import json
+    from flask import jsonify
+    stats = {
+        "symbols_scanned": 0,
+        "signals_detected": 0,
+        "signals_rejected": 0,
+        "orders_submitted": 0,
+        "top_opportunities": []
+    }
+    
+    if os.path.exists("testnet_portfolio.json"):
+        try:
+            with open("testnet_portfolio.json", "r") as f:
+                port = json.load(f)
+                stats.update(port.get("scanner_stats", {}))
+        except:
+            pass
+            
+    if os.path.exists("testnet_opportunity_log.jsonl"):
+        try:
+            opps = []
+            with open("testnet_opportunity_log.jsonl", "r") as f:
+                for line in f:
+                    opp = json.loads(line)
+                    if opp.get("decision") == "ACCEPTED":
+                        opps.append(opp)
+            stats["top_opportunities"] = sorted(opps, key=lambda x: x.get("expected_net_return", 0), reverse=True)[:3]
+        except:
+            pass
+            
+    return jsonify(stats)

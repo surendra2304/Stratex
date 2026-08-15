@@ -6,10 +6,27 @@ from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from config import API_KEY, SECRET_KEY, TRADE_QTY, TRADING_MODE, PAPER_SAFE_MODE, TESTNET_ENABLED, LIVE_TRADING_ENABLED
 from logger import log_trade, get_logger
+from enum import Enum
 from paper_engine.exceptions import StateCorruptionError
 
 sys_logger = get_logger("execution")
 ACTIVE_TRADES_FILE = "active_trades.json"
+
+class OrderState(str, Enum):
+    SIGNAL = "SIGNAL"
+    APPROVED = "APPROVED"
+    SUBMITTED = "SUBMITTED"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+    PARTIALLY_FILLED = "PARTIALLY_FILLED"
+    FILLED = "FILLED"
+    PROTECTED = "PROTECTED"
+    CLOSING = "CLOSING"
+    CLOSED = "CLOSED"
+    REJECTED = "REJECTED"
+    CANCELLED = "CANCELLED"
+    EXPIRED = "EXPIRED"
+    FAILED = "FAILED"
+    UNKNOWN = "UNKNOWN"
 
 # ==============================================================================
 # EXECUTION POLICY
@@ -69,7 +86,7 @@ def get_exchange_client():
 # STATE MANAGEMENT
 # ==============================================================================
 def _validate_trade_schema(trade: dict):
-    required_fields = ["strategy", "symbol", "side", "quantity", "entry_price", "oco_id", "tp_price", "sl_price"]
+    required_fields = ["strategy", "symbol", "side", "quantity", "entry_price", "oco_id", "tp_price", "sl_price", "state", "entry_client_id"]
     for field in required_fields:
         if field not in trade:
             raise StateCorruptionError(f"Missing required field '{field}' in active trade.")
@@ -132,6 +149,11 @@ def _load_active_trades():
             if t["oco_id"] in seen_ids:
                 raise StateCorruptionError(f"Duplicate OCO ID {t['oco_id']} found in active trades.")
             seen_ids.add(t["oco_id"])
+        
+        if t.get("entry_client_id"):
+            if t["entry_client_id"] in seen_ids:
+                raise StateCorruptionError(f"Duplicate Client ID {t['entry_client_id']} found in active trades.")
+            seen_ids.add(t["entry_client_id"])
             
     return data
 
@@ -156,7 +178,7 @@ def get_open_orders(symbol):
 # ==============================================================================
 # EXECUTION
 # ==============================================================================
-def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None, tp=None):
+def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None, tp=None, client_order_id=None):
     """Places a market order and immediately sets SL/TP via an OCO order."""
     allowed, reason = ExecutionPolicy.can_place_order()
     
@@ -172,26 +194,58 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         raise RuntimeError(f"CRITICAL ERROR: Order blocked. ({reason})")
 
     try:
-        # Validate state BEFORE placing the order to prevent saving into a broken state file
-        _load_active_trades()
+        active_trades = _load_active_trades()
+        if client_order_id:
+            for t in active_trades:
+                if t.get("entry_client_id") == client_order_id:
+                    sys_logger.warning(f"[{strategy_name}] 🚫 Duplicate Client ID {client_order_id} rejected.")
+                    return None
     except StateCorruptionError as e:
         sys_logger.critical(f"State corruption prevents new orders: {e}")
         return None
 
     client = get_exchange_client()
+    state = OrderState.SUBMITTED
 
     try:
         # 1. Place the entry Market order
         order_side = Client.SIDE_BUY if side == "BUY" else Client.SIDE_SELL
-        order = client.create_order(
-            symbol=symbol,
-            side=order_side,
-            type=Client.ORDER_TYPE_MARKET,
-            quantity=quantity
-        )
+        order_params = {
+            "symbol": symbol,
+            "side": order_side,
+            "type": Client.ORDER_TYPE_MARKET,
+            "quantity": quantity
+        }
+        if client_order_id:
+            order_params["newClientOrderId"] = client_order_id
+
+        order = client.create_order(**order_params)
+        state = OrderState.ACKNOWLEDGED
+        
         order_id = order.get("orderId", "N/A")
-        price = float(order.get("fills", [{}])[0].get("price", 0)) if order.get("fills") else 0
-        sys_logger.info(f"[{strategy_name}] ✅ {side} order placed! Price: {price:.2f}", extra={"strategy": strategy_name, "symbol": symbol})
+        
+        # Calculate precise actual entry price and executed quantity from fills
+        fills = order.get("fills", [])
+        executed_qty = float(order.get("executedQty", 0))
+        cummulative_quote_qty = float(order.get("cummulativeQuoteQty", 0))
+        
+        actual_price = 0
+        total_fee = 0
+        if executed_qty > 0:
+            actual_price = cummulative_quote_qty / executed_qty
+            for fill in fills:
+                total_fee += float(fill.get("commission", 0))
+                
+            if float(order.get("origQty", quantity)) > executed_qty:
+                state = OrderState.PARTIALLY_FILLED
+            else:
+                state = OrderState.FILLED
+        else:
+            state = OrderState.FAILED
+            sys_logger.warning(f"[{strategy_name}] ⚠️ Zero fill for entry order {order_id}.")
+            return None
+
+        sys_logger.info(f"[{strategy_name}] ✅ {side} order {state}! Avg Price: {actual_price:.2f}, Executed Qty: {executed_qty}, Fees: {total_fee}", extra={"strategy": strategy_name, "symbol": symbol})
 
         oco_id = None
         # 2. Place the OCO order for Take Profit and Stop Loss
@@ -212,6 +266,7 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                 )
                 oco_id = oco_order.get("orderListId")
                 sys_logger.info(f"[{strategy_name}] 🛡️  SL/TP OCO order placed! SL: {sl_price} | TP: {tp_price}", extra={"strategy": strategy_name, "symbol": symbol})
+                state = OrderState.PROTECTED
                 
                 # Save to active trades for monitoring
                 active = _load_active_trades()
@@ -219,11 +274,13 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                     "strategy": strategy_name,
                     "symbol": symbol,
                     "side": side,
-                    "quantity": quantity,
-                    "entry_price": price,
+                    "quantity": executed_qty,
+                    "entry_price": actual_price,
                     "oco_id": oco_id,
                     "tp_price": tp,
-                    "sl_price": sl
+                    "sl_price": sl,
+                    "state": state,
+                    "entry_client_id": client_order_id
                 })
                 _save_active_trades(active)
             except BinanceAPIException as e:
@@ -235,14 +292,18 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                         symbol=symbol,
                         side=close_side,
                         type=Client.ORDER_TYPE_MARKET,
-                        quantity=quantity
+                        quantity=executed_qty
                     )
                     sys_logger.info(f"[{strategy_name}] 🛡️ Emergency close successful.", extra={"strategy": strategy_name, "symbol": symbol})
                 except Exception as ce:
                     sys_logger.critical(f"[EXEC] 🚨 FATAL: Emergency close failed! Unprotected position active. Error: {ce}", extra={"strategy": strategy_name, "symbol": symbol})
                 return None
 
-        log_trade(strategy_name, symbol, side, quantity, price, sl, tp, order_id, "FILLED")
+        log_trade(strategy_name, symbol, side, executed_qty, actual_price, sl, tp, order_id, state)
+        # Attach our custom metrics
+        order["_actual_price"] = actual_price
+        order["_executed_qty"] = executed_qty
+        order["_total_fee"] = total_fee
         return order
     except BinanceAPIException as e:
         sys_logger.error(f"[EXEC] ❌ Binance API Error placing entry order: {e}", extra={"strategy": strategy_name, "symbol": symbol})

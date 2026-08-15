@@ -1,0 +1,1 @@
+[{"strategy": "ml", "symbol": "BTCUSDT", "side": "BUY", "quantity": 0.5, "entry_price": 50000.0, "oco_id": 200, "tp_price": 55000, "sl_price": 48000, "state": "PROTECTED", "entry_client_id": "900d06e8-13eb-494b-a660-eb3bf577ed89"}]

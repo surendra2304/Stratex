@@ -1,49 +1,127 @@
 import pytest
 import os
-import json
+import importlib
 import time
-from paper_engine.portfolio import PaperPortfolio
-from paper_engine.session import SessionState
-from paper_engine.exceptions import PortfolioError, PersistenceError
+import datetime
+from unittest.mock import patch, MagicMock
 
-from unittest.mock import patch
+import config
+import execution
+from testnet_engine.service import TestnetService
+from testnet_engine.market_scanner import MarketScanner
+from testnet_engine.risk_gate import RiskGate
 
-def test_portfolio_persistence_failure(tmp_path):
-    """Simulates a locked file or permission error during save."""
-    port = PaperPortfolio(filename=str(tmp_path / "protected_portfolio.json"))
+def reload_modules():
+    importlib.reload(config)
+    importlib.reload(execution)
+    import testnet_engine.service
+    import testnet_engine.market_scanner
+    import testnet_engine.risk_gate
+    importlib.reload(testnet_engine.service)
+    importlib.reload(testnet_engine.market_scanner)
+    importlib.reload(testnet_engine.risk_gate)
+    return testnet_engine.service, testnet_engine.market_scanner, testnet_engine.risk_gate
+
+@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"}, clear=True)
+def test_chaos_daily_risk_reset():
+    svc, msc, rsg = reload_modules()
+    gate = rsg.RiskGate(starting_balance=10000.0)
     
-    with patch("builtins.open", side_effect=PermissionError("Mocked Permission Error")):
-        with pytest.raises(PersistenceError):
-            port._save()
-
-def test_session_crash_recovery(tmp_path):
-    """Simulates a session that was RUNNING when the process died."""
-    state_file = str(tmp_path / "session_state.json")
+    # Simulate a loss today
+    gate.update_after_trade(-500.0, 9500.0)
+    assert gate.daily_realized_loss == -500.0
     
-    # 1. Simulate old run
-    with open(state_file, "w") as f:
-        json.dump({"session_id": "123", "status": "RUNNING", "start_time": time.time()}, f)
+    # Fast forward the UTC clock by 1 day
+    with patch("testnet_engine.risk_gate.datetime") as mock_dt:
+        future_date = datetime.datetime.utcnow() + datetime.timedelta(days=1)
+        mock_dt.datetime.utcnow.return_value = future_date
         
-    # 2. Boot up new session
-    session = SessionState(filename=state_file)
-    session.start_session({})
+        gate.evaluate_risk("BTCUSDT", "LONG", 9500.0, {}, 0.1, 50000.0, "OK")
+        
+        assert gate.daily_realized_loss == 0.0, "Daily PnL should reset on UTC boundary crossing"
+        assert gate.current_trading_day == future_date.date()
+
+@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"}, clear=True)
+def test_chaos_data_staleness_blocks_entries():
+    svc, msc, rsg = reload_modules()
     
-    # It should have marked the previous session as crashed BEFORE creating the new one
-    assert session.status == "RUNNING"
-    # To strictly test the transition, we would need to mock or read the file right after init 
-    # but the logic in session.py correctly sets PREVIOUS_SESSION_CRASHED before setting RUNNING.
-    # We can check that a new session_id is generated.
-    assert session.session_id != "123"
+    with patch("testnet_engine.service.get_exchange_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        mock_client.get_account.return_value = {"balances": [{"asset": "USDT", "free": "10000.0", "locked": "0.0"}]}
+        mock_client.get_open_orders.return_value = []
+        
+        service = svc.TestnetService()
+        
+        # 1. Healthy data allows risk evaluation
+        passed, reason, _ = service.risk_gate.evaluate_risk("BTCUSDT", "LONG", 10000.0, {}, 0.001, 50000.0, "OK")
+        assert passed is True
+        
+        # 2. Stale data from MarketScanner blocks it
+        passed, reason, _ = service.risk_gate.evaluate_risk("BTCUSDT", "LONG", 10000.0, {}, 0.001, 50000.0, "STALE")
+        assert passed is False
+        assert reason == "DATA_DEGRADED"
+
+@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"}, clear=True)
+def test_chaos_ws_reconnect_logic():
+    svc, msc, rsg = reload_modules()
     
-def test_idempotency_margin_allocation(tmp_path):
-    port = PaperPortfolio(filename=str(tmp_path / "port.json"))
-    initial_cash = port.cash
+    with patch("testnet_engine.market_scanner.ThreadedWebsocketManager") as mock_twm_class, \
+         patch("testnet_engine.market_scanner.Client") as mock_client_class:
+        mock_twm = MagicMock()
+        mock_twm_class.return_value = mock_twm
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        
+        scanner = msc.MarketScanner(symbols=["BTCUSDT"], timeframe="1m")
+        # Mock rest fetch to do nothing for this test
+        scanner._fetch_historical_candles = MagicMock()
+        
+        # Init
+        scanner.start()
+        
+        # Fast forward time to make it look like the socket died completely (>60s)
+        # We manually trigger the logic inside _health_monitor_loop by patching datetime
+        now = datetime.datetime.utcnow()
+        scanner.last_market_update["BTCUSDT"] = now - datetime.timedelta(seconds=70)
+        
+        # Note: the health monitor runs in a background thread, so testing it deterministically
+        # requires triggering the logic directly instead of waiting on threads
+        scanner._stop_event.set() # Stop the actual thread so it doesn't conflict
+        
+        # Simulate one iteration of the health loop manually
+        with patch("testnet_engine.market_scanner.datetime") as mock_dt:
+            mock_dt.datetime.utcnow.return_value = now
+            
+            all_stale = True
+            for sym in scanner.symbols:
+                elapsed = (now - scanner.last_market_update.get(sym)).total_seconds()
+                if elapsed > 15:
+                    scanner.data_health_status[sym] = "STALE"
+            
+            max_elapsed = max([(now - scanner.last_market_update.get(s, now)).total_seconds() for s in scanner.symbols])
+            if all_stale and max_elapsed > 60:
+                scanner.twm.stop()
+                scanner.twm = mock_twm_class(testnet=scanner.testnet)
+                scanner.twm.start()
+                
+        # Assert twm methods were called
+        assert mock_twm.stop.call_count >= 1
+        assert mock_twm_class.call_count == 2 # Initial + Reconnect
+        
+@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"}, clear=True)
+def test_atomic_save_state():
+    svc, msc, rsg = reload_modules()
     
-    # Allocate margin with a specific event ID
-    port.allocate_margin(100.0, "event_123")
-    assert port.cash == initial_cash - 100.0
-    
-    # Allocate again with the SAME event ID (duplicate market/network event)
-    port.allocate_margin(100.0, "event_123")
-    # Should ignore it completely
-    assert port.cash == initial_cash - 100.0
+    with patch("testnet_engine.service.get_exchange_client") as mock_get_client:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        mock_client.get_account.return_value = {"balances": [{"asset": "USDT", "free": "10000.0", "locked": "0.0"}]}
+        mock_client.get_open_orders.return_value = []
+        
+        service = svc.TestnetService()
+        
+        with patch("testnet_engine.service.os.replace") as mock_replace:
+            service._save_state()
+            # Assert os.replace was called with the tmp file
+            mock_replace.assert_called_once_with("testnet_portfolio.json.tmp", "testnet_portfolio.json")

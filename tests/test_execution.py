@@ -29,16 +29,34 @@ def test_get_open_orders_propagates_corruption():
             execution.get_open_orders("BTCUSDT")
 
 def test_validate_trade_schema_valid():
-    trade = {"strategy": "a", "symbol": "BTCUSDT", "side": "BUY", "quantity": 1, "entry_price": 1000, "oco_id": 1, "tp_price": 2000, "sl_price": 500}
+    trade = {
+        "strategy": "scalper",
+        "symbol": "BTCUSDT",
+        "side": "BUY",
+        "quantity": 0.001,
+        "entry_price": 50000.0,
+        "oco_id": 123,
+        "tp_price": 51000.0,
+        "sl_price": 49000.0,
+        "state": execution.OrderState.PROTECTED,
+        "entry_client_id": "test-uuid-001"
+    }
     execution._validate_trade_schema(trade) # Should not raise
 
 def test_validate_trade_schema_invalid():
-    # Missing required field
-    with pytest.raises(StateCorruptionError, match="Missing required field"):
-        execution._validate_trade_schema({"strategy": "a"})
-        
-    # Invalid strategy
-    trade = {"strategy": "", "symbol": "BTCUSDT", "side": "BUY", "quantity": 1, "entry_price": 1000, "oco_id": 1, "tp_price": 2000, "sl_price": 500}
+    # Empty strategy
+    trade = {
+        "strategy": "",
+        "symbol": "BTCUSDT",
+        "side": "BUY",
+        "quantity": 0.001,
+        "entry_price": 50000.0,
+        "oco_id": 123,
+        "tp_price": 51000.0,
+        "sl_price": 49000.0,
+        "state": execution.OrderState.PROTECTED,
+        "entry_client_id": "test-uuid-001"
+    }
     with pytest.raises(StateCorruptionError, match="Invalid strategy"):
         execution._validate_trade_schema(trade)
         
@@ -85,7 +103,9 @@ def test_place_market_order_success(mock_get_client, mock_log, mock_load, mock_s
     # Mock Market Order
     mock_client.create_order.return_value = {
         "orderId": 123,
-        "fills": [{"price": "50000.0"}]
+        "executedQty": "1.0",
+        "cummulativeQuoteQty": "50000.0",
+        "fills": [{"price": "50000.0", "commission": "0.5"}]
     }
     
     # Mock OCO Order

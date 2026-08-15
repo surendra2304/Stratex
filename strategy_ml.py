@@ -107,17 +107,17 @@ class MLStrategy:
     def get_signal(self, df):
         """Generates trading signals based on the trained model."""
         if self.model is None or self.scaler is None:
-            return None, None, None
+            return None, None, None, None
             
         if len(df) < 20:
-            return None, None, None
+            return None, None, None, None
             
         last_bar = df.iloc[-1:]
         
         # Check if we have all features
         for f in self.features:
             if f not in last_bar.columns or pd.isna(last_bar[f].iloc[0]):
-                return None, None, None
+                return None, None, None, None
                 
         X_test = last_bar[self.features]
         X_test_scaled = self.scaler.transform(X_test)

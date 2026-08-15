@@ -4,6 +4,8 @@
 
 # SECRET: API keys - NEVER push this to GitHub!
 config.py
+.env
+.env.*
 
 # Python cache files
 __pycache__/
@@ -23,6 +25,9 @@ active_trades.json
 paper_trade_ledger.jsonl
 paper_equity_curve.jsonl
 paper_portfolio.json
+testnet_portfolio.json*
+testnet_opportunity_log.jsonl
+testnet_trade_ledger.jsonl
 heartbeat.json
 sim_*.json
 sim_*.json.tmp
