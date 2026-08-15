@@ -2,9 +2,7 @@ import os
 import csv
 import sys
 import io
-
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace') if __name__ == '__main__' else sys.stdout
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 from data import get_candles as fetch_candles
@@ -164,8 +162,8 @@ def get_status():
         get_logger("dashboard").error(f"Failed to read alerts: {e}")
         alerts = []
         
-    equity = 0.0
-    cash = 0.0
+    equity = 10000.0
+    cash = 10000.0
     realized_pnl = 0.0
     unrealized_pnl = 0.0
     fees = 0.0
@@ -173,7 +171,7 @@ def get_status():
     used_margin = 0.0
     open_positions = 0
     mdd = 0.0
-
+    
     if os.path.exists("paper_portfolio.json"):
         try:
             import json
@@ -199,7 +197,7 @@ def get_status():
                     else:
                         unrealized_pnl += (pos['entry_price'] - current_price) * pos['quantity']
                         
-            cash = port.get("cash", 0.0)
+            cash = port.get("cash", 10000.0)
             equity = cash + unrealized_pnl
             realized_pnl = port.get("realized_pnl", 0.0)
             fees = port.get("cumulative_fees", 0.0)
@@ -253,16 +251,27 @@ def get_trades():
         
         # 1. Parse closed trades from ledger
         if os.path.exists("paper_trade_ledger.jsonl"):
+            active_exp_id = "UNKNOWN"
+            if os.path.exists("experiments/active_forward_experiment_id.txt"):
+                with open("experiments/active_forward_experiment_id.txt", "r") as expf:
+                    active_exp_id = expf.read().strip()
+
             with open("paper_trade_ledger.jsonl", "r") as f:
                 for line in f:
                     try:
                         trade = json.loads(line)
+                        trade_exp_id = trade.get("experiment_id", "LEGACY_UNASSIGNED")
+                        
+                        # EXCLUDE LEGACY DATA
+                        if trade_exp_id != active_exp_id:
+                            continue
+                        
                         pnl = trade.get("net_pnl", 0.0)
                         
                         if pnl > 0:
                             wins += 1
                             gross_profit += pnl
-                        else:
+                        elif pnl < 0:
                             losses += 1
                             gross_loss += abs(pnl)
                             
@@ -305,8 +314,8 @@ def get_trades():
                 
         positions.sort(key=lambda x: x["timestamp"], reverse=True)
         total_closed = wins + losses
-        win_rate = (wins / total_closed * 100) if total_closed > 0 else 0
-        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else ("Infinity" if gross_profit > 0 else 0)
+        win_rate = (wins / total_closed * 100) if total_closed > 0 else "N/A"
+        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else ("Infinity" if gross_profit > 0 else ("N/A" if total_closed == 0 else 0))
         
         return jsonify({
             "net_pnl": net_pnl, 

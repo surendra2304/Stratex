@@ -95,6 +95,30 @@
             "git_sha": "b1b4d9b1e6ca94e79a4fa520e6298e4535011149",
             "created_at": 1786785029.7476356,
             "status": "NOT_STARTED"
+        },
+        {
+            "experiment_id": "31a5bef8-8428-4764-bf53-4e268aa7243f",
+            "experiment_name": "test_sha_exp",
+            "strategy_name": "test",
+            "git_sha": "28e7cc7ed32e526469279a3119814f0d93f8c977",
+            "created_at": 1786785636.697398,
+            "status": "NOT_STARTED"
+        },
+        {
+            "experiment_id": "f296ca2e-0287-46d6-85cc-5720439cd355",
+            "experiment_name": "test_sha_exp",
+            "strategy_name": "test",
+            "git_sha": "cd038a7968a267b719ee37386aa662b92537c8c9",
+            "created_at": 1786785666.414473,
+            "status": "NOT_STARTED"
+        },
+        {
+            "experiment_id": "be108722-8ca4-4894-94f9-91b3c34c2bdf",
+            "experiment_name": "test_sha_exp",
+            "strategy_name": "test",
+            "git_sha": "cd038a7968a267b719ee37386aa662b92537c8c9",
+            "created_at": 1786786393.5677583,
+            "status": "NOT_STARTED"
         }
     ]
 }
