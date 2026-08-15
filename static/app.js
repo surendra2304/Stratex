@@ -50,13 +50,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             // Update Advanced Stats
             document.getElementById('stat-closed-trades').textContent = data.total_trades;
-            document.getElementById('stat-winrate').textContent = data.win_rate.toFixed(1) + '%';
-            document.getElementById('stat-winrate').style.color = data.win_rate >= 50 ? '#4caf50' : '#ef5350';
+            if (data.win_rate === "N/A" || isNaN(data.win_rate)) {
+                document.getElementById('stat-winrate').textContent = "N/A";
+                document.getElementById('stat-winrate').style.color = '#8b92a5';
+            } else {
+                document.getElementById('stat-winrate').textContent = data.win_rate.toFixed(1) + '%';
+                document.getElementById('stat-winrate').style.color = data.win_rate >= 50 ? '#4caf50' : '#ef5350';
+            }
             
             const pf = parseFloat(data.profit_factor);
             if (isNaN(pf)) {
                 document.getElementById('stat-pf').textContent = data.profit_factor;
-                document.getElementById('stat-pf').style.color = '#4caf50';
+                document.getElementById('stat-pf').style.color = '#8b92a5';
             } else {
                 document.getElementById('stat-pf').textContent = pf.toFixed(2);
                 document.getElementById('stat-pf').style.color = pf >= 1.5 ? '#4caf50' : (pf >= 1 ? '#ff9800' : '#ef5350');
