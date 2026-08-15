@@ -1,49 +1,97 @@
-# Phase 14: Forward Validation Framework & Simulated Session
+# Phase 14: Forward Validation Framework
+## ⚠️ SIMULATED FORWARD VALIDATION — NOT REAL WALL-CLOCK FORWARD VALIDATION
 
-## Executive Summary
-Phase 14 deployed the forward validation infrastructure to safely evaluate strategies on unseen data. Because actual live forward data requires wall-clock time, a *simulated forward validation* session was executed against a strictly held-out data cache to test the pipeline mechanics.
+> [!WARNING]
+> The session labelled "simulated forward validation" in this phase used **held-out historical data**, not genuine future market data. Historical held-out data is NOT equivalent to genuine forward validation. Positive PnL on held-out historical data proves only that the strategy had a plausible historical fit on that particular sub-sample. It does **NOT** prove economic edge on future, unseen data.
 
-**Status: SIMULATED COMPLETE / SCIENTIFICALLY INCONCLUSIVE**
-The framework is fully operational, but true economic validation cannot occur until real-time data is ingested over a sufficiently long epoch (e.g., 2–4 weeks).
+---
+
+## What Each Validation Type Proves
+
+| Validation Type | Evidence Provided | NOT Proved |
+|---|---|---|
+| **165/165 software tests pass** | System is reliable and correct under known conditions | Profitability |
+| **Historical backtest** | Strategy had a historical fit on specific in-sample data | Future profitability |
+| **Held-out historical data (simulated OOS)** | Strategy was not overfit to specific in-sample dates | Future profitability |
+| **Genuine wall-clock PAPER trading** | Strategy responded correctly to real market microstructure | Future profitability |
+| **Profitable genuine PAPER trading** | Minimum necessary (not sufficient) condition for deployment | Guaranteed future profit |
 
 ---
 
 ## 1. Deployed Infrastructure
 
-### `experiments/registry.json`
-- An immutable log tracking all forward experiments (Git SHA, configuration, start/end timestamps, and final metrics).
+All components listed below are installed and tested. They are NOT running in real-time until the genuine forward experiment is explicitly started by a human operator.
 
 ### `ForwardValidator` (`paper_engine/forward_validator.py`)
-- An execution harness that strictly iterates data chronologically.
-- Enforces strict zero-lookahead boundaries by exclusively passing data window slices `df.iloc[:idx+1]` to strategy generators.
-- Generates un-falsifiable signals and routes them to the `PaperPortfolio`.
+- Chronological row-by-row iteration engine.
+- Enforces zero-lookahead via `df.iloc[:idx+1]` window slicing.
 
 ### `BenchmarkComparators` (`paper_engine/benchmark.py`)
-- Computes baseline expectations to ensure strategy Alpha exceeds Beta.
-- Provides:
-  - **Buy and Hold (B&H)** benchmark.
-  - **Random Entry / Monte Carlo** distribution (median and 5th percentile PnL bounds) to identify strategies that simply got lucky.
+- **Corrected:** Monte Carlo now uses the **same CostEngine** as the actual strategy.
+- Applies entry_fee, exit_fee, entry_slip, exit_slip, spread, and spread on actual notional.
+- Two-leg pairs: models **both Leg A and Leg B** independently.
+- Funding arbitrage: models **spot + perp + funding payments**.
+- **Reproducible:** explicit `random_seed` parameter required; results are deterministic.
+- Reports: `median_pnl`, `p05_pnl`, `p95_pnl`, `fraction_beating_strategy`.
+
+### `KillSwitch` (`paper_engine/kill_switch.py`)
+- **Corrected:** Kill switch NEVER closes positions at zero cost.
+- All forced exits apply: `exit_fee + exit_slip + spread` via CostEngine.
+- Reason `KILL_SWITCH` is annotated in the ledger for audit.
+- Lock file is written atomically before any position is touched.
+
+### `FrozenExperimentConfig` (`paper_engine/experiment_config.py`)
+- Configuration is captured once and saved atomically to `experiments/<id>.json`.
+- Git SHA is captured at creation time.
+- Pre-registered acceptance criteria cannot be changed after start.
+- Duplicate registration is idempotent.
+
+### `StatisticalReport` (`paper_engine/statistical_report.py`)
+- Every significance claim includes: H0, H1, test name, statistic, sample size, p-value, CI.
+- Results with `< 30 trades` are always labelled **INCONCLUSIVE**.
+- Multiple comparison corrections noted in report header.
+- `PASS` on statistical tests means only that the pre-defined criteria were met. It does **not** mean the strategy will be profitable in the future.
 
 ### `DailyReportGenerator` (`paper_engine/daily_report.py`)
-- Standardizes metrics across iterations (Net PnL, Maximum Drawdown, Fees, Slippage, Win Rate).
+- Generates standardized daily session reports.
 
 ### `kill_switch.py`
-- Emergency system lock that instantly flattens all paper positions at zero cost and halts the python process. Provides disaster recovery in case runaway signals are detected during forward testing.
+- Emergency halt. Flattens positions with realistic costs. Annotates ledger.
 
 ---
 
-## 2. Simulated Forward Execution Results
-A structural test of the forward validator was run using mock strategy inputs and held-out data.
+## 2. Forward Validation Acceptance Criteria (Pre-Registered)
 
-- **Objective:** Verify architectural plumbing (signal routing -> portfolio allocation -> risk gates -> daily reporting).
-- **Result:** Successfully traced signals, applied fee structures correctly, rejected margin-exhausting orders, and appended cleanly to `ledger.jsonl`.
-- **Finding:** The cost model successfully penalized rapid signal flipping, reducing simulated Gross PnL to Net PnL accurately.
+The following criteria are frozen before the experiment starts. They CANNOT be changed post-hoc without starting a NEW experiment.
 
-## 3. Forward Classification
+| Criterion | Required Value | Notes |
+|---|---|---|
+| Minimum trades | ≥ 30 | Below this, all results are INCONCLUSIVE |
+| Expectancy per trade | > 0% (after all fees) | Primary economic gate |
+| Profit factor | ≥ 1.2 | Gross profit / Gross loss |
+| Max drawdown | ≤ 20% | Over the forward period |
+| Statistical significance | p < 0.05 (one-tailed t-test) | H0: mean_return ≤ 0 |
+| Beats random benchmark | Strategy in > 50th percentile of MC | Uses same CostEngine |
+| Sharpe ratio | ≥ 0.5 | Only reported if n ≥ 50 trades |
+| Planned duration | 30 days | Minimum wall-clock time |
 
-> [!WARNING]  
-> Because the system lacks a multi-week stream of genuine, unforeseen live data, we cannot scientifically state that the strategies currently harbor a true out-of-sample edge. The Phase 10 results already indicated insufficient overlapping data for structural arbitrage, and the Phase 7–9 ML strategies exhibited unstable performance when fully costed.
+---
 
-**Final Phase 14 Classification:** `INCONCLUSIVE`
+## 3. Genuine Forward Experiment Definition
 
-The validator is installed. To achieve a conclusive result, the system must now be deployed in an automated, persistent PAPER execution mode and left to run against the Binance Testnet/Live feed for several weeks.
+The genuine forward experiment has **NOT been started**. When a human operator explicitly starts it:
+
+1. A `FrozenExperimentConfig` is created with Git SHA, strategy params, CostEngine params, and symbols.
+2. The config is saved to `experiments/<id>.json` and registered in `experiments/registry.json`.
+3. `config.mark_started()` is called — this timestamp is the official experiment start.
+4. The system runs in `PAPER` mode only (zero Binance orders placed).
+5. Signals, trades, and equity snapshots are appended to append-only files.
+6. After ≥30 days and ≥30 trades, `evaluate_against_acceptance_criteria()` is called.
+
+---
+
+## 4. Current Status
+
+**Classification: `INFRASTRUCTURE COMPLETE — GENUINE FORWARD EXPERIMENT NOT STARTED`**
+
+Live trading remains **BLOCKED**. No orders of any kind have been placed on Testnet or Live.

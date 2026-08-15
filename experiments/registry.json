@@ -1,3 +1,36 @@
 {
-    "experiments": []
+    "experiments": [
+        {
+            "experiment_id": "b67b2deb-d31d-48ca-a505-a7ca742dfd7c",
+            "experiment_name": "test_sha_exp",
+            "strategy_name": "test",
+            "git_sha": "1c77ad8b7b8835fa4fc7c3a4e4bfafef889adca5",
+            "created_at": 1786783309.946348,
+            "status": "NOT_STARTED"
+        },
+        {
+            "experiment_id": "5e2dcfb0-457b-4714-9447-794c61dc5905",
+            "experiment_name": "test_sha_exp",
+            "strategy_name": "test",
+            "git_sha": "1c77ad8b7b8835fa4fc7c3a4e4bfafef889adca5",
+            "created_at": 1786783348.1522143,
+            "status": "NOT_STARTED"
+        },
+        {
+            "experiment_id": "e24fafa8-c15f-4e4a-88d6-87d07bd3dbe7",
+            "experiment_name": "test_sha_exp",
+            "strategy_name": "test",
+            "git_sha": "1c77ad8b7b8835fa4fc7c3a4e4bfafef889adca5",
+            "created_at": 1786783367.9961283,
+            "status": "NOT_STARTED"
+        },
+        {
+            "experiment_id": "64252b82-046f-42c0-8487-be6c395c8f81",
+            "experiment_name": "test_sha_exp",
+            "strategy_name": "test",
+            "git_sha": "1c77ad8b7b8835fa4fc7c3a4e4bfafef889adca5",
+            "created_at": 1786783511.475816,
+            "status": "NOT_STARTED"
+        }
+    ]
 }

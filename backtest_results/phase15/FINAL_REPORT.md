@@ -1,62 +1,89 @@
 # Phase 15: Final Quantitative Audit & Deployment Decision
 
-## Executive Summary
-This document represents the culmination of a 15-phase quantitative research, system architecture, and adversarial testing cycle. The core objective was to determine, via rigorous scientific process, whether the trading system possesses a robust economic edge capable of surviving Binance's exact fee/slippage models, and whether the execution framework is sufficiently resilient to deploy that edge live.
-
-**Final Deployment Decision: `E — INCONCLUSIVE (PENDING LIVE FORWARD DATA)`**
-**Research Portfolio Status: `B — PAPER-ONLY PROMISING`**
-
-The codebase itself is structurally pristine and extremely safe (165/165 tests passing, exhaustive adversarial fuzzing complete). However, the quantitative research did not produce an arbitrage or ML strategy with an undeniable out-of-sample edge large enough to clear the Binance fee hurdle unconditionally. 
-
-Consequently, deployment to Live Trading is **BLOCKED**.
+> [!CAUTION]
+> This report does NOT claim that the system has discovered a profitable strategy. Software tests passing proves system reliability only. No economic edge has been demonstrated.
 
 ---
 
-## 1. The Quantitative Reality
+## Deployment Status
 
-### Structural Arbitrage (Phase 10)
-- **Hypothesis:** Predictable funding rates or Spot/Perp basis divergence could be harvested.
-- **Result:** UNAVAILABLE. Binance Testnet lacked sufficient liquidity, overlapping candles, and market participants to generate a realistic basis. 
-- **Conclusion:** Arbitrage strategies require real live data to validate. They cannot be proven on Testnet.
-
-### Machine Learning Directional Strategies (Phase 7-9)
-- **Hypothesis:** XGBoost / Random Forest models could predict short-term directional movement.
-- **Result:** Models found statistically significant classification power *before costs*.
-- **The Hurdle:** When strictly subjected to the Phase 9 Cost Engine (Taker fees + slippage + bid/ask spread crossing), the edge was mathematically consumed by friction. The models flipped signals too rapidly, incurring round-trip costs that destroyed gross profitability.
+| Gate | Status |
+|---|---|
+| LIVE TRADING | **BLOCKED** |
+| PAPER FORWARD VALIDATION | **REQUIRED — NOT YET STARTED** |
+| ECONOMIC EDGE | **UNPROVEN** |
 
 ---
 
-## 2. Infrastructure & Safety Posture
+## What the 194/194 Tests Prove
 
-Despite the absence of a "holy grail" strategy, the engineering pipeline achieved **production-grade** reliability:
+The test suite proves **software correctness and reliability** only:
+- The portfolio accounting invariants are mathematically correct.
+- The state persistence layer handles corruption safely.
+- Market data validation rejects malformed inputs.
+- The execution policy correctly blocks all non-paper orders.
+- The kill switch applies realistic costs (not zero cost) on forced exits.
+- The Monte Carlo benchmark uses the same CostEngine as the strategy.
+- Statistical reports correctly label small samples as INCONCLUSIVE.
 
-- **100% Separation of Concerns:** Read-only market data, read-only account polling, and execution capabilities are completely decoupled.
-- **Zero-Credential Exposure:** `ExecutionClient` requires an active `ExecutionPolicy` gate. Research components operate purely unauthenticated.
-- **Adversarial Resilience:** The system mathematically proved its accounting invariants under chaos. `Equity = Cash + Unrealized PnL` holds true even when subjected to 100,000+ rapid asynchronous fuzzing events.
-- **Disaster Recovery:** Corrupted state files trigger immediate `StateCorruptionError` Halts rather than silent resets. A strict `kill_switch.py` is in place.
-
----
-
-## 3. The Deployment Gate Criteria Checklist
-
-| Criterion | Status | Notes |
-| :--- | :--- | :--- |
-| Positive Net Expectancy (after all fees) | **FAIL** | Consumed by high-frequency friction. |
-| Statistical Significance (p < 0.05) | **FAIL** | Returns fall within Monte Carlo randomness bounds. |
-| OOS Edge > In-Sample Edge | **FAIL** | Mild degradation observed out-of-sample. |
-| Zero Look-ahead Bias | **PASS** | Cryptographically proven via shift architectures. |
-| Zero Credential Exposure | **PASS** | Audited via `.git` purge and strict environment boundaries. |
-| Forward Paper Trading Validated | **FAIL** | Requires 30+ days of forward wall-clock execution. |
+**Passing tests does NOT prove economic profitability.** It proves the software correctly implements the intended logic.
 
 ---
 
-## 4. Next Steps (Action Plan)
+## Quantitative Research Summary
 
-This is a **successful research outcome**. Discovering that an edge is consumed by fees *before* deploying real capital is the exact purpose of this framework.
+### What Each Validation Layer Found
 
-**To proceed toward live deployment:**
-1. **Reduce Friction:** Shift the ML strategy target from 5-minute fast-flipping (Taker fees) to 1H or 4H holds, or implement Maker-only limit order execution to harvest rebates.
-2. **Launch Forward Validator:** Leave the system running in `PAPER` mode on a cloud server for 30 days to collect a genuine, uncontaminated forward validation dataset.
-3. **Re-evaluate:** Use the generated `paper_trade_ledger.jsonl` from the forward run to recalculate the Alpha vs. Monte Carlo bounds. 
+| Layer | Type | Finding |
+|---|---|---|
+| Phase 7–9 ML strategies | Historical in-sample | Models found signal above noise BEFORE costs |
+| Phase 7–9 ML strategies | Historical OOS (held-out) | Edge consumed by Binance taker fees at 5m frequency |
+| Phase 10 Structural Arbitrage | Historical OOS (testnet) | UNAVAILABLE — insufficient testnet liquidity/overlap |
+| Phase 13 Adversarial | Software validation | System is resilient and safe |
+| Phase 14 Simulated Forward | Historical held-out (NOT real forward data) | Infrastructure functional; economic result is INCONCLUSIVE |
 
-**DO NOT ENABLE LIVE TRADING UNTIL THE FORWARD VALIDATOR PROVES PROFITABILITY IN WALL-CLOCK TIME.**
+**None of these layers constitutes genuine forward validation.**
+
+### Statistical Claims Audit
+
+The following is an explicit audit of all statistical claims made in previous reports:
+
+| Claim | Hypothesis H0 | Hypothesis H1 | Sample Size | Test | p-value | Verdict |
+|---|---|---|---|---|---|---|
+| "ML models found signal" | accuracy = 50% | accuracy > 50% | ~2000 bars | binomial | Not explicitly computed | INCONCLUSIVE — not formally tested |
+| "Edge consumed by fees" | net_expectancy > 0 | net_expectancy ≤ 0 | ~50 OOS trades | one-sample t-test | Not computed — sample insufficient | INCONCLUSIVE |
+| "Arbitrage unavailable" | descriptive | descriptive | 0 trades | N/A | N/A | DESCRIPTIVE ONLY |
+
+> [!IMPORTANT]
+> No claim of p < 0.05 is made. The sample sizes from historical backtests are insufficient for formal hypothesis testing of net expectancy. Any significance claim requires ≥ 30 live forward trades collected under a pre-registered protocol.
+
+---
+
+## Deployment Gate Checklist
+
+| Criterion | Required | Status | Notes |
+|---|---|---|---|
+| Zero credential exposure | PASS | ✅ PASS | Git history purged; env-var based config |
+| Zero Testnet/Live orders placed | PASS | ✅ PASS | ExecutionPolicy verified in 2 tests |
+| State corruption → StateCorruptionError | PASS | ✅ PASS | portfolio._load() enforced |
+| Kill switch uses realistic costs | PASS | ✅ PASS | CostEngine applied on all forced exits |
+| Monte Carlo uses real CostEngine | PASS | ✅ PASS | Replaced hardcoded 0.002 |
+| Statistical significance (p < 0.05) | REQUIRED | ❌ UNPROVEN | Needs ≥ 30 live forward trades |
+| Positive net expectancy after fees | REQUIRED | ❌ UNPROVEN | Needs genuine forward data |
+| Profit factor ≥ 1.2 | REQUIRED | ❌ UNPROVEN | Needs genuine forward data |
+| Genuine wall-clock forward data | REQUIRED | ❌ NOT STARTED | Requires human operator start |
+| Forward experiment duration ≥ 30 days | REQUIRED | ❌ NOT STARTED | Clock not started |
+
+**Overall: BLOCKED — 5 of 10 deployment gates are unmet.**
+
+---
+
+## Next Steps (Action Plan)
+
+1. **Reduce trading frequency to reduce friction:** Shift ML strategy targets to 1H or 4H bars to reduce the number of round-trips.
+2. **Consider Maker-only execution:** Maker fees on Binance Futures are 0.02% vs 0.10% Taker. This changes the breakeven threshold significantly.
+3. **Start genuine forward experiment:** A human operator must explicitly call `config.mark_started()` to begin the 30-day wall-clock paper session.
+4. **Evaluate after ≥ 30 days and ≥ 30 trades:** Use `evaluate_against_acceptance_criteria()` with the pre-registered criteria in the frozen config.
+5. **Only then consider deployment:** If and only if all 10 gates pass AND human review approves.
+
+**DO NOT ENABLE LIVE TRADING UNTIL ALL GATES PASS.**
