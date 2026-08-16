@@ -25,11 +25,11 @@ document.addEventListener("DOMContentLoaded", () => {
             });
 
             // Update Title
-            pageTitle.innerText = targetView.charAt(0).toUpperCase() + targetView.slice(1);
+            const textContent = item.querySelector("span:not(.nav-icon)").innerText;
+            pageTitle.innerText = textContent;
         });
     });
 });
-
 
 // ==========================================
 // UTILITIES
@@ -48,13 +48,16 @@ const formatTime = (ts) => {
 const formatDateTime = (ts) => {
     if (!ts) return "-";
     const d = new Date(ts);
-    // Use sv-SE for YYYY-MM-DD HH:mm:ss format
     return d.toLocaleString('sv-SE', { timeZone: 'Asia/Kolkata' });
 };
-
+const applyColor = (el, val, isPct = false) => {
+    if(!el) return;
+    el.innerText = isPct ? formatPct(val) : formatCurrency(val);
+    el.className = 'metric-value ' + (val > 0 ? 'val-green' : (val < 0 ? 'val-red' : 'val-neutral'));
+};
 
 // ==========================================
-// 1. CLOCK & UPTIME ARCHITECTURE (CLIENT-SIDE)
+// 1. CLOCK & UPTIME
 // ==========================================
 let serverTimeOffset = 0;
 let lastRenderedSecond = -1;
@@ -63,13 +66,11 @@ let botStartTimeMs = null;
 
 function renderFormattedTime(ms) {
     const d = new Date(ms);
-    // Explicitly format as IST
     const timeStr = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false });
     
     const navClock = document.getElementById('nav-clock');
     if (navClock) navClock.innerText = timeStr + ' IST';
     
-    // Authoritative Uptime from backend start time
     if (botStartTimeMs) {
         const uptimeSecs = Math.max(0, Math.floor((ms - botStartTimeMs) / 1000));
         const hrs = Math.floor(uptimeSecs / 3600).toString().padStart(2, '0');
@@ -99,7 +100,6 @@ function startClockLoop() {
     }
 }
 
-
 // ==========================================
 // 2. DATA POLLING & BINDING
 // ==========================================
@@ -111,86 +111,64 @@ async function fetchDashboardData() {
         const requestEnd = Date.now();
         const data = await res.json();
         
-        // Sync Clock
         if (data.server_time) {
             const serverMs = new Date(data.server_time).getTime();
             const midpoint = (requestStart + requestEnd) / 2;
             serverTimeOffset = serverMs - midpoint;
         }
 
-        // Sync Bot Uptime
         if (data.bot_start_time) {
             botStartTimeMs = new Date(data.bot_start_time).getTime();
         }
 
-        // --- DASHBOARD: Performance Bar ---
+        // Top Metrics
         document.getElementById('pb-balance').innerText = formatCurrency(data.cash);
-        document.getElementById('pb-today').innerText = formatCurrency(data.realized_pnl);
-        
-        const r_pnl = document.getElementById('pb-realized');
-        r_pnl.innerText = formatCurrency(data.realized_pnl);
-        r_pnl.className = data.realized_pnl >= 0 ? 'perf-value val-green' : 'perf-value val-red';
-        
-        const u_pnl = document.getElementById('pb-unrealized');
-        u_pnl.innerText = formatCurrency(data.unrealized_pnl);
-        u_pnl.className = data.unrealized_pnl >= 0 ? 'perf-value val-green' : 'perf-value val-red';
-        
+        applyColor(document.getElementById('pb-today'), data.realized_pnl);
+        applyColor(document.getElementById('pb-realized'), data.realized_pnl);
+        applyColor(document.getElementById('pb-unrealized'), data.unrealized_pnl);
         document.getElementById('pb-fees').innerText = formatCurrency(data.fees);
         document.getElementById('pb-mdd').innerText = (data.max_drawdown || 0).toFixed(2) + '%';
         
-        // --- DASHBOARD: Equity Box (Authoritative High/Low) ---
-        document.getElementById('eq-current').innerText = formatCurrency(data.equity);
-        
-        if (data.equity_high !== null && data.equity_high !== undefined) {
-            document.getElementById('eq-high').innerText = formatCurrency(data.equity_high);
-        } else {
-            document.getElementById('eq-high').innerText = "Awaiting history";
-        }
-
-        if (data.equity_low !== null && data.equity_low !== undefined) {
-            document.getElementById('eq-low').innerText = formatCurrency(data.equity_low);
-        } else {
-            document.getElementById('eq-low').innerText = "Awaiting history";
-        }
-
-        if (data.equity_change !== null && data.equity_change !== undefined) {
-            document.getElementById('eq-change').innerText = (data.equity_change >= 0 ? "+" : "") + data.equity_change.toFixed(2) + "%";
-        } else {
-            document.getElementById('eq-change').innerText = "-";
-        }
-        
-        // --- HEADER STATUS: Engine Online vs Offline ---
+        // Header Status
         const engineDot = document.getElementById('hdr-engine-dot');
         const engineText = document.getElementById('hdr-engine-text');
         if (engineDot && engineText) {
             if (data.engine_status === 'ONLINE' || data.engine_healthy) {
                 engineDot.className = 'dot dot-green';
-                engineText.innerText = 'TRADING ENGINE: ONLINE (TESTNET)';
+                engineText.className = 'status-online';
+                engineText.innerText = 'ENGINE ONLINE (TESTNET)';
             } else {
                 engineDot.className = 'dot dot-red';
-                engineText.innerText = 'TRADING ENGINE: OFFLINE';
+                engineText.className = 'status-offline';
+                engineText.innerText = 'ENGINE OFFLINE';
             }
         }
         
-        // --- SIDEBAR HEALTH ---
+        // Sidebar Health
         const h_status = (state) => state === 'OK' ? 'dot-green' : 'dot-red';
         if(data.components) {
-            if(data.components.binance) document.getElementById('h-ws').className = `dot ${h_status(data.components.binance)}`;
+            if(data.components.binance) {
+                document.getElementById('h-bn').className = `dot ${h_status(data.components.binance)}`;
+                document.getElementById('h-ws').className = `dot ${h_status(data.components.binance)}`;
+            }
             if(data.components.data) document.getElementById('h-md').className = `dot ${h_status(data.components.data)}`;
             if(data.components.execution) document.getElementById('h-ex').className = `dot ${h_status(data.components.execution)}`;
             if(document.getElementById('h-st')) document.getElementById('h-st').className = `dot ${h_status(data.components.strategy || 'OK')}`;
+            if(document.getElementById('h-pt')) document.getElementById('h-pt').className = `dot dot-green`; // Implicitly ok if process runs
+            if(document.getElementById('h-rs')) document.getElementById('h-rs').className = `dot dot-green`;
+            if(document.getElementById('h-pe')) document.getElementById('h-pe').className = `dot dot-green`;
         }
 
-        // --- RISK PAGE ---
+        // Risk View
         document.getElementById('rk-daily').innerText = formatCurrency(data.realized_pnl + data.unrealized_pnl);
-        document.getElementById('rk-daily').className = (data.realized_pnl + data.unrealized_pnl) >= 0 ? 'val-green' : 'val-red';
+        document.getElementById('rk-daily').className = 'status-val ' + ((data.realized_pnl + data.unrealized_pnl) >= 0 ? 'val-green' : 'val-red');
         document.getElementById('rk-mdd').innerText = (data.max_drawdown || 0).toFixed(2) + '%';
         document.getElementById('rk-pos').innerText = data.open_positions || 0;
 
-        // --- POSITIONS SUMMARY ---
+        // Positions View
         document.getElementById('pos-avail').innerText = formatCurrency(data.cash);
 
-        // --- SETTINGS PAGE ---
+        // Settings View
         document.getElementById('set-mode').innerText = data.mode || "TESTNET";
 
     } catch (e) {
@@ -206,52 +184,42 @@ async function fetchTrades() {
         const openPos = positions.filter(p => p.status === 'OPEN');
         const closedPos = positions.filter(p => p.status === 'CLOSED');
         
-        // --- DASHBOARD & POSITIONS: Active Positions ---
         const activeBodies = [document.getElementById('active-pos-body'), document.getElementById('pos-full-body')];
         let exposure = 0;
         let total_upnl = 0;
 
         const posHtml = openPos.length === 0 ? '<tr><td colspan="12" class="empty-state">NO OPEN POSITIONS</td></tr>' : openPos.map(p => {
-            const uPnlStr = p.pnl >= 0 ? `<span class="val-green">${formatCurrency(p.pnl)}</span>` : `<span class="val-red">${formatCurrency(p.pnl)}</span>`;
-            const sideClass = (p.action === 'LONG' || p.action === 'BUY') ? 'tag-long' : 'tag-short';
+            const uPnlStr = p.pnl > 0 ? `<span class="val-green">+${formatCurrency(p.pnl)}</span>` : (p.pnl < 0 ? `<span class="val-red">${formatCurrency(p.pnl)}</span>` : '$0.00');
+            const sideClass = (p.action === 'LONG' || p.action === 'BUY') ? 'tag tag-long' : 'tag tag-short';
             const val = p.quantity * p.entry_price;
             exposure += val;
             total_upnl += p.pnl;
             
             return `<tr>
                 <td>${p.symbol}</td>
-                <td class="${sideClass}">${p.action}</td>
+                <td><span class="${sideClass}">${p.action}</span></td>
                 <td>${Number(p.entry_price).toFixed(4)}</td>
                 <td>-</td>
                 <td>${p.quantity}</td>
                 <td>${formatCurrency(val)}</td>
                 <td>${uPnlStr}</td>
-                <td>-</td>
-                <td>-</td>
-                <td>-</td>
-                <td>-</td>
-                <td>OPEN</td>
+                <td>${p.sl || '-'}</td>
+                <td>${p.tp || '-'}</td>
+                <td><span class="tag tag-active">OPEN</span></td>
             </tr>`;
         }).join('');
 
         activeBodies.forEach(b => { if(b) b.innerHTML = posHtml; });
         
-        // Update Pos Summary
         document.getElementById('pos-count').innerText = openPos.length;
         document.getElementById('pos-exposure').innerText = formatCurrency(exposure);
-        document.getElementById('pos-upnl').innerText = formatCurrency(total_upnl);
-        document.getElementById('pos-upnl').className = total_upnl >= 0 ? 'perf-value val-green' : 'perf-value val-red';
+        applyColor(document.getElementById('pos-upnl'), total_upnl);
 
-
-        // --- DASHBOARD & TRADES: Trade Ledger ---
+        // Ledger
         const dashTradesBody = document.getElementById('recent-trades-body');
         const fullTradesBody = document.getElementById('trades-full-body');
         
-        let wins = 0;
-        let losses = 0;
-        let net_pnl = 0;
-        let total_fees = 0;
-
+        let wins = 0, losses = 0, net_pnl = 0, total_fees = 0;
         const allClosed = [...closedPos].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         
         allClosed.forEach(p => {
@@ -262,41 +230,42 @@ async function fetchTrades() {
         });
 
         const mapTrade = (p) => {
-            const sideClass = (p.action === 'LONG' || p.action === 'BUY') ? 'tag-long' : 'tag-short';
+            const sideClass = (p.action === 'LONG' || p.action === 'BUY') ? 'tag tag-long' : 'tag tag-short';
             const tsShort = p.timestamp ? formatDateTime(p.timestamp) : '-';
             const orderIdStr = p.order_id ? String(p.order_id).substring(0, 8) + '...' : '-';
-            const pnlClass = p.pnl >= 0 ? 'val-green' : 'val-red';
+            const pnlStr = p.pnl > 0 ? `<span class="val-green">+${formatCurrency(p.pnl)}</span>` : (p.pnl < 0 ? `<span class="val-red">${formatCurrency(p.pnl)}</span>` : '$0.00');
+            const netStr = (p.pnl - (p.fees||0)) > 0 ? `<span class="val-green">+${formatCurrency(p.pnl - (p.fees||0))}</span>` : (p.pnl - (p.fees||0) < 0 ? `<span class="val-red">${formatCurrency(p.pnl - (p.fees||0))}</span>` : '$0.00');
             
             return `<tr>
                 <td>${tsShort}</td>
                 <td>-</td>
                 <td>${p.symbol}</td>
-                <td class="${sideClass}">${p.action}</td>
+                <td><span class="${sideClass}">${p.action}</span></td>
                 <td>${Number(p.entry_price).toFixed(4)}</td>
                 <td>${Number(p.exit_price).toFixed(4)}</td>
                 <td>${p.quantity}</td>
-                <td class="${pnlClass}">${formatCurrency(p.pnl)}</td>
+                <td>${pnlStr}</td>
                 <td>${formatCurrency(p.fees || 0)}</td>
-                <td class="${pnlClass}">${formatCurrency(p.pnl - (p.fees||0))}</td>
-                <td>TP/SL</td>
+                <td>${netStr}</td>
+                <td><span class="tag ${p.pnl >= 0 ? 'tag-win' : 'tag-loss'}">${p.pnl >= 0 ? 'WIN' : 'LOSS'}</span></td>
                 <td title="${p.order_id}">${orderIdStr}</td>
             </tr>`;
         };
 
         const mapDashTrade = (p) => {
-            const sideClass = (p.action === 'LONG' || p.action === 'BUY') ? 'tag-long' : 'tag-short';
+            const sideClass = (p.action === 'LONG' || p.action === 'BUY') ? 'tag tag-long' : 'tag tag-short';
             const tsShort = p.timestamp ? formatDateTime(p.timestamp) : '-';
-            const pnlClass = p.pnl >= 0 ? 'val-green' : 'val-red';
-            const status = p.pnl >= 0 ? 'WIN' : 'LOSS';
+            const pnlStr = p.pnl > 0 ? `<span class="val-green">+${formatCurrency(p.pnl)}</span>` : (p.pnl < 0 ? `<span class="val-red">${formatCurrency(p.pnl)}</span>` : '$0.00');
+            const statusTag = p.pnl >= 0 ? '<span class="tag tag-win">WIN</span>' : '<span class="tag tag-loss">LOSS</span>';
             
             return `<tr>
                 <td>${tsShort}</td>
                 <td>${p.symbol}</td>
-                <td class="${sideClass}">${p.action}</td>
+                <td><span class="${sideClass}">${p.action}</span></td>
                 <td>${Number(p.entry_price).toFixed(4)}</td>
                 <td>${Number(p.exit_price).toFixed(4)}</td>
-                <td class="${pnlClass}">${formatCurrency(p.pnl)}</td>
-                <td class="${pnlClass}">${status}</td>
+                <td>${pnlStr}</td>
+                <td>${statusTag}</td>
             </tr>`;
         };
 
@@ -308,14 +277,13 @@ async function fetchTrades() {
             if(fullTradesBody) fullTradesBody.innerHTML = allClosed.map(mapTrade).join('');
         }
 
-        // --- TRADES & ANALYTICS SUMMARY ---
+        // Summary
         const tr_rate = allClosed.length > 0 ? (wins / allClosed.length) : 0;
         document.getElementById('tr-total').innerText = allClosed.length;
         document.getElementById('tr-wins').innerText = wins;
         document.getElementById('tr-loss').innerText = losses;
         document.getElementById('tr-rate').innerText = formatPct(tr_rate);
-        document.getElementById('tr-net').innerText = formatCurrency(net_pnl);
-        document.getElementById('tr-net').className = net_pnl >= 0 ? 'perf-value val-green' : 'perf-value val-red';
+        applyColor(document.getElementById('tr-net'), net_pnl);
         document.getElementById('tr-fees').innerText = formatCurrency(total_fees);
 
         // Analytics
@@ -329,7 +297,6 @@ async function fetchTrades() {
         });
         
         document.getElementById('an-pf').innerText = gross_loss > 0 ? (gross_win / gross_loss).toFixed(2) : (gross_win > 0 ? '∞' : '0.00');
-        document.getElementById('an-exp').innerText = allClosed.length > 0 ? formatCurrency(net_pnl / allClosed.length) : '$0.00';
         document.getElementById('an-avg-win').innerText = wins > 0 ? formatCurrency(gross_win / wins) : '$0.00';
         document.getElementById('an-avg-loss').innerText = losses > 0 ? formatCurrency(gross_loss / losses) : '$0.00';
 
@@ -343,69 +310,53 @@ async function fetchScanner() {
         const res = await fetch('/api/scanner', { cache: 'no-store' });
         const data = await res.json();
         
-        // --- DASHBOARD Scanner ---
-        document.getElementById('sc-total').innerText = data.symbols_scanned || 0;
-        document.getElementById('sc-signals').innerText = data.signals_detected || 0;
-        document.getElementById('sc-qual').innerText = data.orders_submitted || 0;
-        document.getElementById('sc-rej').innerText = data.signals_rejected || 0;
+        // Funnel
+        document.getElementById('fn-signals').innerText = data.TOTAL_SIGNALS || 0;
+        document.getElementById('fn-prof-rej').innerText = data.PROFITABILITY_REJECTED || 0;
+        document.getElementById('fn-risk-rej').innerText = (data.RISK_REJECTED || 0) + (data.COOLDOWN_REJECTED || 0) + (data.JIT_REJECTED || 0) + (data.OTHER_REJECTED || 0);
+        document.getElementById('fn-qual').innerText = data.QUALIFIED || 0;
+        document.getElementById('fn-sub').innerText = data.ORDERS_SUBMITTED || 0;
+        document.getElementById('fn-filled').innerText = data.ORDERS_FILLED || 0;
         
+        // Markets Data (Matrix)
         let dataReceivingCount = 0;
         let evaluatedCount = 0;
-        let lastMarketTs = 0;
-        let lastEvalTs = 0;
         const totalSyms = data.symbols ? data.symbols.length : 0;
-        
         const marketRows = [];
 
         if (data.last_market_update) {
             for (const sym of Object.keys(data.last_market_update)) {
                 dataReceivingCount++;
                 const ts = new Date(data.last_market_update[sym]).getTime();
-                if (ts > lastMarketTs) lastMarketTs = ts;
                 
                 marketRows.push(`<tr>
                     <td>${sym}</td>
                     <td>-</td>
                     <td>-</td>
-                    <td>4H</td>
                     <td>-</td>
-                    <td>-</td>
-                    <td>-</td>
-                    <td class="val-green">CONNECTED</td>
+                    <td><span class="tag tag-active">CONNECTED</span></td>
                     <td>${formatTime(ts)}</td>
                 </tr>`);
             }
         }
         
-        // --- MARKET VIEW ---
         const marketBody = document.getElementById('market-body');
         if(marketBody) {
             if(marketRows.length > 0) marketBody.innerHTML = marketRows.join('');
-            else marketBody.innerHTML = '<tr><td colspan="9" class="empty-state">No active symbols scanned</td></tr>';
+            else marketBody.innerHTML = '<tr><td colspan="6" class="empty-state">No active symbols scanned</td></tr>';
         }
 
         if (data.last_evaluation) {
             for (const sym of Object.keys(data.last_evaluation)) {
                 evaluatedCount++;
-                const ts = new Date(data.last_evaluation[sym]).getTime();
-                if (ts > lastEvalTs) lastEvalTs = ts;
             }
         }
         
-        document.getElementById('sc-data-ratio').innerText = `${dataReceivingCount}/${totalSyms}`;
-        document.getElementById('sc-eval-ratio').innerText = `${evaluatedCount}/${totalSyms}`;
+        document.getElementById('sc-eval-ratio').innerText = `${evaluatedCount}/${totalSyms} Symbols Evaluated`;
         
-        if(lastMarketTs > 0) document.getElementById('st-last-market').innerText = formatTime(lastMarketTs);
-        if(lastEvalTs > 0) document.getElementById('st-last-eval').innerText = formatTime(lastEvalTs);
-        
-        // --- DASHBOARD & SIGNALS: Opportunities ---
-        const oppBody = document.getElementById('opp-short-body');
-        const sigFullBody = document.getElementById('signals-full-body');
-        
-        // --- STRATEGY METRICS ---
+        // Strategy Metrics
         const stratBody = document.getElementById('strategy-metrics-body');
         if (data.strategy_metrics && Object.keys(data.strategy_metrics).length > 0) {
-            document.getElementById('hdr-strategies').innerText = Object.keys(data.strategy_metrics).length + " ACTIVE";
             let stratRows = [];
             for (const [strat, m] of Object.entries(data.strategy_metrics)) {
                 stratRows.push(`<tr>
@@ -414,14 +365,15 @@ async function fetchScanner() {
                     <td>${m.qualified || 0}</td>
                     <td>${m.rejected || 0}</td>
                     <td>${m.executed || 0}</td>
+                    <td><span class="tag tag-active">ACTIVE</span></td>
                 </tr>`);
             }
             if (stratBody) stratBody.innerHTML = stratRows.join('');
         } else {
-            if (stratBody) stratBody.innerHTML = '<tr><td colspan="5" class="empty-state">No metrics available</td></tr>';
+            if (stratBody) stratBody.innerHTML = '<tr><td colspan="6" class="empty-state">NO STRATEGY DATA</td></tr>';
         }
         
-        // --- TIMEFRAME METRICS ---
+        // Timeframe Metrics
         const tfBody = document.getElementById('timeframe-metrics-body');
         if (data.timeframe_metrics && Object.keys(data.timeframe_metrics).length > 0) {
             let tfRows = [];
@@ -436,39 +388,41 @@ async function fetchScanner() {
             }
             if (tfBody) tfBody.innerHTML = tfRows.join('');
         } else {
-            if (tfBody) tfBody.innerHTML = '<tr><td colspan="5" class="empty-state">No metrics available</td></tr>';
+            if (tfBody) tfBody.innerHTML = '<tr><td colspan="5" class="empty-state">NO METRICS AVAILABLE</td></tr>';
         }
         
+        // Opportunities & Signals
+        const oppBody = document.getElementById('opp-short-body');
+        const sigFullBody = document.getElementById('signals-full-body');
+        
         const mapOpp = (o, full) => {
-            const sideClass = o.side === 'BUY' ? 'tag-long' : 'tag-short';
+            const sideClass = o.side === 'BUY' ? 'tag tag-long' : 'tag tag-short';
             const tsShort = o.timestamp ? String(o.timestamp).substring(11, 19) : '-';
             const confStr = o.confidence ? formatPct(o.confidence) : '-';
-            const grossStr = o.expected_gross_return ? formatPct(o.expected_gross_return) : '-';
             const netStr = o.expected_net_return ? (o.expected_net_return > 0 ? `<span class="val-green">+${formatPct(o.expected_net_return)}</span>` : `<span class="val-red">${formatPct(o.expected_net_return)}</span>`) : '-';
-            const feeStr = o.estimated_fees ? formatPct(o.estimated_fees) : '0.00%';
             const priceStr = o.current_price ? Number(o.current_price).toFixed(2) : '-';
-            const decClass = o.decision === 'ACCEPTED' ? 'val-green' : 'val-red';
+            const decClass = o.decision === 'ACCEPTED' ? 'tag tag-qualified' : 'tag tag-rejected';
             const shortReason = o.reason ? (o.reason.length > 25 ? o.reason.substring(0, 25) + '...' : o.reason) : '-';
             
             if (full) {
                 return `<tr>
-                    <td>${tsShort}</td><td>${o.symbol}</td><td class="${sideClass}">${o.side}</td>
-                    <td>${priceStr}</td><td>-</td><td>${confStr}</td><td>${grossStr}</td><td>${feeStr}</td>
-                    <td>${netStr}</td><td>-</td><td>-</td>
-                    <td class="${decClass}">${o.decision || '-'}</td><td title="${o.reason}">${o.reason || '-'}</td>
+                    <td>${tsShort}</td><td>${o.symbol}</td><td><span class="${sideClass}">${o.side}</span></td>
+                    <td>${priceStr}</td><td>${confStr}</td><td>${netStr}</td>
+                    <td>-</td><td>-</td>
+                    <td><span class="${decClass}">${o.decision || '-'}</span></td><td title="${o.reason}">${shortReason}</td>
                 </tr>`;
             } else {
                 return `<tr>
-                    <td>${tsShort}</td><td>${o.symbol}</td><td class="${sideClass}">${o.side}</td>
-                    <td>${priceStr}</td><td>${confStr}</td><td>${netStr}</td>
-                    <td class="${decClass}">${o.decision || '-'}</td>
+                    <td>${tsShort}</td><td>${o.symbol}</td><td><span class="${sideClass}">${o.side}</span></td>
+                    <td>${confStr}</td><td>${netStr}</td>
+                    <td><span class="${decClass}">${o.decision || '-'}</span></td>
                 </tr>`;
             }
         };
 
         if (!data.top_opportunities || data.top_opportunities.length === 0) {
-            if(oppBody) oppBody.innerHTML = '<tr><td colspan="7" class="empty-state">NO OPPORTUNITIES</td></tr>';
-            if(sigFullBody) sigFullBody.innerHTML = '<tr><td colspan="13" class="empty-state">NO OPPORTUNITIES / SIGNALS LOGGED YET</td></tr>';
+            if(oppBody) oppBody.innerHTML = '<tr><td colspan="6" class="empty-state">NO QUALIFYING OPPORTUNITIES</td></tr>';
+            if(sigFullBody) sigFullBody.innerHTML = '<tr><td colspan="10" class="empty-state">NO SIGNALS LOGGED YET</td></tr>';
         } else {
             if(oppBody) oppBody.innerHTML = data.top_opportunities.slice(0, 5).map(o => mapOpp(o, false)).join('');
             if(sigFullBody) sigFullBody.innerHTML = data.top_opportunities.map(o => mapOpp(o, true)).join('');
@@ -479,15 +433,12 @@ async function fetchScanner() {
 }
 
 function updateDashboard() {
-    const spinner = document.getElementById('refresh-spinner');
-    if(spinner) spinner.classList.add('spinning');
-    
     Promise.all([
         fetchDashboardData(),
         fetchTrades(),
         fetchScanner()
     ]).finally(() => {
-        if(spinner) spinner.classList.remove('spinning');
+        // any spinner removal can go here
     });
 }
 
@@ -496,4 +447,4 @@ function updateDashboard() {
 // ==========================================
 startClockLoop(); 
 updateDashboard(); 
-setInterval(updateDashboard, 2000); 
+setInterval(updateDashboard, 2000);
