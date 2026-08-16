@@ -1059,7 +1059,13 @@ class TestnetService:
                 logger.error(f"[SERVICE] Failed to train ML strategy: {e}")
                 
         # 3. Start Scanner
-        tfs = list(set(ACTIVE_STRATEGIES.values()))
+        tfs_set = set()
+        for tfs in ACTIVE_STRATEGIES.values():
+            if isinstance(tfs, list):
+                tfs_set.update(tfs)
+            else:
+                tfs_set.add(tfs)
+        tfs = list(tfs_set)
         self.scanner = MarketScanner(symbol_list, timeframes=tfs)
         self.scanner.register_callback(self.on_candle_closed)
         self.scanner.start()
