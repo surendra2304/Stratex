@@ -426,7 +426,39 @@ class TestnetService:
                     sl   = getattr(signal_result, 'sl',   signal_result[1] if signal_result else None)
                     tp   = getattr(signal_result, 'tp',   signal_result[2] if signal_result else None)
 
-                    logger.info(f"[STRATEGY_EVALUATED] {strat_name} on {symbol} ({tf}) | Signal: {side or 'HOLD'}")
+                    last_row = df.iloc[-1]
+                    prev_row = df.iloc[-2] if len(df) >= 2 else last_row
+                    adx_val = float(last_row.get("adx", 0.0))
+                    ema20_val = float(last_row.get("ema_20", 0.0))
+                    ema50_val = float(last_row.get("ema_50", 0.0))
+                    ema200_val = float(last_row.get("ema_200", 0.0))
+                    atr_val = float(last_row.get("atr_adx_ema", 0.0))
+                    atr_pct = (atr_val / current_price) if current_price > 0 else 0.0
+                    trend_dir = "BULLISH" if current_price > ema200_val else "BEARISH"
+                    candle_ts = last_row.name if hasattr(last_row, 'name') else df.index[-1]
+                    
+                    rejection_reason = "VALID_SIGNAL"
+                    if not side:
+                        reasons = []
+                        cross_up = (ema20_val > ema50_val) and (float(prev_row.get("ema_20", 0)) <= float(prev_row.get("ema_50", 0)))
+                        cross_dn = (ema20_val < ema50_val) and (float(prev_row.get("ema_20", 0)) >= float(prev_row.get("ema_50", 0)))
+                        if not (cross_up or cross_dn):
+                            reasons.append("NO_CROSSOVER")
+                        if adx_val <= 25:
+                            reasons.append("ADX_BELOW_25")
+                        if cross_up and current_price <= ema200_val:
+                            reasons.append("CLOSE_BELOW_EMA200")
+                        if cross_dn and current_price >= ema200_val:
+                            reasons.append("CLOSE_ABOVE_EMA200")
+                        rejection_reason = "; ".join(reasons) if reasons else "NO_TRIGGER"
+
+                    logger.info(
+                        f"[CANDLE_EVALUATION] symbol={symbol} tf={tf} timestamp={candle_ts} "
+                        f"price={current_price:.4f} ADX={adx_val:.2f} EMA20={ema20_val:.4f} "
+                        f"EMA50={ema50_val:.4f} EMA200={ema200_val:.4f} ATR={atr_val:.4f} "
+                        f"ATR%={atr_pct*100:.3f}% trend_direction={trend_dir} "
+                        f"decision={side or 'HOLD'} reason={rejection_reason}"
+                    )
 
                     if not side:
                         self.stats["HOLD_SIGNALS"] += 1
