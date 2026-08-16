@@ -11,6 +11,8 @@ import time
 import signal
 import subprocess
 import threading
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from logger import get_logger
 
 logger = get_logger("supervisor")
@@ -40,23 +42,29 @@ class ServiceSupervisor:
 
     def _start_bot(self):
         """Starts the trading bot daemon subprocess."""
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        bot_script = os.path.join(repo_root, "bot.py")
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         logger.info("[SUPERVISOR] 🚀 Spawning Trading Engine (python bot.py)...")
         self.bot_proc = subprocess.Popen(
-            [sys.executable, "bot.py"],
+            [sys.executable, bot_script],
+            cwd=repo_root,
             env=env
         )
         logger.info(f"[SUPERVISOR] Trading Engine spawned with PID {self.bot_proc.pid}")
 
     def _start_dashboard(self):
         """Starts the Flask dashboard subprocess."""
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        dash_script = os.path.join(repo_root, "dashboard.py")
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         port = os.environ.get("PORT", "5000")
         logger.info(f"[SUPERVISOR] 🚀 Spawning Dashboard on port {port} (python dashboard.py)...")
         self.dash_proc = subprocess.Popen(
-            [sys.executable, "dashboard.py"],
+            [sys.executable, dash_script],
+            cwd=repo_root,
             env=env
         )
         logger.info(f"[SUPERVISOR] Dashboard spawned with PID {self.dash_proc.pid}")

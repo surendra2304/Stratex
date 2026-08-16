@@ -57,8 +57,11 @@ def check_health():
             print(f"Open Positions: {len(positions)}")
             print(f"Signals Gen   : {stats.get('TOTAL_SIGNALS', 0)}")
             print(f"Profit Reject : {stats.get('PROFITABILITY_REJECTED', 0)}")
-            print(f"Risk Reject   : {stats.get('RISK_REJECTED', 0)}")
             print(f"Qualified     : {stats.get('QUALIFIED', 0)}")
+            print(f"Orders Filled : {stats.get('ORDERS_FILLED', 0)}")
+        except Exception as e:
+            print(f"State Read    : ERROR ({e})")
+            
     # 4. Check Engine Heartbeat
     hb_file = getattr(config, "TESTNET_HEARTBEAT_FILE", "testnet_heartbeat.json")
     if not os.path.exists(hb_file) and os.path.exists("heartbeat.json"):
