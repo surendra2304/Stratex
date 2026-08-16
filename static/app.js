@@ -404,6 +404,24 @@ async function fetchScanner() {
             if (stratBody) stratBody.innerHTML = '<tr><td colspan="5" class="empty-state">No metrics available</td></tr>';
         }
         
+        // --- TIMEFRAME METRICS ---
+        const tfBody = document.getElementById('timeframe-metrics-body');
+        if (data.timeframe_metrics && Object.keys(data.timeframe_metrics).length > 0) {
+            let tfRows = [];
+            for (const [tf, m] of Object.entries(data.timeframe_metrics)) {
+                tfRows.push(`<tr>
+                    <td>${tf}</td>
+                    <td>${m.signals || 0}</td>
+                    <td>${m.qualified || 0}</td>
+                    <td>${m.rejected || 0}</td>
+                    <td>${m.executed || 0}</td>
+                </tr>`);
+            }
+            if (tfBody) tfBody.innerHTML = tfRows.join('');
+        } else {
+            if (tfBody) tfBody.innerHTML = '<tr><td colspan="5" class="empty-state">No metrics available</td></tr>';
+        }
+        
         const mapOpp = (o, full) => {
             const sideClass = o.side === 'BUY' ? 'tag-long' : 'tag-short';
             const tsShort = o.timestamp ? String(o.timestamp).substring(11, 19) : '-';

@@ -5,6 +5,13 @@ from sklearn.preprocessing import StandardScaler
 from sklearn import metrics
 import logging
 import os
+from collections import namedtuple
+
+SignalResult = namedtuple(
+    "SignalResult",
+    ["side", "sl", "tp", "strategy_type", "confidence", "rr_ratio"]
+)
+import os
 
 logger = logging.getLogger("strategy_ml")
 
@@ -140,17 +147,17 @@ class MLStrategy:
     def get_signal(self, df):
         """Generates trading signals based on the dual trained models."""
         if self.model_buy is None or self.model_sell is None or self.scaler is None:
-            return None, None, None, None
+            return SignalResult(None, None, None, "PROBABILISTIC", None, None)
             
         if len(df) < 20:
-            return None, None, None, None
+            return SignalResult(None, None, None, "PROBABILISTIC", None, None)
             
         last_bar = df.iloc[-1:]
         
         # Check if we have all features
         for f in self.features:
             if f not in last_bar.columns or pd.isna(last_bar[f].iloc[0]):
-                return None, None, None, None
+                return SignalResult(None, None, None, "PROBABILISTIC", None, None)
                 
         X_test = last_bar[self.features]
         X_test_scaled = self.scaler.transform(X_test)
@@ -169,12 +176,12 @@ class MLStrategy:
         if prob_sell > 0.50:
             sl = close * (1 + sl_pct)
             tp = close * (1 - tp_pct)
-            return "SELL", sl, tp, prob_sell
+            return SignalResult("SELL", sl, tp, "PROBABILISTIC", prob_sell, 2.0)
             
         if prob_buy > 0.50:
             sl = close * (1 - sl_pct)
             tp = close * (1 + tp_pct)
-            return "BUY", sl, tp, prob_buy
+            return SignalResult("BUY", sl, tp, "PROBABILISTIC", prob_buy, 2.0)
             
         # DIAGNOSTIC
         try:
@@ -182,7 +189,7 @@ class MLStrategy:
                 f.write(f"HOLD: prob_buy={prob_buy:.4f}, prob_sell={prob_sell:.4f}\n")
         except: pass
             
-        return None, None, None, None
+        return SignalResult(None, None, None, "PROBABILISTIC", None, None)
 
 # Singleton instance for backwards compatibility with the MultiStrategyWrapper
 _instance = MLStrategy()

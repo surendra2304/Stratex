@@ -45,11 +45,16 @@ class TestnetService:
         print(f"Strategies: {', '.join(ACTIVE_STRATEGIES.keys())}")
         
         self.strategies = {}
-        for strat_name, tf in ACTIVE_STRATEGIES.items():
-            mod = importlib.import_module(f"strategy_{strat_name}")
-            if tf not in self.strategies:
-                self.strategies[tf] = []
-            self.strategies[tf].append((strat_name, mod))
+        for strat_name, tfs in ACTIVE_STRATEGIES.items():
+            try:
+                mod = importlib.import_module(f"strategy_{strat_name}")
+                tfs_list = tfs if isinstance(tfs, list) else [tfs]
+                for tf in tfs_list:
+                    if tf not in self.strategies:
+                        self.strategies[tf] = []
+                    self.strategies[tf].append((strat_name, mod))
+            except Exception as e:
+                logger.error(f"Failed to load strategy {strat_name}: {e}")
         
         self.client = get_exchange_client()
         if self.client is None:
@@ -151,8 +156,16 @@ class TestnetService:
             "TOTAL_CANDLES": 0,
             "strategy_metrics": {
                 s: {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0} for s in ACTIVE_STRATEGIES.keys()
-            }
+            },
+            "timeframe_metrics": {}
         }
+        
+        # Populate timeframe metrics dynamically
+        for tfs in ACTIVE_STRATEGIES.values():
+            tfs_list = tfs if isinstance(tfs, list) else [tfs]
+            for tf in tfs_list:
+                if tf not in self.stats["timeframe_metrics"]:
+                    self.stats["timeframe_metrics"][tf] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0}
         self.stats.update({
             "BUY_SIGNALS": 0,
             "SELL_SIGNALS": 0,
@@ -489,6 +502,8 @@ class TestnetService:
                     self.stats["TOTAL_SIGNALS"] += 1
                     if strat_name in self.stats["strategy_metrics"]:
                         self.stats["strategy_metrics"][strat_name]["signals"] += 1
+                    if tf in self.stats["timeframe_metrics"]:
+                        self.stats["timeframe_metrics"][tf]["signals"] += 1
 
                     passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
                         symbol, side, current_price, sl, tp, signal_result
@@ -498,6 +513,8 @@ class TestnetService:
                         self.stats["PROFITABILITY_REJECTED"] += 1
                         if strat_name in self.stats["strategy_metrics"]:
                             self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                        if tf in self.stats["timeframe_metrics"]:
+                            self.stats["timeframe_metrics"][tf]["rejected"] += 1
                         self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", p_metrics["reason"])
                         continue
                         
@@ -566,8 +583,6 @@ class TestnetService:
                     df = None
                     if hasattr(self, 'scanner'):
                         df = self.scanner.candle_cache.get((symbol, tf))
-                        if df is None or df.empty:
-                            df = self.scanner.candle_cache.get(symbol)
                             
                     if df is None or df.empty:
                         self.stats["MARKET_DATA_REJECTED"] += 1
@@ -619,6 +634,8 @@ class TestnetService:
                     self.stats["QUALIFIED"] += 1
                     if strategy_name in self.stats["strategy_metrics"]:
                         self.stats["strategy_metrics"][strategy_name]["qualified"] += 1
+                    if tf in self.stats["timeframe_metrics"]:
+                        self.stats["timeframe_metrics"][tf]["qualified"] += 1
                     self.log_opportunity(signal_id, symbol, side, fresh_metrics, "ACCEPTED", "ALL_GATES_PASSED")
                     
                     logger.info(f"[EXECUTION_ATTEMPTED] {strategy_name} {side} {qty} {symbol} @ ~{current_price} | SignalID: {signal_id}")
@@ -629,6 +646,8 @@ class TestnetService:
                             self.stats["ORDERS_FILLED"] += 1
                             if strategy_name in self.stats["strategy_metrics"]:
                                 self.stats["strategy_metrics"][strategy_name]["executed"] += 1
+                            if tf in self.stats["timeframe_metrics"]:
+                                self.stats["timeframe_metrics"][tf]["executed"] += 1
                             actual_price = order_res.get("_actual_price", current_price)
                             executed_qty = order_res.get("_executed_qty", qty)
                             
@@ -978,7 +997,7 @@ class TestnetService:
                 "websocket_connected": hasattr(self, 'scanner') and bool(self.scanner),
                 "strategy": list(ACTIVE_STRATEGIES.keys())[0] if ACTIVE_STRATEGIES else "adx_ema",
                 "strategies": list(ACTIVE_STRATEGIES.keys()),
-                "timeframe": list(ACTIVE_STRATEGIES.values())[0] if ACTIVE_STRATEGIES else "4h",
+                "timeframes": list(set(tf for tfs in ACTIVE_STRATEGIES.values() for tf in (tfs if isinstance(tfs, list) else [tfs]))),
                 "symbols": symbols,
                 "symbol_count": len(symbols),
                 "last_market_update": last_m_update,
@@ -1012,8 +1031,8 @@ class TestnetService:
                 self._write_heartbeat(status="RUNNING", worker_alive=True)
                 now_ts = time.time()
                 if now_ts - last_log_time >= 60:
-                    last_log_time = now_ts
-                    logger.info(f"[ENGINE_HEARTBEAT] PID={os.getpid()} | Status=RUNNING | Strategy=ADX_EMA (4h) | Symbols={len(self.symbol_filters)}")
+                    tfs = list(set(tf for tfs in ACTIVE_STRATEGIES.values() for tf in (tfs if isinstance(tfs, list) else [tfs])))
+                    logger.info(f"[ENGINE_HEARTBEAT] PID={os.getpid()} | Status=RUNNING | Strategies={len(ACTIVE_STRATEGIES)} | Timeframes={','.join(tfs)} | Symbols={len(self.symbol_filters)}")
             except Exception as e:
                 logger.error(f"[SERVICE] Heartbeat loop error: {e}")
             time.sleep(5)

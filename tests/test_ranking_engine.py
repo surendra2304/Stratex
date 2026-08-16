@@ -37,9 +37,9 @@ def ranking_service(mocker):
     df_sol = pd.DataFrame({"close": [100.0, 100.0]})
     
     service.scanner.candle_cache = {
-        "BTCUSDT": df_btc,
-        "ETHUSDT": df_eth,
-        "SOLUSDT": df_sol
+        ("BTCUSDT", "4h"): df_btc,
+        ("ETHUSDT", "4h"): df_eth,
+        ("SOLUSDT", "4h"): df_sol
     }
     service.scanner.data_health_status = {"BTCUSDT": "OK", "ETHUSDT": "OK", "SOLUSDT": "OK"}
     service.symbol_filters = {
@@ -62,19 +62,18 @@ def test_opportunity_ranking_and_limits(ranking_service, mocker):
 
     mocker.patch.object(service.profitability_gate, "evaluate_signal", side_effect=mock_eval)
 
-    # Add three candidates simultaneously to the pool (bypassing on_candle_closed)
     service.opportunity_pool.put({
-        "signal_id": "sol", "symbol": "SOLUSDT", "side": "BUY", "sl": 90, "tp": 110,
+        "signal_id": "sol", "symbol": "SOLUSDT", "tf": "4h", "side": "BUY", "sl": 90, "tp": 110,
         "signal_result": None,
         "metrics": {"expected_net_return": 0.01, "confidence": 0.9, "prob_win": 0.9}, "timestamp": time.time()
     })
     service.opportunity_pool.put({
-        "signal_id": "btc", "symbol": "BTCUSDT", "side": "BUY", "sl": 49000, "tp": 52000,
+        "signal_id": "btc", "symbol": "BTCUSDT", "tf": "4h", "side": "BUY", "sl": 49000, "tp": 52000,
         "signal_result": None,
         "metrics": {"expected_net_return": 0.05, "confidence": 0.9, "prob_win": 0.9}, "timestamp": time.time()
     })
     service.opportunity_pool.put({
-        "signal_id": "eth", "symbol": "ETHUSDT", "side": "BUY", "sl": 2900, "tp": 3200,
+        "signal_id": "eth", "symbol": "ETHUSDT", "tf": "4h", "side": "BUY", "sl": 2900, "tp": 3200,
         "signal_result": None,
         "metrics": {"expected_net_return": 0.03, "confidence": 0.9, "prob_win": 0.9}, "timestamp": time.time()
     })
@@ -103,7 +102,7 @@ def test_revalidation_spread_expansion(ranking_service, mocker):
 
     # Queue BTC
     service.opportunity_pool.put({
-        "signal_id": "btc", "symbol": "BTCUSDT", "side": "BUY", "sl": 49000, "tp": 52000,
+        "signal_id": "btc", "symbol": "BTCUSDT", "tf": "4h", "side": "BUY", "sl": 49000, "tp": 52000,
         "signal_result": None,
         "metrics": {"expected_net_return": 0.05, "confidence": 0.9, "prob_win": 0.9}, "timestamp": time.time()
     })

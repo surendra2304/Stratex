@@ -52,7 +52,6 @@ class MarketScanner:
             
             clean_df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume', 'vol_delta', 'buy_vol', 'sell_vol']].copy()
             self.candle_cache[(symbol, tf)] = clean_df
-            self.candle_cache[symbol] = clean_df # backward-compatible key
         except Exception as e:
             logger.error(f"[SCANNER] Failed to fetch historical data for {symbol} ({tf}): {e}")
 
@@ -193,18 +192,9 @@ class MarketScanner:
             if len(df) > 250:
                 df = df.iloc[1:]
             self.candle_cache[(symbol, tf)] = df
-            self.candle_cache[symbol] = df
-        elif symbol in self.candle_cache:
-            df = self.candle_cache[symbol]
-            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-            if len(df) > 250:
-                df = df.iloc[1:]
-            self.candle_cache[(symbol, tf)] = df
-            self.candle_cache[symbol] = df
         else:
             new_df = pd.DataFrame([new_row])
             self.candle_cache[(symbol, tf)] = new_df
-            self.candle_cache[symbol] = new_df
             
         # Dispatch event to registered callbacks
         for cb in self.callbacks:

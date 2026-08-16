@@ -112,7 +112,7 @@ def get_engine_health_data():
             "websocket_connected": hb.get("websocket_connected", False),
             "active_strategy": hb.get("strategy", "adx_ema"),
             "strategies": hb.get("strategies", ["adx_ema"]),
-            "timeframe": hb.get("timeframe", "4h"),
+            "timeframes": hb.get("timeframes", ["4h"]),
             "symbols": hb.get("symbols", []),
             "symbol_count": hb.get("symbol_count", len(hb.get("symbols", []))),
             "last_market_update": hb.get("last_market_update"),

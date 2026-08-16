@@ -43,14 +43,20 @@ TESTNET_ENABLED = os.getenv("TESTNET_ENABLED", "False").lower() == "true"
 LIVE_TRADING_ENABLED = os.getenv("LIVE_TRADING_ENABLED", "False").lower() == "true"
 
 # --- Strategies to Run ---
-# Multi-strategy configuration mapping validated strategy -> timeframe
+# Multi-strategy configuration mapping validated strategy -> timeframe(s)
 ACTIVE_STRATEGIES = {
-    "adx_ema": "4h"
+    "aggressor": ["1m", "3m"],
+    "scalper": ["1m", "3m", "5m"],
+    "supertrend": ["15m", "30m", "1h"],
+    "ml": ["15m", "30m"],
+    "swing": ["2h", "4h"],
+    "adx_ema": ["4h"]
 }
 
 # Backward-compatibility aliases for legacy tests/modules
 ACTIVE_STRATEGY = list(ACTIVE_STRATEGIES.keys())[0]
-TIMEFRAME = list(ACTIVE_STRATEGIES.values())[0]
+_first_tf = list(ACTIVE_STRATEGIES.values())[0]
+TIMEFRAME = _first_tf[0] if isinstance(_first_tf, list) else _first_tf
 
 # Trading Config
 MAX_POSITION_SIZE = 0.95
@@ -97,11 +103,14 @@ def validate_config():
         if tf not in SUPPORTED_TIMEFRAMES:
             raise ValueError(f"Configuration Error: Invalid TIMEFRAME '{tf}'. Supported: {SUPPORTED_TIMEFRAMES}")
 
-    for strategy, timeframe in ACTIVE_STRATEGIES.items():
+    for strategy, timeframes in ACTIVE_STRATEGIES.items():
         if strategy not in SUPPORTED_STRATEGIES:
             raise ValueError(f"Configuration Error: Invalid ACTIVE_STRATEGY '{strategy}'. Supported: {SUPPORTED_STRATEGIES}")
-        if timeframe not in SUPPORTED_TIMEFRAMES:
-            raise ValueError(f"Configuration Error: Invalid TIMEFRAME '{timeframe}' for strategy '{strategy}'. Supported: {SUPPORTED_TIMEFRAMES}")
+        
+        tfs = timeframes if isinstance(timeframes, list) else [timeframes]
+        for tf in tfs:
+            if tf not in SUPPORTED_TIMEFRAMES:
+                raise ValueError(f"Configuration Error: Invalid TIMEFRAME '{tf}' for strategy '{strategy}'. Supported: {SUPPORTED_TIMEFRAMES}")
 
     if TRADING_MODE not in VALID_MODES:
         raise ValueError(f"Configuration Error: Invalid TRADING_MODE '{TRADING_MODE}'.")

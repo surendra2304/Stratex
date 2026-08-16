@@ -103,7 +103,7 @@ class TestHealthAndHeartbeatArchitecture:
             "binance_connected": True,
             "websocket_connected": True,
             "strategy": "adx_ema",
-            "timeframe": "4h",
+            "timeframes": ["4h"],
             "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
             "symbol_count": 3,
             "last_market_update": now_str,
@@ -121,7 +121,7 @@ class TestHealthAndHeartbeatArchitecture:
         assert data["healthy"] is True
         assert data["symbol_count"] == 3
         assert data["active_strategy"] == "adx_ema"
-        assert data["timeframe"] == "4h"
+        assert data["timeframes"] == ["4h"]
 
 class TestExecutionPolicyAndModeInvariants:
     def test_testnet_mode_allowed_only_with_testnet_enabled(self, monkeypatch):
