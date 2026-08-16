@@ -1,10 +1,10 @@
 services:
   - type: web
-    name: algorithmic-trading-bot-fra
+    name: python-trading-bot-fra
     env: docker
     region: frankfurt
     plan: free
-    repo: https://github.com/surendra2304/algorithmic-trading-bot.git
+    repo: https://github.com/surendra2304/python-trading-bot.git
     branch: master
     healthCheckPath: /health
     dockerCommand: python scripts/supervise_services.py
