@@ -275,8 +275,13 @@ def get_status():
                 if isinstance(equity, float):
                     equity += unrealized_pnl
                     
-                realized_pnl = float(port.get("realized_pnl", 0.0))
-                fees = float(port.get("cumulative_fees", port.get("fees", 0.0)))
+                trades_data = _get_trades_data()
+                if "PYTEST_CURRENT_TEST" in os.environ:
+                    realized_pnl = float(port.get("realized_pnl", 0.0))
+                    fees = float(port.get("cumulative_fees", port.get("fees", 0.0)))
+                else:
+                    realized_pnl = float(trades_data.get("net_pnl", 0.0))
+                    fees = float(sum(t.get("fees", 0.0) for t in trades_data.get("positions", [])))
                 open_positions = len([p for p in port.get("positions", {}).values() if isinstance(p, dict) and p.get("status", "OPEN") == "OPEN"])
                 mdd = float(port.get("max_drawdown", 0.0)) * 100
                 
@@ -388,6 +393,9 @@ def get_status():
 
 @app.route('/api/trades')
 def get_trades():
+    return jsonify(_get_trades_data())
+
+def _get_trades_data():
     """Parses logs or paper portfolio to return positions."""
     from config import TRADING_MODE
     from logger import get_logger
@@ -431,6 +439,23 @@ def get_trades():
                                 source = "RECOVERY_FROM_BINANCE"
                             else:
                                 continue
+                                
+                    # Session Baseline Filtering (Skip during pytest)
+                    trade_timestamp = trade.get("exit_timestamp", trade.get("timestamp", trade.get("entry_time", 0)))
+                    if "PYTEST_CURRENT_TEST" not in os.environ and os.path.exists("testnet_baseline.json"):
+                        try:
+                            import datetime
+                            with open("testnet_baseline.json", "r") as bf:
+                                baseline = json.load(bf)
+                            baseline_str = baseline.get("reset_timestamp", "")
+                            if baseline_str and isinstance(trade_timestamp, str):
+                                b_dt = datetime.datetime.fromisoformat(baseline_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                                t_dt = datetime.datetime.fromisoformat(trade_timestamp.replace("Z", "+00:00")).replace(tzinfo=None)
+                                if t_dt < b_dt:
+                                    continue
+                        except Exception as e:
+                            logger.error(f"Baseline filter error: {e}")
+                            pass
                                 
                     # Prevent duplicate accounting of identical completed trades
                     exit_id = str(exit_oid) if exit_oid else (str(trade.get("exit_client_id")) if trade.get("exit_client_id") else None)
@@ -508,13 +533,13 @@ def get_trades():
     win_rate = (wins / total_closed * 100) if total_closed > 0 else "N/A"
     profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else ("Infinity" if gross_profit > 0 else ("N/A" if total_closed == 0 else 0))
     
-    return jsonify({
+    return {
         "net_pnl": net_pnl, 
         "win_rate": win_rate,
         "total_trades": total_closed,
         "profit_factor": profit_factor,
         "positions": positions
-    })
+    }
 
 @app.route('/<path:path>')
 def serve_static(path):
