@@ -3,6 +3,7 @@ import csv
 import sys
 import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace') if __name__ == '__main__' else sys.stdout
+import datetime
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 from data import get_candles as fetch_candles
@@ -584,7 +585,6 @@ def get_scanner():
             
     if os.path.exists("testnet_opportunity_log.jsonl"):
         try:
-            import datetime
             opps = []
             now = datetime.datetime.utcnow()
             with open("testnet_opportunity_log.jsonl", "r") as f:

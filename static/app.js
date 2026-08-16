@@ -283,11 +283,28 @@ async function fetchTrades() {
             </tr>`;
         };
 
+        const mapDashTrade = (p) => {
+            const sideClass = (p.action === 'LONG' || p.action === 'BUY') ? 'tag-long' : 'tag-short';
+            const tsShort = p.timestamp ? formatDateTime(p.timestamp) : '-';
+            const pnlClass = p.pnl >= 0 ? 'val-green' : 'val-red';
+            const status = p.pnl >= 0 ? 'WIN' : 'LOSS';
+            
+            return `<tr>
+                <td>${tsShort}</td>
+                <td>${p.symbol}</td>
+                <td class="${sideClass}">${p.action}</td>
+                <td>${Number(p.entry_price).toFixed(4)}</td>
+                <td>${Number(p.exit_price).toFixed(4)}</td>
+                <td class="${pnlClass}">${formatCurrency(p.pnl)}</td>
+                <td class="${pnlClass}">${status}</td>
+            </tr>`;
+        };
+
         if (allClosed.length === 0) {
             if(dashTradesBody) dashTradesBody.innerHTML = '<tr><td colspan="7" class="empty-state">NO TRADES YET</td></tr>';
             if(fullTradesBody) fullTradesBody.innerHTML = '<tr><td colspan="12" class="empty-state">NO HISTORICAL TRADES</td></tr>';
         } else {
-            if(dashTradesBody) dashTradesBody.innerHTML = allClosed.slice(0, 10).map(mapTrade).join('');
+            if(dashTradesBody) dashTradesBody.innerHTML = allClosed.slice(0, 10).map(mapDashTrade).join('');
             if(fullTradesBody) fullTradesBody.innerHTML = allClosed.map(mapTrade).join('');
         }
 
