@@ -459,6 +459,10 @@ class TestnetService:
                         f"ATR%={atr_pct*100:.3f}% trend_direction={trend_dir} "
                         f"decision={side or 'HOLD'} reason={rejection_reason}"
                     )
+                    logger.info(
+                        f"[STRATEGY_SCAN] symbol={symbol} timeframe={tf} strategy={strat_name} "
+                        f"decision={'SIGNAL' if side else 'HOLD'} reason={rejection_reason}"
+                    )
 
                     if not side:
                         self.stats["HOLD_SIGNALS"] += 1
