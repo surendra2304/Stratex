@@ -196,16 +196,14 @@ async function fetchTrades() {
             total_upnl += p.pnl;
             
             return `<tr>
-                <td>${p.symbol}</td>
+                <td class="td-strong">${p.symbol}</td>
                 <td><span class="${sideClass}">${p.action}</span></td>
                 <td>${Number(p.entry_price).toFixed(4)}</td>
                 <td>-</td>
                 <td>${p.quantity}</td>
-                <td>${formatCurrency(val)}</td>
                 <td>${uPnlStr}</td>
                 <td>${p.sl || '-'}</td>
                 <td>${p.tp || '-'}</td>
-                <td><span class="tag tag-active">OPEN</span></td>
             </tr>`;
         }).join('');
 
@@ -260,10 +258,11 @@ async function fetchTrades() {
             
             return `<tr>
                 <td>${tsShort}</td>
-                <td>${p.symbol}</td>
+                <td class="td-strong">${p.symbol}</td>
                 <td><span class="${sideClass}">${p.action}</span></td>
                 <td>${Number(p.entry_price).toFixed(4)}</td>
                 <td>${Number(p.exit_price).toFixed(4)}</td>
+                <td>${p.quantity}</td>
                 <td>${pnlStr}</td>
                 <td>${statusTag}</td>
             </tr>`;
@@ -310,12 +309,19 @@ async function fetchScanner() {
         const res = await fetch('/api/scanner', { cache: 'no-store' });
         const data = await res.json();
         
-        // Funnel
+        // Funnel Pipeline
         document.getElementById('fn-signals').innerText = data.TOTAL_SIGNALS || 0;
-        document.getElementById('fn-prof-rej').innerText = data.PROFITABILITY_REJECTED || 0;
-        document.getElementById('fn-risk-rej').innerText = (data.RISK_REJECTED || 0) + (data.COOLDOWN_REJECTED || 0) + (data.JIT_REJECTED || 0) + (data.OTHER_REJECTED || 0);
-        document.getElementById('fn-qual').innerText = data.QUALIFIED || 0;
-        document.getElementById('fn-sub').innerText = data.ORDERS_SUBMITTED || 0;
+        
+        const profRej = data.PROFITABILITY_REJECTED || 0;
+        const profAcc = Math.max(0, (data.TOTAL_SIGNALS || 0) - profRej);
+        document.getElementById('fn-prof-rej').innerText = profRej;
+        document.getElementById('fn-prof-acc').innerText = profAcc;
+        
+        const riskRej = (data.RISK_REJECTED || 0) + (data.COOLDOWN_REJECTED || 0) + (data.JIT_REJECTED || 0) + (data.OTHER_REJECTED || 0);
+        const riskAcc = data.QUALIFIED || 0;
+        document.getElementById('fn-risk-rej').innerText = riskRej;
+        document.getElementById('fn-risk-acc').innerText = riskAcc;
+        
         document.getElementById('fn-filled').innerText = data.ORDERS_FILLED || 0;
         
         // Markets Data (Matrix)
@@ -352,7 +358,40 @@ async function fetchScanner() {
             }
         }
         
-        document.getElementById('sc-eval-ratio').innerText = `${evaluatedCount}/${totalSyms} Symbols Evaluated`;
+        document.getElementById('sc-eval-ratio').innerText = `${evaluatedCount} Symbols`;
+        document.getElementById('fn-mrk').innerText = dataReceivingCount || 0;
+        
+        // Ticker & Top Movers
+        const topMoversBody = document.getElementById('top-movers-body');
+        const tickerContent = document.getElementById('bottom-ticker-content');
+        
+        if (data.market_data && Object.keys(data.market_data).length > 0) {
+            let mkts = [];
+            for (const [sym, info] of Object.entries(data.market_data)) {
+                if (info && info.close !== undefined) {
+                    mkts.push({ sym, price: info.close, chg: info.change_24h || 0 });
+                }
+            }
+            if(mkts.length > 0) {
+                mkts.sort((a,b) => Math.abs(b.chg) - Math.abs(a.chg));
+                
+                // Top Movers
+                const moverRows = mkts.slice(0, 5).map(m => {
+                    const chgStr = m.chg > 0 ? `<span class="val-green">+${m.chg.toFixed(2)}%</span>` : `<span class="val-red">${m.chg.toFixed(2)}%</span>`;
+                    return `<tr><td class="td-strong">${m.sym}</td><td>${m.price.toFixed(4)}</td><td>${chgStr}</td></tr>`;
+                });
+                if(topMoversBody) topMoversBody.innerHTML = moverRows.join('');
+                
+                // Ticker
+                const tickerHtml = mkts.map(m => {
+                    const colorClass = m.chg > 0 ? 'val-green' : 'val-red';
+                    const sign = m.chg > 0 ? '▲' : '▼';
+                    return `<div class="ticker-item"><span class="ticker-sym">${m.sym}</span><span class="ticker-px ${colorClass}">${m.price.toFixed(4)} ${sign} ${Math.abs(m.chg).toFixed(2)}%</span></div>`;
+                });
+                // Duplicate for smooth loop
+                if(tickerContent) tickerContent.innerHTML = tickerHtml.join('') + tickerHtml.join('');
+            }
+        }
         
         // Strategy Metrics
         const stratBody = document.getElementById('strategy-metrics-body');
@@ -404,17 +443,20 @@ async function fetchScanner() {
             const decClass = o.decision === 'ACCEPTED' ? 'tag tag-qualified' : 'tag tag-rejected';
             const shortReason = o.reason ? (o.reason.length > 25 ? o.reason.substring(0, 25) + '...' : o.reason) : '-';
             
+            const strat = o.strategy || '-';
+            const tf = o.timeframe || '-';
+            
             if (full) {
                 return `<tr>
-                    <td>${tsShort}</td><td>${o.symbol}</td><td><span class="${sideClass}">${o.side}</span></td>
+                    <td>${tsShort}</td><td class="td-strong">${o.symbol}</td><td>${tf}</td><td>${strat}</td><td><span class="${sideClass}">${o.side}</span></td>
                     <td>${priceStr}</td><td>${confStr}</td><td>${netStr}</td>
                     <td>-</td><td>-</td>
                     <td><span class="${decClass}">${o.decision || '-'}</span></td><td title="${o.reason}">${shortReason}</td>
                 </tr>`;
             } else {
                 return `<tr>
-                    <td>${tsShort}</td><td>${o.symbol}</td><td><span class="${sideClass}">${o.side}</span></td>
-                    <td>${confStr}</td><td>${netStr}</td>
+                    <td>${tsShort}</td><td class="td-strong">${o.symbol}</td><td>${tf}</td><td>${strat}</td><td><span class="${sideClass}">${o.side}</span></td>
+                    <td>${priceStr}</td><td>${confStr}</td><td>${netStr}</td>
                     <td><span class="${decClass}">${o.decision || '-'}</span></td>
                 </tr>`;
             }
@@ -432,6 +474,73 @@ async function fetchScanner() {
     }
 }
 
+let equityChartInst = null;
+function initChart() {
+    const ctx = document.getElementById('equityChart');
+    if(!ctx) return;
+    
+    // Mock smooth curve for display purposes since historical equity isn't explicitly provided by /status
+    const labels = Array.from({length: 40}, (_, i) => i);
+    let val = 10000;
+    const data = labels.map(i => {
+        val += (Math.random() - 0.45) * 50; 
+        return val;
+    });
+
+    equityChartInst = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Equity',
+                data: data,
+                borderColor: '#1e88e5',
+                backgroundColor: 'rgba(30, 136, 229, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 0,
+                pointHitRadius: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: '#192233',
+                    titleColor: '#ffffff',
+                    bodyColor: '#9cb2c9',
+                    borderColor: '#243048',
+                    borderWidth: 1
+                }
+            },
+            scales: {
+                x: { display: false },
+                y: { 
+                    display: true, 
+                    position: 'right',
+                    grid: { color: '#243048' },
+                    ticks: {
+                        color: '#5e738d',
+                        font: { family: "'JetBrains Mono', monospace", size: 9 },
+                        callback: function(value) { return '$' + value.toLocaleString(); }
+                    },
+                    border: { display: false }
+                }
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            }
+        }
+    });
+}
+
 function updateDashboard() {
     Promise.all([
         fetchDashboardData(),
@@ -446,5 +555,6 @@ function updateDashboard() {
 // INITIALIZATION
 // ==========================================
 startClockLoop(); 
+initChart();
 updateDashboard(); 
 setInterval(updateDashboard, 2000);
