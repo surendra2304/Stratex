@@ -1,5 +1,5 @@
 # ==============================================================================
-# Dockerfile - Python Trading Bot (Binance Spot Testnet & Dashboard)
+# Dockerfile - Algorithmic Trading Bot (Binance Spot Testnet & Dashboard)
 # ==============================================================================
 
 FROM python:3.11-slim
