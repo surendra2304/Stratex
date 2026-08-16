@@ -1,7 +1,23 @@
 services:
   - type: web
-    name: python-trading-bot
+    name: python-trading-bot-fra
     env: docker
     region: fra
     plan: free
+    repo: https://github.com/surendra2304/python-trading-bot.git
+    branch: master
+    healthCheckPath: /health
     dockerCommand: python scripts/supervise_services.py
+    envVars:
+      - key: TRADING_MODE
+        value: "TESTNET"
+      - key: TESTNET_ONLY
+        value: "TRUE"
+      - key: TESTNET_ENABLED
+        value: "TRUE"
+      - key: PAPER_SAFE_MODE
+        value: "FALSE"
+      - key: API_KEY
+        sync: false
+      - key: SECRET_KEY
+        sync: false
