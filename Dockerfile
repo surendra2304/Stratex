@@ -28,8 +28,8 @@ COPY . .
 # Expose Dashboard Web UI port
 EXPOSE 5000
 
-# Make start script executable
-RUN chmod +x start.sh
+# Make start script executable and fix Windows line endings
+RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
 
 # Default entrypoint runs both bot and dashboard
 CMD ["./start.sh"]
