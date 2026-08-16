@@ -9,15 +9,21 @@ from logger import get_logger
 logger = get_logger("market_scanner")
 
 class MarketScanner:
-    def __init__(self, symbols, timeframes=["1m"], testnet=True):
+    def __init__(self, symbols, timeframes=None, timeframe=None, testnet=True):
         self.symbols = symbols
-        self.timeframes = timeframes
+        if timeframes is not None:
+            self.timeframes = timeframes if isinstance(timeframes, list) else [timeframes]
+        elif timeframe is not None:
+            self.timeframes = [timeframe]
+        else:
+            self.timeframes = ["1m"]
+            
         self.testnet = testnet
         
         self.client = Client("", "", testnet=testnet)
         self.twm = ThreadedWebsocketManager(testnet=testnet)
         
-        # In-memory OHLCV cache per (symbol, timeframe)
+        # In-memory OHLCV cache per (symbol, timeframe) and symbol
         self.candle_cache = {} 
         self.last_market_update = {} # track by (symbol, timeframe)
         self.data_health_status = {sym: "UNKNOWN" for sym in symbols}
@@ -37,10 +43,16 @@ class MarketScanner:
             ])
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             df['close_time'] = pd.to_datetime(df['close_time'], unit='ms')
-            for col in ['open', 'high', 'low', 'close', 'volume']:
+            for col in ['open', 'high', 'low', 'close', 'volume', 'taker_buy_base_asset_volume']:
                 df[col] = df[col].astype(float)
+                
+            df['buy_vol'] = df['taker_buy_base_asset_volume']
+            df['sell_vol'] = df['volume'] - df['buy_vol']
+            df['vol_delta'] = df['buy_vol'] - df['sell_vol']
             
-            self.candle_cache[(symbol, tf)] = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']].copy()
+            clean_df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume', 'vol_delta', 'buy_vol', 'sell_vol']].copy()
+            self.candle_cache[(symbol, tf)] = clean_df
+            self.candle_cache[symbol] = clean_df # backward-compatible key
         except Exception as e:
             logger.error(f"[SCANNER] Failed to fetch historical data for {symbol} ({tf}): {e}")
 
@@ -140,8 +152,8 @@ class MarketScanner:
         data = msg['data']
         kline = data['k']
         symbol = data['s']
-        tf = kline['i'] # Timeframe / Interval
-        is_closed = kline['x']
+        tf = kline.get('i', self.timeframes[0] if self.timeframes else "1m")
+        is_closed = kline.get('x', True)
         
         # Track market update time
         self.last_market_update[(symbol, tf)] = datetime.datetime.utcnow()
@@ -154,15 +166,26 @@ class MarketScanner:
             return
             
         # Update Cache
+        vol = float(kline.get('v', 0))
+        taker_vol = float(kline.get('V', vol / 2.0))
+        buy_vol = taker_vol
+        sell_vol = max(0.0, vol - buy_vol)
+        vol_delta = buy_vol - sell_vol
+
         new_row = {
-            'timestamp': pd.to_datetime(kline['t'], unit='ms'),
+            'timestamp': pd.to_datetime(kline.get('t', int(time.time() * 1000)), unit='ms'),
             'open': float(kline['o']),
             'high': float(kline['h']),
             'low': float(kline['l']),
             'close': float(kline['c']),
-            'volume': float(kline['v'])
+            'volume': vol,
+            'vol_delta': vol_delta,
+            'buy_vol': buy_vol,
+            'sell_vol': sell_vol
         }
         
+        logger.info(f"[DATA_RECEIVED] {symbol} {tf} | Candle Closed: {new_row['close']} | Vol: {vol:.2f} | VolDelta: {vol_delta:.2f}")
+
         if (symbol, tf) in self.candle_cache:
             df = self.candle_cache[(symbol, tf)]
             # Append new row and drop oldest to keep size fixed (e.g. 250)
@@ -170,12 +193,22 @@ class MarketScanner:
             if len(df) > 250:
                 df = df.iloc[1:]
             self.candle_cache[(symbol, tf)] = df
+            self.candle_cache[symbol] = df
+        elif symbol in self.candle_cache:
+            df = self.candle_cache[symbol]
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            if len(df) > 250:
+                df = df.iloc[1:]
+            self.candle_cache[(symbol, tf)] = df
+            self.candle_cache[symbol] = df
         else:
-            self.candle_cache[(symbol, tf)] = pd.DataFrame([new_row])
+            new_df = pd.DataFrame([new_row])
+            self.candle_cache[(symbol, tf)] = new_df
+            self.candle_cache[symbol] = new_df
             
         # Dispatch event to registered callbacks
         for cb in self.callbacks:
             try:
-                cb(symbol, tf, self.candle_cache[(symbol, tf)].copy(), self.data_health_status[symbol])
+                cb(symbol, tf, self.candle_cache[(symbol, tf)].copy(), self.data_health_status.get(symbol, "OK"))
             except Exception as e:
                 logger.error(f"[SCANNER] Callback error for {symbol} ({tf}): {e}")

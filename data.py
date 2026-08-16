@@ -63,7 +63,7 @@ def get_candles(symbol, interval="15m", limit=300):
 
 def add_indicators(df):
     """Adds all technical indicators needed by all strategies to the DataFrame."""
-    if df is None or df.empty or len(df) < 200:
+    if df is None or df.empty or len(df) < 20:
         return df
         
     try:

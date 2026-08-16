@@ -285,7 +285,7 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                 state             = OrderState.PROTECTED
 
                 sys_logger.info(
-                    f"[{strategy_name}] ⛵  Protection placed! "
+                    f"[PROTECTION_PLACED] [{strategy_name}] {symbol} | "
                     f"OCO_ListId={oco_order_list_id} "
                     f"TP_orderId={tp_order_id} (@ {prot['tp_price_sent']}) "
                     f"SL_orderId={sl_order_id} (@ {prot['sl_price_sent']})",
@@ -317,7 +317,7 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
             except (BinanceAPIException, ValueError, Exception) as e:
                 state = OrderState.PROTECTION_FAILED
                 sys_logger.error(
-                    f"[EXEC] 🚨 CRITICAL: OCO Protection Failed! "
+                    f"[PROTECTION_FAILED] [{strategy_name}] {symbol} | "
                     f"Error: {e}. Attempting emergency MARKET close.",
                     extra={"strategy": strategy_name, "symbol": symbol}
                 )
@@ -403,9 +403,11 @@ def monitor_open_trades():
                 )
 
                 sys_logger.info(
-                    f"[MONITOR] {t['symbol']} {outcome} | "
-                    f"Gross PnL: ${gross_pnl:.4f} | Net PnL: ${net_pnl:.4f} | "
-                    f"Close price: {close_price:.4f} (actual fill, not limit)",
+                    f"[POSITION_CLOSED] {t['symbol']} {outcome} | Qty: {close_qty} @ {close_price:.4f} (Entry: {entry_price:.4f})",
+                    extra={"strategy": t["strategy"], "symbol": t["symbol"]}
+                )
+                sys_logger.info(
+                    f"[PNL_RECORDED] {t['symbol']} | Gross PnL: ${gross_pnl:.4f} | Total Fees: ${(entry_fee + exit_fee):.4f} | Net PnL: ${net_pnl:.4f}",
                     extra={"strategy": t["strategy"], "symbol": t["symbol"]}
                 )
 

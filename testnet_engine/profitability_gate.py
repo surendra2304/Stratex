@@ -172,14 +172,13 @@ class ProfitabilityGate:
 
         if not is_accepted:
             logger.info(
-                f"[PROFIT GATE] Rejected {symbol} {side} — "
+                f"[PROFITABILITY_REJECTED] {symbol} {side} | Reason: {reason} | "
                 f"Expected Net: {expected_net_return:.5f} < {min_edge:.5f}"
             )
             return False, metrics
 
         logger.info(
-            f"[PROFIT GATE] Accepted {symbol} {side} — "
-            f"Expected Net: {expected_net_return:.5f} >= {min_edge:.5f}"
+            f"[PROFITABILITY_ACCEPTED] {symbol} {side} | Expected Net: {expected_net_return:.5f} >= {min_edge:.5f}"
         )
         return True, metrics
 

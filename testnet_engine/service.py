@@ -60,6 +60,21 @@ class TestnetService:
                 raise RuntimeError("No USDT balance found on Testnet.")
             actual_binance_balance = float(usdt_balance['free']) + float(usdt_balance['locked'])
             
+            # Calculate total reconstructable PnL from the Ledger
+            total_reconstructable_pnl = 0.0
+            if os.path.exists(TESTNET_LEDGER_FILE):
+                try:
+                    with open(TESTNET_LEDGER_FILE, "r") as f:
+                        for line in f:
+                            if not line.strip(): continue
+                            try:
+                                record = json.loads(line)
+                                total_reconstructable_pnl += float(record.get("net_pnl", 0.0))
+                            except:
+                                pass
+                except:
+                    pass
+
             # Load or initialize our authoritative initial deposit
             self.initial_deposit = actual_binance_balance
             if os.path.exists(TESTNET_PORTFOLIO_FILE):
@@ -391,7 +406,11 @@ class TestnetService:
                     return
                     
                 df = add_indicators(df)
+                if df.empty:
+                    return
+                    
                 current_price = df['close'].iloc[-1]
+                logger.info(f"[FEATURES_READY] {symbol} {tf} | Rows: {len(df)} | Current Price: {current_price}")
                 
                 self.last_evaluation[symbol] = datetime.datetime.utcnow().isoformat() + "Z"
                 
@@ -405,6 +424,8 @@ class TestnetService:
                     side = getattr(signal_result, 'side', signal_result[0] if signal_result else None)
                     sl   = getattr(signal_result, 'sl',   signal_result[1] if signal_result else None)
                     tp   = getattr(signal_result, 'tp',   signal_result[2] if signal_result else None)
+
+                    logger.info(f"[STRATEGY_EVALUATED] {strat_name} on {symbol} ({tf}) | Signal: {side or 'HOLD'}")
 
                     if not side:
                         self.stats["HOLD_SIGNALS"] += 1
@@ -421,8 +442,11 @@ class TestnetService:
                     deterministic_str = f"{symbol}_{strat_name}_{side}_{candle_timestamp}"
                     signal_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, deterministic_str))
 
+                    logger.info(f"[SIGNAL_GENERATED] {strat_name} {side} {symbol} ({tf}) | SignalID: {signal_id} | SL: {sl} | TP: {tp}")
+
                     self.stats["TOTAL_SIGNALS"] += 1
-                    self.stats["strategy_metrics"][strat_name]["signals"] += 1
+                    if strat_name in self.stats["strategy_metrics"]:
+                        self.stats["strategy_metrics"][strat_name]["signals"] += 1
 
                     passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
                         symbol, side, current_price, sl, tp, signal_result
@@ -430,7 +454,8 @@ class TestnetService:
                     
                     if not passed_profit:
                         self.stats["PROFITABILITY_REJECTED"] += 1
-                        self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                        if strat_name in self.stats["strategy_metrics"]:
+                            self.stats["strategy_metrics"][strat_name]["rejected"] += 1
                         self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", p_metrics["reason"])
                         continue
                         
@@ -484,6 +509,7 @@ class TestnetService:
                 p_metrics = candidate["metrics"]
                 sl = candidate["sl"]
                 tp = candidate["tp"]
+                strategy_name = candidate.get("strategy", "adx_ema")
                 
                 with self.lock:
                     # Enforce per-symbol cooldown (60 seconds)
@@ -495,19 +521,19 @@ class TestnetService:
                         
                     tf = candidate.get("tf", "15m")
                     # Re-validate with absolute latest price
-                    if not hasattr(self, 'scanner') or (symbol, tf) not in self.scanner.candle_cache:
+                    df = None
+                    if hasattr(self, 'scanner'):
+                        df = self.scanner.candle_cache.get((symbol, tf))
+                        if df is None or df.empty:
+                            df = self.scanner.candle_cache.get(symbol)
+                            
+                    if df is None or df.empty:
                         self.stats["JIT_REJECTED"] += 1
                         self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "NO_MARKET_DATA")
                         continue
                         
-                    df = self.scanner.candle_cache[(symbol, tf)]
-                    if df.empty:
-                        self.stats["JIT_REJECTED"] += 1
-                        self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "EMPTY_MARKET_DATA")
-                        continue
-                        
                     current_price = df['close'].iloc[-1]
-                    data_health = self.scanner.data_health_status.get(symbol, "OK")
+                    data_health = self.scanner.data_health_status.get(symbol, "OK") if hasattr(self, 'scanner') else "OK"
                     
                     # Re-validate Profitability Gate (Price may have moved)
                     # Pass signal_result from original candidate — preserves strategy_type metadata.
@@ -547,20 +573,25 @@ class TestnetService:
                         continue
                         
                     self.stats["QUALIFIED"] += 1
-                    self.stats["strategy_metrics"][candidate["strategy"]]["qualified"] += 1
+                    if strategy_name in self.stats["strategy_metrics"]:
+                        self.stats["strategy_metrics"][strategy_name]["qualified"] += 1
                     self.log_opportunity(signal_id, symbol, side, fresh_metrics, "ACCEPTED", "ALL_GATES_PASSED")
-                    logger.info(f"[SERVICE] Executing {side} {qty} {symbol} ({candidate['strategy']})")
+                    
+                    logger.info(f"[EXECUTION_ATTEMPTED] {strategy_name} {side} {qty} {symbol} @ ~{current_price} | SignalID: {signal_id}")
                     try:
-                        order_res = place_market_order(candidate["strategy"], side, symbol, quantity=qty, sl=sl, tp=tp, client_order_id=signal_id)
+                        order_res = place_market_order(strategy_name, side, symbol, quantity=qty, sl=sl, tp=tp, client_order_id=signal_id)
                         if order_res:
                             self.stats["ORDERS_SUBMITTED"] += 1
                             self.stats["ORDERS_FILLED"] += 1
-                            self.stats["strategy_metrics"][candidate["strategy"]]["executed"] += 1
+                            if strategy_name in self.stats["strategy_metrics"]:
+                                self.stats["strategy_metrics"][strategy_name]["executed"] += 1
                             actual_price = order_res.get("_actual_price", current_price)
                             executed_qty = order_res.get("_executed_qty", qty)
                             
+                            logger.info(f"[ORDER_FILLED] {symbol} {side} {executed_qty} @ {actual_price:.4f} | OrderID: {order_res.get('orderId')} | SignalID: {signal_id}")
+                            
                             self.active_positions[symbol] = {
-                                "strategy": candidate["strategy"],
+                                "strategy": strategy_name,
                                 "symbol": symbol,
                                 "side": side,
                                 "quantity": executed_qty,
@@ -574,23 +605,26 @@ class TestnetService:
                             self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
                         else:
                             self.stats["EXECUTION_REJECTED"] += 1
+                            logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: LOCAL_ORDER_BLOCKED")
                             self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", "LOCAL_ORDER_BLOCKED", current_price=current_price)
                             self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
                     except ZeroFillError as zfe:
                         self.stats["ORDERS_SUBMITTED"] += 1
                         self.stats["ORDERS_FAILED"] += 1
+                        logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: ZERO_FILL")
                         self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", "ZERO_FILL", current_price=current_price)
                         self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
                     except BinanceAPIException as e:
                         self.stats["ORDERS_SUBMITTED"] += 1
                         self.stats["ORDERS_FAILED"] += 1
+                        logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: BINANCE_API_ERROR_{e.status_code}")
                         self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", f"BINANCE_API_ERROR_{e.status_code}", current_price=current_price)
                         self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
                     except Exception as e:
                         # Unhandled execution errors
                         self.stats["ORDERS_SUBMITTED"] += 1
                         self.stats["ORDERS_FAILED"] += 1
-                        logger.error(f"[SERVICE] Unhandled execution error: {e}")
+                        logger.error(f"[ORDER_FAILED] {symbol} {side} | Reason: UNHANDLED_ERROR: {e}")
                         self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
                         
                     self._save_state()
@@ -633,7 +667,7 @@ class TestnetService:
                 # This queries Binance for OCO status and updates active_trades.json and ledger
                 monitor_open_trades()
                 
-                # 3. Calculate total reconstructable PnL from the Ledger
+                # 3. Calculate total reconstructable PnL from the Ledger (with strict provenance)
                 total_reconstructable_pnl = 0.0
                 if os.path.exists(TESTNET_LEDGER_FILE):
                     with open(TESTNET_LEDGER_FILE, "r") as f:
@@ -641,7 +675,10 @@ class TestnetService:
                             if not line.strip(): continue
                             try:
                                 record = json.loads(line)
-                                total_reconstructable_pnl += float(record.get("net_pnl", 0.0))
+                                source = record.get("source", "")
+                                strategy = record.get("strategy", "")
+                                if source in ["BINANCE_EXECUTION", "RECOVERY_FROM_BINANCE"] and strategy != "TEST":
+                                    total_reconstructable_pnl += float(record.get("net_pnl", 0.0))
                             except:
                                 pass
                 

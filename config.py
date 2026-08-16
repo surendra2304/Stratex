@@ -49,9 +49,12 @@ ACTIVE_STRATEGIES = {
     "supertrend": "1h",
     "adx_ema": "4h",
     "swing": "1d",
-    "aggressor": "1m",
-    "dummy": "1m"
+    "aggressor": "1m"
 }
+
+# Backward-compatibility aliases for legacy tests/modules
+ACTIVE_STRATEGY = list(ACTIVE_STRATEGIES.keys())[0]
+TIMEFRAME = list(ACTIVE_STRATEGIES.values())[0]
 
 # Trading Config
 MAX_POSITION_SIZE = 0.95
@@ -82,11 +85,22 @@ OOS_TRAIN_PCT = 0.60               # Walk-forward train %
 OOS_VAL_PCT = 0.20                 # Walk-forward validation %
 INTRABAR_RESOLUTION = "conservative" # "conservative" or "optimistic"
 
-SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema", "dummy"]
+SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema"]
 SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"]
 VALID_MODES = ["PAPER", "TESTNET", "LIVE"]
 
 def validate_config():
+    # If legacy ACTIVE_STRATEGY or TIMEFRAME attributes were set dynamically (e.g. in tests)
+    global ACTIVE_STRATEGY, TIMEFRAME
+    if "ACTIVE_STRATEGY" in globals():
+        strat = globals()["ACTIVE_STRATEGY"]
+        if strat not in SUPPORTED_STRATEGIES:
+            raise ValueError(f"Configuration Error: Invalid ACTIVE_STRATEGY '{strat}'. Supported: {SUPPORTED_STRATEGIES}")
+    if "TIMEFRAME" in globals():
+        tf = globals()["TIMEFRAME"]
+        if tf not in SUPPORTED_TIMEFRAMES:
+            raise ValueError(f"Configuration Error: Invalid TIMEFRAME '{tf}'. Supported: {SUPPORTED_TIMEFRAMES}")
+
     for strategy, timeframe in ACTIVE_STRATEGIES.items():
         if strategy not in SUPPORTED_STRATEGIES:
             raise ValueError(f"Configuration Error: Invalid ACTIVE_STRATEGY '{strategy}'. Supported: {SUPPORTED_STRATEGIES}")

@@ -30,14 +30,17 @@ class RiskGate:
         
         # 1. Data Health Check
         if data_health_status != "OK":
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: DATA_DEGRADED | Status: {data_health_status}")
             return False, "DATA_DEGRADED", f"Data health is {data_health_status}"
 
         # 2. Consecutive Losses
         if self.consecutive_losses >= self.max_consecutive_losses:
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: CONSECUTIVE_LOSS_LIMIT | Losses: {self.consecutive_losses}")
             return False, "CONSECUTIVE_LOSS_LIMIT", f"Hit {self.max_consecutive_losses} consecutive losses."
 
         # 3. Open Positions Limit
         if len(active_positions) >= config.MAX_OPEN_POSITIONS:
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_OPEN_POSITIONS | Open: {len(active_positions)}")
             return False, "MAX_OPEN_POSITIONS", f"Currently at limit of {config.MAX_OPEN_POSITIONS} open positions."
 
         # Compute exposures
@@ -48,6 +51,7 @@ class RiskGate:
         
         # 4. Total Exposure Limit
         if total_exposure_pct > config.MAX_TESTNET_EXPOSURE:
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_EXPOSURE_REACHED | Exp: {total_exposure_pct:.2%} > {config.MAX_TESTNET_EXPOSURE:.2%}")
             return False, "MAX_EXPOSURE_REACHED", f"New exposure {total_exposure_pct:.2%} exceeds {config.MAX_TESTNET_EXPOSURE:.2%}"
             
         # 5. Single Asset Exposure
@@ -55,36 +59,43 @@ class RiskGate:
         existing_symbol_value = active_positions.get(symbol, {}).get('quantity', 0) * active_positions.get(symbol, {}).get('entry_price', 0)
         single_asset_exposure_pct = (existing_symbol_value + new_trade_value) / current_equity
         if single_asset_exposure_pct > config.MAX_SINGLE_ASSET_EXPOSURE:
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_SINGLE_ASSET_EXPOSURE | AssetExp: {single_asset_exposure_pct:.2%} > {config.MAX_SINGLE_ASSET_EXPOSURE:.2%}")
             return False, "MAX_SINGLE_ASSET_EXPOSURE", f"Asset exposure {single_asset_exposure_pct:.2%} exceeds {config.MAX_SINGLE_ASSET_EXPOSURE:.2%}"
 
         # 6. Correlated / Net Directional Exposure
         net_exposure = 0.0
         for p in active_positions.values():
             val = p.get('quantity', 0) * p.get('entry_price', 0)
-            if p.get('side') == "LONG":
+            p_side = str(p.get('side', '')).upper()
+            if p_side in ("LONG", "BUY"):
                 net_exposure += val
-            elif p.get('side') == "SHORT":
+            elif p_side in ("SHORT", "SELL"):
                 net_exposure -= val
                 
-        if side == "LONG":
+        req_side = str(side).upper()
+        if req_side in ("LONG", "BUY"):
             net_exposure += new_trade_value
         else:
             net_exposure -= new_trade_value
             
         net_directional_pct = abs(net_exposure) / current_equity
         if net_directional_pct > config.MAX_NET_DIRECTIONAL_EXPOSURE:
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_CORRELATION_EXPOSURE | NetDir: {net_directional_pct:.2%} > {config.MAX_NET_DIRECTIONAL_EXPOSURE:.2%}")
             return False, "MAX_CORRELATION_EXPOSURE", f"Net directional {net_directional_pct:.2%} exceeds {config.MAX_NET_DIRECTIONAL_EXPOSURE:.2%}"
 
         # 7. Drawdown Limit
         drawdown_pct = (self.peak_equity - current_equity) / self.peak_equity
         if drawdown_pct >= config.MAX_TESTNET_DRAWDOWN_PCT:
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_DRAWDOWN_BREACH | DD: {drawdown_pct:.2%} >= {config.MAX_TESTNET_DRAWDOWN_PCT:.2%}")
             return False, "MAX_DRAWDOWN_BREACH", f"Current drawdown {drawdown_pct:.2%} >= {config.MAX_TESTNET_DRAWDOWN_PCT:.2%}"
 
         # 8. Daily Loss Limit
         daily_loss_pct = abs(self.daily_realized_loss) / current_equity if self.daily_realized_loss < 0 else 0
         if daily_loss_pct >= config.MAX_DAILY_LOSS_PCT:
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: DAILY_LOSS_LIMIT | Loss: {daily_loss_pct:.2%} >= {config.MAX_DAILY_LOSS_PCT:.2%}")
             return False, "DAILY_LOSS_LIMIT", f"Daily loss {daily_loss_pct:.2%} >= {config.MAX_DAILY_LOSS_PCT:.2%}"
 
+        logger.info(f"[RISK_ACCEPTED] {symbol} {side} | Proposed Qty: {proposed_qty} | Value: ${new_trade_value:.2f} | Total Exposure: {total_exposure_pct:.2%}")
         return True, "RISK_OK", ""
 
     def update_after_trade(self, net_pnl, current_equity):
