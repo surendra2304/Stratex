@@ -2,7 +2,7 @@ services:
   - type: web
     name: python-trading-bot-fra
     env: docker
-    region: fra
+    region: frankfurt
     plan: free
     repo: https://github.com/surendra2304/python-trading-bot.git
     branch: master
