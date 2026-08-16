@@ -1050,7 +1050,8 @@ class TestnetService:
                 from strategy_ml import train
                 from data import get_candles, add_indicators
                 logger.info("[SERVICE] Pre-training ML strategy on BTCUSDT...")
-                all_df = add_indicators(get_candles("BTCUSDT", ACTIVE_STRATEGIES["ml"], 2500))
+                ml_tf = ACTIVE_STRATEGIES["ml"][0] if isinstance(ACTIVE_STRATEGIES["ml"], list) else ACTIVE_STRATEGIES["ml"]
+                all_df = add_indicators(get_candles("BTCUSDT", ml_tf, 2500))
                 train_df = all_df.iloc[:-500]
                 val_df = all_df.iloc[-500:]
                 train(train_df, val_df)
