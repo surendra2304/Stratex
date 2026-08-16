@@ -25,18 +25,21 @@ This document is the authoritative registry of all algorithmic trading strategie
   - **BUY Take-Profit**: `Close + (3.0 × ATR)`
   - **SELL Stop-Loss**: `Close + (2.0 × ATR)`
   - **SELL Take-Profit**: `Close - (3.0 × ATR)`
-  - **Reward / Risk Ratio**: `1.5` (3.0 ATR / 2.0 ATR)
-- **Economic & Mathematical Validation**:
-  - **OOS Win Rate Prior**: `49.4%` (Multi-asset holdout benchmark)
-  - **Taker Round-Trip Friction**: `31.0 bps` (0.31% = 0.10% entry fee + 0.10% exit fee + 0.05% entry slippage + 0.05% exit slippage + 0.01% spread)
-  - **Expected Gross Return**: `(0.494 × 3.0×ATR) - (0.506 × 2.0×ATR) = +0.47 × ATR` (~70.5 bps on 4h)
-  - **Expected Net Return**: `+70.5 bps - 31.0 bps = +39.5 bps`
-  - **Minimum Required Edge**: `5.0 bps` (0.05%)
-  - **Gate Decision**: `ACCEPTED` (+39.5 bps >= 5.0 bps)
+  - **Reward / Risk Ratio**: `1.50` (3.0 ATR / 2.0 ATR)
+- **Economic & Mathematical Formulation**:
+  - **OOS Win Rate Prior ($P_{\text{win}}$)**: `49.40%` ($0.4940$)
+  - **Taker Round-Trip Friction ($F$)**: `31.0 bps` ($0.003100$)
+  - **Normalized ATR Ratio**: $a = \frac{\text{ATR}(14)}{P_0}$
+  - **Expected Gross Return**: $(0.4940 \times 3.0 \times a) - (0.5060 \times 2.0 \times a) = \mathbf{+0.4700 \times a}$
+  - **Expected Net Return**: $\mathbf{(+0.4700 \times a) - 0.003100}$
+  - **Exemplar Net Edge (at 1.5% ATR)**: `+39.5 bps`
+  - **Break-Even ATR Ratio**: $a \ge \frac{0.003600}{0.4700} = \mathbf{0.766\% \text{ (76.6 bps)}}$
+  - **Minimum Required Edge**: `5.0 bps` ($0.000500$)
+  - **Gate Decision**: `ACCEPTED` for all 4h candle signals with $a \ge 0.766\%$
 
 ---
 
-## 2. Inactive / Unvalidated Strategies
+## 2. Inactive / Disabled Strategies
 
 | Strategy | Timeframe | Execution Model | Status | Rationale for Inactivation |
 |---|---|---|---|---|
@@ -49,8 +52,6 @@ This document is the authoritative registry of all algorithmic trading strategie
 ---
 
 ## 3. Economic Cost Engine Assumptions
-
-All strategy profitabilities are evaluated using decoupled, transparent Binance Spot Taker friction:
 
 | Friction Component | Basis Points (bps) | Percentage (%) |
 |---|---|---|
