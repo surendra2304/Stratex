@@ -128,6 +128,7 @@ class TestnetService:
             "PROFITABILITY_REJECTED": 0,
             "RISK_REJECTED": 0,
             "COOLDOWN_REJECTED": 0,
+            "MARKET_DATA_REJECTED": 0,
             "JIT_REJECTED": 0,
             "OTHER_REJECTED": 0,
             "QUALIFIED": 0,
@@ -528,6 +529,7 @@ class TestnetService:
                             df = self.scanner.candle_cache.get(symbol)
                             
                     if df is None or df.empty:
+                        self.stats["MARKET_DATA_REJECTED"] += 1
                         self.stats["JIT_REJECTED"] += 1
                         self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "NO_MARKET_DATA")
                         continue
@@ -543,6 +545,7 @@ class TestnetService:
                     )
                     
                     if not passed_profit:
+                        self.stats["PROFITABILITY_REJECTED"] += 1
                         self.stats["JIT_REJECTED"] += 1
                         self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", f"REVALIDATION_FAILED: {fresh_metrics['reason']}")
                         continue

@@ -443,6 +443,14 @@ def monitor_open_trades():
                 with LEDGER_WRITE_LOCK:
                     with open(ledger_file, "a") as lf:
                         lf.write(json.dumps(ledger_entry) + "\n")
+                    if t.get("strategy") == "adx_ema":
+                        try:
+                            with open("adx_ema_forward_ledger.jsonl", "a") as fwd_f:
+                                fwd_entry = dict(ledger_entry)
+                                fwd_entry["strategy_version"] = "ADX_EMA_4H_V1"
+                                fwd_f.write(json.dumps(fwd_entry) + "\n")
+                        except Exception:
+                            pass
 
                 log_trade(
                     t["strategy"], t["symbol"],

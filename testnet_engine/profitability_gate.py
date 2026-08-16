@@ -140,6 +140,18 @@ class ProfitabilityGate:
         # ------------------------------------------------------------------
         # 4. Diagnostic logging
         # ------------------------------------------------------------------
+        atr_val = abs(entry_price - sl_price) / 2.0
+        atr_pct = (atr_val / entry_price) if entry_price > 0 else 0.0
+        decision_str = "ACCEPTED" if is_accepted else "REJECTED"
+
+        logger.info(
+            f"[PROFITABILITY] symbol={symbol} side={side} ATR={atr_val:.4f} "
+            f"ATR%={atr_pct*100:.3f}% win_rate={prob_win:.4f} reward={reward_pct:.5f} "
+            f"risk={risk_pct:.5f} friction={total_friction_pct:.6f} "
+            f"expected_net={expected_net_return:.6f} minimum_required={min_edge:.5f} "
+            f"decision={decision_str}"
+        )
+
         logger.info(f"--- [PROFIT GATE: {symbol} {side}] ---")
         logger.info(f"  Strategy Type   : {strategy_type}")
         logger.info(f"  Prob Source     : {prob_source}")
@@ -151,13 +163,20 @@ class ProfitabilityGate:
         )
         logger.info(f"  Friction        : {total_friction_pct:.6f}")
         logger.info(f"  Expected Net    : {expected_net_return:.6f} | Threshold: >={min_edge:.5f}")
-        logger.info(f"  Decision        : {'ACCEPTED' if is_accepted else 'REJECTED'}")
+        logger.info(f"  Decision        : {decision_str}")
         logger.info(f"---------------------------------------")
+
+        if is_accepted:
+            logger.info(f"[PROFITABILITY_ACCEPTED] {symbol} {side} | Expected Net: {expected_net_return:.5f} >= {min_edge:.5f}")
+        else:
+            logger.info(f"[PROFITABILITY_REJECTED] {symbol} {side} | Reason: {reason} | Expected Net: {expected_net_return:.5f} < {min_edge:.5f}")
 
         metrics = {
             "expected_gross_return": expected_gross_return,
             "total_friction":        total_friction_pct,
             "expected_net_return":   expected_net_return,
+            "atr":                   atr_val,
+            "atr_pct":               atr_pct,
             "reward_pct":            reward_pct,
             "risk_pct":              risk_pct,
             "prob_win":              prob_win,

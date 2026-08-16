@@ -53,3 +53,4 @@ forward_signal_log.jsonl
 testnet_equity_history.jsonl
 experiments/*.json
 data_cache/
+bot.pid
