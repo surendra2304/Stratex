@@ -3,7 +3,6 @@
 # ==============================================================================
 
 # SECRET: API keys and runtime mode — NEVER push to GitHub!
-config.py
 .env
 .env.*
 
