@@ -43,12 +43,13 @@ const formatPct = (val) => (val * 100).toFixed(2) + '%';
 const formatTime = (ts) => {
     if (!ts) return "-";
     const d = new Date(ts);
-    return d.toLocaleTimeString('en-US', { hour12: false });
+    return d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false });
 };
 const formatDateTime = (ts) => {
     if (!ts) return "-";
     const d = new Date(ts);
-    return d.toISOString().replace('T', ' ').substring(0, 19);
+    // Use sv-SE for YYYY-MM-DD HH:mm:ss format
+    return d.toLocaleString('sv-SE', { timeZone: 'Asia/Kolkata' });
 };
 
 
@@ -62,11 +63,11 @@ let botStartTimeMs = null;
 
 function renderFormattedTime(ms) {
     const d = new Date(ms);
-    // Explicitly format as UTC
-    const timeStr = d.toLocaleTimeString('en-GB', { timeZone: 'UTC', hour12: false });
+    // Explicitly format as IST
+    const timeStr = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false });
     
     const navClock = document.getElementById('nav-clock');
-    if (navClock) navClock.innerText = timeStr + ' UTC';
+    if (navClock) navClock.innerText = timeStr + ' IST';
     
     // Authoritative Uptime from backend start time
     if (botStartTimeMs) {
@@ -369,6 +370,25 @@ async function fetchScanner() {
         // --- DASHBOARD & SIGNALS: Opportunities ---
         const oppBody = document.getElementById('opp-short-body');
         const sigFullBody = document.getElementById('signals-full-body');
+        
+        // --- STRATEGY METRICS ---
+        const stratBody = document.getElementById('strategy-metrics-body');
+        if (data.strategy_metrics && Object.keys(data.strategy_metrics).length > 0) {
+            document.getElementById('hdr-strategies').innerText = Object.keys(data.strategy_metrics).length + " ACTIVE";
+            let stratRows = [];
+            for (const [strat, m] of Object.entries(data.strategy_metrics)) {
+                stratRows.push(`<tr>
+                    <td>${strat}</td>
+                    <td>${m.signals || 0}</td>
+                    <td>${m.qualified || 0}</td>
+                    <td>${m.rejected || 0}</td>
+                    <td>${m.executed || 0}</td>
+                </tr>`);
+            }
+            if (stratBody) stratBody.innerHTML = stratRows.join('');
+        } else {
+            if (stratBody) stratBody.innerHTML = '<tr><td colspan="5" class="empty-state">No metrics available</td></tr>';
+        }
         
         const mapOpp = (o, full) => {
             const sideClass = o.side === 'BUY' ? 'tag-long' : 'tag-short';

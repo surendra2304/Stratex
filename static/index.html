@@ -72,8 +72,8 @@
                         <span class="stat-value" id="hdr-uptime">--:--:--</span>
                     </div>
                     <div class="header-stat">
-                        <span class="stat-label">Strategy</span>
-                        <span class="stat-value">ADX+EMA (4H)</span>
+                        <span class="stat-label">Active Strategies</span>
+                        <span class="stat-value" id="hdr-strategies">MULTIPLE</span>
                     </div>
                     <div class="header-divider"></div>
                     <div class="status-indicator">
@@ -107,10 +107,16 @@
                                 <div class="s-row"><span>Status</span><span class="val-green">TESTNET ONLINE</span></div>
                                 <div class="s-row"><span>Market Data</span><span class="val-green">CONNECTED</span></div>
                                 <div class="s-row"><span>Execution</span><span class="val-green">READY</span></div>
-                                <div class="s-row"><span>Strategy</span><span>ADX + EMA Trend Following</span></div>
-                                <div class="s-row"><span>Timeframe</span><span>4H</span></div>
                                 <div class="s-row"><span>Last Market Update</span><span id="st-last-market">--:--:--</span></div>
                                 <div class="s-row"><span>Last Signal Eval</span><span id="st-last-eval">--:--:--</span></div>
+                            </div>
+                            
+                            <h3 class="sub-title" style="margin-top:20px;">STRATEGY METRICS</h3>
+                            <div class="table-wrap" style="max-height: 150px;">
+                                <table>
+                                    <thead><tr><th>STRATEGY</th><th>SIGNALS</th><th>QUALIFIED</th><th>REJECTED</th><th>EXECUTED</th></tr></thead>
+                                    <tbody id="strategy-metrics-body"><tr><td colspan="5" class="empty-state">No metrics available</td></tr></tbody>
+                                </table>
                             </div>
                         </div>
                     </div>

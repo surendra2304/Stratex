@@ -3,7 +3,7 @@
 # ==============================================================================
 import pandas as pd
 from data_client import MarketDataClient
-from config import BASE_URL, TIMEFRAME
+from config import BASE_URL
 
 def get_top_gainers(limit=5):
     """Fetches the top gaining USDT pairs from Binance Testnet in the last 24h."""
@@ -23,7 +23,7 @@ def get_top_gainers(limit=5):
         print(f"[DATA] Error fetching top gainers: {e}")
         return []  # DATA_UNAVAILABLE
 
-def get_candles(symbol, interval=TIMEFRAME, limit=300):
+def get_candles(symbol, interval="15m", limit=300):
     """Fetches the latest candles from Binance Testnet and returns a DataFrame."""
     client = MarketDataClient()
     if not client.is_available():

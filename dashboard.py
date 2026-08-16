@@ -6,7 +6,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='repla
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 from data import get_candles as fetch_candles
-from config import TIMEFRAME
+from config import ACTIVE_STRATEGIES
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
@@ -23,7 +23,7 @@ def get_candles():
     """Fetches live candles for the chart via the centralized data module."""
     try:
         symbol = request.args.get('symbol', 'BTCUSDT')
-        df = fetch_candles(symbol, TIMEFRAME, 500)
+        df = fetch_candles(symbol, "15m", 500)
         
         if df.empty:
             return jsonify({"error": "No data returned"}), 500
@@ -146,7 +146,7 @@ def get_status():
                         # Fetch recent market price for this specific symbol
                         current_price = 0.0
                         try:
-                            df = fetch_candles(sym, TIMEFRAME, 1)
+                            df = fetch_candles(sym, "1m", 1)
                             if not df.empty:
                                 current_price = float(df['close'].iloc[-1])
                         except Exception as pe:
@@ -446,7 +446,10 @@ def get_scanner():
         "EXECUTION_REJECTED": 0,
         "ORDERS_FILLED": 0,
         "ORDERS_FAILED": 0,
-        "top_opportunities": []
+        "top_opportunities": [],
+        "DEBUG_CWD": os.getcwd(),
+        "DEBUG_PORT_EXISTS": os.path.exists("testnet_portfolio.json"),
+        "DEBUG_PORT_SIZE": os.path.getsize("testnet_portfolio.json") if os.path.exists("testnet_portfolio.json") else 0
     }
     
     if os.path.exists("testnet_portfolio.json"):

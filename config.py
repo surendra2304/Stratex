@@ -28,7 +28,6 @@ WS_URL = "wss://ws-api.testnet.binance.vision/ws-api/v3"
 # --- Dynamic Market Scanner ---
 SYMBOL = "BTCUSDT"
 TOP_COINS_LIMIT = 5  # Number of top trending coins to scan
-TIMEFRAME = "5m"            # Candle interval (1m, 5m, 15m, 1h)
 
 # --- Risk Management ---
 TRADE_QTY = 0.001           # BTC quantity per trade (small for safety)
@@ -43,14 +42,20 @@ PAPER_SAFE_MODE = os.getenv("PAPER_SAFE_MODE", "False" if TRADING_MODE in ["TEST
 TESTNET_ENABLED = os.getenv("TESTNET_ENABLED", "False").lower() == "true"
 LIVE_TRADING_ENABLED = os.getenv("LIVE_TRADING_ENABLED", "False").lower() == "true"
 
-# --- Strategy to Run ---
+# --- Strategies to Run ---
+# Multi-strategy configuration mapping strategy -> timeframe
+ACTIVE_STRATEGIES = {
+    "scalper": "15m",
+    "supertrend": "1h",
+    "adx_ema": "4h",
+    "swing": "1d",
+    "aggressor": "1m",
+    "dummy": "1m"
+}
+
 # Trading Config
-TIMEFRAME = "4h"
 MAX_POSITION_SIZE = 0.95
 RISK_PER_TRADE = 0.02
-
-# Options: "scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema"
-ACTIVE_STRATEGY = "adx_ema"
 
 # --- Testnet Risk Management ---
 MAX_TESTNET_RISK_PER_TRADE = 0.005 # 0.5% risk
@@ -77,22 +82,22 @@ OOS_TRAIN_PCT = 0.60               # Walk-forward train %
 OOS_VAL_PCT = 0.20                 # Walk-forward validation %
 INTRABAR_RESOLUTION = "conservative" # "conservative" or "optimistic"
 
-SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema"]
+SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema", "dummy"]
 SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"]
 VALID_MODES = ["PAPER", "TESTNET", "LIVE"]
 
 def validate_config():
-    if ACTIVE_STRATEGY not in SUPPORTED_STRATEGIES:
-        raise ValueError(f"Configuration Error: Invalid ACTIVE_STRATEGY '{ACTIVE_STRATEGY}'. Supported: {SUPPORTED_STRATEGIES}")
+    for strategy, timeframe in ACTIVE_STRATEGIES.items():
+        if strategy not in SUPPORTED_STRATEGIES:
+            raise ValueError(f"Configuration Error: Invalid ACTIVE_STRATEGY '{strategy}'. Supported: {SUPPORTED_STRATEGIES}")
+        if timeframe not in SUPPORTED_TIMEFRAMES:
+            raise ValueError(f"Configuration Error: Invalid TIMEFRAME '{timeframe}' for strategy '{strategy}'. Supported: {SUPPORTED_TIMEFRAMES}")
 
     if TRADING_MODE not in VALID_MODES:
         raise ValueError(f"Configuration Error: Invalid TRADING_MODE '{TRADING_MODE}'.")
 
     if TRADING_MODE == "LIVE":
         print("WARNING: TRADING_MODE IS SET TO LIVE. REAL MONEY AT RISK.")
-
-    if TIMEFRAME not in SUPPORTED_TIMEFRAMES:
-        raise ValueError(f"Configuration Error: Invalid TIMEFRAME '{TIMEFRAME}'. Supported: {SUPPORTED_TIMEFRAMES}")
 
     if not isinstance(TRADE_QTY, (int, float)) or TRADE_QTY <= 0:
         raise ValueError(f"Configuration Error: TRADE_QTY must be a positive number.")

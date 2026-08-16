@@ -9,27 +9,27 @@ from logger import get_logger
 logger = get_logger("market_scanner")
 
 class MarketScanner:
-    def __init__(self, symbols, timeframe="1m", testnet=True):
+    def __init__(self, symbols, timeframes=["1m"], testnet=True):
         self.symbols = symbols
-        self.timeframe = timeframe
+        self.timeframes = timeframes
         self.testnet = testnet
         
         self.client = Client("", "", testnet=testnet)
         self.twm = ThreadedWebsocketManager(testnet=testnet)
         
-        # In-memory OHLCV cache per symbol
+        # In-memory OHLCV cache per (symbol, timeframe)
         self.candle_cache = {} 
-        self.last_market_update = {}
+        self.last_market_update = {} # track by (symbol, timeframe)
         self.data_health_status = {sym: "UNKNOWN" for sym in symbols}
         self.callbacks = []
         
         self._stop_event = threading.Event()
         self._health_thread = None
         
-    def _fetch_historical_candles(self, symbol):
+    def _fetch_historical_candles(self, symbol, tf):
         """Initializes the cache with 250 historical candles via REST."""
         try:
-            klines = self.client.get_klines(symbol=symbol, interval=self.timeframe, limit=250)
+            klines = self.client.get_klines(symbol=symbol, interval=tf, limit=250)
             df = pd.DataFrame(klines, columns=[
                 'timestamp', 'open', 'high', 'low', 'close', 'volume',
                 'close_time', 'quote_asset_volume', 'number_of_trades',
@@ -40,16 +40,17 @@ class MarketScanner:
             for col in ['open', 'high', 'low', 'close', 'volume']:
                 df[col] = df[col].astype(float)
             
-            self.candle_cache[symbol] = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']].copy()
+            self.candle_cache[(symbol, tf)] = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']].copy()
         except Exception as e:
-            logger.error(f"[SCANNER] Failed to fetch historical data for {symbol}: {e}")
+            logger.error(f"[SCANNER] Failed to fetch historical data for {symbol} ({tf}): {e}")
 
     def start(self):
-        """Starts the multiplexed websocket stream for all discovered symbols."""
-        logger.info(f"[SCANNER] Initializing cache for {len(self.symbols)} symbols...")
+        """Starts the multiplexed websocket stream for all discovered symbols and timeframes."""
+        logger.info(f"[SCANNER] Initializing cache for {len(self.symbols)} symbols across {len(self.timeframes)} timeframes...")
         for sym in self.symbols:
-            self._fetch_historical_candles(sym)
-            self.last_market_update[sym] = datetime.datetime.utcnow()
+            for tf in self.timeframes:
+                self._fetch_historical_candles(sym, tf)
+                self.last_market_update[(sym, tf)] = datetime.datetime.utcnow()
             self.data_health_status[sym] = "OK"
             time.sleep(0.1) # Small delay to respect REST rate limits during init
             
@@ -57,7 +58,7 @@ class MarketScanner:
         self.twm.start()
         
         # Subscribe to multiplex kline streams
-        streams = [f"{sym.lower()}@kline_{self.timeframe}" for sym in self.symbols]
+        streams = [f"{sym.lower()}@kline_{tf}" for sym in self.symbols for tf in self.timeframes]
         self.twm.start_multiplex_socket(callback=self._handle_socket_message, streams=streams)
         
         # Start health monitor
@@ -75,54 +76,60 @@ class MarketScanner:
             all_stale = True
             
             for sym in self.symbols:
-                last_update = self.last_market_update.get(sym)
-                if not last_update:
-                    continue
+                sym_stale = False
+                for tf in self.timeframes:
+                    last_update = self.last_market_update.get((sym, tf))
+                    if not last_update:
+                        continue
+                        
+                    elapsed = (now - last_update).total_seconds()
                     
-                elapsed = (now - last_update).total_seconds()
+                    if elapsed > max(15, int(pd.to_timedelta(tf).total_seconds()) * 1.5): # Scale timeout to TF
+                        sym_stale = True
+                        if self.data_health_status[sym] == "OK":
+                            logger.warning(f"[SCANNER] ⚠️ {sym} ({tf}) data STALE (>15s or 1.5x TF). Falling back to REST.")
+                        
+                        # REST Fallback
+                        try:
+                            self._fetch_historical_candles(sym, tf)
+                            # Dispatch simulated tick from REST
+                            for cb in self.callbacks:
+                                try:
+                                    cb(sym, tf, self.candle_cache[(sym, tf)].copy(), "STALE")
+                                except Exception as e:
+                                    logger.error(f"[SCANNER] Callback error (REST Fallback) for {sym} ({tf}): {e}")
+                        except Exception as e:
+                            logger.error(f"[SCANNER] REST Fallback failed for {sym} ({tf}): {e}")
                 
-                if elapsed > 15:
-                    if self.data_health_status[sym] == "OK":
-                        logger.warning(f"[SCANNER] ⚠️ {sym} data STALE (>15s). Falling back to REST.")
+                if sym_stale:
                     self.data_health_status[sym] = "STALE"
-                    
-                    # REST Fallback
-                    try:
-                        self._fetch_historical_candles(sym)
-                        # Dispatch simulated tick from REST
-                        for cb in self.callbacks:
-                            try:
-                                cb(sym, self.candle_cache[sym].copy(), "STALE")
-                            except Exception as e:
-                                logger.error(f"[SCANNER] Callback error (REST Fallback) for {sym}: {e}")
-                    except Exception as e:
-                        logger.error(f"[SCANNER] REST Fallback failed for {sym}: {e}")
                 else:
                     self.data_health_status[sym] = "OK"
                     all_stale = False
             
             # If all symbols are completely dead for > 60 seconds, reconnect socket
             if all_stale and len(self.symbols) > 0:
-                max_elapsed = max([(now - self.last_market_update.get(s, now)).total_seconds() for s in self.symbols])
-                if max_elapsed > 60:
+                max_elapsed = max([(now - self.last_market_update.get((s, t), now)).total_seconds() for s in self.symbols for t in self.timeframes])
+                if max_elapsed > 120:
                     logger.critical("[SCANNER] 🚨 Entire websocket appears DEAD. Attempting reconnect...")
                     try:
                         self.twm.stop()
                         time.sleep(5)
                         self.twm = ThreadedWebsocketManager(testnet=self.testnet)
                         self.twm.start()
-                        streams = [f"{sym.lower()}@kline_{self.timeframe}" for sym in self.symbols]
+                        streams = [f"{sym.lower()}@kline_{tf}" for sym in self.symbols for tf in self.timeframes]
                         self.twm.start_multiplex_socket(callback=self._handle_socket_message, streams=streams)
                         
                         for sym in self.symbols:
-                            self.last_market_update[sym] = datetime.datetime.utcnow() # Reset timeout
+                            for tf in self.timeframes:
+                                self.last_market_update[(sym, tf)] = datetime.datetime.utcnow() # Reset timeout
                     except Exception as e:
                         logger.error(f"[SCANNER] Reconnect failed: {e}")
                         
             time.sleep(5)
 
     def register_callback(self, callback_func):
-        """Register a function to be called when a candle closes."""
+        """Register a function to be called when a candle closes. Signature: cb(symbol, tf, df, health)"""
         self.callbacks.append(callback_func)
 
     def _handle_socket_message(self, msg):
@@ -133,13 +140,14 @@ class MarketScanner:
         data = msg['data']
         kline = data['k']
         symbol = data['s']
+        tf = kline['i'] # Timeframe / Interval
         is_closed = kline['x']
         
         # Track market update time
-        self.last_market_update[symbol] = datetime.datetime.utcnow()
+        self.last_market_update[(symbol, tf)] = datetime.datetime.utcnow()
         if not hasattr(self, 'tick_counts'):
             self.tick_counts = {}
-        self.tick_counts[symbol] = self.tick_counts.get(symbol, 0) + 1
+        self.tick_counts[(symbol, tf)] = self.tick_counts.get((symbol, tf), 0) + 1
         
         # Only process fully closed candles for signals
         if not is_closed:
@@ -155,19 +163,19 @@ class MarketScanner:
             'volume': float(kline['v'])
         }
         
-        if symbol in self.candle_cache:
-            df = self.candle_cache[symbol]
+        if (symbol, tf) in self.candle_cache:
+            df = self.candle_cache[(symbol, tf)]
             # Append new row and drop oldest to keep size fixed (e.g. 250)
             df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
             if len(df) > 250:
                 df = df.iloc[1:]
-            self.candle_cache[symbol] = df
+            self.candle_cache[(symbol, tf)] = df
         else:
-            self.candle_cache[symbol] = pd.DataFrame([new_row])
+            self.candle_cache[(symbol, tf)] = pd.DataFrame([new_row])
             
         # Dispatch event to registered callbacks
         for cb in self.callbacks:
             try:
-                cb(symbol, self.candle_cache[symbol].copy(), self.data_health_status[symbol])
+                cb(symbol, tf, self.candle_cache[(symbol, tf)].copy(), self.data_health_status[symbol])
             except Exception as e:
-                logger.error(f"[SCANNER] Callback error for {symbol}: {e}")
+                logger.error(f"[SCANNER] Callback error for {symbol} ({tf}): {e}")

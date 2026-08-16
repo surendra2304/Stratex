@@ -6,13 +6,9 @@ import datetime
 import threading
 import queue
 import importlib
-from config import TRADING_MODE, ACTIVE_STRATEGY, TIMEFRAME
+from config import TRADING_MODE, ACTIVE_STRATEGIES
 from logger import get_logger
 from data import add_indicators
-
-# Dynamically load the get_signal function from the active strategy
-strategy_module = importlib.import_module(f"strategy_{ACTIVE_STRATEGY}")
-get_signal = strategy_module.get_signal
 
 from execution import place_market_order, get_exchange_client
 from binance.exceptions import BinanceAPIException
@@ -43,7 +39,14 @@ class TestnetService:
         print("========================================")
         print("EXECUTION ENVIRONMENT: TESTNET")
         print("LIVE ORDERS: BLOCKED")
-        print(f"Strategy: {ACTIVE_STRATEGY}")
+        print(f"Strategies: {', '.join(ACTIVE_STRATEGIES.keys())}")
+        
+        self.strategies = {}
+        for strat_name, tf in ACTIVE_STRATEGIES.items():
+            mod = importlib.import_module(f"strategy_{strat_name}")
+            if tf not in self.strategies:
+                self.strategies[tf] = []
+            self.strategies[tf].append((strat_name, mod))
         
         self.client = get_exchange_client()
         if self.client is None:
@@ -124,7 +127,10 @@ class TestnetService:
             "strategy_evaluations": 0,
             "buy_predictions": 0,
             "sell_predictions": 0,
-            "TOTAL_CANDLES": 0
+            "TOTAL_CANDLES": 0,
+            "strategy_metrics": {
+                s: {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0} for s in ACTIVE_STRATEGIES.keys()
+            }
         }
         self.stats.update({
             "BUY_SIGNALS": 0,
@@ -271,7 +277,7 @@ class TestnetService:
                         entry_side = "BUY" if entry_trade['isBuyer'] else "SELL"
                         
                         recovered_trade = {
-                            "strategy": ACTIVE_STRATEGY,
+                            "strategy": "RECOVERED",
                             "symbol": sym,
                             "side": entry_side,
                             "quantity": entry_qty,
@@ -319,12 +325,12 @@ class TestnetService:
         last_m = {}
         if hasattr(self, 'scanner'):
             for k, v in self.scanner.last_market_update.items():
-                last_m[k] = v.isoformat() + "Z" if isinstance(v, datetime.datetime) else str(v)
+                last_m[f"{k[0]}_{k[1]}"] = v.isoformat() + "Z" if isinstance(v, datetime.datetime) else str(v)
             
             # Populate diagnostics
-            self.stats["ticks_received_per_symbol"] = getattr(self.scanner, 'tick_counts', {})
-            self.stats["candles_constructed_per_symbol"] = {k: len(v) for k, v in self.scanner.candle_cache.items()}
-            self.stats["latest_candle_timestamp"] = {k: str(v.index[-1] if not v.empty else "") for k, v in self.scanner.candle_cache.items()}
+            self.stats["ticks_received_per_symbol"] = {f"{k[0]}_{k[1]}": v for k, v in getattr(self.scanner, 'tick_counts', {}).items()}
+            self.stats["candles_constructed_per_symbol"] = {f"{k[0]}_{k[1]}": len(v) for k, v in self.scanner.candle_cache.items()}
+            self.stats["latest_candle_timestamp"] = {f"{k[0]}_{k[1]}": str(v.index[-1] if not v.empty else "") for k, v in self.scanner.candle_cache.items()}
                 
         state = {
             "initial_deposit": self.initial_deposit,
@@ -348,7 +354,13 @@ class TestnetService:
         try:
             tmp_file = TESTNET_PORTFOLIO_FILE + ".tmp"
             with open(tmp_file, "w") as f:
-                json.dump(state, f)
+                def convert_keys(obj):
+                    if isinstance(obj, dict):
+                        return {str(k) if isinstance(k, tuple) else k: convert_keys(v) for k, v in obj.items()}
+                    elif isinstance(obj, list):
+                        return [convert_keys(i) for i in obj]
+                    return obj
+                json.dump(convert_keys(state), f)
             os.replace(tmp_file, TESTNET_PORTFOLIO_FILE)
             
             # Record periodic equity history snapshot (at most once every 60s)
@@ -366,7 +378,7 @@ class TestnetService:
         except Exception as e:
             logger.error(f"[SERVICE] Failed to save state atomically: {e}")
 
-    def on_candle_closed(self, symbol, df, data_health_status="OK"):
+    def on_candle_closed(self, symbol, tf, df, data_health_status="OK"):
         """Callback invoked by MarketScanner when a new candle closes."""
         if self.safety_halt:
             logger.warning(f"[SERVICE] Scanning halted due to RECONCILIATION MISMATCH. Rejecting {symbol} signal.")
@@ -382,60 +394,64 @@ class TestnetService:
                 current_price = df['close'].iloc[-1]
                 
                 self.last_evaluation[symbol] = datetime.datetime.utcnow().isoformat() + "Z"
-                self.stats["strategy_evaluations"] += 1
                 
-                signal_result = get_signal(df)
-                # Unpack from SignalResult namedtuple or legacy tuple — never assign fake confidence
-                side = getattr(signal_result, 'side', signal_result[0] if signal_result else None)
-                sl   = getattr(signal_result, 'sl',   signal_result[1] if signal_result else None)
-                tp   = getattr(signal_result, 'tp',   signal_result[2] if signal_result else None)
-
-                if not side:
-                    self.stats["HOLD_SIGNALS"] += 1
-                    return
-
-                if side == "BUY":
-                    self.stats["BUY_SIGNALS"] += 1
-                    self.stats["buy_predictions"] += 1
-                elif side == "SELL":
-                    self.stats["SELL_SIGNALS"] += 1
-                    self.stats["sell_predictions"] += 1
-
-                # Generate deterministic client order ID for duplicate protection
-                candle_timestamp = df.index[-1]
-                deterministic_str = f"{symbol}_{side}_{candle_timestamp}"
-                signal_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, deterministic_str))
-
-                self.stats["TOTAL_SIGNALS"] += 1
-
-                # 1. Profitability Gate — pass the full signal_result so the gate can
-                #    read strategy_type and win_rate_prior; never invent a confidence float.
-                passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
-                    symbol, side, current_price, sl, tp, signal_result
-                )
-                
-                if not passed_profit:
-                    self.stats["PROFITABILITY_REJECTED"] += 1
-                    self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", p_metrics["reason"])
+                if tf not in self.strategies:
                     return
                     
-                # Phase 6: Push to Opportunity Pool
-                candidate = {
-                    "signal_id": signal_id,
-                    "symbol": symbol,
-                    "side": side,
-                    "sl": sl,
-                    "tp": tp,
-                    "metrics": p_metrics,
-                    "signal_result": signal_result,   # preserved for JIT re-validation
-                    "timestamp": datetime.datetime.utcnow().timestamp()
-                }
-                self.opportunity_pool.put(candidate)
-                self.pool_event.set()
-                self.log_opportunity(signal_id, symbol, side, p_metrics, "QUALIFIED", "ADDED_TO_POOL")
+                for strat_name, strat_mod in self.strategies[tf]:
+                    self.stats["strategy_evaluations"] += 1
+                    
+                    signal_result = strat_mod.get_signal(df)
+                    side = getattr(signal_result, 'side', signal_result[0] if signal_result else None)
+                    sl   = getattr(signal_result, 'sl',   signal_result[1] if signal_result else None)
+                    tp   = getattr(signal_result, 'tp',   signal_result[2] if signal_result else None)
+
+                    if not side:
+                        self.stats["HOLD_SIGNALS"] += 1
+                        continue
+
+                    if side == "BUY":
+                        self.stats["BUY_SIGNALS"] += 1
+                        self.stats["buy_predictions"] += 1
+                    elif side == "SELL":
+                        self.stats["SELL_SIGNALS"] += 1
+                        self.stats["sell_predictions"] += 1
+
+                    candle_timestamp = df.index[-1]
+                    deterministic_str = f"{symbol}_{strat_name}_{side}_{candle_timestamp}"
+                    signal_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, deterministic_str))
+
+                    self.stats["TOTAL_SIGNALS"] += 1
+                    self.stats["strategy_metrics"][strat_name]["signals"] += 1
+
+                    passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
+                        symbol, side, current_price, sl, tp, signal_result
+                    )
+                    
+                    if not passed_profit:
+                        self.stats["PROFITABILITY_REJECTED"] += 1
+                        self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                        self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", p_metrics["reason"])
+                        continue
+                        
+                    candidate = {
+                        "signal_id": signal_id,
+                        "symbol": symbol,
+                        "tf": tf,
+                        "side": side,
+                        "sl": sl,
+                        "tp": tp,
+                        "strategy": strat_name,
+                        "metrics": p_metrics,
+                        "signal_result": signal_result,
+                        "timestamp": datetime.datetime.utcnow().timestamp()
+                    }
+                    self.opportunity_pool.put(candidate)
+                    self.pool_event.set()
+                    self.log_opportunity(signal_id, symbol, side, p_metrics, "QUALIFIED", "ADDED_TO_POOL")
                 
             except Exception as e:
-                logger.error(f"[SERVICE] Error processing signal for {symbol}: {e}")
+                logger.error(f"[SERVICE] Error processing signal for {symbol} ({tf}): {e}")
             finally:
                 self._save_state()
 
@@ -477,13 +493,14 @@ class TestnetService:
                         self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "ON_COOLDOWN")
                         continue
                         
+                    tf = candidate.get("tf", "15m")
                     # Re-validate with absolute latest price
-                    if not hasattr(self, 'scanner') or symbol not in self.scanner.candle_cache:
+                    if not hasattr(self, 'scanner') or (symbol, tf) not in self.scanner.candle_cache:
                         self.stats["JIT_REJECTED"] += 1
                         self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "NO_MARKET_DATA")
                         continue
                         
-                    df = self.scanner.candle_cache[symbol]
+                    df = self.scanner.candle_cache[(symbol, tf)]
                     if df.empty:
                         self.stats["JIT_REJECTED"] += 1
                         self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "EMPTY_MARKET_DATA")
@@ -530,18 +547,20 @@ class TestnetService:
                         continue
                         
                     self.stats["QUALIFIED"] += 1
+                    self.stats["strategy_metrics"][candidate["strategy"]]["qualified"] += 1
                     self.log_opportunity(signal_id, symbol, side, fresh_metrics, "ACCEPTED", "ALL_GATES_PASSED")
-                    logger.info(f"[SERVICE] Executing {side} {qty} {symbol}")
+                    logger.info(f"[SERVICE] Executing {side} {qty} {symbol} ({candidate['strategy']})")
                     try:
-                        order_res = place_market_order(ACTIVE_STRATEGY, side, symbol, quantity=qty, sl=sl, tp=tp, client_order_id=signal_id)
+                        order_res = place_market_order(candidate["strategy"], side, symbol, quantity=qty, sl=sl, tp=tp, client_order_id=signal_id)
                         if order_res:
                             self.stats["ORDERS_SUBMITTED"] += 1
                             self.stats["ORDERS_FILLED"] += 1
+                            self.stats["strategy_metrics"][candidate["strategy"]]["executed"] += 1
                             actual_price = order_res.get("_actual_price", current_price)
                             executed_qty = order_res.get("_executed_qty", qty)
                             
                             self.active_positions[symbol] = {
-                                "strategy": ACTIVE_STRATEGY,
+                                "strategy": candidate["strategy"],
                                 "symbol": symbol,
                                 "side": side,
                                 "quantity": executed_qty,
@@ -856,14 +875,14 @@ class TestnetService:
         self.stats["symbols_scanned"] = len(symbol_list)
         
         # 2. Train ML Strategy
-        if ACTIVE_STRATEGY == "ml":
+        if "ml" in ACTIVE_STRATEGIES:
             try:
                 from strategy_ml import train
                 from data import get_candles, add_indicators
                 logger.info("[SERVICE] Pre-training ML strategy on BTCUSDT...")
                 
                 # Fetch 2500 candles and strictly split to eliminate look-ahead data leakage
-                all_df = add_indicators(get_candles("BTCUSDT", TIMEFRAME, 2500))
+                all_df = add_indicators(get_candles("BTCUSDT", ACTIVE_STRATEGIES["ml"], 2500))
                 train_df = all_df.iloc[:-500]
                 val_df = all_df.iloc[-500:]
                 
@@ -873,7 +892,8 @@ class TestnetService:
                 logger.error(f"[SERVICE] Failed to train ML strategy: {e}")
                 
         # 3. Start Scanner
-        self.scanner = MarketScanner(symbol_list, timeframe=TIMEFRAME)
+        tfs = list(set(ACTIVE_STRATEGIES.values()))
+        self.scanner = MarketScanner(symbol_list, timeframes=tfs)
         self.scanner.register_callback(self.on_candle_closed)
         self.scanner.start()
         

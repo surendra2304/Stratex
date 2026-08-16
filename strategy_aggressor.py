@@ -2,6 +2,17 @@
 # STRATEGY_AGGRESSOR.PY - High-Frequency Volume Delta Scalper
 # ==============================================================================
 
+from collections import namedtuple
+
+SignalResult = namedtuple(
+    "SignalResult",
+    ["side", "sl", "tp", "strategy_type", "win_rate_prior", "rr_ratio"]
+)
+
+_STRATEGY_TYPE = "RULE_BASED"
+_OOS_WIN_RATE_PRIOR = 0.45  # Volume Delta scalping typically ~45%
+_RR_RATIO = 2.66            # 4.0 ATR / 1.5 ATR
+
 def get_signal(df):
     """
     The Aggressor Strategy:
@@ -9,12 +20,17 @@ def get_signal(df):
     - BUY when extreme buying pressure + momentum trending up (RSI > 55)
     - SELL when extreme selling pressure + momentum trending down (RSI < 45)
     - Uses ultra-tight stop losses for high frequency
+    Returns: SignalResult
     """
     if df is None or len(df) < 2:
-        return None, None, None
+        return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     last = df.iloc[-1]
-    
+
+    # Required columns check
+    if 'vol_delta' not in df.columns or 'rsi' not in df.columns:
+        return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+
     rsi = last["rsi"]
     close = last["close"]
     atr = last["atr"]
@@ -28,12 +44,13 @@ def get_signal(df):
     if vol_delta > extreme_vol_threshold and rsi > 55:
         sl = close - (atr * 1.5)  # Give a bit more breathing room
         tp = close + (atr * 4.0)  # Aim for higher R:R
-        return "BUY", sl, tp
+        return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     # SELL: Massive sell volume delta AND RSI confirms downward momentum
     if vol_delta < -extreme_vol_threshold and rsi < 45:
         sl = close + (atr * 1.5)
         tp = close - (atr * 4.0)
-        return "SELL", sl, tp
+        return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
-    return None, None, None
+    return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+

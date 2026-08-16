@@ -1,2 +1,2 @@
 Mode is TESTNET, looking for testnet_trade_ledger.jsonl
-File exists2026-08-15T20:33:14.726888Z - FUNNEL DISCREPANCY: ['ORDERS_FILLED 0 != sum 15 (Open: 0, Closed: 15)']
+File exists2026-08-16T09:13:10.209207Z - FUNNEL DISCREPANCY: ['ORDERS_FILLED 0 != sum 15 (Open: 0, Closed: 15)']

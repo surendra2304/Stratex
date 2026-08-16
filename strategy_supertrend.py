@@ -2,6 +2,17 @@
 # STRATEGY_SUPERTREND.PY - Maximum Profitability Trend Rider
 # ==============================================================================
 
+from collections import namedtuple
+
+SignalResult = namedtuple(
+    "SignalResult",
+    ["side", "sl", "tp", "strategy_type", "win_rate_prior", "rr_ratio"]
+)
+
+_STRATEGY_TYPE = "RULE_BASED"
+_OOS_WIN_RATE_PRIOR = 0.40  # Trend followers typically have lower win rates (~40%)
+_RR_RATIO = 2.0             # But higher reward-to-risk (letting winners run)
+
 def get_signal(df):
     """
     Supertrend + 200 EMA Strategy:
@@ -9,16 +20,17 @@ def get_signal(df):
     - SELL when Supertrend turns bearish AND price is below 200 EMA
     - Close signals are handled by the execution engine, but we will provide
       a dynamic SL that matches the supertrend band.
+    Returns: SignalResult
     """
     if df is None or len(df) < 200:
-        return None, None, None
+        return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     last = df.iloc[-1]
     prev = df.iloc[-2]
 
     # Required columns from features.py: 'supertrend', 'ema_200', 'st_lower', 'st_upper'
     if 'supertrend' not in df.columns:
-        return None, None, None
+        return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     st_now = last['supertrend']
     st_prev = prev['supertrend']
@@ -32,7 +44,7 @@ def get_signal(df):
         # We want to ride the trend indefinitely. Set TP very high (e.g. 50% away)
         # Actually, trailing stop will take us out when supertrend flips.
         tp = close * 1.50
-        return "BUY", sl, tp
+        return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     # Trend changed to BEARISH
     if st_now == False and st_prev == True and close < ema:
@@ -40,6 +52,7 @@ def get_signal(df):
         sl = last['st_upper']
         # Set TP very low (e.g. 50% away)
         tp = close * 0.50
-        return "SELL", sl, tp
+        return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
-    return None, None, None
+    return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+

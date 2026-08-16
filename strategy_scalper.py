@@ -2,18 +2,33 @@
 # STRATEGY_SCALPER.PY - High-Frequency Mean Reversion: RSI + Bollinger Bands
 # ==============================================================================
 
+from collections import namedtuple
+
+SignalResult = namedtuple(
+    "SignalResult",
+    ["side", "sl", "tp", "strategy_type", "win_rate_prior", "rr_ratio"]
+)
+
+_STRATEGY_TYPE = "RULE_BASED"
+_OOS_WIN_RATE_PRIOR = 0.60  # Estimated 60% win rate for mean reversion
+_RR_RATIO = 0.66            # Reward/Risk (1.0 ATR / 1.5 ATR)
+
 def get_signal(df):
     """
     Scalping Strategy:
     - BUY when price touches the lower Bollinger Band AND RSI is oversold (<30)
     - SELL when price touches the upper Bollinger Band AND RSI is overbought (>70)
-    Returns: "BUY", "SELL", or None
+    Returns: SignalResult
     """
     if df is None or df.empty or len(df) < 2:
-        return None, None, None
+        return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     last = df.iloc[-1]
     prev = df.iloc[-2]
+
+    # Required columns check (graceful fallback)
+    if 'rsi' not in df.columns or 'bb_upper' not in df.columns:
+        return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     rsi = last["rsi"]
     close = last["close"]
@@ -27,12 +42,13 @@ def get_signal(df):
     if close <= bb_lower and rsi < 35 and close > ema_200:
         sl = close - (atr * 1.5)
         tp = close + (atr * 1.0)
-        return "BUY", sl, tp
+        return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     # SELL: Price wicked above upper band, RSI overbought, and overall trend is DOWN
     if close >= bb_upper and rsi > 65 and close < ema_200:
         sl = close + (atr * 1.5)
         tp = close - (atr * 1.0)
-        return "SELL", sl, tp
+        return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
-    return None, None, None
+    return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+
