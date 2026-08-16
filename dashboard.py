@@ -507,6 +507,7 @@ def get_scanner():
 
 if __name__ == '__main__':
     print("🚀 Starting Live Dashboard...")
-    print("👉 Open http://127.0.0.1:5000 in your browser")
+    port = int(os.environ.get('PORT', 5000))
+    print(f"👉 Open http://127.0.0.1:{port} in your browser")
     is_debug = os.environ.get('FLASK_DEBUG') == '1'
-    app.run(debug=is_debug, port=5000, load_dotenv=False)
+    app.run(host='0.0.0.0', debug=is_debug, port=port, load_dotenv=False)

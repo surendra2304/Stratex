@@ -28,5 +28,8 @@ COPY . .
 # Expose Dashboard Web UI port
 EXPOSE 5000
 
-# Default entrypoint runs bot
-CMD ["python", "bot.py"]
+# Make start script executable
+RUN chmod +x start.sh
+
+# Default entrypoint runs both bot and dashboard
+CMD ["./start.sh"]
