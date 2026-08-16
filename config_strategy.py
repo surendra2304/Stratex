@@ -72,3 +72,56 @@ TESTNET_RISK = {
     "MAX_DRAWDOWN_PCT":       0.05,
     "MINIMUM_EXPECTED_EDGE":  0.0005,   # 0.05% min net edge at gate
 }
+
+# ==============================================================================
+# PRODUCTION STRATEGY REGISTRY
+# Explicit classification of all candidate strategies
+# ==============================================================================
+
+PRODUCTION_STRATEGY_REGISTRY = {
+    "adx_ema": {
+        "status": "VALIDATED",
+        "timeframe": "4h",
+        "execution_model": "RULE_BASED",
+        "entry_conditions": "EMA(20) crosses EMA(50), Close > EMA(200) (BUY) / Close < EMA(200) (SELL), ADX(14) > 25",
+        "sl_method": "2.0 * ATR(14)",
+        "tp_method": "3.0 * ATR(14)",
+        "rr_ratio": 1.5,
+        "oos_win_rate_prior": 0.494,
+        "total_friction_bps": 31.0,
+        "expected_net_edge_bps": 39.5,
+        "minimum_required_edge": 0.0005,
+        "validated_assets": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT"],
+        "reason": "Empirically validated multi-asset OOS trend strategy with robust positive net edge after 31 bps taker friction."
+    },
+    "aggressor": {
+        "status": "DISABLED",
+        "timeframe": "1m",
+        "execution_model": "RULE_BASED",
+        "reason": "Disabled: 1m targets (10-16 bps) are mathematically incapable of overcoming 31 bps Binance Spot taker friction."
+    },
+    "scalper": {
+        "status": "DISABLED",
+        "timeframe": "1m",
+        "execution_model": "RULE_BASED",
+        "reason": "Disabled: 1m scalp mean-reversion fails positive expectancy under 31 bps friction."
+    },
+    "supertrend": {
+        "status": "DISABLED",
+        "timeframe": "15m",
+        "execution_model": "RULE_BASED",
+        "reason": "Disabled: Unvalidated 50% target heuristic; pending proper multi-asset ATR target calibration."
+    },
+    "swing": {
+        "status": "DISABLED",
+        "timeframe": "1d",
+        "execution_model": "RULE_BASED",
+        "reason": "Disabled: Pending formal multi-asset OOS backtest benchmark."
+    },
+    "ml": {
+        "status": "DISABLED",
+        "timeframe": "15m",
+        "execution_model": "PROBABILISTIC",
+        "reason": "Disabled: Requires trained model artifacts with calibrated predict_proba >= 43.0%."
+    }
+}

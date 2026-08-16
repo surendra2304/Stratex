@@ -43,13 +43,9 @@ TESTNET_ENABLED = os.getenv("TESTNET_ENABLED", "False").lower() == "true"
 LIVE_TRADING_ENABLED = os.getenv("LIVE_TRADING_ENABLED", "False").lower() == "true"
 
 # --- Strategies to Run ---
-# Multi-strategy configuration mapping strategy -> timeframe
+# Multi-strategy configuration mapping validated strategy -> timeframe
 ACTIVE_STRATEGIES = {
-    "scalper": "15m",
-    "supertrend": "1h",
-    "adx_ema": "4h",
-    "swing": "1d",
-    "aggressor": "1m"
+    "adx_ema": "4h"
 }
 
 # Backward-compatibility aliases for legacy tests/modules
