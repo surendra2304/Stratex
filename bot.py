@@ -37,9 +37,14 @@ def acquire_singleton_lock(port=48888):
     except:
         pass
         
-    atexit.register(_cleanup)
+def _signal_handler(signum, frame):
+    print(f"\n[BOT] Received signal {signum}. Initiating graceful shutdown...")
+    _cleanup()
+    sys.exit(0)
 
 def main():
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
     acquire_singleton_lock(port=48888)
     
     print("=" * 60)
@@ -59,6 +64,8 @@ def main():
         except Exception as e:
             print(f"\n[BOT] Unexpected exception: {e}")
             raise
+        finally:
+            _cleanup()
     else:
         print(f"TRADING_MODE {TRADING_MODE} is not supported by this entrypoint. Please configure TRADING_MODE=TESTNET.")
 

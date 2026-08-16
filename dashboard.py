@@ -41,6 +41,116 @@ def get_candles():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def get_engine_health_data():
+    """Reads engine heartbeat and verifies live process state."""
+    import datetime
+    import json
+    
+    hb_env = os.getenv("TESTNET_HEARTBEAT_FILE")
+    if hb_env:
+        hb_file = hb_env
+    elif os.path.exists("testnet_heartbeat.json"):
+        hb_file = "testnet_heartbeat.json"
+    elif os.path.exists("heartbeat.json"):
+        hb_file = "heartbeat.json"
+    else:
+        hb_file = "testnet_heartbeat.json"
+        
+    if not os.path.exists(hb_file):
+        return {
+            "engine_status": "OFFLINE",
+            "healthy": False,
+            "worker_alive": False,
+            "heartbeat_age_seconds": None,
+            "reason": "HEARTBEAT_FILE_MISSING",
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        }
+        
+    try:
+        with open(hb_file, "r") as f:
+            hb = json.load(f)
+            
+        hb_ts_str = hb.get("timestamp", "")
+        now = datetime.datetime.utcnow()
+        if hb_ts_str:
+            hb_dt = datetime.datetime.fromisoformat(hb_ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
+            age = (now - hb_dt).total_seconds()
+        else:
+            age = 999.0
+            
+        worker_alive = hb.get("worker_alive", False) and hb.get("status") == "RUNNING"
+        pid = hb.get("pid")
+        
+        # Check process existence
+        pid_alive = False
+        if pid:
+            try:
+                if os.name == 'nt':
+                    import ctypes
+                    PROCESS_QUERY_INFORMATION = 0x0400
+                    handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_INFORMATION, False, pid)
+                    if handle:
+                        ctypes.windll.kernel32.CloseHandle(handle)
+                        pid_alive = True
+                else:
+                    os.kill(pid, 0)
+                    pid_alive = True
+            except:
+                pid_alive = False
+                
+        is_healthy = worker_alive and age <= 60 and (pid_alive or pid is None)
+        engine_status = "ONLINE" if is_healthy else "OFFLINE"
+        
+        return {
+            "engine_status": engine_status,
+            "healthy": is_healthy,
+            "worker_alive": worker_alive,
+            "heartbeat_age_seconds": round(age, 2),
+            "pid": pid,
+            "pid_alive": pid_alive,
+            "binance_connected": hb.get("binance_connected", False),
+            "websocket_connected": hb.get("websocket_connected", False),
+            "active_strategy": hb.get("strategy", "adx_ema"),
+            "strategies": hb.get("strategies", ["adx_ema"]),
+            "timeframe": hb.get("timeframe", "4h"),
+            "symbols": hb.get("symbols", []),
+            "symbol_count": hb.get("symbol_count", len(hb.get("symbols", []))),
+            "last_market_update": hb.get("last_market_update"),
+            "last_candle_close": hb.get("last_candle_close"),
+            "last_strategy_evaluation": hb.get("last_strategy_evaluation"),
+            "service_start_time": hb.get("service_start_time"),
+            "timestamp": hb_ts_str or (datetime.datetime.utcnow().isoformat() + "Z")
+        }
+    except Exception as e:
+        return {
+            "engine_status": "OFFLINE",
+            "healthy": False,
+            "worker_alive": False,
+            "heartbeat_age_seconds": None,
+            "reason": f"READ_ERROR: {str(e)}",
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        }
+
+@app.route('/health')
+def health():
+    """UptimeRobot and Render platform health check endpoint."""
+    import datetime
+    from config import TRADING_MODE
+    engine_data = get_engine_health_data()
+    return jsonify({
+        "status": "ok",
+        "dashboard": "online",
+        "engine": engine_data["engine_status"].lower(),
+        "engine_healthy": engine_data["healthy"],
+        "mode": TRADING_MODE,
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+    }), 200
+
+@app.route('/api/engine-health')
+def api_engine_health():
+    """Authoritative trading engine health and telemetry endpoint."""
+    return jsonify(get_engine_health_data())
+
 # Legacy /api/backtest removed to focus purely on live Testnet operations.
 
 @app.route('/api/chart_trades')
@@ -241,9 +351,21 @@ def get_status():
             except: pass
 
     import datetime
+    engine_data = get_engine_health_data()
+    components["engine"] = "OK" if engine_data["healthy"] else "ERROR"
+    components["binance"] = "OK" if engine_data.get("binance_connected") else "ERROR"
+    components["data"] = "OK" if engine_data.get("websocket_connected") else "ERROR"
+    components["execution"] = "OK" if engine_data["healthy"] else "ERROR"
+    components["strategy"] = "OK" if engine_data["healthy"] else "ERROR"
+    if not engine_data["healthy"]:
+        overall = "DEGRADED"
+
     return jsonify({
         "mode": TRADING_MODE,
         "overall_health": overall,
+        "engine_status": engine_data["engine_status"],
+        "engine_healthy": engine_data["healthy"],
+        "engine_data": engine_data,
         "components": components,
         "session": session_info,
         "alerts": alerts,

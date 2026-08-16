@@ -59,10 +59,28 @@ def check_health():
             print(f"Profit Reject : {stats.get('PROFITABILITY_REJECTED', 0)}")
             print(f"Risk Reject   : {stats.get('RISK_REJECTED', 0)}")
             print(f"Qualified     : {stats.get('QUALIFIED', 0)}")
-            print(f"Orders Filled : {stats.get('ORDERS_FILLED', 0)}")
+    # 4. Check Engine Heartbeat
+    hb_file = getattr(config, "TESTNET_HEARTBEAT_FILE", "testnet_heartbeat.json")
+    if not os.path.exists(hb_file) and os.path.exists("heartbeat.json"):
+        hb_file = "heartbeat.json"
+    if os.path.exists(hb_file):
+        try:
+            with open(hb_file, "r") as f:
+                hb = json.load(f)
+            hb_ts = hb.get("timestamp", "")
+            age_s = "N/A"
+            if hb_ts:
+                dt = datetime.datetime.fromisoformat(hb_ts.replace("Z", "+00:00")).replace(tzinfo=None)
+                age_s = f"{(datetime.datetime.utcnow() - dt).total_seconds():.1f}s ago"
+            print(f"Heartbeat Age : {age_s} (Status: {hb.get('status', 'UNKNOWN')})")
+            print(f"Active Strat  : {hb.get('strategy', 'N/A')} ({hb.get('timeframe', 'N/A')})")
+            print(f"Symbols Active: {hb.get('symbol_count', 0)}")
+            print(f"Last Evaluation: {hb.get('last_strategy_evaluation', 'N/A')}")
         except Exception as e:
-            print(f"State Read    : ERROR ({e})")
-            
+            print(f"Heartbeat Read: ERROR ({e})")
+    else:
+        print("Heartbeat     : NOT FOUND")
+
     print("==========================================================")
 
 if __name__ == "__main__":

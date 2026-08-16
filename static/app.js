@@ -159,12 +159,26 @@ async function fetchDashboardData() {
             document.getElementById('eq-change').innerText = "-";
         }
         
+        // --- HEADER STATUS: Engine Online vs Offline ---
+        const engineDot = document.getElementById('hdr-engine-dot');
+        const engineText = document.getElementById('hdr-engine-text');
+        if (engineDot && engineText) {
+            if (data.engine_status === 'ONLINE' || data.engine_healthy) {
+                engineDot.className = 'dot dot-green';
+                engineText.innerText = 'TRADING ENGINE: ONLINE (TESTNET)';
+            } else {
+                engineDot.className = 'dot dot-red';
+                engineText.innerText = 'TRADING ENGINE: OFFLINE';
+            }
+        }
+        
         // --- SIDEBAR HEALTH ---
         const h_status = (state) => state === 'OK' ? 'dot-green' : 'dot-red';
         if(data.components) {
             if(data.components.binance) document.getElementById('h-ws').className = `dot ${h_status(data.components.binance)}`;
             if(data.components.data) document.getElementById('h-md').className = `dot ${h_status(data.components.data)}`;
             if(data.components.execution) document.getElementById('h-ex').className = `dot ${h_status(data.components.execution)}`;
+            if(document.getElementById('h-st')) document.getElementById('h-st').className = `dot ${h_status(data.components.strategy || 'OK')}`;
         }
 
         // --- RISK PAGE ---

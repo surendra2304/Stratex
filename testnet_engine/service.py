@@ -24,6 +24,7 @@ logger = get_logger("service")
 TESTNET_LEDGER_FILE = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
 TESTNET_OPPORTUNITY_LOG = os.getenv("TESTNET_OPPORTUNITY_LOG", "testnet_opportunity_log.jsonl")
 TESTNET_PORTFOLIO_FILE = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+TESTNET_HEARTBEAT_FILE = os.getenv("TESTNET_HEARTBEAT_FILE", "testnet_heartbeat.json")
 
 class TestnetService:
     def __init__(self):
@@ -34,10 +35,12 @@ class TestnetService:
         if os.getenv("TESTNET_ONLY", "FALSE").upper() != "TRUE":
             raise RuntimeError("CRITICAL ERROR: TESTNET_ONLY=TRUE is required to run the Testnet execution mode safely.")
             
+        logger.info("[ENGINE_START] Starting Binance Testnet Trading Engine...")
         print("========================================")
         print("24/7 TESTNET EXECUTION SERVICE")
         print("========================================")
-        print("EXECUTION ENVIRONMENT: TESTNET")
+        print("BINANCE CONFIGURED: YES")
+        print("TRADING MODE: TESTNET")
         print("LIVE ORDERS: BLOCKED")
         print(f"Strategies: {', '.join(ACTIVE_STRATEGIES.keys())}")
         
@@ -51,6 +54,8 @@ class TestnetService:
         self.client = get_exchange_client()
         if self.client is None:
             raise RuntimeError("CRITICAL ERROR: Binance Client could not be instantiated for TESTNET.")
+            
+        logger.info("[BINANCE_CONNECTED] Verified Binance Testnet API connectivity.")
             
         # Reconcile Initial Balance
         try:
@@ -940,8 +945,78 @@ class TestnetService:
             if not self.observe_only:
                 logger.warning(f"[SERVICE] 🚨 STRATEGY DEGRADATION DETECTED. Win rate {win_rate:.2%} < {min_win_rate:.2%}. Switching to OBSERVE-ONLY mode.")
                 self.observe_only = True
+
+    def _write_heartbeat(self, status="RUNNING", worker_alive=True):
+        """Atomically writes worker heartbeat state for dashboard, supervisor, and health checks."""
+        try:
+            now_iso = datetime.datetime.utcnow().isoformat() + "Z"
+            symbols = self.scanner.symbols if hasattr(self, 'scanner') and self.scanner else list(self.symbol_filters.keys())
+            
+            last_m_update = None
+            if hasattr(self, 'scanner') and self.scanner and hasattr(self.scanner, 'last_market_update'):
+                updates = [ts for ts in self.scanner.last_market_update.values() if ts]
+                if updates:
+                    last_m_update = max(updates).isoformat() + "Z"
+                    
+            last_candle_close = None
+            if hasattr(self, 'scanner') and self.scanner and hasattr(self.scanner, 'last_candle_close'):
+                last_candle_close = self.scanner.last_candle_close.isoformat() + "Z"
                 
-        # Additional checks can be added if ledger captures the initial expected_net_return
+            last_eval = None
+            if self.last_evaluation:
+                eval_times = [v for v in self.last_evaluation.values() if v]
+                if eval_times:
+                    last_eval = max(eval_times)
+
+            hb = {
+                "worker_alive": worker_alive,
+                "status": status,
+                "pid": os.getpid(),
+                "timestamp": now_iso,
+                "mode": "TESTNET",
+                "binance_connected": self.client is not None,
+                "websocket_connected": hasattr(self, 'scanner') and bool(self.scanner),
+                "strategy": list(ACTIVE_STRATEGIES.keys())[0] if ACTIVE_STRATEGIES else "adx_ema",
+                "strategies": list(ACTIVE_STRATEGIES.keys()),
+                "timeframe": list(ACTIVE_STRATEGIES.values())[0] if ACTIVE_STRATEGIES else "4h",
+                "symbols": symbols,
+                "symbol_count": len(symbols),
+                "last_market_update": last_m_update,
+                "last_candle_close": last_candle_close,
+                "last_strategy_evaluation": last_eval,
+                "service_start_time": getattr(self, 'service_start_time', now_iso),
+                "current_equity": getattr(self, 'current_equity', 0.0),
+                "open_positions": len(getattr(self, 'active_positions', {}))
+            }
+            tmp = TESTNET_HEARTBEAT_FILE + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(hb, f, indent=2)
+            os.replace(tmp, TESTNET_HEARTBEAT_FILE)
+            
+            # Also update legacy heartbeat.json for backwards compatibility
+            try:
+                tmp_legacy = "heartbeat.json.tmp"
+                with open(tmp_legacy, "w") as lf:
+                    json.dump(hb, lf, indent=2)
+                os.replace(tmp_legacy, "heartbeat.json")
+            except:
+                pass
+        except Exception as e:
+            logger.error(f"[SERVICE] Error writing heartbeat: {e}")
+
+    def _heartbeat_loop(self):
+        """Periodic heartbeat writer (runs every 5 seconds)."""
+        last_log_time = 0
+        while True:
+            try:
+                self._write_heartbeat(status="RUNNING", worker_alive=True)
+                now_ts = time.time()
+                if now_ts - last_log_time >= 60:
+                    last_log_time = now_ts
+                    logger.info(f"[ENGINE_HEARTBEAT] PID={os.getpid()} | Status=RUNNING | Strategy=ADX_EMA (4h) | Symbols={len(self.symbol_filters)}")
+            except Exception as e:
+                logger.error(f"[SERVICE] Heartbeat loop error: {e}")
+            time.sleep(5)
 
     def run(self):
         # 1. Discover Symbols
@@ -950,18 +1025,15 @@ class TestnetService:
         symbol_list = list(self.symbol_filters.keys())
         self.stats["symbols_scanned"] = len(symbol_list)
         
-        # 2. Train ML Strategy
+        # 2. Train ML Strategy (if enabled)
         if "ml" in ACTIVE_STRATEGIES:
             try:
                 from strategy_ml import train
                 from data import get_candles, add_indicators
                 logger.info("[SERVICE] Pre-training ML strategy on BTCUSDT...")
-                
-                # Fetch 2500 candles and strictly split to eliminate look-ahead data leakage
                 all_df = add_indicators(get_candles("BTCUSDT", ACTIVE_STRATEGIES["ml"], 2500))
                 train_df = all_df.iloc[:-500]
                 val_df = all_df.iloc[-500:]
-                
                 train(train_df, val_df)
                 logger.info("[SERVICE] ML strategy trained successfully.")
             except Exception as e:
@@ -972,18 +1044,28 @@ class TestnetService:
         self.scanner = MarketScanner(symbol_list, timeframes=tfs)
         self.scanner.register_callback(self.on_candle_closed)
         self.scanner.start()
+        logger.info(f"[MARKET_DATA_CONNECTED] Multiplex WebSocket streaming active for {len(symbol_list)} symbols.")
         
-        # 3. Start Position Monitor Thread
+        # 4. Start Position Monitor Thread
         monitor_thread = threading.Thread(target=self.position_monitor_loop, daemon=True)
         monitor_thread.start()
         
-        # 4. Keep Main Thread Alive
+        # 5. Start Heartbeat Thread
+        self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+        self._heartbeat_thread.start()
+        self._write_heartbeat(status="RUNNING", worker_alive=True)
+        
+        logger.info("[ENGINE_READY] Binance Testnet trading engine is fully initialized and operational.")
+        
+        # 6. Keep Main Thread Alive
         try:
             while True:
                 time.sleep(1)
-        except KeyboardInterrupt:
-            logger.info("[SERVICE] Shutting down...")
-            self.scanner.stop()
+        except (KeyboardInterrupt, SystemExit):
+            logger.info("[SERVICE] Graceful shutdown initiated...")
+            self._write_heartbeat(status="STOPPED", worker_alive=False)
+            if hasattr(self, 'scanner') and self.scanner:
+                self.scanner.stop()
 
 if __name__ == "__main__":
     service = TestnetService()

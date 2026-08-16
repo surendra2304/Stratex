@@ -7,6 +7,8 @@ FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     TRADING_MODE=TESTNET \
+    TESTNET_ENABLED=True \
+    LIVE_TRADING_ENABLED=False \
     TESTNET_ONLY=TRUE
 
 WORKDIR /app
@@ -28,5 +30,5 @@ COPY . .
 # Expose Dashboard Web UI port
 EXPOSE 5000
 
-# Default entrypoint runs both bot and dashboard concurrently
-CMD ["bash", "-c", "python bot.py & python dashboard.py"]
+# Supervised production entrypoint monitoring bot.py and dashboard.py
+CMD ["python", "scripts/supervise_services.py"]
