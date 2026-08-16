@@ -39,7 +39,7 @@ LONG_ONLY = True            # Binance Spot default
 # OPERATIONAL SAFETY GATES
 # -------------------------------------------------------------------
 TRADING_MODE = os.getenv("TRADING_MODE", "PAPER") # "PAPER", "TESTNET", or "LIVE"
-PAPER_SAFE_MODE = os.getenv("PAPER_SAFE_MODE", "True").lower() == "true"
+PAPER_SAFE_MODE = os.getenv("PAPER_SAFE_MODE", "False" if TRADING_MODE in ["TESTNET", "LIVE"] else "True").lower() == "true"
 TESTNET_ENABLED = os.getenv("TESTNET_ENABLED", "False").lower() == "true"
 LIVE_TRADING_ENABLED = os.getenv("LIVE_TRADING_ENABLED", "False").lower() == "true"
 

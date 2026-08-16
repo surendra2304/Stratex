@@ -34,7 +34,11 @@ document.addEventListener("DOMContentLoaded", () => {
 // ==========================================
 // UTILITIES
 // ==========================================
-const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+const formatCurrency = (val) => {
+    const num = Number(val);
+    if (isNaN(num)) return "$0.00";
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
+};
 const formatPct = (val) => (val * 100).toFixed(2) + '%';
 const formatTime = (ts) => {
     if (!ts) return "-";
