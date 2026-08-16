@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: python-trading-bot
+    env: docker
+    region: fra
+    plan: free
+    dockerCommand: python scripts/supervise_services.py
