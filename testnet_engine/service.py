@@ -35,6 +35,21 @@ class TestnetService:
         if os.getenv("TESTNET_ONLY", "FALSE").upper() != "TRUE":
             raise RuntimeError("CRITICAL ERROR: TESTNET_ONLY=TRUE is required to run the Testnet execution mode safely.")
             
+        if os.getenv("RESET_REVIEW_STATE", "FALSE").upper() == "TRUE":
+            logger.warning("[RESET] RESET_REVIEW_STATE=TRUE detected. Wiping local review telemetry...")
+            files_to_clean = [
+                TESTNET_LEDGER_FILE, TESTNET_OPPORTUNITY_LOG, TESTNET_PORTFOLIO_FILE, 
+                TESTNET_HEARTBEAT_FILE, "testnet_equity_history.jsonl", "bot.log",
+                "heartbeat.json", "status.json", "trades.json", "scanner.json"
+            ]
+            for f in files_to_clean:
+                if os.path.exists(f):
+                    try:
+                        os.remove(f)
+                        logger.warning(f"[RESET] Cleared {f}")
+                    except Exception as e:
+                        logger.error(f"[RESET] Failed to clear {f}: {e}")
+                        
         logger.info("[ENGINE_START] Starting Binance Testnet Trading Engine...")
         print("========================================")
         print("24/7 TESTNET EXECUTION SERVICE")
