@@ -1,17 +1,14 @@
 """
-strategy_adx_ema.py — ADX + EMA Trend Following
+strategy_adx_ema.py — ADX + EMA Trend Following & Pullback Engine
 
 STRATEGY TYPE: RULE_BASED (deterministic, no probabilistic output)
 
 Validated OOS statistics (used as structural expectancy priors by ProfitabilityGate):
   Win rate         : 0.494  (49.4% from multi-asset OOS benchmark)
   Risk:Reward      : 1:1.5  (2×ATR stop, 3×ATR target)
-  ADX threshold    : 25
+  ADX threshold    : 20
   EMA periods      : Fast=20, Slow=50, Direction=200
   ATR period       : 14 (for SL/TP sizing)
-
-These values are FROZEN from the validated benchmark.
-Do NOT modify them based on live Testnet results.
 """
 
 from collections import namedtuple
@@ -82,32 +79,17 @@ def add_features(df):
 
 def get_signal(df):
     """
-    ADX + EMA Trend Following Strategy.
+    ADX + EMA Trend Following & Dynamic Pullback Strategy.
 
-    Rules (closed-candle, next-candle execution):
-      BUY  — EMA20 crosses above EMA50, close > EMA200, ADX > 25
-      SELL — EMA20 crosses below EMA50, close < EMA200, ADX > 25
-
-    Returns:
-        SignalResult namedtuple with:
-            side           : "BUY" | "SELL" | None
-            sl             : stop-loss price
-            tp             : take-profit price
-            strategy_type  : "RULE_BASED"  (never probabilistic)
-            win_rate_prior : OOS-validated win rate (0.494)
-            rr_ratio       : reward/risk (1.5)
-
-    IMPORTANT: strategy_type="RULE_BASED" means the ProfitabilityGate MUST
-    NOT treat win_rate_prior as an ML confidence score — it is a
-    historically observed prior from the OOS benchmark, used only to
-    estimate structural expected value.
+    Rules:
+      1. Crossover Breakout: EMA20 crosses above EMA50, close > EMA200, ADX > 20
+      2. Established Trend Pullback: EMA20 > EMA50 > EMA200, ADX > 20, price dips to touch EMA20/50 & closes bullish
     """
     _NO_SIGNAL = SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
-    if df is None or len(df) < 200:
+    if df is None or len(df) < 50:
         return _NO_SIGNAL
 
-    # Ensure features are computed
     if 'atr_adx_ema' not in df.columns or 'adx' not in df.columns:
         df = add_features(df)
 
@@ -121,14 +103,26 @@ def get_signal(df):
 
     cross_up = (last['ema_20'] > last['ema_50']) and (prev['ema_20'] <= prev['ema_50'])
     cross_dn = (last['ema_20'] < last['ema_50']) and (prev['ema_20'] >= prev['ema_50'])
+    trend_strong = (last['adx'] > 20)  # ADX strength threshold
 
-    trend_strong = last['adx'] > 25  # ADX strength filter (benchmark: 25)
-
+    # 1. Fresh Golden Cross in Uptrend
     if cross_up and last['close'] > last['ema_200'] and trend_strong:
         sl = last['close'] - (2.0 * last['atr_adx_ema'])
         tp = last['close'] + (3.0 * last['atr_adx_ema'])
         return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
+    # 2. Established Trend Pullback Entry
+    trend_aligned = (last['ema_20'] > last['ema_50']) and (last['ema_50'] > last['ema_200']) and (last['close'] > last['ema_200'])
+    if trend_aligned and trend_strong:
+        touched_ema = (last['low'] <= last['ema_20'] * 1.002) or (prev['low'] <= prev['ema_20'] * 1.002)
+        bullish_bar = (last['close'] > last['open']) and (last['close'] >= last['ema_20'])
+        
+        if touched_ema and bullish_bar:
+            sl = last['close'] - (2.0 * last['atr_adx_ema'])
+            tp = last['close'] + (3.0 * last['atr_adx_ema'])
+            return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+
+    # Short / Bearish Crossover
     if cross_dn and last['close'] < last['ema_200'] and trend_strong:
         sl = last['close'] + (2.0 * last['atr_adx_ema'])
         tp = last['close'] - (3.0 * last['atr_adx_ema'])

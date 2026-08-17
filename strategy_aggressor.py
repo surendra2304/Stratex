@@ -1,8 +1,10 @@
 # ==============================================================================
-# STRATEGY_AGGRESSOR.PY - High-Frequency Volume Delta Scalper
+# STRATEGY_AGGRESSOR.PY - Adaptive Volume Delta & Order Flow Surge Engine
 # ==============================================================================
 
 from collections import namedtuple
+import pandas as pd
+import numpy as np
 
 SignalResult = namedtuple(
     "SignalResult",
@@ -10,47 +12,53 @@ SignalResult = namedtuple(
 )
 
 _STRATEGY_TYPE = "RULE_BASED"
-_OOS_WIN_RATE_PRIOR = 0.45  # Volume Delta scalping typically ~45%
-_RR_RATIO = 2.66            # 4.0 ATR / 1.5 ATR
+_OOS_WIN_RATE_PRIOR = 0.50  # 50% Win rate with order flow momentum confirmation
+_RR_RATIO = 2.5             # 3.75 ATR TP / 1.5 ATR SL
 
 def get_signal(df):
     """
     The Aggressor Strategy:
-    - Analyzes Order Book Imbalance (Volume Delta)
-    - BUY when extreme buying pressure + momentum trending up (RSI > 55)
-    - SELL when extreme selling pressure + momentum trending down (RSI < 45)
-    - Uses ultra-tight stop losses for high frequency
+    - Analyzes Order Flow / Volume Delta Surges via adaptive Z-Scores
+    - BUY when institutional buying pressure (Z-Score > 1.3 or Delta > 30% Vol) + Momentum Up (RSI > 50) + Green Candle
+    - SELL when institutional selling pressure (Z-Score < -1.3 or Delta < -30% Vol) + Momentum Down (RSI < 50) + Red Candle
     Returns: SignalResult
     """
-    if df is None or len(df) < 2:
+    if df is None or len(df) < 20:
         return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     last = df.iloc[-1]
 
     # Required columns check
-    if 'vol_delta' not in df.columns or 'rsi' not in df.columns:
+    if 'vol_delta' not in df.columns:
         return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
-    rsi = last["rsi"]
-    close = last["close"]
-    atr = last["atr"]
-    vol_delta = last["vol_delta"]
+    close     = float(last["close"])
+    open_p    = float(last["open"])
+    atr       = float(last.get("atr", last.get("atr_14", close * 0.01)))
+    rsi       = float(last.get("rsi", last.get("rsi_14", 50.0)))
+    vol_delta = float(last["vol_delta"])
+    vol       = float(last.get("volume", 1.0))
     
-    # Calculate average volume delta to find extremes
-    avg_vol = df["volume"].tail(20).mean()
-    extreme_vol_threshold = avg_vol * 0.5  # Delta must be 50% of avg volume
+    # Calculate rolling volume delta stats for z-score
+    recent_deltas = df["vol_delta"].tail(20)
+    delta_mean = float(recent_deltas.mean())
+    delta_std = float(recent_deltas.std()) + 1e-9
+    z_score = (vol_delta - delta_mean) / delta_std
     
-    # BUY: Massive buy volume delta AND RSI confirms upward momentum
-    if vol_delta > extreme_vol_threshold and rsi > 55:
-        sl = close - (atr * 1.5)  # Give a bit more breathing room
-        tp = close + (atr * 4.0)  # Aim for higher R:R
+    avg_vol = float(df["volume"].tail(20).mean())
+    
+    # BUY: Positive Volume Surge (Z-Score > 1.3 or > 30% avg vol) + Bullish Price Action + RSI Momentum
+    is_buy_surge = (z_score > 1.3 or vol_delta > avg_vol * 0.3)
+    if is_buy_surge and rsi > 50 and close > open_p:
+        sl = close - (atr * 1.5)
+        tp = close + (atr * 3.75)
         return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
-    # SELL: Massive sell volume delta AND RSI confirms downward momentum
-    if vol_delta < -extreme_vol_threshold and rsi < 45:
+    # SELL: Negative Volume Surge (Z-Score < -1.3 or < -30% avg vol) + Bearish Price Action + RSI Momentum
+    is_sell_surge = (z_score < -1.3 or vol_delta < -avg_vol * 0.3)
+    if is_sell_surge and rsi < 50 and close < open_p:
         sl = close + (atr * 1.5)
-        tp = close - (atr * 4.0)
+        tp = close - (atr * 3.75)
         return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
-

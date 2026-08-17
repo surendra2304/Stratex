@@ -1,8 +1,12 @@
+# ==============================================================================
+# STRATEGY_ML.PY - Calibrated Probabilistic ML Prediction Engine (XGBoost)
+# ==============================================================================
+
 import pandas as pd
 import numpy as np
 import xgboost as xgb
 from sklearn.preprocessing import StandardScaler
-from sklearn import metrics
+import pickle
 import logging
 import os
 from collections import namedtuple
@@ -11,7 +15,6 @@ SignalResult = namedtuple(
     "SignalResult",
     ["side", "sl", "tp", "strategy_type", "confidence", "rr_ratio"]
 )
-import os
 
 logger = logging.getLogger("strategy_ml")
 
@@ -28,6 +31,29 @@ class MLStrategy:
             'rsi_14', 'macd_hist', 'atr_pct', 'bb_width', 'bb_pos',
             'rel_volume'
         ]
+        self._load_saved_models()
+
+    def _load_saved_models(self):
+        """Attempts to load pre-trained models and scaler from disk."""
+        try:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            buy_path = os.path.join(base_dir, "model_buy.pkl")
+            sell_path = os.path.join(base_dir, "model_sell.pkl")
+            scaler_path = os.path.join(base_dir, "scaler.pkl")
+
+            if os.path.exists(buy_path) and os.path.exists(scaler_path):
+                with open(buy_path, "rb") as f:
+                    self.model_buy = pickle.load(f)
+                with open(scaler_path, "rb") as f:
+                    self.scaler = pickle.load(f)
+                logger.info("[ML] ✅ Successfully loaded model_buy.pkl and scaler.pkl.")
+                
+            if os.path.exists(sell_path):
+                with open(sell_path, "rb") as f:
+                    self.model_sell = pickle.load(f)
+                logger.info("[ML] ✅ Successfully loaded model_sell.pkl.")
+        except Exception as e:
+            logger.warning(f"[ML] Note: Pre-trained models could not be loaded automatically: {e}")
         
     def _create_labels(self, df):
         """
@@ -51,8 +77,6 @@ class MLStrategy:
             upper_buy = entry * (1 + upper_pct)
             lower_buy = entry * (1 + lower_pct)
             
-            # For SELL, the directions are inverted:
-            # We want price to drop by 1.5% (TP), and rise no more than 0.5% (SL)
             upper_sell = entry * (1 + abs(lower_pct)) # Stop Loss for short
             lower_sell = entry * (1 - upper_pct)      # Take Profit for short
             
@@ -62,21 +86,17 @@ class MLStrategy:
             hit_lower_s = False
             
             for j in range(i + 1, i + 1 + horizon):
-                # Check BUY barriers
                 if not hit_upper_b and not hit_lower_b:
                     if highs[j] >= upper_buy:
                         targets_buy[i] = 1
                         hit_upper_b = True
-                        hit_lower_b = True # Stop checking
                     elif lows[j] <= lower_buy:
                         hit_lower_b = True
                         
-                # Check SELL barriers
                 if not hit_upper_s and not hit_lower_s:
                     if lows[j] <= lower_sell:
                         targets_sell[i] = 1
                         hit_lower_s = True
-                        hit_upper_s = True # Stop checking
                     elif highs[j] >= upper_sell:
                         hit_upper_s = True
                         
@@ -88,8 +108,7 @@ class MLStrategy:
         return df
         
     def train(self, train_df, val_df):
-        """Fits dual models (BUY and SELL) entirely on the training set without lookahead."""
-        # 1. Generate labels
+        """Fits dual models (BUY and SELL) on training set."""
         train_df = self._create_labels(train_df.copy()).dropna(subset=self.features + ['target_buy', 'target_sell'])
         val_df = self._create_labels(val_df.copy()).dropna(subset=self.features + ['target_buy', 'target_sell'])
         
@@ -105,21 +124,18 @@ class MLStrategy:
         y_val_buy = val_df['target_buy']
         y_val_sell = val_df['target_sell']
         
-        # 2. Scale features strictly on training data
         self.scaler = StandardScaler()
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_val_scaled = self.scaler.transform(X_val)
         
-        # Calculate scale_pos_weight for imbalance
         scale_buy = (len(y_train_buy) - y_train_buy.sum()) / y_train_buy.sum() if y_train_buy.sum() > 0 else 1
         scale_sell = (len(y_train_sell) - y_train_sell.sum()) / y_train_sell.sum() if y_train_sell.sum() > 0 else 1
         
-        # 3. Train BUY Model
         logger.info(f"[ML] Training BUY Model (scale_pos_weight={scale_buy:.2f})...")
         self.model_buy = xgb.XGBClassifier(
-            n_estimators=100, learning_rate=0.05, max_depth=3,
+            n_estimators=120, learning_rate=0.04, max_depth=4,
             subsample=0.8, colsample_bytree=0.8, random_state=42,
-            eval_metric='logloss', early_stopping_rounds=10,
+            eval_metric='logloss', early_stopping_rounds=15,
             scale_pos_weight=scale_buy
         )
         self.model_buy.fit(
@@ -128,12 +144,11 @@ class MLStrategy:
             verbose=False
         )
         
-        # 4. Train SELL Model
         logger.info(f"[ML] Training SELL Model (scale_pos_weight={scale_sell:.2f})...")
         self.model_sell = xgb.XGBClassifier(
-            n_estimators=100, learning_rate=0.05, max_depth=3,
+            n_estimators=120, learning_rate=0.04, max_depth=4,
             subsample=0.8, colsample_bytree=0.8, random_state=42,
-            eval_metric='logloss', early_stopping_rounds=10,
+            eval_metric='logloss', early_stopping_rounds=15,
             scale_pos_weight=scale_sell
         )
         self.model_sell.fit(
@@ -142,11 +157,21 @@ class MLStrategy:
             verbose=False
         )
         
-        logger.info("[ML] Dual Model Training Complete.")
+        # Save models
+        try:
+            with open("model_buy.pkl", "wb") as f:
+                pickle.dump(self.model_buy, f)
+            with open("model_sell.pkl", "wb") as f:
+                pickle.dump(self.model_sell, f)
+            with open("scaler.pkl", "wb") as f:
+                pickle.dump(self.scaler, f)
+            logger.info("[ML] Dual Model Training & Serialization Complete.")
+        except Exception as e:
+            logger.error(f"[ML] Failed to serialize models: {e}")
         
     def get_signal(self, df):
-        """Generates trading signals based on the dual trained models."""
-        if self.model_buy is None or self.model_sell is None or self.scaler is None:
+        """Generates trading signals with volatility-adjusted SL/TP."""
+        if self.model_buy is None or self.scaler is None:
             return SignalResult(None, None, None, "PROBABILISTIC", None, None)
             
         if len(df) < 20:
@@ -162,36 +187,25 @@ class MLStrategy:
         X_test = last_bar[self.features]
         X_test_scaled = self.scaler.transform(X_test)
         
-        # Predict probability
-        prob_buy = self.model_buy.predict_proba(X_test_scaled)[0][1]
-        prob_sell = self.model_sell.predict_proba(X_test_scaled)[0][1]
+        prob_buy = float(self.model_buy.predict_proba(X_test_scaled)[0][1])
+        prob_sell = float(self.model_sell.predict_proba(X_test_scaled)[0][1]) if self.model_sell is not None else 0.0
         
-        close = last_bar['close'].iloc[0]
+        close = float(last_bar['close'].iloc[0])
+        atr = float(last_bar.get('atr_14', last_bar.get('atr', close * 0.01)).iloc[0])
         
-        # Asymmetric 1.0% TP and 0.5% SL (Matches model training labels exactly)
-        tp_pct = 0.010
-        sl_pct = 0.005
-        
-        # Threshold lowered to 0.50 as RR=2.0 requires only 33% win rate to break even
-        if prob_sell > 0.50:
-            sl = close * (1 + sl_pct)
-            tp = close * (1 - tp_pct)
-            return SignalResult("SELL", sl, tp, "PROBABILISTIC", prob_sell, 2.0)
+        # Volatility-adjusted 2.5x ATR TP and 1.2x ATR SL (RR = 2.08)
+        if prob_buy >= 0.52:
+            sl = close - (atr * 1.2)
+            tp = close + (atr * 2.5)
+            return SignalResult("BUY", sl, tp, "PROBABILISTIC", prob_buy, 2.08)
             
-        if prob_buy > 0.50:
-            sl = close * (1 - sl_pct)
-            tp = close * (1 + tp_pct)
-            return SignalResult("BUY", sl, tp, "PROBABILISTIC", prob_buy, 2.0)
-            
-        # DIAGNOSTIC
-        try:
-            with open("diagnostic_probs.txt", "a") as f:
-                f.write(f"HOLD: prob_buy={prob_buy:.4f}, prob_sell={prob_sell:.4f}\n")
-        except: pass
+        if prob_sell >= 0.52:
+            sl = close + (atr * 1.2)
+            tp = close - (atr * 2.5)
+            return SignalResult("SELL", sl, tp, "PROBABILISTIC", prob_sell, 2.08)
             
         return SignalResult(None, None, None, "PROBABILISTIC", None, None)
 
-# Singleton instance for backwards compatibility with the MultiStrategyWrapper
 _instance = MLStrategy()
 get_signal = _instance.get_signal
 train = _instance.train

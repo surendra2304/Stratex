@@ -41,7 +41,7 @@ def test_chaos_daily_risk_reset():
         assert gate.daily_realized_loss == 0.0, "Daily PnL should reset on UTC boundary crossing"
         assert gate.current_trading_day == future_date.date()
 
-@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"})
+@patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE", "TESTNET_PORTFOLIO_FILE": "nonexistent_portfolio.json", "TESTNET_LEDGER_FILE": "nonexistent_ledger.jsonl"})
 def test_chaos_data_staleness_blocks_entries():
     svc, msc, rsg = reload_modules()
     

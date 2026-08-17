@@ -127,5 +127,5 @@ def replay_all(symbols, timeframes=["15m", "1h", "4h"], days=60):
     df_res.to_csv("scratch/replay_results.csv", index=False)
 
 if __name__ == "__main__":
-    syms = ['BNBUSDT', 'BTCUSDT', 'ETHUSDT', 'TRXUSDT', 'ADAUSDT', 'LINKUSDT', 'DOGEUSDT', 'SOLUSDT', 'PAXGUSDT', 'PORTALUSDT', 'SOPHUSDT', 'HEMIUSDT', 'SPCXBUSDT']
-    replay_all(syms)
+    syms = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'LINKUSDT', 'TRXUSDT']
+    replay_all(syms, days=30)

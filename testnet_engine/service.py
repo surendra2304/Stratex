@@ -542,12 +542,6 @@ class TestnetService:
 
                     logger.info(f"[SIGNAL_GENERATED] {strat_name} {side} {symbol} ({tf}) | SignalID: {signal_id} | SL: {sl} | TP: {tp}")
 
-                    self.stats["TOTAL_SIGNALS"] += 1
-                    if strat_name in self.stats["strategy_metrics"]:
-                        self.stats["strategy_metrics"][strat_name]["signals"] += 1
-                    if tf in self.stats["timeframe_metrics"]:
-                        self.stats["timeframe_metrics"][tf]["signals"] += 1
-
                     if side == "SELL" and getattr(config, 'LONG_ONLY', False):
                         self.stats["OTHER_REJECTED"] += 1
                         if strat_name in self.stats["strategy_metrics"]:
