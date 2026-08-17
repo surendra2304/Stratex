@@ -10,6 +10,13 @@ A robust, multi-strategy quantitative trading and statistical validation platfor
 
 ---
 
+## 🤖 AI Agent & Copilot Instructions
+
+> [!IMPORTANT]
+> **If you are an AI coding assistant, LLM, or autonomous agent:** You **MUST** read [`AGENTS.md`](AGENTS.md), [`docs/LIVE_SYSTEM.md`](docs/LIVE_SYSTEM.md), and [`docs/AI_DEBUGGING.md`](docs/AI_DEBUGGING.md) before interacting with this repository. These documents serve as the canonical source of truth for architectural constraints, debugging protocols, and strict safety rules (e.g., TESTNET ONLY).
+
+---
+
 ## Current Status & Deployment Gates
 
 > [!CAUTION]
