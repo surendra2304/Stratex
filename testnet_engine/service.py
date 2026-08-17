@@ -150,17 +150,22 @@ class TestnetService:
         # Stats for dashboard (Strict Signal Funnel)
         self.stats = {
             "TOTAL_SIGNALS": 0,
+            "PROFITABILITY_ACCEPTED": 0,
             "PROFITABILITY_REJECTED": 0,
+            "RISK_ACCEPTED": 0,
             "RISK_REJECTED": 0,
+            "EXECUTION_ELIGIBLE": 0,
+            "EXECUTION_REJECTED": 0,
             "COOLDOWN_REJECTED": 0,
             "MARKET_DATA_REJECTED": 0,
             "JIT_REJECTED": 0,
             "OTHER_REJECTED": 0,
             "QUALIFIED": 0,
             "ORDERS_SUBMITTED": 0,
-            "EXECUTION_REJECTED": 0,
             "ORDERS_FILLED": 0,
             "ORDERS_FAILED": 0,
+            "OPEN_POSITIONS": 0,
+            "CLOSED_TRADES": 0,
             "symbols_scanned": 0,
             "ticks_received_per_symbol": {},
             "candles_constructed_per_symbol": {},
@@ -380,6 +385,8 @@ class TestnetService:
             self.stats["ticks_received_per_symbol"] = {f"{k[0]}_{k[1]}": v for k, v in getattr(self.scanner, 'tick_counts', {}).items()}
             self.stats["candles_constructed_per_symbol"] = {f"{k[0]}_{k[1]}": len(v) for k, v in self.scanner.candle_cache.items()}
             self.stats["latest_candle_timestamp"] = {f"{k[0]}_{k[1]}": str(v.index[-1] if not v.empty else "") for k, v in self.scanner.candle_cache.items()}
+            
+        self.stats["OPEN_POSITIONS"] = len(self.active_positions)
                 
         state = {
             "initial_deposit": self.initial_deposit,
@@ -630,6 +637,8 @@ class TestnetService:
                         self.stats["JIT_REJECTED"] += 1
                         self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", f"REVALIDATION_FAILED: {fresh_metrics['reason']}")
                         continue
+                        
+                    self.stats["PROFITABILITY_ACCEPTED"] += 1
                     
                     # Sizing
                     filters = self.symbol_filters.get(symbol, {})
@@ -650,6 +659,8 @@ class TestnetService:
                         self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", r_reason)
                         continue
                         
+                    self.stats["RISK_ACCEPTED"] += 1
+                        
                     # Execute
                     if self.observe_only:
                         self.stats["OTHER_REJECTED"] += 1
@@ -664,6 +675,8 @@ class TestnetService:
                     self.log_opportunity(signal_id, symbol, side, fresh_metrics, "ACCEPTED", "ALL_GATES_PASSED")
                     
                     logger.info(f"[EXECUTION_ATTEMPTED] {strategy_name} {side} {qty} {symbol} @ ~{current_price} | SignalID: {signal_id}")
+                    self.stats["EXECUTION_ELIGIBLE"] += 1
+                    
                     try:
                         order_res = place_market_order(strategy_name, side, symbol, quantity=qty, sl=sl, tp=tp, client_order_id=signal_id)
                         if order_res:
@@ -801,6 +814,7 @@ class TestnetService:
                         if sym not in new_active_positions:
                             logger.info(f"[SERVICE] Position for {sym} closed. Risk bounds will update on next PnL parse.")
                             self._restore_daily_risk_state()
+                            self.stats["CLOSED_TRADES"] += 1
                             
                     self.active_positions = new_active_positions
                 except Exception as e:
