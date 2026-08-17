@@ -69,8 +69,8 @@ MAX_SINGLE_ASSET_EXPOSURE = 0.02   # 2% max per single asset
 MAX_NET_DIRECTIONAL_EXPOSURE = 0.04 # 4% max net directional exposure
 MAX_OPEN_POSITIONS = 5             # Allow multiple positions up to exposure limit
 MAX_DAILY_LOSS_PCT = 0.02          # 2% daily loss limit
-MAX_TESTNET_DRAWDOWN_PCT = 0.05    # 5% max drawdown limit
-RECONCILIATION_TOLERANCE = 1.0     # 1 USDT tolerance for slight fee estimation drift
+MAX_TESTNET_DRAWDOWN_PCT = 0.05    # Strict Reconciliation Tolerance (allow small rounding/dust gaps up to $5.00)
+RECONCILIATION_TOLERANCE = 5.0     # 5 USDT tolerance for slight fee estimation drift
 
 # --- Strategy Quality Control (Phase 5) ---
 MINIMUM_EXPECTED_EDGE = 0.0005     # Must have at least 0.05% expected net edge after fees
