@@ -349,10 +349,11 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         return order
     except BinanceAPIException as e:
         sys_logger.error(f"[EXEC] ❌ Binance API Error placing entry order: {e}", extra={"strategy": strategy_name, "symbol": symbol})
-        return None
+        raise
     except Exception as e:
         sys_logger.error(f"[EXEC] ❌ Unexpected error placing entry order: {e}", extra={"strategy": strategy_name, "symbol": symbol})
-        return None
+        raise
+
 
 def monitor_open_trades():
     """Checks active OCO orders to see if SL or TP was hit. Uses actual fill prices for PnL."""

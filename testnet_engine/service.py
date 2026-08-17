@@ -521,6 +521,15 @@ class TestnetService:
                     if tf in self.stats["timeframe_metrics"]:
                         self.stats["timeframe_metrics"][tf]["signals"] += 1
 
+                    if side == "SELL" and getattr(config, 'LONG_ONLY', False):
+                        self.stats["OTHER_REJECTED"] += 1
+                        if strat_name in self.stats["strategy_metrics"]:
+                            self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                        if tf in self.stats["timeframe_metrics"]:
+                            self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                        self.log_opportunity(signal_id, symbol, side, {"reason": "LONG_ONLY_RESTRICTION"}, "REJECTED", "LONG_ONLY_RESTRICTION")
+                        continue
+
                     passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
                         symbol, side, current_price, sl, tp, signal_result
                     )

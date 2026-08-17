@@ -45,8 +45,8 @@ LIVE_TRADING_ENABLED = os.getenv("LIVE_TRADING_ENABLED", "False").lower() == "tr
 # --- Strategies to Run ---
 # Multi-strategy configuration mapping validated strategy -> timeframe(s)
 ACTIVE_STRATEGIES = {
-    "aggressor": ["1m", "3m"],
-    "scalper": ["1m", "3m", "5m"],
+    "aggressor": ["5m"],  # bumped from 1m, 3m
+    "scalper": ["5m"],    # bumped from 1m, 3m
     "supertrend": ["15m", "30m", "1h"],
     "ml": ["15m", "30m"],
     "swing": ["2h", "4h"],

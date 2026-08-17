@@ -61,8 +61,9 @@ def get_logger(name="system"):
     if not logger.handlers:
         logger.setLevel(logging.INFO)
         
+        log_file = "test_bot.log" if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("TESTING") else "bot.log"
         handler = RotatingFileHandler(
-            "bot.log", 
+            log_file, 
             maxBytes=10 * 1024 * 1024, # 10 MB
             backupCount=5
         )
