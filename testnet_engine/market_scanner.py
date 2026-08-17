@@ -26,6 +26,7 @@ class MarketScanner:
         # In-memory OHLCV cache per (symbol, timeframe) and symbol
         self.candle_cache = {} 
         self.last_market_update = {} # track by (symbol, timeframe)
+        self.last_candle_close = {} # track actual candle closes
         self.data_health_status = {sym: "UNKNOWN" for sym in symbols}
         self.callbacks = []
         
@@ -62,6 +63,7 @@ class MarketScanner:
             for tf in self.timeframes:
                 self._fetch_historical_candles(sym, tf)
                 self.last_market_update[(sym, tf)] = datetime.datetime.utcnow()
+                self.last_candle_close[(sym, tf)] = datetime.datetime.utcnow()
             self.data_health_status[sym] = "OK"
             time.sleep(0.1) # Small delay to respect REST rate limits during init
             
@@ -94,11 +96,20 @@ class MarketScanner:
                         continue
                         
                     elapsed = (now - last_update).total_seconds()
+                    try:
+                        tf_secs = int(pd.to_timedelta(tf).total_seconds())
+                    except Exception:
+                        if tf.endswith('m'): tf_secs = int(tf[:-1]) * 60
+                        elif tf.endswith('h'): tf_secs = int(tf[:-1]) * 3600
+                        else: tf_secs = 60
+                        
+                    last_close = self.last_candle_close.get((sym, tf), now - datetime.timedelta(days=1))
+                    elapsed_close = (now - last_close).total_seconds()
                     
-                    if elapsed > max(15, int(pd.to_timedelta(tf).total_seconds()) * 1.5): # Scale timeout to TF
+                    if elapsed > max(15, tf_secs * 1.5) or elapsed_close > tf_secs + 15:
                         sym_stale = True
                         if self.data_health_status[sym] == "OK":
-                            logger.warning(f"[SCANNER] ⚠️ {sym} ({tf}) data STALE (>15s or 1.5x TF). Falling back to REST.")
+                            logger.warning(f"[SCANNER] ⚠️ {sym} ({tf}) data STALE (Missed close or tick timeout). Falling back to REST.")
                         
                         # REST Fallback
                         try:
@@ -109,6 +120,8 @@ class MarketScanner:
                                     cb(sym, tf, self.candle_cache[(sym, tf)].copy(), "STALE")
                                 except Exception as e:
                                     logger.error(f"[SCANNER] Callback error (REST Fallback) for {sym} ({tf}): {e}")
+                            
+                            self.last_candle_close[(sym, tf)] = now
                         except Exception as e:
                             logger.error(f"[SCANNER] REST Fallback failed for {sym} ({tf}): {e}")
                 
@@ -163,6 +176,8 @@ class MarketScanner:
         # Only process fully closed candles for signals
         if not is_closed:
             return
+            
+        self.last_candle_close[(symbol, tf)] = datetime.datetime.utcnow()
             
         # Update Cache
         vol = float(kline.get('v', 0))

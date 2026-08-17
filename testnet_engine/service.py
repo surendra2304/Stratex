@@ -979,7 +979,9 @@ class TestnetService:
                     
             last_candle_close = None
             if hasattr(self, 'scanner') and self.scanner and hasattr(self.scanner, 'last_candle_close'):
-                last_candle_close = self.scanner.last_candle_close.isoformat() + "Z"
+                closes = [ts for ts in self.scanner.last_candle_close.values() if ts]
+                if closes:
+                    last_candle_close = max(closes).isoformat() + "Z"
                 
             last_eval = None
             if self.last_evaluation:
