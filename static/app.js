@@ -57,6 +57,136 @@ const applyColor = (el, val, isPct = false) => {
 };
 
 // ==========================================
+// AUDIO & TOAST NOTIFICATION ENGINE
+// ==========================================
+let audioAlertsEnabled = true;
+let audioCtx = null;
+const knownTradeOrderIds = new Set();
+let rawEquityPoints = [];
+let equityTimeframe = 'ALL';
+let rawOpportunities = [];
+let signalFilterState = 'ALL';
+
+function getAudioContext() {
+    if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) audioCtx = new AudioContextClass();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    return audioCtx;
+}
+
+function playTradeChime() {
+    if (!audioAlertsEnabled) return;
+    try {
+        const ctx = getAudioContext();
+        if (!ctx) return;
+        
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, now); // D5
+        osc.frequency.exponentialRampToValueAtTime(880.00, now + 0.12); // A5
+        
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc.start(now);
+        osc.stop(now + 0.35);
+    } catch (e) {
+        console.warn("Audio chime error:", e);
+    }
+}
+
+function toggleAudioAlerts() {
+    audioAlertsEnabled = !audioAlertsEnabled;
+    const btn = document.getElementById('audio-toggle-btn');
+    const txt = document.getElementById('audio-status-txt');
+    if (btn) {
+        if (audioAlertsEnabled) {
+            btn.classList.add('active');
+            if (txt) txt.innerText = 'Audio ON';
+            playTradeChime();
+        } else {
+            btn.classList.remove('active');
+            if (txt) txt.innerText = 'Audio OFF';
+        }
+    }
+}
+
+function showTradeToast(trade) {
+    const container = document.getElementById('trade-toast-container');
+    if (!container) return;
+    
+    playTradeChime();
+    
+    const toast = document.createElement('div');
+    toast.className = 'trade-toast';
+    const isWin = (trade.pnl || 0) >= 0;
+    const pnlTxt = trade.pnl !== undefined ? (isWin ? `+$${Number(trade.pnl).toFixed(2)}` : `-$${Math.abs(trade.pnl).toFixed(2)}`) : '';
+    
+    toast.innerHTML = `
+        <div class="toast-header">
+            <div class="toast-title">⚡ ${trade.status === 'CLOSED' ? 'TRADE CLOSED' : 'ORDER EXECUTED'}</div>
+            <div class="toast-time">${new Date().toLocaleTimeString()}</div>
+        </div>
+        <div class="toast-body">
+            <div class="toast-detail-row">
+                <span>Symbol / Side</span>
+                <span class="toast-detail-val">${trade.symbol} • ${trade.action || trade.side}</span>
+            </div>
+            <div class="toast-detail-row">
+                <span>Price / Qty</span>
+                <span class="toast-detail-val">${Number(trade.entry_price || trade.price || 0).toFixed(4)} (${trade.quantity})</span>
+            </div>
+            ${pnlTxt ? `<div class="toast-detail-row"><span>Realized PnL</span><span class="toast-detail-val ${isWin ? 'val-green' : 'val-red'}">${pnlTxt}</span></div>` : ''}
+        </div>
+    `;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+        setTimeout(() => toast.remove(), 400);
+    }, 5000);
+}
+
+async function exportTradesJSON() {
+    const data = await apiClient.get('/api/trades');
+    if (!data || !data.positions) return;
+    const blob = new Blob([JSON.stringify(data.positions, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'binance_trade_ledger.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function setEquityTimeframe(tf) {
+    equityTimeframe = tf;
+    document.querySelectorAll('.btn-tf').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById('tf-' + tf.toLowerCase());
+    if (btn) btn.classList.add('active');
+    renderEquityChart();
+}
+
+function setSignalFilter(filterType) {
+    signalFilterState = filterType;
+    document.querySelectorAll('.btn-filter').forEach(b => b.classList.remove('active'));
+    const bId = filterType === 'ALL' ? 'sig-btn-all' : (filterType === 'ACCEPTED' ? 'sig-btn-acc' : 'sig-btn-rej');
+    const btn = document.getElementById(bId);
+    if (btn) btn.classList.add('active');
+    renderSignalsTable();
+}
+
+// ==========================================
 // 1. CLOCK & UPTIME
 // ==========================================
 let serverTimeOffset = 0;
@@ -489,6 +619,22 @@ async function fetchTrades() {
         } else {
             if(dashTradesBody) dashTradesBody.innerHTML = allClosed.slice(0, 10).map(mapDashTrade).join('');
             if(fullTradesBody) fullTradesBody.innerHTML = allClosed.map(mapTrade).join('');
+            
+            // Check for new live trades to pop up toast & sound chime
+            if (knownTradeOrderIds.size > 0) {
+                for (const t of allClosed) {
+                    const tid = String(t.order_id || t.timestamp);
+                    if (tid && !knownTradeOrderIds.has(tid)) {
+                        knownTradeOrderIds.add(tid);
+                        showTradeToast(t);
+                    }
+                }
+            } else {
+                allClosed.forEach(t => {
+                    const tid = String(t.order_id || t.timestamp);
+                    if (tid) knownTradeOrderIds.add(tid);
+                });
+            }
         }
 
         // Summary
@@ -713,43 +859,15 @@ async function fetchScanner() {
         
         // Opportunities & Signals
         const oppBody = document.getElementById('opp-short-body');
-        const sigFullBody = document.getElementById('signals-full-body');
+        rawOpportunities = data.top_opportunities || [];
         
-        const mapOpp = (o, full) => {
-            const sideClass = o.side === 'BUY' || o.side === 'LONG' ? 'tag tag-long' : 'tag tag-short';
-            const tsShort = o.timestamp ? formatDateTime(o.timestamp) : '-';
-            const confStr = o.confidence ? formatPct(o.confidence) : '-';
-            const netStr = o.expected_net_return ? (o.expected_net_return > 0 ? `<span class="val-green">+${formatPct(o.expected_net_return)}</span>` : `<span class="val-red">${formatPct(o.expected_net_return)}</span>`) : '-';
-            const priceStr = o.current_price ? Number(o.current_price).toFixed(2) : '-';
-            const decClass = o.decision === 'ACCEPTED' || o.decision === 'APPROVED' ? 'tag tag-qualified' : 'tag tag-rejected';
-            const shortReason = o.reason ? (o.reason.length > 30 ? o.reason.substring(0, 30) + '...' : o.reason) : '-';
-            
-            const strat = o.strategy || '-';
-            const tf = o.timeframe || '-';
-            
-            if (full) {
-                return `<tr>
-                    <td>${tsShort}</td><td class="td-strong">${o.symbol}</td><td>${tf}</td><td>${strat}</td><td><span class="${sideClass}">${o.side}</span></td>
-                    <td>${priceStr}</td><td>${confStr}</td><td>${netStr}</td>
-                    <td>-</td><td>-</td>
-                    <td><span class="${decClass}">${o.decision || '-'}</span></td><td title="${o.reason}">${shortReason}</td>
-                </tr>`;
-            } else {
-                const shTs = o.timestamp ? String(o.timestamp).substring(11, 19) : '-';
-                return `<tr>
-                    <td>${shTs}</td><td class="td-strong">${o.symbol}</td><td>${tf}</td><td>${strat}</td><td><span class="${sideClass}">${o.side}</span></td>
-                    <td>${priceStr}</td><td>${confStr}</td><td>${netStr}</td>
-                    <td><span class="${decClass}">${o.decision || '-'}</span></td>
-                </tr>`;
-            }
-        };
-
-        if (!data.top_opportunities || data.top_opportunities.length === 0) {
+        if (!rawOpportunities || rawOpportunities.length === 0) {
             if(oppBody) oppBody.innerHTML = '<tr><td colspan="6" class="empty-state">NO QUALIFYING OPPORTUNITIES</td></tr>';
+            const sigFullBody = document.getElementById('signals-full-body');
             if(sigFullBody) sigFullBody.innerHTML = '<tr><td colspan="12" class="empty-state">NO SIGNALS LOGGED YET</td></tr>';
         } else {
-            if(oppBody) oppBody.innerHTML = data.top_opportunities.slice(0, 5).map(o => mapOpp(o, false)).join('');
-            if(sigFullBody) sigFullBody.innerHTML = data.top_opportunities.map(o => mapOpp(o, true)).join('');
+            if(oppBody) oppBody.innerHTML = rawOpportunities.slice(0, 5).map(o => mapOpp(o, false)).join('');
+            renderSignalsTable();
         }
         // Capture rejection reasons for Analytics
         scannerRejectionData = {
@@ -767,22 +885,75 @@ async function fetchScanner() {
     }
 }
 
+const mapOpp = (o, full) => {
+    const sideClass = o.side === 'BUY' || o.side === 'LONG' ? 'tag tag-long' : 'tag tag-short';
+    const tsShort = o.timestamp ? formatDateTime(o.timestamp) : '-';
+    const confStr = o.confidence ? formatPct(o.confidence) : '-';
+    const netStr = o.expected_net_return ? (o.expected_net_return > 0 ? `<span class="val-green">+${formatPct(o.expected_net_return)}</span>` : `<span class="val-red">${formatPct(o.expected_net_return)}</span>`) : '-';
+    const priceStr = o.current_price ? Number(o.current_price).toFixed(2) : '-';
+    const decClass = o.decision === 'ACCEPTED' || o.decision === 'APPROVED' ? 'tag tag-qualified' : 'tag tag-rejected';
+    const shortReason = o.reason ? (o.reason.length > 30 ? o.reason.substring(0, 30) + '...' : o.reason) : '-';
+    
+    const strat = o.strategy || '-';
+    const tf = o.timeframe || '-';
+    
+    if (full) {
+        return `<tr>
+            <td>${tsShort}</td><td class="td-strong">${o.symbol}</td><td>${tf}</td><td>${strat}</td><td><span class="${sideClass}">${o.side}</span></td>
+            <td>${priceStr}</td><td>${confStr}</td><td>${netStr}</td>
+            <td>-</td><td>-</td>
+            <td><span class="${decClass}">${o.decision || '-'}</span></td><td title="${o.reason}">${shortReason}</td>
+        </tr>`;
+    } else {
+        const shTs = o.timestamp ? String(o.timestamp).substring(11, 19) : '-';
+        return `<tr>
+            <td>${shTs}</td><td class="td-strong">${o.symbol}</td><td>${tf}</td><td>${strat}</td><td><span class="${sideClass}">${o.side}</span></td>
+            <td>${priceStr}</td><td>${confStr}</td><td>${netStr}</td>
+            <td><span class="${decClass}">${o.decision || '-'}</span></td>
+        </tr>`;
+    }
+};
+
+function renderSignalsTable() {
+    const sigFullBody = document.getElementById('signals-full-body');
+    if (!sigFullBody) return;
+    
+    let filtered = rawOpportunities;
+    if (signalFilterState === 'ACCEPTED') {
+        filtered = rawOpportunities.filter(o => o.decision === 'ACCEPTED' || o.decision === 'APPROVED');
+    } else if (signalFilterState === 'REJECTED') {
+        filtered = rawOpportunities.filter(o => o.decision !== 'ACCEPTED' && o.decision !== 'APPROVED');
+    }
+    
+    if (filtered.length === 0) {
+        sigFullBody.innerHTML = `<tr><td colspan="12" class="empty-state">NO SIGNALS MATCHING FILTER (${signalFilterState})</td></tr>`;
+    } else {
+        sigFullBody.innerHTML = filtered.map(o => mapOpp(o, true)).join('');
+    }
+}
+
 let equityChartInst = null;
 let pnlHistChartInst = null;
 let rejPieChartInst = null;
 
-async function initChart() {
+function renderEquityChart() {
     const ctx = document.getElementById('equityChart');
-    if(!ctx) return;
-    
-    const eqData = await apiClient.get('/api/equity');
-    if (!eqData || eqData.length === 0) return; // No data yet
+    if(!ctx || !rawEquityPoints || rawEquityPoints.length === 0) return;
 
-    const labels = eqData.map(p => {
+    let points = rawEquityPoints;
+    const now = Date.now();
+    if (equityTimeframe === '1D') {
+        points = rawEquityPoints.filter(p => now - p.time <= 86400000);
+    } else if (equityTimeframe === '7D') {
+        points = rawEquityPoints.filter(p => now - p.time <= 7 * 86400000);
+    }
+    if (points.length === 0) points = rawEquityPoints;
+
+    const labels = points.map(p => {
         const d = new Date(p.time);
         return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     });
-    const data = eqData.map(p => p.equity);
+    const data = points.map(p => p.equity);
 
     if (equityChartInst) {
         equityChartInst.data.labels = labels;
@@ -843,6 +1014,13 @@ async function initChart() {
             }
         }
     });
+}
+
+async function initChart() {
+    const eqData = await apiClient.get('/api/equity');
+    if (!eqData || eqData.length === 0) return;
+    rawEquityPoints = eqData;
+    renderEquityChart();
 }
 
 function updateAnalyticsCharts() {

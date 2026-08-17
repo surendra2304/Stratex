@@ -103,9 +103,8 @@
                         <span class="stat-value" id="nav-clock">--:--:--</span>
                     </div>
                     <div class="header-actions">
-                        <span>↻</span>
-                        <span>🔔</span>
-                        <span>⚙</span>
+                        <button id="audio-toggle-btn" class="header-toggle-btn active" onclick="toggleAudioAlerts()" title="Toggle Trade Sound Alerts">🔔 <span id="audio-status-txt">Audio ON</span></button>
+                        <button class="btn-action" onclick="fetchStatus();fetchTrades();fetchScanner();" title="Refresh Live State">↻ Refresh</button>
                     </div>
                 </div>
             </header>
@@ -179,6 +178,11 @@
                     <div class="panel">
                         <div class="panel-header">
                             <h3 class="panel-title">EQUITY CURVE</h3>
+                            <div class="chart-tf-group">
+                                <button class="btn-tf" id="tf-1d" onclick="setEquityTimeframe('1D')">1D</button>
+                                <button class="btn-tf" id="tf-7d" onclick="setEquityTimeframe('7D')">7D</button>
+                                <button class="btn-tf active" id="tf-all" onclick="setEquityTimeframe('ALL')">ALL</button>
+                            </div>
                         </div>
                         <div class="panel-content no-pad">
                             <div class="chart-container">
@@ -489,6 +493,11 @@
                 <div class="panel" style="flex:1;">
                     <div class="panel-header">
                         <h3 class="panel-title">LIVE SIGNALS TERMINAL</h3>
+                        <div class="filter-group">
+                            <button class="btn-filter active" id="sig-btn-all" onclick="setSignalFilter('ALL')">ALL</button>
+                            <button class="btn-filter" id="sig-btn-acc" onclick="setSignalFilter('ACCEPTED')">✅ ACCEPTED</button>
+                            <button class="btn-filter" id="sig-btn-rej" onclick="setSignalFilter('REJECTED')">❌ REJECTED</button>
+                        </div>
                     </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
@@ -594,7 +603,13 @@
                     <div class="metric-card"><div class="metric-icon-wrap bg-amber">¢</div><div class="metric-content"><span class="metric-label">TOTAL FEES</span><span class="metric-value" id="tr-fees">$0.00</span></div></div>
                 </div>
                 <div class="panel" style="flex:1;">
-                    <div class="panel-header"><h3 class="panel-title">TRADE HISTORY</h3></div>
+                    <div class="panel-header">
+                        <h3 class="panel-title">TRADE HISTORY</h3>
+                        <div class="chart-tf-group">
+                            <a href="/api/export-trades" class="btn-action" download="binance_trade_ledger.csv">📥 Export CSV</a>
+                            <button class="btn-action" onclick="exportTradesJSON()">📥 Export JSON</button>
+                        </div>
+                    </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
                             <table>

@@ -128,10 +128,11 @@ class RiskGate:
         if current_equity > self.peak_equity:
             self.peak_equity = current_equity
 
-    def calculate_position_size(self, current_equity, entry_price, sl_price, filters=None):
+    def calculate_position_size(self, current_equity, entry_price, sl_price, filters=None, confidence=None, tp_price=None):
         """
         Calculates position size strictly capped at MAX_TESTNET_RISK_PER_TRADE,
-        and floors the value strictly to Binance's LOT_SIZE stepSize.
+        with optional Half-Kelly dynamic scaling when calibrated confidence and targets are provided.
+        Floors the value strictly to Binance's LOT_SIZE stepSize.
         Returns 0.0 if the rounded size is below MIN_NOTIONAL.
         """
         if filters is None:
@@ -140,7 +141,23 @@ class RiskGate:
         if risk_per_unit == 0:
             return 0.0
 
-        max_risk_amount = current_equity * config.MAX_TESTNET_RISK_PER_TRADE
+        # Base risk fraction
+        risk_pct = config.MAX_TESTNET_RISK_PER_TRADE
+        
+        # Adaptive Half-Kelly sizing when confidence & TP are available
+        if confidence is not None and tp_price is not None and 0.5 < confidence < 1.0:
+            reward_per_unit = abs(tp_price - entry_price)
+            if risk_per_unit > 0 and reward_per_unit > 0:
+                b = reward_per_unit / risk_per_unit  # reward-to-risk ratio
+                p = float(confidence)
+                q = 1.0 - p
+                kelly_f = (p * b - q) / b if b > 0 else 0.0
+                if kelly_f > 0:
+                    half_kelly = kelly_f * 0.5
+                    # Bound between 0.002 (0.2%) and MAX_TESTNET_RISK_PER_TRADE
+                    risk_pct = max(0.002, min(config.MAX_TESTNET_RISK_PER_TRADE, half_kelly))
+
+        max_risk_amount = current_equity * risk_pct
         quantity = max_risk_amount / risk_per_unit
         
         # Also cap by max single asset absolute size
@@ -153,18 +170,16 @@ class RiskGate:
         step_size = filters.get("stepSize", 1.0)
         import math
         # Floor to nearest step_size
-        rounded_qty = math.floor(final_quantity / step_size) * step_size
+        precision = max(0, int(round(-math.log10(step_size)))) if step_size < 1 else 0
+        stepped_quantity = math.floor(final_quantity / step_size) * step_size
+        stepped_quantity = round(stepped_quantity, precision)
         
-        # Handle floating point inaccuracies
-        # We find how many decimals are in the step size and round to that.
-        step_str = f"{step_size:f}".rstrip('0')
-        decimals = len(step_str.split('.')[1]) if '.' in step_str else 0
-        rounded_qty = round(rounded_qty, decimals)
-        
-        # Apply MIN_NOTIONAL check
+        # Apply MIN_NOTIONAL filter check
         min_notional = filters.get("minNotional", 10.0)
-        if rounded_qty * entry_price < min_notional:
-            logger.info(f"[RISKGATE] Rejecting trade: Notional value ${rounded_qty * entry_price:.2f} < MIN_NOTIONAL ${min_notional}")
+        notional_value = stepped_quantity * entry_price
+        
+        if notional_value < min_notional:
+            logger.info(f"[RISKGATE] Rejecting trade: Notional value ${notional_value:.2f} < MIN_NOTIONAL ${min_notional:.1f}")
             return 0.0
             
-        return rounded_qty
+        return stepped_quantity

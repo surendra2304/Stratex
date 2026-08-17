@@ -665,7 +665,101 @@ def get_scanner():
         except Exception as e:
             logger.error(f"Error reading opportunity log: {e}")
             
+    # Compute dynamic strategy metrics from trade ledger and forward signals if empty
+    if not stats.get("strategy_metrics"):
+        trades_info = _get_trades_data()
+        strat_metrics = {}
+        # Prepopulate active strategies
+        for s_name in ["ADX_EMA", "ML", "SCALPER", "SUPERTREND", "SWING", "AGGRESSOR", "FAST1M"]:
+            strat_metrics[s_name] = {
+                "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0,
+                "qualified": 0, "rejected": 0, "orders": 0, "fills": 0,
+                "wins": 0, "losses": 0, "PnL": 0.0
+            }
+            
+        for t in trades_info.get("positions", []):
+            st = str(t.get("strategy", "AGGRESSOR")).upper()
+            if st not in strat_metrics:
+                strat_metrics[st] = {
+                    "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0,
+                    "qualified": 0, "rejected": 0, "orders": 0, "fills": 0,
+                    "wins": 0, "losses": 0, "PnL": 0.0
+                }
+            strat_metrics[st]["fills"] += 1
+            strat_metrics[st]["orders"] += 1
+            strat_metrics[st]["qualified"] += 1
+            strat_metrics[st]["evaluations"] += 1
+            if t.get("action", "").upper() in ["BUY", "LONG"]:
+                strat_metrics[st]["BUY"] += 1
+            else:
+                strat_metrics[st]["SELL"] += 1
+            pnl = float(t.get("pnl", 0.0))
+            strat_metrics[st]["PnL"] += pnl
+            if pnl > 0: strat_metrics[st]["wins"] += 1
+            elif pnl < 0: strat_metrics[st]["losses"] += 1
+            
+        stats["strategy_metrics"] = strat_metrics
+
     return jsonify(stats)
+
+@app.route('/api/strategy-metrics')
+def api_strategy_metrics():
+    """Calculates comprehensive strategy metrics."""
+    trades_info = _get_trades_data()
+    positions = trades_info.get("positions", [])
+    strats = {}
+    for t in positions:
+        st = str(t.get("strategy", "AGGRESSOR")).upper()
+        if st not in strats:
+            strats[st] = {"trades": 0, "wins": 0, "losses": 0, "net_pnl": 0.0, "gross_profit": 0.0, "gross_loss": 0.0}
+        strats[st]["trades"] += 1
+        pnl = float(t.get("pnl", 0.0))
+        strats[st]["net_pnl"] += pnl
+        if pnl > 0:
+            strats[st]["wins"] += 1
+            strats[st]["gross_profit"] += pnl
+        elif pnl < 0:
+            strats[st]["losses"] += 1
+            strats[st]["gross_loss"] += abs(pnl)
+            
+    for st, data in strats.items():
+        data["win_rate"] = round((data["wins"] / data["trades"] * 100), 2) if data["trades"] > 0 else 0.0
+        data["profit_factor"] = round((data["gross_profit"] / data["gross_loss"]), 2) if data["gross_loss"] > 0 else (999.0 if data["gross_profit"] > 0 else 0.0)
+        data["net_pnl"] = round(data["net_pnl"], 4)
+        
+    return jsonify(strats)
+
+@app.route('/api/export-trades')
+def api_export_trades():
+    """Generates downloadable CSV export of the verified trade ledger."""
+    from flask import Response
+    trades_info = _get_trades_data()
+    positions = trades_info.get("positions", [])
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["timestamp", "symbol", "side", "strategy", "entry_price", "exit_price", "quantity", "gross_pnl", "fees", "net_pnl", "status", "exit_reason", "order_id"])
+    for p in positions:
+        writer.writerow([
+            p.get("timestamp", ""),
+            p.get("symbol", ""),
+            p.get("action", ""),
+            p.get("strategy", ""),
+            p.get("entry_price", ""),
+            p.get("exit_price", ""),
+            p.get("quantity", ""),
+            p.get("gross_pnl", ""),
+            p.get("fees", ""),
+            p.get("pnl", ""),
+            p.get("status", ""),
+            p.get("exit_reason", ""),
+            p.get("order_id", "")
+        ])
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment;filename=binance_trade_ledger.csv"}
+    )
 
 @app.route('/<path:path>')
 def serve_static(path):
