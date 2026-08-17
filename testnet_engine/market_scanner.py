@@ -57,7 +57,7 @@ class MarketScanner:
             df['sell_vol'] = df['volume'] - df['buy_vol']
             df['vol_delta'] = df['buy_vol'] - df['sell_vol']
             
-            clean_df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume', 'vol_delta', 'buy_vol', 'sell_vol']].copy()
+            clean_df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume', 'vol_delta', 'buy_vol', 'sell_vol', 'close_time']].copy()
             self.candle_cache[(symbol, tf)] = clean_df
         except Exception as e:
             logger.error(f"[SCANNER] Failed to fetch historical data for {symbol} ({tf}): {e}")
