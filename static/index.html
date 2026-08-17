@@ -161,6 +161,18 @@
                     </div>
                 </div>
 
+                <!-- CAPITAL DEPLOYMENT & CASH TRANSPARENCY BAR -->
+                <div class="allocation-banner-wrap">
+                    <div class="allocation-header-row">
+                        <span>⚡ <strong>CAPITAL ALLOCATION:</strong> <span id="alloc-cash-txt">Liquid USDT: $8,762.05 (74%)</span> • <span id="alloc-crypto-txt">Active Spot Trades (PORTAL, LINK): $3,112.57 (26%)</span></span>
+                        <span class="alloc-note">Spot Mode: Opening trades exchanges USDT for target crypto with automated OCO exit orders</span>
+                    </div>
+                    <div class="allocation-track">
+                        <div class="alloc-bar-cash" id="alloc-bar-cash" style="width: 74%;"></div>
+                        <div class="alloc-bar-crypto" id="alloc-bar-crypto" style="width: 26%;"></div>
+                    </div>
+                </div>
+
                 <!-- ROW 2: CURVE & ENGINES -->
                 <div class="dashboard-grid-2">
                     <!-- EQUITY CURVE -->
@@ -535,6 +547,34 @@
                                 </thead>
                                 <tbody id="pos-full-body">
                                     <tr><td colspan="8" class="empty-state">No open positions</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel" style="flex:1; margin-top: 14px;">
+                    <div class="panel-header">
+                        <h3 class="panel-title">🛡️ LIVE BINANCE OCO ORDERS (STOP-LOSS & TAKE-PROFIT)</h3>
+                        <span class="panel-action">On-Exchange Working Orders</span>
+                    </div>
+                    <div class="panel-content no-pad">
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>ORDER ID</th>
+                                        <th>SYMBOL</th>
+                                        <th>SIDE</th>
+                                        <th>TYPE</th>
+                                        <th>LIMIT PRICE</th>
+                                        <th>STOP TRIGGER</th>
+                                        <th>QTY</th>
+                                        <th>STATUS</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="open-orders-body">
+                                    <tr><td colspan="8" class="empty-state">Fetching active orders from Binance...</td></tr>
                                 </tbody>
                             </table>
                         </div>

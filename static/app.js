@@ -203,6 +203,23 @@ async function fetchDashboardData() {
         const rviewPos = document.getElementById('rview-pos');
         if (rviewPos) rviewPos.innerText = data.open_positions || 0;
 
+        // Capital Allocation Transparency Bar
+        const cashVal = data.cash || 0;
+        const cryptoVal = data.crypto_holdings_value || 0;
+        const totalVal = (cashVal + cryptoVal) || data.equity || 1;
+        const cashPct = Math.min(100, Math.max(0, (cashVal / totalVal) * 100));
+        const cryptoPct = Math.min(100, Math.max(0, 100 - cashPct));
+
+        const allocCashTxt = document.getElementById('alloc-cash-txt');
+        const allocCryptoTxt = document.getElementById('alloc-crypto-txt');
+        const barCash = document.getElementById('alloc-bar-cash');
+        const barCrypto = document.getElementById('alloc-bar-crypto');
+
+        if (allocCashTxt) allocCashTxt.innerHTML = `Liquid USDT: <strong>${formatCurrency(cashVal)} (${cashPct.toFixed(1)}%)</strong>`;
+        if (allocCryptoTxt) allocCryptoTxt.innerHTML = `Active Spot Trades: <strong>${formatCurrency(cryptoVal)} (${cryptoPct.toFixed(1)}%)</strong>`;
+        if (barCash) barCash.style.width = `${cashPct.toFixed(1)}%`;
+        if (barCrypto) barCrypto.style.width = `${cryptoPct.toFixed(1)}%`;
+
         // Positions View
         const posAvail = document.getElementById('pos-avail');
         if (posAvail) posAvail.innerText = formatCurrency(data.cash);
@@ -238,6 +255,37 @@ async function fetchDashboardData() {
     } catch (e) {
         console.error("Failed to fetch status:", e);
         handleDataUnavailable();
+    }
+}
+
+async function fetchOpenOrders() {
+    try {
+        const orders = await apiClient.get('/api/open-orders');
+        const ordersBody = document.getElementById('open-orders-body');
+        if (!ordersBody) return;
+
+        if (!orders || orders.length === 0) {
+            ordersBody.innerHTML = '<tr><td colspan="8" class="empty-state">No open orders on Binance Testnet</td></tr>';
+            return;
+        }
+
+        ordersBody.innerHTML = orders.map(o => {
+            const sideClass = o.side === 'BUY' ? 'tag tag-long' : 'tag tag-short';
+            const stopStr = o.stop_price > 0 ? Number(o.stop_price).toFixed(4) : '-';
+
+            return `<tr>
+                <td class="td-strong">${o.order_id}</td>
+                <td>${o.symbol}</td>
+                <td><span class="${sideClass}">${o.side}</span></td>
+                <td>${o.type}</td>
+                <td>${Number(o.price).toFixed(4)}</td>
+                <td class="val-amber">${stopStr}</td>
+                <td>${o.orig_qty}</td>
+                <td><span class="tag tag-qualified">${o.status}</span></td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        console.error("Failed to fetch open orders:", e);
     }
 }
 
@@ -907,6 +955,7 @@ function updateDashboard() {
     Promise.all([
         fetchDashboardData(),
         fetchTrades(),
+        fetchOpenOrders(),
         fetchScanner(),
         initChart()
     ]).finally(() => {

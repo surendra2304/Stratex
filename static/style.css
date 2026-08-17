@@ -708,6 +708,49 @@ tbody tr:hover {
     color: #fff;
 }
 
+/* ─── ALLOCATION TRANSPARENCY BANNER ─── */
+.allocation-banner-wrap {
+    background-color: var(--bg-panel);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+
+.allocation-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-primary);
+}
+
+.alloc-note {
+    font-size: 9px;
+    color: var(--text-muted);
+}
+
+.allocation-track {
+    height: 8px;
+    background: #090e17;
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    border: 1px solid var(--border-subtle);
+}
+
+.alloc-bar-cash {
+    background: linear-gradient(90deg, #06b6d4, #2563eb);
+    transition: width 0.4s ease;
+}
+
+.alloc-bar-crypto {
+    background: linear-gradient(90deg, #8b5cf6, #ec4899);
+    transition: width 0.4s ease;
+}
 
 /* ─── CHARTS ─── */
 .chart-container {
