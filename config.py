@@ -50,7 +50,10 @@ ACTIVE_STRATEGIES = {
     "supertrend": ["15m", "30m", "1h"],
     "ml": ["15m", "30m"],
     "swing": ["2h", "4h"],
-    "adx_ema": ["4h"]
+    "adx_ema": ["4h"],
+    "fast1m": ["1m"],
+    "fast2m": ["2m"],
+    "fast5m": ["5m"]
 }
 
 # Backward-compatibility aliases for legacy tests/modules
@@ -73,7 +76,7 @@ MAX_TESTNET_DRAWDOWN_PCT = 0.05    # Strict Reconciliation Tolerance (allow smal
 RECONCILIATION_TOLERANCE = 5.0     # 5 USDT tolerance for slight fee estimation drift
 
 # --- Strategy Quality Control (Phase 5) ---
-MINIMUM_EXPECTED_EDGE = 0.0005     # Must have at least 0.05% expected net edge after fees
+MINIMUM_EXPECTED_EDGE = 0.0001     # Reduced threshold for high‑frequency strategies
 DEGRADATION_WINDOW = 20            # Evaluate last 20 trades for degradation
 MIN_WIN_RATE_THRESHOLD = 0.35      # Automatically switch to OBSERVE-ONLY if < 35% win rate
 MAX_PREDICTION_ERROR = 0.02        # Automatically switch to OBSERVE-ONLY if actual differs from expected by > 2%
