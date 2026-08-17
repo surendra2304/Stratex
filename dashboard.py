@@ -152,6 +152,25 @@ def api_engine_health():
     """Authoritative trading engine health and telemetry endpoint."""
     return jsonify(get_engine_health_data())
 
+@app.route('/api/diagnostics')
+def api_diagnostics():
+    """Authoritative raw state diagnostic endpoint without triggering trades."""
+    import json
+    diag = {}
+    if os.path.exists("testnet_portfolio.json"):
+        try:
+            with open("testnet_portfolio.json", "r") as f:
+                diag["portfolio"] = json.load(f)
+        except Exception:
+            pass
+    if os.path.exists("testnet_heartbeat.json"):
+        try:
+            with open("testnet_heartbeat.json", "r") as f:
+                diag["heartbeat"] = json.load(f)
+        except Exception:
+            pass
+    return jsonify(diag)
+
 @app.route('/api/equity')
 def api_equity():
     """Returns historical equity curve data points."""
@@ -233,6 +252,7 @@ def get_status():
     used_margin = 0.0
     open_positions = 0
     mdd = 0.0
+    safety_halt = False
 
     bot_start_time = None
     equity_high = None
@@ -270,6 +290,7 @@ def get_status():
                     port = json.load(f)
                 
                 bot_start_time = port.get("service_start_time")
+                safety_halt = port.get("safety_halt", False)
                 
                 # Compute unrealized PnL across all open positions independently
                 for pos in port.get("positions", {}).values():
@@ -432,6 +453,7 @@ def get_status():
         "max_drawdown": mdd,
         "server_time": datetime.datetime.utcnow().isoformat() + "Z",
         "bot_start_time": bot_start_time,
+        "safety_halt": safety_halt,
         "equity_high": equity_high,
         "equity_low": equity_low,
         "equity_change": equity_change

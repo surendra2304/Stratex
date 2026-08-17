@@ -384,6 +384,7 @@ class TestnetService:
         state = {
             "initial_deposit": self.initial_deposit,
             "service_start_time": getattr(self, 'service_start_time', datetime.datetime.utcnow().isoformat() + "Z"),
+            "safety_halt": getattr(self, 'safety_halt', False),
             "cash": self.current_equity,
             "equity": self.current_equity,
             "realized_pnl": getattr(self, 'total_reconciled_pnl', self.risk_gate.daily_realized_loss),
@@ -429,8 +430,8 @@ class TestnetService:
 
     def on_candle_closed(self, symbol, tf, df, data_health_status="OK"):
         """Callback invoked by MarketScanner when a new candle closes."""
-        if self.safety_halt:
-            logger.warning(f"[SERVICE] Scanning halted due to RECONCILIATION MISMATCH. Rejecting {symbol} signal.")
+        if getattr(self, 'safety_halt', False):
+            logger.warning(f"[SAFETY_HALT] Scanning halted due to RECONCILIATION MISMATCH. Rejecting {symbol} signal.")
             return
 
         with self.lock:
@@ -550,7 +551,7 @@ class TestnetService:
                     self.log_opportunity(signal_id, symbol, side, p_metrics, "QUALIFIED", "ADDED_TO_POOL")
                 
             except Exception as e:
-                logger.error(f"[SERVICE] Error processing signal for {symbol} ({tf}): {e}")
+                logger.error(f"[STRATEGY_EXCEPTION] Error processing signal for {symbol} ({tf}): {e}", exc_info=True)
             finally:
                 self._save_state()
 

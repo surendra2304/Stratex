@@ -123,7 +123,10 @@ async function fetchDashboardData() {
     const requestStart = Date.now();
     try {
         const data = await apiClient.get('/api/status');
-        if (!data) return; // Stale state visual handling can be added here
+        if (!data) {
+            handleDataUnavailable();
+            return;
+        }
         
         const requestEnd = Date.now();
         
@@ -149,7 +152,11 @@ async function fetchDashboardData() {
         const engineDot = document.getElementById('hdr-engine-dot');
         const engineText = document.getElementById('hdr-engine-text');
         if (engineDot && engineText) {
-            if (data.engine_status === 'ONLINE' || data.engine_healthy) {
+            if (data.safety_halt) {
+                engineDot.className = 'dot dot-red';
+                engineText.className = 'status-offline';
+                engineText.innerText = 'SAFETY HALT';
+            } else if (data.engine_status === 'ONLINE' || data.engine_healthy) {
                 engineDot.className = 'dot dot-green';
                 engineText.className = 'status-online';
                 engineText.innerText = 'ENGINE ONLINE (TESTNET)';
@@ -188,7 +195,9 @@ async function fetchDashboardData() {
 
         // Full Risk Page
         const rviewUsed = document.getElementById('rview-used');
-        if (rviewUsed) rviewUsed.innerText = "0.00%"; 
+        if (rviewUsed) rviewUsed.innerText = (data.risk_used || 0).toFixed(2) + '%';
+        const rkAvail = document.getElementById('rk-avail');
+        if (rkAvail) rkAvail.innerText = (data.available_risk || 0).toFixed(2) + '%'; 
         const rviewMdd = document.getElementById('rview-mdd');
         if (rviewMdd) rviewMdd.innerText = (data.max_drawdown || 0).toFixed(2) + '%';
         const rviewPos = document.getElementById('rview-pos');
@@ -228,7 +237,26 @@ async function fetchDashboardData() {
 
     } catch (e) {
         console.error("Failed to fetch status:", e);
+        handleDataUnavailable();
     }
+}
+
+function handleDataUnavailable() {
+    const engineDot = document.getElementById('hdr-engine-dot');
+    const engineText = document.getElementById('hdr-engine-text');
+    if (engineDot && engineText) {
+        engineDot.className = 'dot dot-red';
+        engineText.className = 'status-offline';
+        engineText.innerText = 'DATA UNAVAILABLE';
+    }
+    const els = ['pb-balance', 'pb-today', 'pb-realized', 'pb-unrealized', 'rk-daily'];
+    els.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.innerText = 'DATA UNAVAILABLE';
+            el.className = 'metric-value val-neutral';
+        }
+    });
 }
 
 let dailyPnLData = {}; // For Analytics histogram
