@@ -176,10 +176,15 @@ async function fetchDashboardData() {
         }
 
         // Risk View
-        document.getElementById('rk-daily').innerText = formatCurrency(data.realized_pnl + data.unrealized_pnl);
-        document.getElementById('rk-daily').className = 'status-val ' + ((data.realized_pnl + data.unrealized_pnl) >= 0 ? 'val-green' : 'val-red');
-        document.getElementById('rk-mdd').innerText = (data.max_drawdown || 0).toFixed(2) + '%';
-        document.getElementById('rk-pos').innerText = data.open_positions || 0;
+        const rkDaily = document.getElementById('rk-daily');
+        if (rkDaily) {
+            rkDaily.innerText = formatCurrency(data.realized_pnl + data.unrealized_pnl);
+            rkDaily.className = 'r-val ' + ((data.realized_pnl + data.unrealized_pnl) >= 0 ? 'val-green' : 'val-red');
+        }
+        const rkMdd = document.getElementById('rk-mdd');
+        if (rkMdd) rkMdd.innerText = (data.max_drawdown || 0).toFixed(2) + '%';
+        const rkPos = document.getElementById('rk-pos');
+        if (rkPos) rkPos.innerText = data.open_positions || 0;
 
         // Full Risk Page
         const rviewUsed = document.getElementById('rview-used');
