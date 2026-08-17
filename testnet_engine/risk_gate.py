@@ -44,7 +44,16 @@ class RiskGate:
             return False, "MAX_OPEN_POSITIONS", f"Currently at limit of {config.MAX_OPEN_POSITIONS} open positions."
 
         # Compute exposures
-        current_exposure = sum([p.get('quantity', 0) * p.get('entry_price', 0) for p in active_positions.values()])
+        current_exposure = 0.0
+        for p in active_positions.values():
+            if isinstance(p, dict):
+                try:
+                    q = float(p.get('quantity', 0.0))
+                    ep = float(p.get('entry_price', 0.0))
+                    current_exposure += q * ep
+                except (ValueError, TypeError):
+                    pass
+                    
         new_trade_value = proposed_qty * entry_price
         total_exposure = current_exposure + new_trade_value
         total_exposure_pct = total_exposure / current_equity
@@ -56,8 +65,15 @@ class RiskGate:
             
         # 5. Single Asset Exposure
         # Existing plus new if same symbol, but OCO normally prevents duplicate symbols. Checked anyway for safety.
-        existing_symbol_value = active_positions.get(symbol, {}).get('quantity', 0) * active_positions.get(symbol, {}).get('entry_price', 0)
-        single_asset_exposure_pct = (existing_symbol_value + new_trade_value) / current_equity
+        existing_val = 0.0
+        pos_entry = active_positions.get(symbol)
+        if isinstance(pos_entry, dict):
+            try:
+                existing_val = float(pos_entry.get('quantity', 0.0)) * float(pos_entry.get('entry_price', 0.0))
+            except (ValueError, TypeError):
+                pass
+                
+        single_asset_exposure_pct = (existing_val + new_trade_value) / current_equity
         if single_asset_exposure_pct > config.MAX_SINGLE_ASSET_EXPOSURE:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_SINGLE_ASSET_EXPOSURE | AssetExp: {single_asset_exposure_pct:.2%} > {config.MAX_SINGLE_ASSET_EXPOSURE:.2%}")
             return False, "MAX_SINGLE_ASSET_EXPOSURE", f"Asset exposure {single_asset_exposure_pct:.2%} exceeds {config.MAX_SINGLE_ASSET_EXPOSURE:.2%}"

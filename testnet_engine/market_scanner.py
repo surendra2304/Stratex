@@ -30,6 +30,7 @@ class MarketScanner:
         self.data_health_status = {sym: "UNKNOWN" for sym in symbols}
         self.callbacks = []
         
+        self._cache_lock = threading.Lock()
         self._stop_event = threading.Event()
         self._health_thread = None
         
@@ -208,20 +209,23 @@ class MarketScanner:
         
         logger.info(f"[DATA_RECEIVED] {symbol} {tf} | Candle Closed: {new_row['close']} | Vol: {vol:.2f} | VolDelta: {vol_delta:.2f}")
 
-        if (symbol, tf) in self.candle_cache:
-            df = self.candle_cache[(symbol, tf)]
-            # Append new row and drop oldest to keep size fixed (e.g. 250)
-            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-            if len(df) > 250:
-                df = df.iloc[1:]
-            self.candle_cache[(symbol, tf)] = df
-        else:
-            new_df = pd.DataFrame([new_row])
-            self.candle_cache[(symbol, tf)] = new_df
+        cached_copy = None
+        with self._cache_lock:
+            if (symbol, tf) in self.candle_cache:
+                df = self.candle_cache[(symbol, tf)]
+                # Append new row and keep last 250 rows cleanly indexed
+                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+                if len(df) > 250:
+                    df = df.iloc[-250:].reset_index(drop=True)
+                self.candle_cache[(symbol, tf)] = df
+            else:
+                self.candle_cache[(symbol, tf)] = pd.DataFrame([new_row])
+            cached_copy = self.candle_cache[(symbol, tf)].copy()
             
         # Dispatch event to registered callbacks
-        for cb in self.callbacks:
-            try:
-                cb(symbol, tf, self.candle_cache[(symbol, tf)].copy(), self.data_health_status.get(symbol, "OK"))
-            except Exception as e:
-                logger.error(f"[SCANNER] Callback error for {symbol} ({tf}): {e}")
+        if cached_copy is not None:
+            for cb in self.callbacks:
+                try:
+                    cb(symbol, tf, cached_copy, self.data_health_status.get(symbol, "OK"))
+                except Exception as e:
+                    logger.error(f"[SCANNER] Callback error for {symbol} ({tf}): {e}")

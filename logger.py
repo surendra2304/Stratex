@@ -50,10 +50,18 @@ class JSONFormatter(logging.Formatter):
             
         return json.dumps(log_record)
 
+class SafeRotatingFileHandler(RotatingFileHandler):
+    """Subclass of RotatingFileHandler that silently handles Windows file lock race conditions during rollover."""
+    def doRollover(self):
+        try:
+            super().doRollover()
+        except (PermissionError, OSError):
+            pass
+
 def get_logger(name="system"):
     """
     Returns a configured structured logger.
-    Logs to bot.log with rotation (Max 10MB, 5 backups).
+    Logs to bot.log with safe rotation (Max 10MB, 5 backups).
     """
     logger = logging.getLogger(name)
     
@@ -62,7 +70,7 @@ def get_logger(name="system"):
         logger.setLevel(logging.INFO)
         
         log_file = "test_bot.log" if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("TESTING") else "bot.log"
-        handler = RotatingFileHandler(
+        handler = SafeRotatingFileHandler(
             log_file, 
             maxBytes=10 * 1024 * 1024, # 10 MB
             backupCount=5

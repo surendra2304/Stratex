@@ -1,4 +1,6 @@
 import os
+import threading
+import time
 import csv
 import sys
 import io
@@ -147,27 +149,41 @@ def health():
 def api_engine_health():
     return jsonify(get_engine_health_data())
 
-def get_live_account_and_holdings():
+_holdings_cache = None
+_holdings_cache_ts = 0.0
+_holdings_lock = threading.Lock()
+
+def get_live_account_and_holdings(force_refresh=False):
     """
     Queries Binance Spot for live balances, active crypto positions,
     and converts every non-USDT asset to current USD value.
+    Cached for 2 seconds to optimize concurrent dashboard polling.
     """
-    from execution import get_exchange_client
-    from data_client import MarketDataClient
-    
-    usdt_free = 0.0
-    usdt_locked = 0.0
-    holdings = []
-    total_crypto_value = 0.0
-    active_trade_holdings_value = 0.0
-    
-    # Active traded coins by our bot (to distinguish from default testnet faucet assets)
-    bot_traded_assets = {"PORTAL", "LINK", "HEMI", "TRX", "SPCXB", "PAXG", "BNB", "DOGE", "SOL", "SOPH", "BTC", "ETH"}
-    
-    try:
-        client = get_exchange_client()
-        if client:
-            account = client.get_account()
+    global _holdings_cache, _holdings_cache_ts
+    now = time.time()
+    if not force_refresh and _holdings_cache and (now - _holdings_cache_ts < 2.0):
+        return _holdings_cache
+        
+    with _holdings_lock:
+        if not force_refresh and _holdings_cache and (time.time() - _holdings_cache_ts < 2.0):
+            return _holdings_cache
+            
+        from execution import get_exchange_client
+        from data_client import MarketDataClient
+        
+        usdt_free = 0.0
+        usdt_locked = 0.0
+        holdings = []
+        total_crypto_value = 0.0
+        active_trade_holdings_value = 0.0
+        
+        # Active traded coins by our bot (to distinguish from default testnet faucet assets)
+        bot_traded_assets = {"PORTAL", "LINK", "HEMI", "TRX", "SPCXB", "PAXG", "BNB", "DOGE", "SOL", "SOPH", "BTC", "ETH"}
+        
+        try:
+            client = get_exchange_client()
+            if client:
+                account = client.get_account()
             md = MarketDataClient()
             tickers = {}
             if md.is_available():
@@ -208,22 +224,25 @@ def get_live_account_and_holdings():
                         "usd_value": usd_val,
                         "is_bot_trade": is_bot_trade
                     }
-                    holdings.append(h_info)
-                    total_crypto_value += usd_val
-                    if is_bot_trade and asset not in ['USDC', 'TUSD', 'FDUSD', 'WBTC', 'BTC', 'ETH']:
-                        active_trade_holdings_value += usd_val
-    except Exception as e:
-        logger.error(f"[DASHBOARD] Error calculating live holdings: {e}")
-        
-    holdings.sort(key=lambda x: x['usd_value'], reverse=True)
-    return {
-        "usdt_free": usdt_free,
-        "usdt_locked": usdt_locked,
-        "usdt_total_cash": usdt_free + usdt_locked,
-        "total_crypto_value": total_crypto_value,
-        "active_trade_holdings_value": active_trade_holdings_value,
-        "holdings": holdings
-    }
+            holdings.append(h_info)
+            total_crypto_value += usd_val
+            if is_bot_trade and asset not in ['USDC', 'TUSD', 'FDUSD', 'WBTC', 'BTC', 'ETH']:
+                active_trade_holdings_value += usd_val
+        except Exception as e:
+            logger.error(f"[DASHBOARD] Error calculating live holdings: {e}")
+            
+        holdings.sort(key=lambda x: x['usd_value'], reverse=True)
+        res_dict = {
+            "usdt_free": usdt_free,
+            "usdt_locked": usdt_locked,
+            "usdt_total_cash": usdt_free + usdt_locked,
+            "total_crypto_value": total_crypto_value,
+            "active_trade_holdings_value": active_trade_holdings_value,
+            "holdings": holdings
+        }
+        _holdings_cache = res_dict
+        _holdings_cache_ts = time.time()
+        return res_dict
 
 def verify_funnel(s, open_count, closed_count):
     """Mathematically verifies consistency across signal funnel pipeline stages."""
