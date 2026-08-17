@@ -1239,6 +1239,22 @@
             "git_sha": "465f119fc35a777c48bd24350e86c6f5d185f943",
             "created_at": 1786959362.0706828,
             "status": "NOT_STARTED"
+        },
+        {
+            "experiment_id": "221cb999-1e5e-4a26-90f6-d10589186b2c",
+            "experiment_name": "test_sha_exp",
+            "strategy_name": "test",
+            "git_sha": "a6de5d75241abb6339285c21aae8901b966471de",
+            "created_at": 1786960490.1576877,
+            "status": "NOT_STARTED"
+        },
+        {
+            "experiment_id": "a167e6cd-cdcf-443c-98f0-df23f4df402c",
+            "experiment_name": "test_sha_exp",
+            "strategy_name": "test",
+            "git_sha": "bb29182b83e7f9c554ad11d8f365ec627f91cd29",
+            "created_at": 1786960524.6807685,
+            "status": "NOT_STARTED"
         }
     ]
 }
