@@ -46,11 +46,12 @@ class MarketScanner:
             df['close_time'] = pd.to_datetime(df['close_time'], unit='ms')
             for col in ['open', 'high', 'low', 'close', 'volume', 'taker_buy_base_asset_volume']:
                 df[col] = df[col].astype(float)
-                
-            # Drop unclosed candle (Binance always returns the active incomplete candle at the end)
-            # A candle is only closed if its close_time is in the past.
-            now_utc = datetime.datetime.utcnow()
-            df = df[df['close_time'] <= now_utc]
+            if df is not None and not df.empty:
+                # Drop unclosed candle (Binance always returns the active incomplete candle at the end)
+                # A candle is only closed if its close_time is in the past.
+                now_utc = datetime.datetime.utcnow()
+                if 'close_time' in df.columns:
+                    df = df[df['close_time'] <= now_utc]
                 
             df['buy_vol'] = df['taker_buy_base_asset_volume']
             df['sell_vol'] = df['volume'] - df['buy_vol']
@@ -194,6 +195,7 @@ class MarketScanner:
 
         new_row = {
             'timestamp': pd.to_datetime(kline.get('t', int(time.time() * 1000)), unit='ms'),
+            'close_time': pd.to_datetime(kline.get('T', int(time.time() * 1000)), unit='ms'),
             'open': float(kline['o']),
             'high': float(kline['h']),
             'low': float(kline['l']),

@@ -41,7 +41,7 @@ def get_candles(symbol, interval="15m", limit=300):
             "close_time", "quote_volume", "trades", "taker_buy_base",
             "taker_buy_quote", "ignore"
         ])
-        df = df[["timestamp", "open", "high", "low", "close", "volume", "taker_buy_base"]].copy()
+        df = df[["timestamp", "open", "high", "low", "close", "volume", "taker_buy_base", "close_time"]].copy()
         
         # Safe numeric conversion
         numeric_cols = ["open", "high", "low", "close", "volume", "taker_buy_base"]
@@ -50,6 +50,7 @@ def get_candles(symbol, interval="15m", limit=300):
             
         df.dropna(subset=numeric_cols, inplace=True)
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        df["close_time"] = pd.to_datetime(df["close_time"], unit="ms")
         
         # Calculate Volume Delta (Buy Volume - Sell Volume)
         df["buy_vol"] = df["taker_buy_base"]
