@@ -623,8 +623,8 @@ async function initChart() {
             datasets: [{
                 label: 'Equity',
                 data: data,
-                borderColor: '#1e88e5',
-                backgroundColor: 'rgba(30, 136, 229, 0.1)',
+                borderColor: '#2563eb',
+                backgroundColor: 'rgba(37, 99, 235, 0.1)',
                 borderWidth: 2,
                 fill: true,
                 tension: 0.1,
@@ -640,10 +640,10 @@ async function initChart() {
                 tooltip: {
                     mode: 'index',
                     intersect: false,
-                    backgroundColor: '#192233',
-                    titleColor: '#ffffff',
-                    bodyColor: '#9cb2c9',
-                    borderColor: '#243048',
+                    backgroundColor: '#1e293b',
+                    titleColor: '#f8fafc',
+                    bodyColor: '#94a3b8',
+                    borderColor: '#334155',
                     borderWidth: 1
                 }
             },
@@ -652,9 +652,9 @@ async function initChart() {
                 y: { 
                     display: true, 
                     position: 'right',
-                    grid: { color: '#243048' },
+                    grid: { color: '#1e293b' },
                     ticks: {
-                        color: '#5e738d',
+                        color: '#64748b',
                         font: { family: "'JetBrains Mono', monospace", size: 9 },
                         callback: function(value) { return '$' + value.toLocaleString(); }
                     },
@@ -703,10 +703,10 @@ function updateAnalyticsCharts() {
             plugins: {
                 legend: { display: false },
                 tooltip: {
-                    backgroundColor: '#192233',
-                    titleColor: '#ffffff',
-                    bodyColor: '#9cb2c9',
-                    borderColor: '#243048',
+                    backgroundColor: '#1e293b',
+                    titleColor: '#f8fafc',
+                    bodyColor: '#94a3b8',
+                    borderColor: '#334155',
                     borderWidth: 1,
                     callbacks: {
                         label: function(ctx) {
@@ -718,13 +718,13 @@ function updateAnalyticsCharts() {
             scales: {
                 x: {
                     grid: { display: false },
-                    ticks: { color: '#5e738d', font: { family: "'JetBrains Mono', monospace", size: 10 } }
+                    ticks: { color: '#64748b', font: { family: "'JetBrains Mono', monospace", size: 9 } }
                 },
                 y: { 
-                    grid: { color: '#243048' },
+                    grid: { color: '#1e293b' },
                     ticks: {
-                        color: '#5e738d',
-                        font: { family: "'JetBrains Mono', monospace", size: 10 },
+                        color: '#64748b',
+                        font: { family: "'JetBrains Mono', monospace", size: 9 },
                         callback: function(value) { return '$' + value.toLocaleString(); }
                     },
                     border: { display: false }
@@ -757,7 +757,7 @@ function updateRejectionChart() {
             labels: labels,
             datasets: [{
                 data: data,
-                backgroundColor: ['#1e88e5', '#f43f5e', '#f59e0b', '#8b5cf6', '#64748b', '#cbd5e1'],
+                backgroundColor: ['#2563eb', '#ef4444', '#f59e0b', '#8b5cf6', '#64748b', '#06b6d4'],
                 borderWidth: 0,
                 hoverOffset: 4
             }]
@@ -769,7 +769,7 @@ function updateRejectionChart() {
             plugins: {
                 legend: {
                     position: 'right',
-                    labels: { color: '#9cb2c9', font: { family: "'Inter', sans-serif", size: 12 } }
+                    labels: { color: '#94a3b8', font: { family: "'Inter', sans-serif", size: 10 } }
                 }
             }
         }
