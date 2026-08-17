@@ -1223,6 +1223,14 @@
             "git_sha": "b5ddc18e69301711b44e971a0f48b14c24bc7b88",
             "created_at": 1786958800.1488497,
             "status": "NOT_STARTED"
+        },
+        {
+            "experiment_id": "b631e0c0-5eb3-4dd4-824f-705c37e82e1c",
+            "experiment_name": "test_sha_exp",
+            "strategy_name": "test",
+            "git_sha": "aedd7ea6426f35738dbce1a031afcd56303f57c2",
+            "created_at": 1786958995.1026912,
+            "status": "NOT_STARTED"
         }
     ]
 }

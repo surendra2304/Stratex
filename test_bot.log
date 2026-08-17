@@ -13,3 +13,8 @@
 {"timestamp": "2026-08-17T09:26:44.253661Z", "level": "INFO", "component": "reconciliation", "message": "Reconciliation PASS: 2 ledger records, 2 unique trade IDs, 2 unique signal IDs", "mode": "TESTNET"}
 {"timestamp": "2026-08-17T09:26:44.260270Z", "level": "INFO", "component": "reconciliation", "message": "Reconciliation PASS: 1 ledger records, 1 unique trade IDs, 1 unique signal IDs", "mode": "TESTNET"}
 {"timestamp": "2026-08-17T09:26:44.265575Z", "level": "ERROR", "component": "reconciliation", "message": "RECONCILIATION ERROR: 1 duplicate trade IDs: ['dup_1']", "mode": "TESTNET"}
+{"timestamp": "2026-08-17T09:29:51.892185Z", "level": "ERROR", "component": "dashboard", "message": "Failed calculating unrealized PnL for position {'status': 'OPEN', 'quantity': 'invalid_number'}: could not convert string to float: 'invalid_number'", "mode": "TESTNET"}
+{"timestamp": "2026-08-17T09:29:51.894415Z", "level": "ERROR", "component": "dashboard", "message": "Failed parsing portfolio for trades: 'str' object has no attribute 'get'", "mode": "TESTNET"}
+{"timestamp": "2026-08-17T09:30:01.004193Z", "level": "INFO", "component": "reconciliation", "message": "Reconciliation PASS: 2 ledger records, 2 unique trade IDs, 2 unique signal IDs", "mode": "TESTNET"}
+{"timestamp": "2026-08-17T09:30:01.012226Z", "level": "INFO", "component": "reconciliation", "message": "Reconciliation PASS: 1 ledger records, 1 unique trade IDs, 1 unique signal IDs", "mode": "TESTNET"}
+{"timestamp": "2026-08-17T09:30:01.020305Z", "level": "ERROR", "component": "reconciliation", "message": "RECONCILIATION ERROR: 1 duplicate trade IDs: ['dup_1']", "mode": "TESTNET"}

@@ -348,7 +348,13 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         order["_final_state"] = state
         return order
     except BinanceAPIException as e:
-        sys_logger.error(f"[EXEC] ❌ Binance API Error placing entry order: {e}", extra={"strategy": strategy_name, "symbol": symbol})
+        notional = float(quantity) * current_price if 'current_price' in locals() else "UNKNOWN"
+        sys_logger.error(
+            f"[EXECUTION_FAILED] Binance API Error {e.status_code} | "
+            f"Symbol: {symbol} | Side: {side} | Qty: {quantity} | Notional: {notional} | "
+            f"Params: {order_params} | Code: {e.code} | Message: {e.message}",
+            extra={"strategy": strategy_name, "symbol": symbol}
+        )
         raise
     except Exception as e:
         sys_logger.error(f"[EXEC] ❌ Unexpected error placing entry order: {e}", extra={"strategy": strategy_name, "symbol": symbol})

@@ -674,11 +674,18 @@ class TestnetService:
                         self.stats["timeframe_metrics"][tf]["qualified"] += 1
                     self.log_opportunity(signal_id, symbol, side, fresh_metrics, "ACCEPTED", "ALL_GATES_PASSED")
                     
-                    logger.info(f"[EXECUTION_ATTEMPTED] {strategy_name} {side} {qty} {symbol} @ ~{current_price} | SignalID: {signal_id}")
+                    # Format strictly for Binance execution to prevent LOT_SIZE Filter Failure
+                    step_size = filters.get("stepSize", 1.0)
+                    precision = 0
+                    if '.' in str(step_size):
+                        precision = len(str(step_size).rstrip('0').split('.')[1])
+                    qty_str = f"{qty:.{precision}f}"
+                    
+                    logger.info(f"[EXECUTION_ATTEMPTED] {strategy_name} {side} {qty_str} {symbol} @ ~{current_price} | SignalID: {signal_id}")
                     self.stats["EXECUTION_ELIGIBLE"] += 1
                     
                     try:
-                        order_res = place_market_order(strategy_name, side, symbol, quantity=qty, sl=sl, tp=tp, client_order_id=signal_id)
+                        order_res = place_market_order(strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp, client_order_id=signal_id)
                         if order_res:
                             self.stats["ORDERS_SUBMITTED"] += 1
                             self.stats["ORDERS_FILLED"] += 1
