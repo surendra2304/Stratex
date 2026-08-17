@@ -145,6 +145,9 @@ class TestnetService:
         self.opportunity_pool = queue.Queue()
         self.pool_event = threading.Event()
         self._execution_thread = threading.Thread(target=self.execution_loop, daemon=True)
+        # Start trade target monitor thread
+        self._target_monitor_thread = threading.Thread(target=self._trade_target_monitor, daemon=True)
+        self._target_monitor_thread.start()
         self._execution_thread.start()
         
         # Stats for dashboard (Strict Signal Funnel)
@@ -617,9 +620,9 @@ class TestnetService:
                 strategy_name = candidate.get("strategy", "adx_ema")
                 
                 with self.lock:
-                    # Enforce per-symbol cooldown (60 seconds)
+                    # Enforce per-symbol cooldown (5 seconds for high-frequency testing)
                     now_ts = datetime.datetime.utcnow().timestamp()
-                    if symbol in self.cooldowns and now_ts - self.cooldowns[symbol] < 60:
+                    if symbol in self.cooldowns and now_ts - self.cooldowns[symbol] < 5:
                         self.stats["COOLDOWN_REJECTED"] += 1
                         self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "ON_COOLDOWN")
                         continue
@@ -750,6 +753,41 @@ class TestnetService:
                         self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
                         
                     self._save_state()
+
+    def _trade_target_monitor(self):
+        """Monitor trade count and log progress toward 100-trade target."""
+        import config
+        start_time = datetime.datetime.utcnow()
+        window_hours = getattr(config, "TARGET_TRADE_WINDOW_HOURS", 3)
+        target = getattr(config, "TARGET_TRADE_COUNT", 100)
+        window = datetime.timedelta(hours=window_hours)
+        logger.info(f"[TRADE_TARGET] 🎯 Goal: {target} trades in {window_hours}h. Window ends at "
+                    f"{(start_time + window).strftime('%H:%M UTC')}")
+        while True:
+            time.sleep(60)
+            elapsed = datetime.datetime.utcnow() - start_time
+            closed = self.stats.get("CLOSED_TRADES", 0)
+            filled = self.stats.get("ORDERS_FILLED", 0)
+            total = max(closed, filled)
+            elapsed_h = elapsed.total_seconds() / 3600
+            remaining_h = max(0, window_hours - elapsed_h)
+            rate = total / elapsed_h if elapsed_h > 0 else 0
+            projected = rate * window_hours
+            logger.info(
+                f"[TRADE_TARGET] ⏱ {elapsed_h:.1f}h elapsed | "
+                f"Trades: {total}/{target} | Rate: {rate:.1f}/h | "
+                f"Projected: {projected:.0f} | Remaining: {remaining_h:.1f}h | "
+                f"Signals: {self.stats.get('TOTAL_SIGNALS',0)} | "
+                f"Rejected(cooldown): {self.stats.get('COOLDOWN_REJECTED',0)} | "
+                f"Rejected(risk): {self.stats.get('RISK_REJECTED',0)} | "
+                f"Rejected(profit): {self.stats.get('PROFITABILITY_REJECTED',0)}"
+            )
+            if total >= target:
+                logger.info(f"[TRADE_TARGET] ✅ TARGET ACHIEVED: {total} trades in {elapsed_h:.2f}h!")
+                break
+            if elapsed > window:
+                logger.warning(f"[TRADE_TARGET] ❌ Window expired. Final: {total}/{target} trades.")
+                break
 
     def log_opportunity(self, signal_id, symbol, side, metrics, decision, reason, current_price=0.0):
         log_entry = {

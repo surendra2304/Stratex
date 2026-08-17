@@ -27,11 +27,13 @@ WS_URL = "wss://ws-api.testnet.binance.vision/ws-api/v3"
 
 # --- Dynamic Market Scanner ---
 SYMBOL = "BTCUSDT"
-TOP_COINS_LIMIT = 5  # Number of top trending coins to scan
 
 # --- Risk Management ---
 TRADE_QTY = 0.001           # BTC quantity per trade (small for safety)
-MAX_OPEN_TRADES = 5         # Allow more trades to open concurrently
+MAX_OPEN_TRADES = 20        # Allow more concurrent trades during testing
+TOP_COINS_LIMIT = 20  # Increase number of top trending coins to scan
+TARGET_TRADE_COUNT = 100  # Minimum trades to generate within the window
+TARGET_TRADE_WINDOW_HOURS = 3  # Hours within which to achieve target
 LONG_ONLY = True            # Binance Spot default
 
 # -------------------------------------------------------------------
@@ -65,18 +67,18 @@ TIMEFRAME = _first_tf[0] if isinstance(_first_tf, list) else _first_tf
 MAX_POSITION_SIZE = 0.95
 RISK_PER_TRADE = 0.02
 
-# --- Testnet Risk Management ---
+# --- Testnet Risk Management (RELAXED for 100-trade target) ---
 MAX_TESTNET_RISK_PER_TRADE = 0.005 # 0.5% risk
-MAX_TESTNET_EXPOSURE = 0.05        # 5% max total exposure
-MAX_SINGLE_ASSET_EXPOSURE = 0.02   # 2% max per single asset
-MAX_NET_DIRECTIONAL_EXPOSURE = 0.04 # 4% max net directional exposure
-MAX_OPEN_POSITIONS = 5             # Allow multiple positions up to exposure limit
-MAX_DAILY_LOSS_PCT = 0.02          # 2% daily loss limit
-MAX_TESTNET_DRAWDOWN_PCT = 0.05    # Strict Reconciliation Tolerance (allow small rounding/dust gaps up to $5.00)
+MAX_TESTNET_EXPOSURE = 0.95        # 95% max total exposure (relaxed for testing)
+MAX_SINGLE_ASSET_EXPOSURE = 0.50   # 50% max per single asset (relaxed for testing)
+MAX_NET_DIRECTIONAL_EXPOSURE = 0.95 # 95% max net directional exposure (relaxed)
+MAX_OPEN_POSITIONS = 20            # Allow up to 20 concurrent positions
+MAX_DAILY_LOSS_PCT = 0.50          # 50% daily loss limit (relaxed for testing)
+MAX_TESTNET_DRAWDOWN_PCT = 0.50    # 50% drawdown tolerance (relaxed for testing)
 RECONCILIATION_TOLERANCE = 5.0     # 5 USDT tolerance for slight fee estimation drift
 
 # --- Strategy Quality Control (Phase 5) ---
-MINIMUM_EXPECTED_EDGE = 0.0001     # Reduced threshold for high‑frequency strategies
+MINIMUM_EXPECTED_EDGE = -0.001     # Very low threshold to accept all signals during testing
 DEGRADATION_WINDOW = 20            # Evaluate last 20 trades for degradation
 MIN_WIN_RATE_THRESHOLD = 0.35      # Automatically switch to OBSERVE-ONLY if < 35% win rate
 MAX_PREDICTION_ERROR = 0.02        # Automatically switch to OBSERVE-ONLY if actual differs from expected by > 2%
