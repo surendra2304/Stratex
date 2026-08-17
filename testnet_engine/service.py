@@ -1095,6 +1095,50 @@ class TestnetService:
                 if now_ts - last_log_time >= 60:
                     tfs = list(set(tf for tfs in ACTIVE_STRATEGIES.values() for tf in (tfs if isinstance(tfs, list) else [tfs])))
                     logger.info(f"[ENGINE_HEARTBEAT] PID={os.getpid()} | Status=RUNNING | Strategies={len(ACTIVE_STRATEGIES)} | Timeframes={','.join(tfs)} | Symbols={len(self.symbol_filters)}")
+                    last_log_time = now_ts
+            except Exception as e:
+                logger.error(f"[SERVICE] Heartbeat loop error: {e}")
+            time.sleep(5)
+
+    def _progress_report_loop(self):
+        """Periodic progress reporter (runs every 60 seconds). Logs key stats and writes them to a progress file."""
+        progress_file = os.getenv("PROGRESS_LOG_FILE", "progress_report.jsonl")
+        while True:
+            try:
+                timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+                # Gather key metrics
+                report = {
+                    "timestamp": timestamp,
+                    "total_signals": self.stats.get("TOTAL_SIGNALS", 0),
+                    "buy_signals": self.stats.get("BUY_SIGNALS", 0),
+                    "sell_signals": self.stats.get("SELL_SIGNALS", 0),
+                    "qualified": self.stats.get("QUALIFIED", 0),
+                    "executed": self.stats.get("ORDERS_FILLED", 0),
+                    "current_equity": getattr(self, "current_equity", 0.0),
+                    "open_positions": len(self.active_positions),
+                    "symbols_scanned": self.stats.get("symbols_scanned", 0),
+                    "strategy_metrics": self.stats.get("strategy_metrics", {}),
+                    "timeframe_metrics": self.stats.get("timeframe_metrics", {}),
+                }
+                # Atomic append
+                tmp_path = progress_file + ".tmp"
+                with open(tmp_path, "a") as f:
+                    f.write(json.dumps(report) + "\n")
+                os.replace(tmp_path, progress_file)
+                logger.info(f"[PROGRESS] Total:{report['total_signals']} BUY:{report['buy_signals']} SELL:{report['sell_signals']} Equity:{report['current_equity']:.2f}")
+            except Exception as e:
+                logger.error(f"[SERVICE] Progress report loop error: {e}")
+            time.sleep(60)
+
+        """Periodic heartbeat writer (runs every 5 seconds)."""
+        last_log_time = 0
+        while True:
+            try:
+                self._write_heartbeat(status="RUNNING", worker_alive=True)
+                now_ts = time.time()
+                if now_ts - last_log_time >= 60:
+                    tfs = list(set(tf for tfs in ACTIVE_STRATEGIES.values() for tf in (tfs if isinstance(tfs, list) else [tfs])))
+                    logger.info(f"[ENGINE_HEARTBEAT] PID={os.getpid()} | Status=RUNNING | Strategies={len(ACTIVE_STRATEGIES)} | Timeframes={','.join(tfs)} | Symbols={len(self.symbol_filters)}")
             except Exception as e:
                 logger.error(f"[SERVICE] Heartbeat loop error: {e}")
             time.sleep(5)
@@ -1142,6 +1186,9 @@ class TestnetService:
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
         self._heartbeat_thread.start()
         self._write_heartbeat(status="RUNNING", worker_alive=True)
+        # Start progress reporting thread
+        self._progress_thread = threading.Thread(target=self._progress_report_loop, daemon=True)
+        self._progress_thread.start()
         
         logger.info("[ENGINE_READY] Binance Testnet trading engine is fully initialized and operational.")
         
