@@ -152,6 +152,35 @@ def api_engine_health():
     """Authoritative trading engine health and telemetry endpoint."""
     return jsonify(get_engine_health_data())
 
+@app.route('/api/equity')
+def api_equity():
+    """Returns historical equity curve data points."""
+    eq_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
+    if not os.path.exists(eq_file):
+        return jsonify([])
+        
+    points = []
+    try:
+        import json
+        import datetime
+        with open(eq_file, "r") as f:
+            for line in f:
+                if not line.strip(): continue
+                try:
+                    snap = json.loads(line)
+                    ts_str = snap.get("timestamp", "")
+                    if ts_str:
+                        dt = datetime.datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                        points.append({
+                            "time": int(dt.timestamp() * 1000),
+                            "equity": float(snap.get("equity", 0.0))
+                        })
+                except:
+                    pass
+        return jsonify(points)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # Legacy /api/backtest removed to focus purely on live Testnet operations.
 
 @app.route('/api/chart_trades')
@@ -264,6 +293,7 @@ def get_status():
                             logger.warning(f"Failed to fetch live price for {sym}: {pe}")
                             
                         if current_price > 0 and entry_price > 0 and quantity > 0:
+                            used_margin += entry_price * quantity
                             if direction in ["LONG", "BUY"]:
                                 unrealized_pnl += (current_price - entry_price) * quantity
                             else:
@@ -357,6 +387,7 @@ def get_status():
             except: pass
 
     import datetime
+    import config
     engine_data = get_engine_health_data()
     components["engine"] = "OK" if engine_data["healthy"] else "ERROR"
     components["binance"] = "OK" if engine_data.get("binance_connected") else "ERROR"
@@ -365,6 +396,12 @@ def get_status():
     components["strategy"] = "OK" if engine_data["healthy"] else "ERROR"
     if not engine_data["healthy"]:
         overall = "DEGRADED"
+        
+    risk_used = 0.0
+    if equity and isinstance(equity, (int, float)) and equity > 0:
+        risk_used = (used_margin / equity) * 100
+        
+    available_risk = max(0, (config.MAX_TESTNET_EXPOSURE * 100) - risk_used)
 
     return jsonify({
         "mode": TRADING_MODE,
@@ -382,6 +419,15 @@ def get_status():
         "fees": fees,
         "funding": funding,
         "used_margin": used_margin,
+        "risk_used": risk_used,
+        "available_risk": available_risk,
+        "limits": {
+            "max_exposure": config.MAX_TESTNET_EXPOSURE * 100,
+            "max_drawdown": config.MAX_TESTNET_DRAWDOWN_PCT * 100,
+            "max_positions": config.MAX_OPEN_POSITIONS,
+            "profitability_gate": "ENFORCED",
+            "risk_gate": "ENFORCED"
+        },
         "open_positions": open_positions,
         "max_drawdown": mdd,
         "server_time": datetime.datetime.utcnow().isoformat() + "Z",
@@ -607,6 +653,26 @@ def get_scanner():
                 stats.update(port.get("scanner_stats", {}))
         except:
             pass
+            
+    # Dynamically inject market data for active symbols
+    if "symbols" in stats and stats["symbols"]:
+        try:
+            from data_client import MarketDataClient
+            client = MarketDataClient()
+            if client.is_available():
+                tickers = client.get_ticker()
+                market_data = {}
+                for t in tickers:
+                    sym = t['symbol']
+                    if sym in stats["symbols"]:
+                        market_data[sym] = {
+                            "close": float(t['lastPrice']),
+                            "change_24h": float(t['priceChangePercent'])
+                        }
+                stats["market_data"] = market_data
+        except Exception as e:
+            from logger import get_logger
+            get_logger("dashboard").error(f"Failed to fetch market data: {e}")
             
     if os.path.exists("testnet_opportunity_log.jsonl"):
         try:
