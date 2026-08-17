@@ -48,9 +48,15 @@ def get_candles():
 
 def get_engine_health_data():
     """Reads engine heartbeat and verifies live process state."""
-    hb_file = os.getenv("TESTNET_HEARTBEAT_FILE", "testnet_heartbeat.json")
-    if not os.path.exists(hb_file) and os.path.exists("heartbeat.json"):
+    env_hb = os.getenv("TESTNET_HEARTBEAT_FILE")
+    if env_hb:
+        hb_file = env_hb
+    elif os.path.exists("testnet_heartbeat.json"):
+        hb_file = "testnet_heartbeat.json"
+    elif os.path.exists("heartbeat.json"):
         hb_file = "heartbeat.json"
+    else:
+        hb_file = "testnet_heartbeat.json"
         
     if not os.path.exists(hb_file):
         return {
@@ -219,6 +225,29 @@ def get_live_account_and_holdings():
         "holdings": holdings
     }
 
+def verify_funnel(s, open_count, closed_count):
+    """Mathematically verifies consistency across signal funnel pipeline stages."""
+    errors = []
+    sum_rejections = (s.get("PROFITABILITY_REJECTED", 0) + s.get("RISK_REJECTED", 0) + 
+                      s.get("COOLDOWN_REJECTED", 0) + s.get("JIT_REJECTED", 0) + 
+                      s.get("OTHER_REJECTED", 0) + s.get("QUALIFIED", 0))
+    if s.get("TOTAL_SIGNALS", 0) != sum_rejections:
+        errors.append(f"TOTAL_SIGNALS {s.get('TOTAL_SIGNALS')} != sum {sum_rejections}")
+        
+    sum_qual = s.get("ORDERS_SUBMITTED", 0) + s.get("EXECUTION_REJECTED", 0)
+    if s.get("QUALIFIED", 0) != sum_qual:
+        errors.append(f"QUALIFIED {s.get('QUALIFIED')} != sum {sum_qual}")
+        
+    sum_sub = s.get("ORDERS_FILLED", 0) + s.get("ORDERS_FAILED", 0)
+    if s.get("ORDERS_SUBMITTED", 0) != sum_sub:
+        errors.append(f"ORDERS_SUBMITTED {s.get('ORDERS_SUBMITTED')} != sum {sum_sub}")
+        
+    sum_fill = open_count + closed_count
+    if s.get("ORDERS_FILLED", 0) != sum_fill:
+        errors.append(f"ORDERS_FILLED {s.get('ORDERS_FILLED')} != sum {sum_fill} (Open: {open_count}, Closed: {closed_count})")
+        
+    return errors
+
 @app.route('/api/holdings')
 def api_holdings():
     """Returns detailed asset breakdown explaining capital deployment."""
@@ -335,12 +364,42 @@ def get_status():
                     logger.error(f"Error calculating open pos PnL: {pos_err}")
             
             trades_data = _get_trades_data()
-            realized_pnl = float(trades_data.get("net_pnl", 0.0))
-            fees = float(sum(t.get("fees", 0.0) for t in trades_data.get("positions", [])))
-            open_positions = len(open_pos_list)
+            if trades_data.get("positions"):
+                realized_pnl = float(trades_data.get("net_pnl", 0.0))
+                fees = float(sum(t.get("fees", 0.0) for t in trades_data.get("positions", [])))
+            else:
+                realized_pnl = float(port.get("realized_pnl", 0.0))
+                fees = float(port.get("fees", 0.0))
+                
+            open_positions = sum(1 for p in port.get("positions", {}).values() if isinstance(p, dict) and p.get("status") == "OPEN")
             mdd = float(port.get("max_drawdown", 0.0)) * 100
         except Exception as e:
             logger.error(f"Failed to process testnet portfolio: {e}")
+
+    # Read today's equity history for High / Low calculation
+    hist_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
+    today_utc_str = datetime.datetime.utcnow().date().isoformat()
+    today_equities = []
+    if os.path.exists(hist_file):
+        try:
+            with open(hist_file, "r") as f:
+                for line in f:
+                    if not line.strip(): continue
+                    rec = json.loads(line.strip())
+                    ts = rec.get("timestamp", "")
+                    if ts.startswith(today_utc_str):
+                        eq_val = float(rec.get("equity", rec.get("balance", 0.0)))
+                        if eq_val > 0:
+                            today_equities.append(eq_val)
+        except Exception as eh_err:
+            logger.warning(f"Error parsing equity history: {eh_err}")
+
+    if today_equities:
+        equity_high = max(today_equities)
+        equity_low = min(today_equities)
+        first_eq = today_equities[0]
+        if first_eq > 0:
+            equity_change = round(((today_equities[-1] - first_eq) / first_eq) * 100, 2)
 
     # Total Valuation: Liquid USDT Cash + Capital In Active Trades + Realized + Unrealized
     # If in testnet, base is actual cash + active crypto assets
@@ -426,10 +485,21 @@ def _get_trades_data():
                     trade = json.loads(line.strip())
                     if not trade: continue
                     
+                    source = trade.get("source", "")
+                    strategy = trade.get("strategy", "")
+                    if source == "TEST" or strategy == "TEST":
+                        continue
+                    
                     symbol = trade.get("symbol", "")
                     entry_oid = str(trade.get("entry_order_id", ""))
                     exit_oid = str(trade.get("exit_order_id", ""))
-                    key = f"{symbol}_{entry_oid}_{exit_oid}_{trade.get('exit_timestamp', trade.get('timestamp', ''))}"
+                    
+                    if exit_oid and exit_oid != "None":
+                        key = f"{symbol}_{exit_oid}"
+                    elif entry_oid and entry_oid != "None":
+                        key = f"{symbol}_{entry_oid}"
+                    else:
+                        key = f"{symbol}_{trade.get('exit_timestamp', trade.get('timestamp', ''))}_{trade.get('pnl', '')}"
                     
                     if key in seen_trade_keys:
                         continue
@@ -450,6 +520,7 @@ def _get_trades_data():
                         "symbol": symbol,
                         "action": trade.get("side", trade.get("action", "BUY")).replace("CLOSED_", "").replace("CLOSE_", ""),
                         "strategy": trade.get("strategy", "aggressor"),
+                        "source": source or trade.get("source", "BINANCE_EXECUTION"),
                         "entry_price": float(trade.get("entry_price", 0.0)),
                         "exit_price": float(trade.get("exit_price", 0.0)),
                         "quantity": float(trade.get("quantity", trade.get("entry_executed_quantity", 0.0))),

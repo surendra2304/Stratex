@@ -54,7 +54,6 @@ ACTIVE_STRATEGIES = {
     "swing": ["2h", "4h"],
     "adx_ema": ["4h"],
     "fast1m": ["1m"],
-    "fast2m": ["2m"],
     "fast5m": ["5m"]
 }
 
@@ -67,18 +66,18 @@ TIMEFRAME = _first_tf[0] if isinstance(_first_tf, list) else _first_tf
 MAX_POSITION_SIZE = 0.95
 RISK_PER_TRADE = 0.02
 
-# --- Testnet Risk Management (RELAXED for 100-trade target) ---
-MAX_TESTNET_RISK_PER_TRADE = 0.005 # 0.5% risk
-MAX_TESTNET_EXPOSURE = 0.95        # 95% max total exposure (relaxed for testing)
-MAX_SINGLE_ASSET_EXPOSURE = 0.50   # 50% max per single asset (relaxed for testing)
-MAX_NET_DIRECTIONAL_EXPOSURE = 0.95 # 95% max net directional exposure (relaxed)
-MAX_OPEN_POSITIONS = 20            # Allow up to 20 concurrent positions
-MAX_DAILY_LOSS_PCT = 0.50          # 50% daily loss limit (relaxed for testing)
-MAX_TESTNET_DRAWDOWN_PCT = 0.50    # 50% drawdown tolerance (relaxed for testing)
-RECONCILIATION_TOLERANCE = 5.0     # 5 USDT tolerance for slight fee estimation drift
+# --- Testnet Risk Management ---
+MAX_TESTNET_RISK_PER_TRADE = float(os.getenv("MAX_TESTNET_RISK_PER_TRADE", "0.005")) # 0.5% risk
+MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.05"))        # 5% max total exposure
+MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.02"))   # 2% max per single asset
+MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.04")) # 4% max net directional exposure
+MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))            # Allow up to 5 concurrent positions
+MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.02"))          # 2% daily loss limit
+MAX_TESTNET_DRAWDOWN_PCT = float(os.getenv("MAX_TESTNET_DRAWDOWN_PCT", "0.05"))    # 5% drawdown tolerance
+RECONCILIATION_TOLERANCE = float(os.getenv("RECONCILIATION_TOLERANCE", "5.0"))     # 5 USDT tolerance
 
 # --- Strategy Quality Control (Phase 5) ---
-MINIMUM_EXPECTED_EDGE = -0.001     # Very low threshold to accept all signals during testing
+MINIMUM_EXPECTED_EDGE = float(os.getenv("MINIMUM_EXPECTED_EDGE", "0.0001"))     # Standard positive expected edge threshold
 DEGRADATION_WINDOW = 20            # Evaluate last 20 trades for degradation
 MIN_WIN_RATE_THRESHOLD = 0.35      # Automatically switch to OBSERVE-ONLY if < 35% win rate
 MAX_PREDICTION_ERROR = 0.02        # Automatically switch to OBSERVE-ONLY if actual differs from expected by > 2%
@@ -92,8 +91,8 @@ OOS_TRAIN_PCT = 0.60               # Walk-forward train %
 OOS_VAL_PCT = 0.20                 # Walk-forward validation %
 INTRABAR_RESOLUTION = "conservative" # "conservative" or "optimistic"
 
-SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema", "fast1m", "fast2m", "fast5m"]
-SUPPORTED_TIMEFRAMES = ["1m", "2m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"]
+SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema", "fast1m", "fast5m"]
+SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"]
 VALID_MODES = ["PAPER", "TESTNET", "LIVE"]
 
 def validate_config():
