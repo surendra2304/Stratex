@@ -41,17 +41,17 @@ def get_signal(df):
     if st_now == True and st_prev == False and close > ema:
         # Initial Stop Loss at the lower band
         sl = last['st_lower']
-        # We want to ride the trend indefinitely. Set TP very high (e.g. 50% away)
-        # Actually, trailing stop will take us out when supertrend flips.
-        tp = close * 1.50
+        # Trailing stop rider. Realistic expected target is ~3.0x to 5.0x the initial risk.
+        risk = close - sl
+        tp = close + (risk * 3.0)
         return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     # Trend changed to BEARISH
     if st_now == False and st_prev == True and close < ema:
         # Initial Stop Loss at the upper band
         sl = last['st_upper']
-        # Set TP very low (e.g. 50% away)
-        tp = close * 0.50
+        risk = sl - close
+        tp = close - (risk * 3.0)
         return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)

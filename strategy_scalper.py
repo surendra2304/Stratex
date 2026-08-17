@@ -41,13 +41,13 @@ def get_signal(df):
     # BUY: Price wicked below lower band, RSI is oversold, and overall trend is UP (filter)
     if close <= bb_lower and rsi < 35 and close > ema_200:
         sl = close - (atr * 1.5)
-        tp = close + (atr * 1.0)
+        tp = close + (atr * 2.0)  # Mathematically must be >= 1.6 ATR to overcome 31bps friction at 60% WR
         return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     # SELL: Price wicked above upper band, RSI overbought, and overall trend is DOWN
     if close >= bb_upper and rsi > 65 and close < ema_200:
         sl = close + (atr * 1.5)
-        tp = close - (atr * 1.0)
+        tp = close - (atr * 2.0)
         return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
