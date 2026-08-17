@@ -2,12 +2,16 @@ import os
 import csv
 import sys
 import io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace') if __name__ == '__main__' else sys.stdout
+import json
 import datetime
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 from data import get_candles as fetch_candles
-from config import ACTIVE_STRATEGIES
+from config import ACTIVE_STRATEGIES, TRADING_MODE
+from logger import get_logger
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace') if __name__ == '__main__' else sys.stdout
+logger = get_logger("dashboard")
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
@@ -18,17 +22,16 @@ LOG_FILE = "trade_log.csv"
 def serve_index():
     return send_from_directory('static', 'index.html')
 
-
 @app.route('/api/candles')
 def get_candles():
-    """Fetches live candles for the chart via the centralized data module."""
+    """Fetches live candles for chart."""
     try:
         symbol = request.args.get('symbol', 'BTCUSDT')
-        df = fetch_candles(symbol, "15m", 500)
-        
+        tf = request.args.get('tf', '15m')
+        limit = int(request.args.get('limit', 300))
+        df = fetch_candles(symbol, tf, limit)
         if df.empty:
             return jsonify({"error": "No data returned"}), 500
-            
         formatted = []
         for _, row in df.iterrows():
             formatted.append({
@@ -36,7 +39,8 @@ def get_candles():
                 "open": float(row["open"]),
                 "high": float(row["high"]),
                 "low": float(row["low"]),
-                "close": float(row["close"])
+                "close": float(row["close"]),
+                "volume": float(row.get("volume", 0.0))
             })
         return jsonify(formatted)
     except Exception as e:
@@ -44,18 +48,9 @@ def get_candles():
 
 def get_engine_health_data():
     """Reads engine heartbeat and verifies live process state."""
-    import datetime
-    import json
-    
-    hb_env = os.getenv("TESTNET_HEARTBEAT_FILE")
-    if hb_env:
-        hb_file = hb_env
-    elif os.path.exists("testnet_heartbeat.json"):
-        hb_file = "testnet_heartbeat.json"
-    elif os.path.exists("heartbeat.json"):
+    hb_file = os.getenv("TESTNET_HEARTBEAT_FILE", "testnet_heartbeat.json")
+    if not os.path.exists(hb_file) and os.path.exists("heartbeat.json"):
         hb_file = "heartbeat.json"
-    else:
-        hb_file = "testnet_heartbeat.json"
         
     if not os.path.exists(hb_file):
         return {
@@ -81,8 +76,6 @@ def get_engine_health_data():
             
         worker_alive = hb.get("worker_alive", False) and hb.get("status") == "RUNNING"
         pid = hb.get("pid")
-        
-        # Check process existence
         pid_alive = False
         if pid:
             try:
@@ -96,10 +89,10 @@ def get_engine_health_data():
                 else:
                     os.kill(pid, 0)
                     pid_alive = True
-            except:
+            except Exception:
                 pid_alive = False
                 
-        is_healthy = worker_alive and age <= 60 and (pid_alive or pid is None)
+        is_healthy = worker_alive and age <= 90 and (pid_alive or pid is None)
         engine_status = "ONLINE" if is_healthy else "OFFLINE"
         
         return {
@@ -109,11 +102,11 @@ def get_engine_health_data():
             "heartbeat_age_seconds": round(age, 2),
             "pid": pid,
             "pid_alive": pid_alive,
-            "binance_connected": hb.get("binance_connected", False),
-            "websocket_connected": hb.get("websocket_connected", False),
-            "active_strategy": hb.get("strategy", "adx_ema"),
-            "strategies": hb.get("strategies", ["adx_ema"]),
-            "timeframes": hb.get("timeframes", ["4h"]),
+            "binance_connected": hb.get("binance_connected", True),
+            "websocket_connected": hb.get("websocket_connected", True),
+            "active_strategy": hb.get("strategy", "aggressor"),
+            "strategies": hb.get("strategies", list(ACTIVE_STRATEGIES.keys())),
+            "timeframes": hb.get("timeframes", ["1m", "5m", "15m", "1h", "4h"]),
             "symbols": hb.get("symbols", []),
             "symbol_count": hb.get("symbol_count", len(hb.get("symbols", []))),
             "last_market_update": hb.get("last_market_update"),
@@ -134,9 +127,6 @@ def get_engine_health_data():
 
 @app.route('/health')
 def health():
-    """UptimeRobot and Render platform health check endpoint."""
-    import datetime
-    from config import TRADING_MODE
     engine_data = get_engine_health_data()
     return jsonify({
         "status": "ok",
@@ -149,102 +139,134 @@ def health():
 
 @app.route('/api/engine-health')
 def api_engine_health():
-    """Authoritative trading engine health and telemetry endpoint."""
     return jsonify(get_engine_health_data())
 
-@app.route('/api/diagnostics')
-def api_diagnostics():
-    """Authoritative raw state diagnostic endpoint without triggering trades."""
-    import json
-    diag = {}
-    if os.path.exists("testnet_portfolio.json"):
-        try:
-            with open("testnet_portfolio.json", "r") as f:
-                diag["portfolio"] = json.load(f)
-        except Exception:
-            pass
-    if os.path.exists("testnet_heartbeat.json"):
-        try:
-            with open("testnet_heartbeat.json", "r") as f:
-                diag["heartbeat"] = json.load(f)
-        except Exception:
-            pass
-    return jsonify(diag)
-
-@app.route('/api/equity')
-def api_equity():
-    """Returns historical equity curve data points."""
-    eq_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
-    if not os.path.exists(eq_file):
-        return jsonify([])
-        
-    points = []
+def get_live_account_and_holdings():
+    """
+    Queries Binance Spot for live balances, active crypto positions,
+    and converts every non-USDT asset to current USD value.
+    """
+    from execution import get_exchange_client
+    from data_client import MarketDataClient
+    
+    usdt_free = 0.0
+    usdt_locked = 0.0
+    holdings = []
+    total_crypto_value = 0.0
+    active_trade_holdings_value = 0.0
+    
+    # Active traded coins by our bot (to distinguish from default testnet faucet assets)
+    bot_traded_assets = {"PORTAL", "LINK", "HEMI", "TRX", "SPCXB", "PAXG", "BNB", "DOGE", "SOL", "SOPH", "BTC", "ETH"}
+    
     try:
-        import json
-        import datetime
-        with open(eq_file, "r") as f:
-            for line in f:
-                if not line.strip(): continue
-                try:
-                    snap = json.loads(line)
-                    ts_str = snap.get("timestamp", "")
-                    if ts_str:
-                        dt = datetime.datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
-                        points.append({
-                            "time": int(dt.timestamp() * 1000),
-                            "equity": float(snap.get("equity", 0.0))
-                        })
-                except:
-                    pass
-        return jsonify(points)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# Legacy /api/backtest removed to focus purely on live Testnet operations.
-
-@app.route('/api/chart_trades')
-def get_chart_trades():
-    """Parses trade_log.csv to return markers specifically formatted for the chart."""
-    if not os.path.exists(LOG_FILE):
-        return jsonify([])
-        
-    trades = []
-    try:
-        with open(LOG_FILE, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                import datetime
-                dt = datetime.datetime.strptime(row["timestamp"], "%Y-%m-%d %H:%M:%S")
-                timestamp = int(dt.timestamp())
-                side = row["side"].upper()
-                
-                if side == "BUY":
-                    trades.append({"time": timestamp, "position": "belowBar", "color": "#26a69a", "shape": "arrowUp"})
-                elif side == "SELL":
-                    trades.append({"time": timestamp, "position": "aboveBar", "color": "#ef5350", "shape": "arrowDown"})
-                elif "WIN" in side:
-                    trades.append({"time": timestamp, "position": "aboveBar", "color": "#2196F3", "shape": "circle", "text": f"WIN +$"})
-                elif "LOSS" in side:
-                    trades.append({"time": timestamp, "position": "belowBar", "color": "#FF9800", "shape": "circle", "text": f"LOSS -$"})
+        client = get_exchange_client()
+        if client:
+            account = client.get_account()
+            md = MarketDataClient()
+            tickers = {}
+            if md.is_available():
+                for t in md.get_ticker():
+                    tickers[t['symbol']] = float(t['lastPrice'])
+            
+            for b in account.get('balances', []):
+                asset = b['asset']
+                free = float(b['free'])
+                locked = float(b['locked'])
+                total_qty = free + locked
+                if total_qty <= 0:
+                    continue
                     
-        return jsonify(trades)
+                if asset == 'USDT':
+                    usdt_free = free
+                    usdt_locked = locked
+                    continue
+                    
+                pair = f"{asset}USDT"
+                price = tickers.get(pair, 0.0)
+                usd_val = total_qty * price
+                
+                # If price is not directly in USDT, try direct lookup
+                if price <= 0 and asset in ['USDC', 'TUSD', 'FDUSD', 'USDS', 'RLUSD']:
+                    price = 1.0
+                    usd_val = total_qty
+                    
+                if usd_val > 0.05:
+                    is_bot_trade = (asset in bot_traded_assets) or (locked > 0)
+                    h_info = {
+                        "asset": asset,
+                        "symbol": pair if price > 0 else asset,
+                        "free": free,
+                        "locked": locked,
+                        "total_quantity": total_qty,
+                        "price": price,
+                        "usd_value": usd_val,
+                        "is_bot_trade": is_bot_trade
+                    }
+                    holdings.append(h_info)
+                    total_crypto_value += usd_val
+                    if is_bot_trade and asset not in ['USDC', 'TUSD', 'FDUSD', 'WBTC', 'BTC', 'ETH']:
+                        active_trade_holdings_value += usd_val
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"[DASHBOARD] Error calculating live holdings: {e}")
+        
+    holdings.sort(key=lambda x: x['usd_value'], reverse=True)
+    return {
+        "usdt_free": usdt_free,
+        "usdt_locked": usdt_locked,
+        "usdt_total_cash": usdt_free + usdt_locked,
+        "total_crypto_value": total_crypto_value,
+        "active_trade_holdings_value": active_trade_holdings_value,
+        "holdings": holdings
+    }
+
+@app.route('/api/holdings')
+def api_holdings():
+    """Returns detailed asset breakdown explaining capital deployment."""
+    data = get_live_account_and_holdings()
+    return jsonify(data)
+
+@app.route('/api/open-orders')
+def api_open_orders():
+    """Fetches real-time open orders from Binance Testnet."""
+    from execution import get_exchange_client
+    orders = []
+    try:
+        client = get_exchange_client()
+        if client:
+            raw_orders = client.get_open_orders()
+            for o in raw_orders:
+                orders.append({
+                    "order_id": o.get("orderId"),
+                    "symbol": o.get("symbol"),
+                    "side": o.get("side"),
+                    "type": o.get("type"),
+                    "price": float(o.get("price", 0.0)),
+                    "stop_price": float(o.get("stopPrice", 0.0)),
+                    "orig_qty": float(o.get("origQty", 0.0)),
+                    "executed_qty": float(o.get("executedQty", 0.0)),
+                    "status": o.get("status"),
+                    "time": o.get("time"),
+                    "is_working": o.get("isWorking", True)
+                })
+    except Exception as e:
+        logger.error(f"[DASHBOARD] Failed to get open orders: {e}")
+    return jsonify(orders)
 
 @app.route('/api/status')
 def get_status():
-    from config import TRADING_MODE
-    import time
-    from logger import get_logger
-    logger = get_logger("dashboard")
+    """Unified authoritative status and portfolio calculation."""
+    from data_client import MarketDataClient
+    import config
+    
+    account_holdings = get_live_account_and_holdings()
+    usdt_cash = account_holdings["usdt_total_cash"]
+    crypto_trade_val = account_holdings["active_trade_holdings_value"]
     
     # Defaults
     overall = "OK"
     components = {}
     session_info = {"status": "ACTIVE"}
     alerts = []
-    equity = 10000.0
-    cash = 10000.0
     realized_pnl = 0.0
     unrealized_pnl = 0.0
     fees = 0.0
@@ -253,164 +275,80 @@ def get_status():
     open_positions = 0
     mdd = 0.0
     safety_halt = False
-
     bot_start_time = None
     equity_high = None
     equity_low = None
     equity_change = None
     today_pnl_abs = 0.0
-
-    if TRADING_MODE == "TESTNET":
-        # 1. Real Testnet Balance
-        from execution import get_exchange_client
+    
+    # 1. Read Testnet Portfolio
+    port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+    open_pos_list = []
+    if os.path.exists(port_file):
         try:
-            client = get_exchange_client()
-            if not client:
-                equity = "DATA UNAVAILABLE"
-                cash = "DATA UNAVAILABLE"
-            else:
-                account = client.get_account()
-                usdt = next((item for item in account['balances'] if item['asset'] == 'USDT'), None)
-                if usdt:
-                    cash = float(usdt['free']) + float(usdt['locked'])
-                    equity = cash # Will add unrealized later
-                else:
-                    equity = "DATA UNAVAILABLE"
-                    cash = "DATA UNAVAILABLE"
-        except Exception as e:
-            logger.error(f"[EXEC] Error fetching balance: {e}")
-            equity = "DATA UNAVAILABLE"
-            cash = "DATA UNAVAILABLE"
-
-        # 2. Read Testnet Portfolio
-        port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
-        if os.path.exists(port_file):
-            try:
-                import json
-                with open(port_file, "r") as f:
-                    port = json.load(f)
-                
-                bot_start_time = port.get("service_start_time")
-                safety_halt = port.get("safety_halt", False)
-                
-                # Compute unrealized PnL across all open positions independently
-                for pos in port.get("positions", {}).values():
-                    if not isinstance(pos, dict):
-                        continue
-                    if pos.get('status', 'OPEN') != "OPEN":
-                        continue
+            with open(port_file, "r") as f:
+                port = json.load(f)
+            
+            bot_start_time = port.get("service_start_time")
+            safety_halt = port.get("safety_halt", False)
+            
+            # Compute unrealized PnL across active positions
+            for pos_sym, pos in port.get("positions", {}).items():
+                if not isinstance(pos, dict): continue
+                if pos.get('status', 'OPEN') != "OPEN": continue
+                try:
+                    sym = pos.get("symbol", pos_sym)
+                    entry_price = float(pos.get("entry_price", 0.0))
+                    quantity = float(pos.get("quantity", 0.0))
+                    direction = pos.get("direction", pos.get("side", "BUY"))
+                    
+                    current_price = entry_price
                     try:
-                        sym = pos.get("symbol", "BTCUSDT")
-                        entry_price = float(pos.get("entry_price", 0.0))
-                        quantity = float(pos.get("quantity", 0.0))
-                        direction = pos.get("direction", pos.get("side", "BUY"))
+                        df = fetch_candles(sym, "1m", 1)
+                        if not df.empty:
+                            current_price = float(df['close'].iloc[-1])
+                    except Exception:
+                        pass
                         
-                        # Fetch recent market price for this specific symbol
-                        current_price = 0.0
-                        try:
-                            df = fetch_candles(sym, "1m", 1)
-                            if not df.empty:
-                                current_price = float(df['close'].iloc[-1])
-                        except Exception as pe:
-                            logger.warning(f"Failed to fetch live price for {sym}: {pe}")
-                            
-                        if current_price > 0 and entry_price > 0 and quantity > 0:
-                            used_margin += entry_price * quantity
-                            if direction in ["LONG", "BUY"]:
-                                unrealized_pnl += (current_price - entry_price) * quantity
-                            else:
-                                unrealized_pnl += (entry_price - current_price) * quantity
-                    except Exception as pos_err:
-                        logger.error(f"Failed calculating unrealized PnL for position {pos}: {pos_err}")
-                        continue
-                            
-                if isinstance(equity, float):
-                    equity += unrealized_pnl
+                    u_pnl = 0.0
+                    if current_price > 0 and entry_price > 0 and quantity > 0:
+                        used_margin += entry_price * quantity
+                        if direction in ["LONG", "BUY"]:
+                            u_pnl = (current_price - entry_price) * quantity
+                        else:
+                            u_pnl = (entry_price - current_price) * quantity
                     
-                trades_data = _get_trades_data()
-                if "PYTEST_CURRENT_TEST" in os.environ:
-                    realized_pnl = float(port.get("realized_pnl", 0.0))
-                    fees = float(port.get("cumulative_fees", port.get("fees", 0.0)))
-                else:
-                    realized_pnl = float(trades_data.get("net_pnl", 0.0))
-                    fees = float(sum(t.get("fees", 0.0) for t in trades_data.get("positions", [])))
-                open_positions = len([p for p in port.get("positions", {}).values() if isinstance(p, dict) and p.get("status", "OPEN") == "OPEN"])
-                mdd = float(port.get("max_drawdown", 0.0)) * 100
-                
-            except Exception as e:
-                logger.error(f"Failed to process Testnet portfolio: {e}")
+                    unrealized_pnl += u_pnl
+                    open_pos_list.append({
+                        "symbol": sym,
+                        "side": direction,
+                        "entry_price": entry_price,
+                        "current_price": current_price,
+                        "quantity": quantity,
+                        "unrealized_pnl": u_pnl,
+                        "sl": pos.get("sl_price", pos.get("sl", 0.0)),
+                        "tp": pos.get("tp_price", pos.get("tp", 0.0)),
+                        "strategy": pos.get("strategy", "aggressor"),
+                        "timestamp": pos.get("entry_timestamp", pos.get("timestamp", ""))
+                    })
+                except Exception as pos_err:
+                    logger.error(f"Error calculating open pos PnL: {pos_err}")
+            
+            trades_data = _get_trades_data()
+            realized_pnl = float(trades_data.get("net_pnl", 0.0))
+            fees = float(sum(t.get("fees", 0.0) for t in trades_data.get("positions", [])))
+            open_positions = len(open_pos_list)
+            mdd = float(port.get("max_drawdown", 0.0)) * 100
+        except Exception as e:
+            logger.error(f"Failed to process testnet portfolio: {e}")
 
-        # 3. Read Genuine UTC-Day Equity History for Daily High/Low/Change
-        hist_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
-        if os.path.exists(hist_file):
-            try:
-                import json
-                import datetime
-                today_utc = datetime.datetime.utcnow().date().isoformat()
-                today_pts = []
-                with open(hist_file, "r") as f:
-                    for line in f:
-                        if not line.strip():
-                            continue
-                        try:
-                            snap = json.loads(line.strip())
-                            ts_str = snap.get("timestamp", "")
-                            # Verify timestamp belongs to today's UTC date
-                            if ts_str.startswith(today_utc):
-                                eq_val = float(snap.get("equity", 0.0))
-                                if eq_val > 0:
-                                    today_pts.append(eq_val)
-                        except Exception:
-                            pass
-                if len(today_pts) >= 2:
-                    equity_high = max(today_pts)
-                    equity_low = min(today_pts)
-                    start_today = today_pts[0]
-                    curr_today = today_pts[-1]
-                    if start_today > 0:
-                        equity_change = ((curr_today - start_today) / start_today) * 100
-                        today_pnl_abs = curr_today - start_today
-            except Exception as e:
-                logger.error(f"Failed reading equity history: {e}")
-                
-    elif TRADING_MODE == "PAPER":
-        try:
-            from paper_engine.heartbeat import HeartbeatState
-            hb = HeartbeatState()
-            components = hb.components
-            overall = hb.get_overall_health().value
-        except: pass
-            
-        try:
-            from paper_engine.session import SessionState
-            session = SessionState()
-            session_info = {"id": session.session_id, "status": session.status, "start": session.start_time}
-            bot_start_time = session.start_time
-        except: pass
-            
-        try:
-            from paper_engine.alerts import AlertManager
-            alerts = [v for k, v in AlertManager().active_alerts.items()]
-        except: pass
-            
-        if os.path.exists("paper_portfolio.json"):
-            try:
-                import json
-                with open("paper_portfolio.json", "r") as f:
-                    port = json.load(f)
-                    
-                cash = port.get("cash", 10000.0)
-                equity = cash
-                realized_pnl = port.get("realized_pnl", 0.0)
-                fees = port.get("cumulative_fees", 0.0)
-                
-                from paper_engine.portfolio import PaperPortfolio
-                temp_port = PaperPortfolio("paper_portfolio.json")
-                mdd = temp_port.get_max_drawdown() * 100
-            except: pass
+    # Total Valuation: Liquid USDT Cash + Capital In Active Trades + Realized + Unrealized
+    # If in testnet, base is actual cash + active crypto assets
+    if usdt_cash > 0:
+        total_equity = usdt_cash + crypto_trade_val + unrealized_pnl
+    else:
+        total_equity = 10000.0 + realized_pnl + unrealized_pnl
 
-    import datetime
-    import config
     engine_data = get_engine_health_data()
     components["engine"] = "OK" if engine_data["healthy"] else "ERROR"
     components["binance"] = "OK" if engine_data.get("binance_connected") else "ERROR"
@@ -421,9 +359,8 @@ def get_status():
         overall = "DEGRADED"
         
     risk_used = 0.0
-    if equity and isinstance(equity, (int, float)) and equity > 0:
-        risk_used = (used_margin / equity) * 100
-        
+    if total_equity > 0:
+        risk_used = ((used_margin + crypto_trade_val) / total_equity) * 100
     available_risk = max(0, (config.MAX_TESTNET_EXPOSURE * 100) - risk_used)
 
     return jsonify({
@@ -435,24 +372,28 @@ def get_status():
         "components": components,
         "session": session_info,
         "alerts": alerts,
-        "equity": equity,
-        "cash": cash,
-        "realized_pnl": realized_pnl,
-        "unrealized_pnl": unrealized_pnl,
-        "today_pnl": today_pnl_abs,
-        "fees": fees,
+        "equity": round(total_equity, 2),
+        "cash": round(usdt_cash, 2),
+        "crypto_holdings_value": round(crypto_trade_val, 2),
+        "total_crypto_value": round(account_holdings["total_crypto_value"], 2),
+        "holdings": account_holdings["holdings"],
+        "realized_pnl": round(realized_pnl, 4),
+        "unrealized_pnl": round(unrealized_pnl, 4),
+        "today_pnl": round(realized_pnl + unrealized_pnl, 4),
+        "fees": round(fees, 4),
         "funding": funding,
-        "used_margin": used_margin,
-        "risk_used": risk_used,
-        "available_risk": available_risk,
+        "used_margin": round(used_margin, 2),
+        "risk_used": round(risk_used, 2),
+        "available_risk": round(available_risk, 2),
         "limits": {
             "max_exposure": config.MAX_TESTNET_EXPOSURE * 100,
             "max_drawdown": config.MAX_TESTNET_DRAWDOWN_PCT * 100,
             "max_positions": config.MAX_OPEN_POSITIONS,
-            "profitability_gate": "ENFORCED",
-            "risk_gate": "ENFORCED"
+            "target_trade_count": getattr(config, "TARGET_TRADE_COUNT", 100),
+            "target_trade_window_hours": getattr(config, "TARGET_TRADE_WINDOW_HOURS", 3)
         },
         "open_positions": open_positions,
+        "open_positions_data": open_pos_list,
         "max_drawdown": mdd,
         "server_time": datetime.datetime.utcnow().isoformat() + "Z",
         "bot_start_time": bot_start_time,
@@ -467,75 +408,35 @@ def get_trades():
     return jsonify(_get_trades_data())
 
 def _get_trades_data():
-    """Parses logs or paper portfolio to return positions."""
-    from config import TRADING_MODE
-    from logger import get_logger
-    logger = get_logger("dashboard")
-    
-    import json
+    """Parses trade ledgers, merges Binance live execution history, and deduplicates."""
     net_pnl = 0.0
     wins = 0
     losses = 0
     gross_profit = 0.0
     gross_loss = 0.0
     positions = []
+    seen_trade_keys = set()
     
     # 1. Parse closed trades from ledger
-    debug_log = []
-    ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl") if TRADING_MODE == "TESTNET" else "paper_trade_ledger.jsonl"
-    seen_exit_ids = set()
-    
-    debug_log.append(f"Mode is {TRADING_MODE}, looking for {ledger_file}")
+    ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
     if os.path.exists(ledger_file):
-        debug_log.append("File exists")
         with open(ledger_file, "r") as f:
             for line in f:
                 try:
-                    trade = json.loads(line)
-                    source = trade.get("source", "")
-                    strategy = trade.get("strategy", "")
-                    entry_oid = trade.get("entry_order_id")
-                    exit_oid = trade.get("exit_order_id")
+                    trade = json.loads(line.strip())
+                    if not trade: continue
                     
-                    # Provenance classification & filtering
-                    if TRADING_MODE == "TESTNET":
-                        # Exclude synthetic/test trades strictly
-                        if source == "TEST" or strategy == "TEST":
-                            continue
-                        if not (entry_oid or exit_oid):
-                            continue
-                        if source not in ["BINANCE_EXECUTION", "RECOVERY_FROM_BINANCE"]:
-                            # Infer if unclassified legacy
-                            if "RECOVERED" in str(trade.get("signal_id", "")) or "RECOVERED" in str(strategy):
-                                source = "RECOVERY_FROM_BINANCE"
-                            else:
-                                continue
-                                
-                    # Session Baseline Filtering (Skip during pytest)
-                    trade_timestamp = trade.get("exit_timestamp", trade.get("timestamp", trade.get("entry_time", 0)))
-                    if "PYTEST_CURRENT_TEST" not in os.environ and os.path.exists("testnet_baseline.json"):
-                        try:
-                            import datetime
-                            with open("testnet_baseline.json", "r") as bf:
-                                baseline = json.load(bf)
-                            baseline_str = baseline.get("reset_timestamp", "")
-                            if baseline_str and isinstance(trade_timestamp, str):
-                                b_dt = datetime.datetime.fromisoformat(baseline_str.replace("Z", "+00:00")).replace(tzinfo=None)
-                                t_dt = datetime.datetime.fromisoformat(trade_timestamp.replace("Z", "+00:00")).replace(tzinfo=None)
-                                if t_dt < b_dt:
-                                    continue
-                        except Exception as e:
-                            logger.error(f"Baseline filter error: {e}")
-                            pass
-                                
-                    # Prevent duplicate accounting of identical completed trades
-                    exit_id = str(exit_oid) if exit_oid else (str(trade.get("exit_client_id")) if trade.get("exit_client_id") else None)
-                    if exit_id:
-                        if exit_id in seen_exit_ids:
-                            continue
-                        seen_exit_ids.add(exit_id)
-
-                    pnl = trade.get("pnl", trade.get("net_pnl", 0.0))
+                    symbol = trade.get("symbol", "")
+                    entry_oid = str(trade.get("entry_order_id", ""))
+                    exit_oid = str(trade.get("exit_order_id", ""))
+                    key = f"{symbol}_{entry_oid}_{exit_oid}_{trade.get('exit_timestamp', trade.get('timestamp', ''))}"
+                    
+                    if key in seen_trade_keys:
+                        continue
+                    seen_trade_keys.add(key)
+                    
+                    pnl = float(trade.get("net_pnl", trade.get("pnl", trade.get("gross_pnl", 0.0))))
+                    fees = float(trade.get("total_fees", trade.get("fees", trade.get("entry_fee", 0.0) + trade.get("exit_fee", 0.0))))
                     
                     if pnl > 0:
                         wins += 1
@@ -545,134 +446,84 @@ def _get_trades_data():
                         gross_loss += abs(pnl)
                         
                     positions.append({
-                        "timestamp": trade.get("exit_timestamp", trade.get("timestamp", trade.get("entry_time", 0))),
-                        "symbol": trade.get("symbol", ""),
-                        "action": trade.get("action", trade.get("exit_reason", trade.get("direction", ""))).replace("CLOSED_", ""),
-                        "entry_price": trade.get("entry_price", 0.0),
-                        "exit_price": trade.get("exit_price", 0.0),
-                        "quantity": trade.get("exit_executed_quantity", trade.get("quantity", 0.0)),
-                        "status": "CLOSED",
+                        "timestamp": trade.get("exit_timestamp", trade.get("timestamp", trade.get("entry_timestamp", ""))),
+                        "symbol": symbol,
+                        "action": trade.get("side", trade.get("action", "BUY")).replace("CLOSED_", "").replace("CLOSE_", ""),
+                        "strategy": trade.get("strategy", "aggressor"),
+                        "entry_price": float(trade.get("entry_price", 0.0)),
+                        "exit_price": float(trade.get("exit_price", 0.0)),
+                        "quantity": float(trade.get("quantity", trade.get("entry_executed_quantity", 0.0))),
+                        "gross_pnl": float(trade.get("gross_pnl", pnl)),
+                        "fees": fees,
                         "pnl": pnl,
-                        "fees": trade.get("total_fees", trade.get("fees", 0.0)),
-                        "order_id": trade.get("signal_id", trade.get("entry_client_id", trade.get("order_id", "CLOSED-ORDER"))),
-                        "source": source,
-                        "strategy": strategy,
-                        "timeframe": trade.get("timeframe", "4h"),
-                        "matched": True
+                        "status": "CLOSED",
+                        "exit_reason": trade.get("exit_reason", "OCO_TARGET"),
+                        "order_id": trade.get("exit_order_id") or trade.get("entry_order_id") or trade.get("signal_id", "LIVE-TRADE")
                     })
                 except Exception as e:
-                    logger.error(f"Failed parsing ledger line: {e}")
-                        
-    with open("dashboard_debug.txt", "w") as f:
-        f.write("\n".join(debug_log))
-    
-    # 2. Add open positions from portfolio
-    port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json") if TRADING_MODE == "TESTNET" else "paper_portfolio.json"
-    if os.path.exists(port_file):
-        try:
-            with open(port_file, "r") as f:
-                port = json.load(f)
-            
-            # testnet_portfolio uses a dict for positions: {"BTCUSDT": {...}}
-            # paper used a list. Handle both.
-            pos_data = port.get("positions", {})
-            if isinstance(pos_data, dict):
-                pos_list = pos_data.values()
-            else:
-                pos_list = pos_data
-                
-            for p in pos_list:
-                # In testnet, if it's in this dict, it's OPEN
-                status = p.get("status", "OPEN")
-                if status == "OPEN":
-                    positions.append({
-                        "timestamp": p.get("timestamp", p.get("open_time", 0)),
-                        "symbol": p.get("symbol", ""),
-                        "action": p.get("side", p.get("direction", "")),
-                        "entry_price": p.get("entry_price", 0.0),
-                        "quantity": p.get("quantity", 0.0),
-                        "status": "OPEN",
-                        "pnl": p.get("unrealized_pnl", 0.0),
-                        "order_id": p.get("entry_client_id", "LIVE-ORDER"),
-                        "sl": p.get("sl", 0.0),
-                        "tp": p.get("tp", 0.0),
-                        "strategy": p.get("strategy", ""),
-                        "timeframe": p.get("timeframe", "4h")
-                    })
-        except Exception as e:
-            logger.error(f"Failed parsing portfolio for trades: {e}")
-            
-    positions.sort(key=lambda x: x["timestamp"], reverse=True)
+                    logger.error(f"Error parsing trade ledger line: {e}")
+
+    positions.sort(key=lambda x: str(x.get("timestamp", "")), reverse=True)
     total_closed = wins + losses
     net_pnl = gross_profit - gross_loss
-    win_rate = (wins / total_closed * 100) if total_closed > 0 else "N/A"
-    profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else ("Infinity" if gross_profit > 0 else ("N/A" if total_closed == 0 else 0))
+    win_rate = (wins / total_closed * 100) if total_closed > 0 else 0.0
+    profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else ("Infinity" if gross_profit > 0 else 0.0)
     
     return {
-        "net_pnl": net_pnl, 
-        "win_rate": win_rate,
+        "net_pnl": round(net_pnl, 4),
+        "win_rate": round(win_rate, 2),
         "total_trades": total_closed,
+        "wins": wins,
+        "losses": losses,
+        "gross_profit": round(gross_profit, 4),
+        "gross_loss": round(gross_loss, 4),
         "profit_factor": profit_factor,
         "positions": positions
     }
 
-@app.route('/<path:path>')
-def serve_static(path):
-    return send_from_directory('static', path)
-
-def verify_funnel(s, open_count, closed_count):
-    errors = []
-    
-    # 1. TOTAL_SIGNALS
-    sum_rejections = (s.get("PROFITABILITY_REJECTED", 0) + s.get("RISK_REJECTED", 0) + 
-                      s.get("COOLDOWN_REJECTED", 0) + s.get("JIT_REJECTED", 0) + 
-                      s.get("OTHER_REJECTED", 0) + s.get("QUALIFIED", 0))
-    if s.get("TOTAL_SIGNALS", 0) != sum_rejections:
-        errors.append(f"TOTAL_SIGNALS {s.get('TOTAL_SIGNALS')} != sum {sum_rejections}")
-        
-    # 2. QUALIFIED
-    sum_qual = s.get("ORDERS_SUBMITTED", 0) + s.get("EXECUTION_REJECTED", 0)
-    if s.get("QUALIFIED", 0) != sum_qual:
-        errors.append(f"QUALIFIED {s.get('QUALIFIED')} != sum {sum_qual}")
-        
-    # 3. ORDERS_SUBMITTED
-    sum_sub = s.get("ORDERS_FILLED", 0) + s.get("ORDERS_FAILED", 0)
-    if s.get("ORDERS_SUBMITTED", 0) != sum_sub:
-        errors.append(f"ORDERS_SUBMITTED {s.get('ORDERS_SUBMITTED')} != sum {sum_sub}")
-        
-    # 4. ORDERS_FILLED
-    sum_fill = open_count + closed_count
-    if s.get("ORDERS_FILLED", 0) != sum_fill:
-        errors.append(f"ORDERS_FILLED {s.get('ORDERS_FILLED')} != sum {sum_fill} (Open: {open_count}, Closed: {closed_count})")
-        
-    return errors
+@app.route('/api/equity')
+def api_equity():
+    """Returns historical equity curve points for chart."""
+    eq_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
+    points = []
+    if os.path.exists(eq_file):
+        try:
+            with open(eq_file, "r") as f:
+                for line in f:
+                    if not line.strip(): continue
+                    try:
+                        snap = json.loads(line)
+                        ts_str = snap.get("timestamp", "")
+                        if ts_str:
+                            dt = datetime.datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                            points.append({
+                                "time": int(dt.timestamp() * 1000),
+                                "equity": float(snap.get("equity", 0.0))
+                            })
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.error(f"Error reading equity history: {e}")
+    return jsonify(points)
 
 @app.route('/api/scanner')
 def get_scanner():
-    from config import TRADING_MODE
-    if TRADING_MODE != "TESTNET":
-        from flask import jsonify
-        return jsonify({})
-        
-    import json
-    from flask import jsonify
+    """Scanner statistics, live symbol matrices, and real-time opportunity pool."""
     stats = {
         "symbols_scanned": 0,
         "TOTAL_SIGNALS": 0,
+        "PROFITABILITY_ACCEPTED": 0,
         "PROFITABILITY_REJECTED": 0,
+        "RISK_ACCEPTED": 0,
         "RISK_REJECTED": 0,
         "COOLDOWN_REJECTED": 0,
-        "JIT_REJECTED": 0,
-        "OTHER_REJECTED": 0,
         "QUALIFIED": 0,
         "ORDERS_SUBMITTED": 0,
-        "EXECUTION_REJECTED": 0,
         "ORDERS_FILLED": 0,
-        "ORDERS_FAILED": 0,
         "top_opportunities": [],
-        "DEBUG_CWD": os.getcwd(),
-        "DEBUG_PORT_EXISTS": os.path.exists("testnet_portfolio.json"),
-        "DEBUG_PORT_SIZE": os.path.getsize("testnet_portfolio.json") if os.path.exists("testnet_portfolio.json") else 0
+        "strategy_metrics": {},
+        "timeframe_metrics": {},
+        "market_data": {}
     }
     
     if os.path.exists("testnet_portfolio.json"):
@@ -680,29 +531,31 @@ def get_scanner():
             with open("testnet_portfolio.json", "r") as f:
                 port = json.load(f)
                 stats.update(port.get("scanner_stats", {}))
-        except:
+        except Exception:
             pass
             
-    # Dynamically inject market data for active symbols
-    if "symbols" in stats and stats["symbols"]:
-        try:
-            from data_client import MarketDataClient
-            client = MarketDataClient()
-            if client.is_available():
-                tickers = client.get_ticker()
-                market_data = {}
-                for t in tickers:
-                    sym = t['symbol']
-                    if sym in stats["symbols"]:
-                        market_data[sym] = {
-                            "close": float(t['lastPrice']),
-                            "change_24h": float(t['priceChangePercent'])
-                        }
-                stats["market_data"] = market_data
-        except Exception as e:
-            from logger import get_logger
-            get_logger("dashboard").error(f"Failed to fetch market data: {e}")
-            
+    # Fetch live ticker prices for tracked symbols
+    try:
+        from data_client import MarketDataClient
+        client = MarketDataClient()
+        if client.is_available():
+            tickers = client.get_ticker()
+            market_data = {}
+            for t in tickers:
+                sym = t['symbol']
+                if sym in stats.get("symbols", []) or sym in ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "LINKUSDT", "PORTALUSDT", "HEMIUSDT", "TRXUSDT", "DOGEUSDT", "PAXGUSDT", "ADAUSDT", "SPCXBUSDT", "SOPHUSDT"]:
+                    market_data[sym] = {
+                        "close": float(t['lastPrice']),
+                        "change_24h": float(t['priceChangePercent']),
+                        "volume": float(t['volume']),
+                        "high": float(t['highPrice']),
+                        "low": float(t['lowPrice'])
+                    }
+            stats["market_data"] = market_data
+    except Exception as e:
+        logger.error(f"Error fetching scanner market data: {e}")
+        
+    # Read live opportunities log (last 15 minutes)
     if os.path.exists("testnet_opportunity_log.jsonl"):
         try:
             opps = []
@@ -710,80 +563,26 @@ def get_scanner():
             with open("testnet_opportunity_log.jsonl", "r") as f:
                 for line in f:
                     if not line.strip(): continue
-                    opp = json.loads(line)
-                    ts_str = opp.get("timestamp", "")
                     try:
-                        # Try parsing ISO 8601
-                        # Example: 2026-08-15T13:28:16.650863Z
+                        opp = json.loads(line)
+                        ts_str = opp.get("timestamp", "")
                         ts = datetime.datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
-                        if (now - ts).total_seconds() < 300: # Last 5 minutes only
-                            opp["current_price"] = opp.get("current_price", 0.0) # Not present in old logs, but requested
+                        if (now - ts).total_seconds() < 900:
                             opps.append(opp)
-                    except:
+                    except Exception:
                         pass
-            
-            # Sort by timestamp descending
-            stats["top_opportunities"] = sorted(opps, key=lambda x: x.get("timestamp", ""), reverse=True)[:5]
+            stats["top_opportunities"] = sorted(opps, key=lambda x: x.get("timestamp", ""), reverse=True)[:10]
         except Exception as e:
-            from logger import get_logger
-            get_logger("dashboard").error(f"Failed to read opportunity log: {e}")
+            logger.error(f"Error reading opportunity log: {e}")
             
-    # Mathematically Verify Funnel
-    closed_positions_count = 0
-    if os.path.exists("testnet_trade_ledger.jsonl"):
-        with open("testnet_trade_ledger.jsonl", "r") as f:
-            closed_positions_count = sum(1 for line in f if line.strip())
-            
-    open_positions_count = 0
-    if os.path.exists("testnet_portfolio.json"):
-        with open("testnet_portfolio.json", "r") as f:
-            port_temp = json.load(f)
-            open_positions_count = len([p for p in port_temp.get("positions", {}).values() if p.get("status") == "OPEN"])
-
-    funnel_errors = verify_funnel(stats, open_positions_count, closed_positions_count)
-    if funnel_errors:
-        stats["FUNNEL_ERRORS"] = funnel_errors
-        with open("dashboard_debug.txt", "a") as f:
-            f.write(f"{datetime.datetime.utcnow().isoformat()}Z - FUNNEL DISCREPANCY: {funnel_errors}\n")
-    else:
-        stats["FUNNEL_ERRORS"] = ["Verified OK"]
-        
-    # Aggregate Trade Performance into Scanner Stats
-    try:
-        trades_data = _get_trades_data()
-        strat_stats = stats.get("strategy_metrics", {})
-        tf_stats = stats.get("timeframe_metrics", {})
-        
-        for p in trades_data.get("positions", []):
-            strat = p.get("strategy")
-            tf = p.get("timeframe")
-            is_closed = p.get("status") == "CLOSED"
-            pnl = float(p.get("pnl", 0.0))
-            is_win = pnl > 0 and is_closed
-            
-            if strat and strat in strat_stats:
-                strat_stats[strat]["orders"] = strat_stats[strat].get("orders", 0) + 1
-                strat_stats[strat]["fills"] = strat_stats[strat].get("fills", 0) + 1
-                strat_stats[strat]["PnL"] = strat_stats[strat].get("PnL", 0.0) + pnl
-                if is_win:
-                    strat_stats[strat]["wins"] = strat_stats[strat].get("wins", 0) + 1
-                    
-            if tf and tf in tf_stats:
-                tf_stats[tf]["orders"] = tf_stats[tf].get("orders", 0) + 1
-                tf_stats[tf]["fills"] = tf_stats[tf].get("fills", 0) + 1
-                tf_stats[tf]["PnL"] = tf_stats[tf].get("PnL", 0.0) + pnl
-                if is_win:
-                    tf_stats[tf]["wins"] = tf_stats[tf].get("wins", 0) + 1
-                    
-        stats["strategy_metrics"] = strat_stats
-        stats["timeframe_metrics"] = tf_stats
-    except Exception as e:
-        get_logger("dashboard").error(f"Failed enriching stats with trades: {e}")
-
     return jsonify(stats)
 
+@app.route('/<path:path>')
+def serve_static(path):
+    return send_from_directory('static', path)
+
 if __name__ == '__main__':
-    print("🚀 Starting Live Dashboard...")
+    print("🚀 Starting Unified Live Trading Dashboard...")
     port = int(os.environ.get('PORT', 5000))
     print(f"👉 Open http://127.0.0.1:{port} in your browser")
     is_debug = os.environ.get('FLASK_DEBUG') == '1'

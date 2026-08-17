@@ -3,268 +3,308 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Algorithmic Trading Terminal</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <title>⚡ Quant Engine Pro | Binance Algorithmic Trading Terminal</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="app-container">
-        <!-- SIDEBAR -->
+        <!-- SIDEBAR NAVIGATION -->
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="brand">
-                    <h2><span class="logo-icon">⚡</span> ALGORITHMIC TRADING BOT</h2>
-                    <span class="badge-testnet">BINANCE TESTNET</span>
+                    <div class="logo-box">
+                        <span class="logo-icon">⚡</span>
+                    </div>
+                    <div class="brand-text">
+                        <h2>QUANT ENGINE</h2>
+                        <span class="brand-sub">PRO TRADING TERMINAL</span>
+                    </div>
                 </div>
+            </div>
+
+            <div class="env-pill">
+                <span class="pulse-indicator"></span>
+                <span class="env-text">BINANCE SPOT TESTNET</span>
             </div>
             
             <nav class="sidebar-nav">
-                <a href="#dashboard" class="nav-item active" data-view="dashboard">
-                    <span>Overview</span>
+                <a href="#overview" class="nav-item active" data-view="overview">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-label">Command Center</span>
                 </a>
-                <a href="#market" class="nav-item" data-view="market">
-                    <span>Markets</span>
-                </a>
-                <a href="#signals" class="nav-item" data-view="signals">
-                    <span>Signals</span>
+                <a href="#holdings" class="nav-item" data-view="holdings">
+                    <span class="nav-icon">💰</span>
+                    <span class="nav-label">Holdings & Audit</span>
+                    <span class="nav-badge" id="nav-holdings-count">0</span>
                 </a>
                 <a href="#positions" class="nav-item" data-view="positions">
-                    <span>Positions</span>
+                    <span class="nav-icon">⚡</span>
+                    <span class="nav-label">Live Positions & OCO</span>
+                    <span class="nav-badge green" id="nav-pos-count">0</span>
                 </a>
                 <a href="#trades" class="nav-item" data-view="trades">
-                    <span>Trades</span>
+                    <span class="nav-icon">📜</span>
+                    <span class="nav-label">Trade History</span>
+                    <span class="nav-badge" id="nav-trades-count">0</span>
+                </a>
+                <a href="#signals" class="nav-item" data-view="signals">
+                    <span class="nav-icon">📡</span>
+                    <span class="nav-label">Signal Pipeline</span>
+                </a>
+                <a href="#markets" class="nav-item" data-view="markets">
+                    <span class="nav-icon">🌐</span>
+                    <span class="nav-label">Market Scanner</span>
                 </a>
                 <a href="#strategies" class="nav-item" data-view="strategies">
-                    <span>Strategies</span>
+                    <span class="nav-icon">🎯</span>
+                    <span class="nav-label">Strategies</span>
                 </a>
                 <a href="#risk" class="nav-item" data-view="risk">
-                    <span>Risk</span>
+                    <span class="nav-icon">🛡️</span>
+                    <span class="nav-label">Risk & Safeguards</span>
                 </a>
                 <a href="#analytics" class="nav-item" data-view="analytics">
-                    <span>Analytics</span>
+                    <span class="nav-icon">📈</span>
+                    <span class="nav-label">Analytics</span>
                 </a>
-                <a href="#settings" class="nav-item" data-view="settings">
-                    <span>Settings</span>
+                <a href="#diagnostics" class="nav-item" data-view="diagnostics">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-label">Diagnostics</span>
                 </a>
             </nav>
 
-            <div class="sidebar-system-health">
-                <div class="health-row"><span>Binance</span><span class="dot dot-green" id="h-bn"></span></div>
-                <div class="health-row"><span>WebSocket</span><span class="dot dot-green" id="h-ws"></span></div>
-                <div class="health-row"><span>Market Data</span><span class="dot dot-green" id="h-md"></span></div>
-                <div class="health-row"><span>Execution</span><span class="dot dot-green" id="h-ex"></span></div>
-                <div class="health-row"><span>Strategy Engine</span><span class="dot dot-green" id="h-st"></span></div>
-                <div class="health-row"><span>Portfolio</span><span class="dot dot-green" id="h-pt"></span></div>
-                <div class="health-row"><span>Risk</span><span class="dot dot-green" id="h-rs"></span></div>
-                <div class="health-row"><span>Persistence</span><span class="dot dot-green" id="h-pe"></span></div>
-                
-                <div style="margin-top: 16px; font-size: 9px; color: var(--text-muted);">
-                    Version 2.0.0 • TESTNET<br>
-                    Frankfurt (DE)
+            <div class="sidebar-footer">
+                <div class="sidebar-system-health">
+                    <div class="health-header">SYSTEM ENGINE HEALTH</div>
+                    <div class="health-grid">
+                        <div class="health-item"><span>Binance API</span><span class="dot dot-green" id="h-bn"></span></div>
+                        <div class="health-item"><span>WebSocket</span><span class="dot dot-green" id="h-ws"></span></div>
+                        <div class="health-item"><span>Market Feed</span><span class="dot dot-green" id="h-md"></span></div>
+                        <div class="health-item"><span>Execution</span><span class="dot dot-green" id="h-ex"></span></div>
+                        <div class="health-item"><span>Strategy</span><span class="dot dot-green" id="h-st"></span></div>
+                        <div class="health-item"><span>Risk Gate</span><span class="dot dot-green" id="h-rs"></span></div>
+                    </div>
+                </div>
+                <div class="version-tag">
+                    <span>v2.2.0 • 24/7 Production Node</span>
                 </div>
             </div>
         </aside>
 
-        <!-- MAIN CONTENT -->
+        <!-- MAIN VIEWPORT -->
         <main class="main-content">
-            <!-- TOP HEADER -->
+            <!-- TOP TICKER & HEADER -->
             <header class="top-header">
                 <div class="header-left">
-                    <div class="breadcrumb">
-                        <span id="page-title" class="breadcrumb-active">Overview</span>
-                        <span>Dashboard</span>
+                    <div class="view-indicator">
+                        <span class="view-icon" id="page-icon">📊</span>
+                        <h1 id="page-title">Command Center</h1>
+                    </div>
+                    <div class="fund-summary-pill" id="quick-allocation-pill">
+                        <span class="fund-tag">PORTFOLIO VALUATION:</span>
+                        <span class="fund-equity" id="hdr-equity">$0.00</span>
+                        <span class="fund-sep">|</span>
+                        <span class="fund-cash" id="hdr-cash">Cash: $0.00</span>
+                        <span class="fund-sep">|</span>
+                        <span class="fund-crypto" id="hdr-crypto">Crypto: $0.00</span>
                     </div>
                 </div>
+
                 <div class="header-right">
                     <div class="header-stat">
-                        <span class="stat-label">Bot Uptime</span>
-                        <span class="stat-value" id="hdr-uptime">--:--:--</span>
+                        <span class="stat-label">BOT UPTIME</span>
+                        <span class="stat-value mono" id="hdr-uptime">--:--:--</span>
                     </div>
-                    <div class="divider"></div>
+                    <div class="header-divider"></div>
                     <div class="header-stat">
-                        <span class="stat-label">Engine Status</span>
-                        <div class="engine-status-inner">
+                        <span class="stat-label">ENGINE STATUS</span>
+                        <div class="engine-badge online" id="hdr-engine-badge">
                             <span class="dot dot-green" id="hdr-engine-dot"></span>
-                            <span id="hdr-engine-text" class="status-online">ONLINE</span>
+                            <span id="hdr-engine-text">ENGINE ONLINE</span>
                         </div>
                     </div>
-                    <div class="divider"></div>
+                    <div class="header-divider"></div>
                     <div class="header-stat">
-                        <span class="stat-label">Environment</span>
-                        <span class="stat-value">TESTNET</span>
+                        <span class="stat-label">TIME (IST)</span>
+                        <span class="stat-value mono" id="nav-clock">--:--:-- IST</span>
                     </div>
-                    <div class="divider"></div>
-                    <div class="header-stat">
-                        <span class="stat-label">Time (IST)</span>
-                        <span class="stat-value" id="nav-clock">--:--:--</span>
-                    </div>
-                    <div class="header-actions">
-                        <span>↻</span>
-                        <span>🔔</span>
-                        <span>⚙</span>
-                    </div>
+                    <button class="btn-refresh" id="btn-manual-refresh" title="Force Refresh Data">
+                        <span>↻</span> Refresh
+                    </button>
                 </div>
             </header>
 
             <!-- ========================================== -->
-            <!-- 1. DASHBOARD OVERVIEW -->
+            <!-- 1. OVERVIEW (COMMAND CENTER) -->
             <!-- ========================================== -->
-            <div id="view-dashboard" class="view-container active">
+            <div id="view-overview" class="view-container active">
                 
-                <!-- ROW 1: KPI CARDS -->
-                <div class="metrics-row">
-                    <div class="metric-card">
-                        <div class="metric-icon-wrap bg-blue">💼</div>
-                        <div class="metric-content">
-                            <span class="metric-label">Total Equity</span>
-                            <span class="metric-value" id="pb-balance">--</span>
+                <!-- ROW 1: KPI STATS CARDS -->
+                <div class="kpi-grid">
+                    <div class="kpi-card highlight-glow">
+                        <div class="kpi-top">
+                            <span class="kpi-title">TOTAL PORTFOLIO VALUE</span>
+                            <span class="kpi-icon blue">💼</span>
+                        </div>
+                        <div class="kpi-value mono" id="kpi-equity">$0.00</div>
+                        <div class="kpi-sub">
+                            <span class="tag-positive" id="kpi-equity-status">✓ Real-time Binance Valuation</span>
                         </div>
                     </div>
-                    <div class="metric-card">
-                        <div class="metric-icon-wrap bg-green">📈</div>
-                        <div class="metric-content">
-                            <span class="metric-label">Today's PnL</span>
-                            <span class="metric-value val-green" id="pb-today">--</span>
+
+                    <div class="kpi-card">
+                        <div class="kpi-top">
+                            <span class="kpi-title">LIQUID USDT CASH</span>
+                            <span class="kpi-icon cyan">💵</span>
+                        </div>
+                        <div class="kpi-value mono" id="kpi-cash">$0.00</div>
+                        <div class="kpi-sub" id="kpi-cash-ratio">
+                            <span>Available to deploy: 100%</span>
                         </div>
                     </div>
-                    <div class="metric-card">
-                        <div class="metric-icon-wrap bg-blue">💵</div>
-                        <div class="metric-content">
-                            <span class="metric-label">Realized PnL</span>
-                            <span class="metric-value val-green" id="pb-realized">--</span>
+
+                    <div class="kpi-card">
+                        <div class="kpi-top">
+                            <span class="kpi-title">ACTIVE CRYPTO DEPLOYED</span>
+                            <span class="kpi-icon purple">🪙</span>
+                        </div>
+                        <div class="kpi-value mono val-cyan" id="kpi-crypto">$0.00</div>
+                        <div class="kpi-sub" id="kpi-crypto-ratio">
+                            <span>Held in Spot Assets & OCO Orders</span>
                         </div>
                     </div>
-                    <div class="metric-card">
-                        <div class="metric-icon-wrap bg-amber">⏱</div>
-                        <div class="metric-content">
-                            <span class="metric-label">Unrealized PnL</span>
-                            <span class="metric-value" id="pb-unrealized">--</span>
+
+                    <div class="kpi-card">
+                        <div class="kpi-top">
+                            <span class="kpi-title">REALIZED NET PNL</span>
+                            <span class="kpi-icon green">📈</span>
+                        </div>
+                        <div class="kpi-value mono" id="kpi-realized">$0.00</div>
+                        <div class="kpi-sub">
+                            <span>From <strong id="kpi-closed-count">0</strong> closed trades</span>
                         </div>
                     </div>
-                    <div class="metric-card">
-                        <div class="metric-icon-wrap bg-purple">%</div>
-                        <div class="metric-content">
-                            <span class="metric-label">Fees Paid</span>
-                            <span class="metric-value" id="pb-fees">--</span>
+
+                    <div class="kpi-card">
+                        <div class="kpi-top">
+                            <span class="kpi-title">UNREALIZED PNL</span>
+                            <span class="kpi-icon amber">⏱️</span>
+                        </div>
+                        <div class="kpi-value mono" id="kpi-unrealized">$0.00</div>
+                        <div class="kpi-sub">
+                            <span>Across <strong id="kpi-open-count">0</strong> open positions</span>
                         </div>
                     </div>
-                    <div class="metric-card">
-                        <div class="metric-icon-wrap bg-red">🛡</div>
-                        <div class="metric-content">
-                            <span class="metric-label">Max Drawdown</span>
-                            <span class="metric-value val-red" id="pb-mdd">--</span>
+
+                    <div class="kpi-card">
+                        <div class="kpi-top">
+                            <span class="kpi-title">WIN RATE & TARGET</span>
+                            <span class="kpi-icon green">🎯</span>
+                        </div>
+                        <div class="kpi-value mono val-green" id="kpi-winrate">0.0%</div>
+                        <div class="kpi-sub">
+                            <span id="kpi-target-progress">Target: 0/100 Trades</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- ROW 2: CURVE & ENGINES -->
-                <div class="dashboard-grid-2">
+                <!-- CAPITAL UTILIZATION & SPOT ALLOCATION BAR -->
+                <div class="capital-banner">
+                    <div class="banner-top">
+                        <div class="banner-title">
+                            <span>⚡ CAPITAL ALLOCATION TRANSPARENCY</span>
+                            <span class="banner-info-badge">How Spot Trading Works: USDT is converted to target coins with automated Stop-Loss / Take-Profit OCO sell orders.</span>
+                        </div>
+                        <div class="banner-stats" id="banner-stats-text">
+                            <span>Liquid Cash: $0.00</span> • <span>Active Positions: $0.00</span>
+                        </div>
+                    </div>
+                    <div class="allocation-bar-track">
+                        <div class="bar-fill cash" id="bar-cash" style="width: 50%;"></div>
+                        <div class="bar-fill crypto" id="bar-crypto" style="width: 50%;"></div>
+                    </div>
+                    <div class="allocation-legend" id="allocation-legend-items">
+                        <span class="legend-item"><span class="legend-dot cash"></span> Liquid USDT Cash</span>
+                        <span class="legend-item"><span class="legend-dot crypto"></span> Active Crypto Positions (PORTAL, LINK, etc.)</span>
+                    </div>
+                </div>
+
+                <!-- ROW 2: CHARTS & ALLOCATION -->
+                <div class="grid-2-col">
                     <!-- EQUITY CURVE -->
                     <div class="panel">
                         <div class="panel-header">
-                            <h3 class="panel-title">EQUITY CURVE</h3>
+                            <div class="panel-title-wrap">
+                                <h3>📊 PORTFOLIO VALUATION & EQUITY CURVE</h3>
+                                <span class="panel-badge">Live Real-time</span>
+                            </div>
+                            <div class="chart-controls">
+                                <button class="btn-pill active" data-range="all">ALL</button>
+                                <button class="btn-pill" data-range="24h">24H</button>
+                            </div>
                         </div>
-                        <div class="panel-content no-pad">
-                            <div class="chart-container">
+                        <div class="panel-body">
+                            <div class="chart-wrap">
                                 <canvas id="equityChart"></canvas>
                             </div>
                         </div>
                     </div>
 
-                    <!-- MARKET ENGINE -->
+                    <!-- ASSET ALLOCATION DOUGHNUT -->
                     <div class="panel">
                         <div class="panel-header">
-                            <h3 class="panel-title">MARKET ENGINE (TIMEFRAMES)</h3>
-                            <span class="panel-action" id="sc-eval-ratio">14 Symbols</span>
-                        </div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>TIMEFRAME</th>
-                                            <th>CANDLES</th>
-                                            <th>EVALUATIONS</th>
-                                            <th>BUY</th>
-                                            <th>SELL</th>
-                                            <th>SIGNALS</th>
-                                            <th>QUALIFIED</th>
-                                            <th>REJECTED</th>
-                                            <th>ORDERS</th>
-                                            <th>FILLS</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="timeframe-metrics-body">
-                                        <tr><td colspan="6" class="empty-state">AWAITING DATA</td></tr>
-                                    </tbody>
-                                </table>
+                            <div class="panel-title-wrap">
+                                <h3>🪙 ASSET ALLOCATION BREAKDOWN</h3>
+                                <span class="panel-badge">Binance Spot</span>
                             </div>
+                            <a href="#holdings" class="panel-link" data-view="holdings">View Full Audit →</a>
                         </div>
-                    </div>
-
-                    <!-- STRATEGY ENGINE -->
-                    <div class="panel">
-                        <div class="panel-header">
-                            <h3 class="panel-title">STRATEGY ENGINE</h3>
-                            <span class="panel-action">6 Active Strategies</span>
-                        </div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>STRATEGY</th>
-                                            <th>EVALUATIONS</th>
-                                            <th>BUY</th>
-                                            <th>SELL</th>
-                                            <th>HOLD</th>
-                                            <th>QUALIFIED</th>
-                                            <th>REJECTED</th>
-                                            <th>ORDERS</th>
-                                            <th>FILLS</th>
-                                            <th>WIN RATE</th>
-                                            <th>PNL</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="strategy-metrics-body">
-                                        <tr><td colspan="6" class="empty-state">AWAITING DATA</td></tr>
-                                    </tbody>
-                                </table>
+                        <div class="panel-body">
+                            <div class="doughnut-container">
+                                <div class="chart-wrap-doughnut">
+                                    <canvas id="allocationChart"></canvas>
+                                </div>
+                                <div class="allocation-quick-list" id="allocation-quick-list">
+                                    <div class="empty-state">Calculating holdings...</div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- ROW 3: OPPORTUNITIES, FUNNEL, RISK -->
-                <div class="dashboard-grid-3">
-                    <!-- OPPORTUNITY CENTER -->
+                <!-- ROW 3: ACTIVE POSITIONS & SIGNAL PIPELINE -->
+                <div class="grid-2-col-wide">
+                    <!-- ACTIVE POSITIONS & OPEN ORDERS -->
                     <div class="panel">
                         <div class="panel-header">
-                            <h3 class="panel-title">BEST CURRENT OPPORTUNITIES</h3>
-                            <span class="panel-action">View All Opportunities &rarr;</span>
+                            <div class="panel-title-wrap">
+                                <h3>⚡ ACTIVE POSITIONS & LIVE OCO ORDERS</h3>
+                                <span class="badge-count" id="active-positions-badge">0 Active</span>
+                            </div>
+                            <a href="#positions" class="panel-link" data-view="positions">Manage All →</a>
                         </div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container">
-                                <table>
+                        <div class="panel-body no-pad">
+                            <div class="table-responsive">
+                                <table class="data-table">
                                     <thead>
                                         <tr>
-                                            <th>TIME</th>
-                                            <th>SYMBOL</th>
-                                            <th>TF</th>
-                                            <th>STRATEGY</th>
+                                            <th>ASSET / SYMBOL</th>
                                             <th>SIDE</th>
-                                            <th>ENTRY</th>
-                                            <th>STOP</th>
-                                            <th>TARGET</th>
-                                            <th>CONF.</th>
-                                            <th>NET EDGE</th>
-                                            <th>RISK</th>
-                                            <th>DECISION</th>
+                                            <th>ENTRY PRICE</th>
+                                            <th>LIVE PRICE</th>
+                                            <th>QUANTITY</th>
+                                            <th>DEPLOYED ($)</th>
+                                            <th>UNREALIZED PNL</th>
+                                            <th>OCO STOP / TP</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="opp-short-body">
-                                        <tr><td colspan="12" class="empty-state">NO QUALIFYING OPPORTUNITIES</td></tr>
+                                    <tbody id="dash-active-pos-body">
+                                        <tr><td colspan="8" class="empty-state">No open positions currently active</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -274,157 +314,106 @@
                     <!-- SIGNAL PIPELINE -->
                     <div class="panel">
                         <div class="panel-header">
-                            <h3 class="panel-title">SIGNAL FLOW PIPELINE (24H)</h3>
-                        </div>
-                        <div class="panel-content">
-                            <div class="funnel-pipeline">
-                                <div class="funnel-node">
-                                    <div class="funnel-icon blue">🌐</div>
-                                    <div class="funnel-val" id="fn-mrk">0</div>
-                                    <div class="funnel-lbl">Receiving Data</div>
-                                </div>
-                                <div class="funnel-line"></div>
-                                <div class="funnel-node">
-                                    <div class="funnel-icon purple">📈</div>
-                                    <div class="funnel-val" id="fn-signals">0</div>
-                                    <div class="funnel-lbl">Total Signals</div>
-                                </div>
-                                <div class="funnel-line"></div>
-                                <div class="funnel-node">
-                                    <div class="funnel-icon amber">💵</div>
-                                    <div class="funnel-val val-green" id="fn-prof-acc">0</div>
-                                    <div class="funnel-sub val-red"><span id="fn-prof-rej">0</span> Rejected</div>
-                                    <div class="funnel-lbl">Profitability Gate</div>
-                                </div>
-                                <div class="funnel-line"></div>
-                                <div class="funnel-node">
-                                    <div class="funnel-icon amber">🛡</div>
-                                    <div class="funnel-val val-green" id="fn-risk-acc">0</div>
-                                    <div class="funnel-sub val-red"><span id="fn-risk-rej">0</span> Rejected</div>
-                                    <div class="funnel-lbl">Risk Gate</div>
-                                </div>
-                                <div class="funnel-line"></div>
-                                <div class="funnel-node">
-                                    <div class="funnel-icon cyan">🚀</div>
-                                    <div class="funnel-val val-green" id="fn-filled">0</div>
-                                    <div class="funnel-lbl">Filled</div>
-                                </div>
+                            <div class="panel-title-wrap">
+                                <h3>📡 5-STAGE SIGNAL PIPELINE (24H)</h3>
+                                <span class="panel-badge">Automated Quality Gate</span>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- RISK OVERVIEW -->
-                    <div class="panel">
-                        <div class="panel-header">
-                            <h3 class="panel-title">RISK OVERVIEW</h3>
-                        </div>
-                        <div class="panel-content">
-                            <div class="risk-grid">
-                                <div class="risk-item">
-                                    <div class="risk-lbl">Portfolio Exposure</div>
-                                    <div class="risk-circle">
-                                        <div class="r-val" id="rk-exp-val">0.00%</div>
-                                        <div class="r-sub">of Equity</div>
-                                    </div>
+                        <div class="panel-body">
+                            <div class="pipeline-flow">
+                                <div class="pipeline-step">
+                                    <div class="step-icon blue">🌐</div>
+                                    <div class="step-val mono" id="pl-candles">0</div>
+                                    <div class="step-label">Market Candles</div>
                                 </div>
-                                <div class="risk-item">
-                                    <div class="risk-lbl">Risk Used</div>
-                                    <div class="r-val val-green" style="margin-bottom: 4px;" id="rk-used">0.00%</div>
-                                    <div class="risk-lbl" style="margin-top: 8px;">Available Risk</div>
-                                    <div class="r-val val-green" id="rk-avail">2.00%</div>
+                                <div class="pipeline-arrow">➔</div>
+                                <div class="pipeline-step">
+                                    <div class="step-icon purple">📈</div>
+                                    <div class="step-val mono" id="pl-signals">0</div>
+                                    <div class="step-label">Signals Generated</div>
                                 </div>
-                                <div class="risk-item">
-                                    <div class="risk-lbl">Open Positions</div>
-                                    <div class="r-val" style="margin-top: 4px;" id="rk-pos">0</div>
-                                    <div class="r-sub" style="font-size: 8px; color: var(--text-muted);">of Max 10</div>
+                                <div class="pipeline-arrow">➔</div>
+                                <div class="pipeline-step">
+                                    <div class="step-icon amber">💵</div>
+                                    <div class="step-val mono val-green" id="pl-profit-acc">0</div>
+                                    <div class="step-sub val-red"><span id="pl-profit-rej">0</span> Rejected</div>
+                                    <div class="step-label">Profitability Gate</div>
                                 </div>
-                                <div class="risk-item">
-                                    <div class="risk-lbl">Daily PNL</div>
-                                    <div class="r-val val-green" style="margin-top: 4px;" id="rk-daily">$0.00</div>
+                                <div class="pipeline-arrow">➔</div>
+                                <div class="pipeline-step">
+                                    <div class="step-icon amber">🛡️</div>
+                                    <div class="step-val mono val-green" id="pl-risk-acc">0</div>
+                                    <div class="step-sub val-red"><span id="pl-risk-rej">0</span> Filtered</div>
+                                    <div class="step-label">Risk & Cooldown</div>
+                                </div>
+                                <div class="pipeline-arrow">➔</div>
+                                <div class="pipeline-step glow-step">
+                                    <div class="step-icon cyan">🚀</div>
+                                    <div class="step-val mono val-cyan" id="pl-filled">0</div>
+                                    <div class="step-label">Orders Executed</div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- ROW 4: BOTTOM TABLES -->
-                <div class="dashboard-grid-4">
+                <!-- ROW 4: RECENT TRADES & TOP MOVERS -->
+                <div class="grid-2-col">
+                    <!-- RECENT TRADES -->
                     <div class="panel">
                         <div class="panel-header">
-                            <h3 class="panel-title">ACTIVE POSITIONS</h3>
+                            <div class="panel-title-wrap">
+                                <h3>📜 RECENTLY EXECUTED TRADES</h3>
+                                <span class="panel-badge">Binance Fills</span>
+                            </div>
+                            <a href="#trades" class="panel-link" data-view="trades">Full Ledger →</a>
                         </div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container">
-                                <table>
+                        <div class="panel-body no-pad">
+                            <div class="table-responsive">
+                                <table class="data-table">
                                     <thead>
                                         <tr>
+                                            <th>TIME (IST)</th>
                                             <th>SYMBOL</th>
                                             <th>SIDE</th>
-                                            <th>ENTRY</th>
-                                            <th>CURRENT</th>
                                             <th>QTY</th>
-                                            <th>U.PNL</th>
-                                            <th>SL</th>
-                                            <th>TP</th>
+                                            <th>ENTRY</th>
+                                            <th>EXIT</th>
+                                            <th>NET PNL</th>
+                                            <th>STATUS</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="active-pos-body">
-                                        <tr><td colspan="8" class="empty-state">NO OPEN POSITIONS<br>Qualifying positions will appear here</td></tr>
+                                    <tbody id="dash-recent-trades-body">
+                                        <tr><td colspan="8" class="empty-state">Loading executed trades...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
                     </div>
 
+                    <!-- TOP MARKET MOVERS -->
                     <div class="panel">
                         <div class="panel-header">
-                            <h3 class="panel-title">RECENT TRADES</h3>
-                            <span class="panel-action">View All &rarr;</span>
-                        </div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>TIME</th>
-                                            <th>SYMBOL</th>
-                                            <th>TF</th>
-                                            <th>STRATEGY</th>
-                                            <th>SIDE</th>
-                                            <th>ENTRY</th>
-                                            <th>EXIT</th>
-                                            <th>QTY</th>
-                                            <th>PNL</th>
-                                            <th>STATUS</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="recent-trades-body">
-                                        <tr><td colspan="10" class="empty-state">NO TRADES YET</td></tr>
-                                    </tbody>
-                                </table>
+                            <div class="panel-title-wrap">
+                                <h3>🌐 TOP MARKET MOVERS (24H)</h3>
+                                <span class="panel-badge">Live Scanner</span>
                             </div>
+                            <a href="#markets" class="panel-link" data-view="markets">All Markets →</a>
                         </div>
-                    </div>
-                    
-                    <div class="panel">
-                        <div class="panel-header">
-                            <h3 class="panel-title">TOP MOVERS (24H)</h3>
-                            <span class="panel-action">View Market &rarr;</span>
-                        </div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container">
-                                <table>
+                        <div class="panel-body no-pad">
+                            <div class="table-responsive">
+                                <table class="data-table">
                                     <thead>
                                         <tr>
                                             <th>SYMBOL</th>
-                                            <th>PRICE</th>
+                                            <th>LAST PRICE</th>
                                             <th>24H CHANGE</th>
                                             <th>VOLUME</th>
                                             <th>TREND</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="top-movers-body">
-                                        <tr><td colspan="5" class="empty-state">AWAITING MARKET DATA</td></tr>
+                                    <tbody id="dash-top-movers-body">
+                                        <tr><td colspan="5" class="empty-state">Fetching market feeds...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -435,31 +424,54 @@
             </div>
 
             <!-- ========================================== -->
-            <!-- 2. MARKETS -->
+            <!-- 2. HOLDINGS & BALANCE AUDIT VIEW (NEW) -->
             <!-- ========================================== -->
-            <div id="view-market" class="view-container">
-                <div class="panel" style="flex:1;">
-                    <div class="panel-header">
-                        <h3 class="panel-title">MARKET OVERVIEW</h3>
+            <div id="view-holdings" class="view-container">
+                <div class="audit-hero-card">
+                    <div class="audit-hero-left">
+                        <h2>💰 CAPITAL ACCOUNTING & RECONCILIATION</h2>
+                        <p>Complete transparent breakdown of where your funds are allocated between liquid USDT cash and active cryptocurrency positions on Binance Spot.</p>
                     </div>
-                    <div class="panel-content no-pad">
-                        <div class="table-container">
-                            <table>
+                    <div class="audit-hero-stats">
+                        <div class="stat-pill">
+                            <span class="lbl">TOTAL NET ASSET VALUE:</span>
+                            <span class="val mono" id="audit-total-equity">$0.00</span>
+                        </div>
+                        <div class="stat-pill">
+                            <span class="lbl">LIQUID USDT:</span>
+                            <span class="val mono val-cyan" id="audit-usdt-cash">$0.00</span>
+                        </div>
+                        <div class="stat-pill">
+                            <span class="lbl">DEPLOYED IN TOKENS:</span>
+                            <span class="val mono val-purple" id="audit-crypto-val">$0.00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title-wrap">
+                            <h3>🪙 COMPLETE ASSET VALUATION BREAKDOWN</h3>
+                            <span class="panel-badge">Live Binance Spot Balances</span>
+                        </div>
+                    </div>
+                    <div class="panel-body no-pad">
+                        <div class="table-responsive">
+                            <table class="data-table">
                                 <thead>
                                     <tr>
-                                        <th>SYMBOL</th>
-                                        <th>PRICE</th>
-                                        <th>24H CHANGE</th>
-                                        <th>VOLUME</th>
-                                        <th>TF STATUS</th>
-                                        <th>LAST UPDATE</th>
-                                        <th>TREND</th>
-                                        <th>SIGNAL</th>
-                                        <th>VOLATILITY</th>
+                                        <th>ASSET</th>
+                                        <th>TYPE / STATUS</th>
+                                        <th>AVAILABLE QTY</th>
+                                        <th>LOCKED IN ORDERS</th>
+                                        <th>TOTAL QUANTITY</th>
+                                        <th>LIVE PRICE (USDT)</th>
+                                        <th>TOTAL USD VALUE</th>
+                                        <th>PORTFOLIO SHARE</th>
                                     </tr>
                                 </thead>
-                                <tbody id="market-full-body">
-                                    <tr><td colspan="9" class="empty-state">AWAITING MARKET DATA</td></tr>
+                                <tbody id="holdings-full-table-body">
+                                    <tr><td colspan="8" class="empty-state">Loading portfolio balances...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -468,70 +480,73 @@
             </div>
 
             <!-- ========================================== -->
-            <!-- 3. SIGNALS -->
-            <!-- ========================================== -->
-            <div id="view-signals" class="view-container">
-                <div class="panel" style="flex:1;">
-                    <div class="panel-header">
-                        <h3 class="panel-title">LIVE SIGNALS TERMINAL</h3>
-                    </div>
-                    <div class="panel-content no-pad">
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>TIME</th>
-                                        <th>SYMBOL</th>
-                                        <th>TF</th>
-                                        <th>STRATEGY</th>
-                                        <th>SIDE</th>
-                                        <th>PRICE</th>
-                                        <th>CONFIDENCE</th>
-                                        <th>EXPECTED EDGE</th>
-                                        <th>PROFITABILITY</th>
-                                        <th>RISK</th>
-                                        <th>DECISION</th>
-                                        <th>REASON</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="signals-full-body">
-                                    <tr><td colspan="12" class="empty-state">NO SIGNALS LOGGED YET</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ========================================== -->
-            <!-- 4. POSITIONS -->
+            <!-- 3. LIVE POSITIONS & OCO ORDERS VIEW -->
             <!-- ========================================== -->
             <div id="view-positions" class="view-container">
-                <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr);">
-                    <div class="metric-card"><div class="metric-icon-wrap bg-blue">#</div><div class="metric-content"><span class="metric-label">OPEN POSITIONS</span><span class="metric-value" id="pos-count">0</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-cyan">$</div><div class="metric-content"><span class="metric-label">TOTAL EXPOSURE</span><span class="metric-value" id="pos-exposure">$0.00</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-amber">±</div><div class="metric-content"><span class="metric-label">UNREALIZED PNL</span><span class="metric-value" id="pos-upnl">$0.00</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-green">▤</div><div class="metric-content"><span class="metric-label">AVAILABLE EQUITY</span><span class="metric-value" id="pos-avail">$0.00</span></div></div>
+                <div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr);">
+                    <div class="kpi-card"><div class="kpi-title">OPEN POSITIONS</div><div class="kpi-value mono" id="pos-count">0</div></div>
+                    <div class="kpi-card"><div class="kpi-title">CAPITAL AT RISK</div><div class="kpi-value mono" id="pos-exposure">$0.00</div></div>
+                    <div class="kpi-card"><div class="kpi-title">FLOATING U.PNL</div><div class="kpi-value mono" id="pos-upnl">$0.00</div></div>
+                    <div class="kpi-card"><div class="kpi-title">AVAILABLE CASH</div><div class="kpi-value mono" id="pos-avail">$0.00</div></div>
                 </div>
-                <div class="panel" style="flex:1;">
-                    <div class="panel-header"><h3 class="panel-title">ACTIVE POSITIONS</h3></div>
-                    <div class="panel-content no-pad">
-                        <div class="table-container">
-                            <table>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title-wrap">
+                            <h3>⚡ ACTIVE STRATEGY POSITIONS</h3>
+                        </div>
+                    </div>
+                    <div class="panel-body no-pad">
+                        <div class="table-responsive">
+                            <table class="data-table">
                                 <thead>
                                     <tr>
                                         <th>SYMBOL</th>
+                                        <th>STRATEGY</th>
                                         <th>SIDE</th>
-                                        <th>ENTRY</th>
-                                        <th>CURRENT</th>
-                                        <th>QTY</th>
+                                        <th>ENTRY PRICE</th>
+                                        <th>MARK PRICE</th>
+                                        <th>QUANTITY</th>
+                                        <th>DEPLOYED VALUE</th>
                                         <th>U.PNL</th>
-                                        <th>SL</th>
-                                        <th>TP</th>
+                                        <th>STOP LOSS</th>
+                                        <th>TAKE PROFIT</th>
+                                        <th>ENTRY TIME</th>
                                     </tr>
                                 </thead>
-                                <tbody id="pos-full-body">
-                                    <tr><td colspan="8" class="empty-state">No open positions</td></tr>
+                                <tbody id="positions-full-body">
+                                    <tr><td colspan="11" class="empty-state">No open positions</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel" style="margin-top: 16px;">
+                    <div class="panel-header">
+                        <div class="panel-title-wrap">
+                            <h3>🛡️ LIVE BINANCE OCO ORDERS (STOP-LOSS & TAKE-PROFIT)</h3>
+                            <span class="panel-badge">On-Exchange Working Orders</span>
+                        </div>
+                    </div>
+                    <div class="panel-body no-pad">
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>ORDER ID</th>
+                                        <th>SYMBOL</th>
+                                        <th>SIDE</th>
+                                        <th>TYPE</th>
+                                        <th>LIMIT PRICE</th>
+                                        <th>STOP TRIGGER</th>
+                                        <th>QTY</th>
+                                        <th>STATUS</th>
+                                        <th>TIME</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="open-orders-body">
+                                    <tr><td colspan="9" class="empty-state">Fetching active orders from Binance...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -540,39 +555,44 @@
             </div>
 
             <!-- ========================================== -->
-            <!-- 5. TRADES -->
+            <!-- 4. TRADE HISTORY VIEW -->
             <!-- ========================================== -->
             <div id="view-trades" class="view-container">
-                <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr);">
-                    <div class="metric-card"><div class="metric-icon-wrap bg-blue">#</div><div class="metric-content"><span class="metric-label">TOTAL TRADES</span><span class="metric-value" id="tr-total">0</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-cyan">%</div><div class="metric-content"><span class="metric-label">WIN RATE</span><span class="metric-value val-green" id="tr-rate">0.00%</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-green">±</div><div class="metric-content"><span class="metric-label">WINS / LOSSES</span><span class="metric-value"><span id="tr-wins" class="val-green">0</span> / <span id="tr-loss" class="val-red">0</span></span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-purple">$</div><div class="metric-content"><span class="metric-label">TOTAL REALIZED</span><span class="metric-value" id="tr-net">$0.00</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-amber">¢</div><div class="metric-content"><span class="metric-label">TOTAL FEES</span><span class="metric-value" id="tr-fees">$0.00</span></div></div>
+                <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr);">
+                    <div class="kpi-card"><div class="kpi-title">TOTAL TRADES</div><div class="kpi-value mono" id="tr-total">0</div></div>
+                    <div class="kpi-card"><div class="kpi-title">WIN RATE</div><div class="kpi-value mono val-green" id="tr-rate">0.0%</div></div>
+                    <div class="kpi-card"><div class="kpi-title">WINS / LOSSES</div><div class="kpi-value mono"><span id="tr-wins" class="val-green">0</span> / <span id="tr-loss" class="val-red">0</span></div></div>
+                    <div class="kpi-card"><div class="kpi-title">NET REALIZED PNL</div><div class="kpi-value mono" id="tr-net">$0.00</div></div>
+                    <div class="kpi-card"><div class="kpi-title">TOTAL FEES PAID</div><div class="kpi-value mono" id="tr-fees">$0.00</div></div>
                 </div>
-                <div class="panel" style="flex:1;">
-                    <div class="panel-header"><h3 class="panel-title">TRADE HISTORY</h3></div>
-                    <div class="panel-content no-pad">
-                        <div class="table-container">
-                            <table>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title-wrap">
+                            <h3>📜 COMPLETE TRADE EXECUTION LEDGER</h3>
+                        </div>
+                    </div>
+                    <div class="panel-body no-pad">
+                        <div class="table-responsive">
+                            <table class="data-table">
                                 <thead>
                                     <tr>
-                                        <th>TIME</th>
-                                        <th>TF</th>
+                                        <th>TIMESTAMP (IST)</th>
                                         <th>SYMBOL</th>
+                                        <th>STRATEGY</th>
                                         <th>SIDE</th>
-                                        <th>ENTRY</th>
-                                        <th>EXIT</th>
                                         <th>QTY</th>
-                                        <th>GROSS PNL</th>
+                                        <th>ENTRY PRICE</th>
+                                        <th>EXIT PRICE</th>
+                                        <th>GROSS RETURN</th>
                                         <th>FEES</th>
-                                        <th>NET RETURN</th>
+                                        <th>NET PROFIT</th>
                                         <th>STATUS</th>
                                         <th>ORDER ID</th>
                                     </tr>
                                 </thead>
                                 <tbody id="trades-full-body">
-                                    <tr><td colspan="12" class="empty-state">NO HISTORICAL TRADES</td></tr>
+                                    <tr><td colspan="12" class="empty-state">No trade history found</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -581,14 +601,89 @@
             </div>
 
             <!-- ========================================== -->
-            <!-- 6. STRATEGIES -->
+            <!-- 5. SIGNALS VIEW -->
+            <!-- ========================================== -->
+            <div id="view-signals" class="view-container">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title-wrap">
+                            <h3>📡 REAL-TIME OPPORTUNITY POOL & DECISION LOG</h3>
+                        </div>
+                    </div>
+                    <div class="panel-body no-pad">
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>TIMESTAMP</th>
+                                        <th>SYMBOL</th>
+                                        <th>SIDE</th>
+                                        <th>PRICE</th>
+                                        <th>CONFIDENCE</th>
+                                        <th>PREDICTED MOVE</th>
+                                        <th>EXP. GROSS</th>
+                                        <th>EXP. NET</th>
+                                        <th>FEES</th>
+                                        <th>DECISION</th>
+                                        <th>REASON</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="signals-full-body">
+                                    <tr><td colspan="11" class="empty-state">Awaiting signal evaluations...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- 6. MARKETS VIEW -->
+            <!-- ========================================== -->
+            <div id="view-markets" class="view-container">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title-wrap">
+                            <h3>🌐 MULTI-ASSET MARKET SCANNER</h3>
+                        </div>
+                    </div>
+                    <div class="panel-body no-pad">
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>SYMBOL</th>
+                                        <th>PRICE (USDT)</th>
+                                        <th>24H CHANGE</th>
+                                        <th>24H HIGH</th>
+                                        <th>24H LOW</th>
+                                        <th>24H VOLUME</th>
+                                        <th>FEED STATUS</th>
+                                        <th>LAST TICK</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="markets-full-body">
+                                    <tr><td colspan="8" class="empty-state">Loading market data feeds...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- 7. STRATEGIES VIEW -->
             <!-- ========================================== -->
             <div id="view-strategies" class="view-container">
-                <div class="panel" style="flex:1;">
-                    <div class="panel-header"><h3 class="panel-title">STRATEGY PERFORMANCE</h3></div>
-                    <div class="panel-content no-pad">
-                        <div class="table-container">
-                            <table>
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title-wrap">
+                            <h3>🎯 MULTI-STRATEGY ENGINE METRICS</h3>
+                        </div>
+                    </div>
+                    <div class="panel-body no-pad">
+                        <div class="table-responsive">
+                            <table class="data-table">
                                 <thead>
                                     <tr>
                                         <th>STRATEGY</th>
@@ -598,14 +693,13 @@
                                         <th>HOLD</th>
                                         <th>QUALIFIED</th>
                                         <th>REJECTED</th>
-                                        <th>ORDERS</th>
-                                        <th>FILLS</th>
+                                        <th>EXECUTED</th>
                                         <th>WIN RATE</th>
-                                        <th>PNL</th>
+                                        <th>TOTAL PNL</th>
                                     </tr>
                                 </thead>
-                                <tbody id="strat-full-body">
-                                    <tr><td colspan="10" class="empty-state">AWAITING DATA</td></tr>
+                                <tbody id="strategies-full-body">
+                                    <tr><td colspan="10" class="empty-state">Loading strategy performance...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -614,80 +708,102 @@
             </div>
 
             <!-- ========================================== -->
-            <!-- 7. RISK -->
+            <!-- 8. RISK VIEW -->
             <!-- ========================================== -->
             <div id="view-risk" class="view-container">
-                <div class="panel" style="flex:1;">
-                    <div class="panel-header"><h3 class="panel-title">RISK GATE LOGS</h3></div>
-                    <div class="panel-content no-pad">
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>TIME</th>
-                                        <th>SYMBOL</th>
-                                        <th>DECISION</th>
-                                        <th>GATE</th>
-                                        <th>REASON / METRIC</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="risk-logs-body">
-                                    <tr><td colspan="5" class="empty-state">NO RISK EVENTS</td></tr>
-                                </tbody>
-                            </table>
+                <div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr);">
+                    <div class="kpi-card"><div class="kpi-title">MAX ALLOWED EXPOSURE</div><div class="kpi-value mono" id="risk-max-exp">95.0%</div></div>
+                    <div class="kpi-card"><div class="kpi-title">CURRENT EXPOSURE USED</div><div class="kpi-value mono val-cyan" id="risk-used-exp">0.0%</div></div>
+                    <div class="kpi-card"><div class="kpi-title">MAX POSITION CAPACITY</div><div class="kpi-value mono" id="risk-max-pos">20 Slots</div></div>
+                    <div class="kpi-card"><div class="kpi-title">MAX DRAWDOWN TOLERANCE</div><div class="kpi-value mono val-amber" id="risk-max-dd">50.0%</div></div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title-wrap">
+                            <h3>🛡️ OPERATIONAL SAFETY GATES CONFIGURATION</h3>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="config-grid">
+                            <div class="config-box">
+                                <div class="config-title">Profitability Gate</div>
+                                <div class="config-value val-green">ACTIVE (MIN EDGE: -0.001)</div>
+                                <div class="config-desc">Evaluates win probability, expected move, and commission drag before allowing orders.</div>
+                            </div>
+                            <div class="config-box">
+                                <div class="config-title">Symbol Cooldown</div>
+                                <div class="config-value val-cyan">5 SECONDS</div>
+                                <div class="config-desc">Prevents order spamming while allowing high-frequency trade generation.</div>
+                            </div>
+                            <div class="config-box">
+                                <div class="config-title">Reconciliation Gate</div>
+                                <div class="config-value val-green">TOLERANCE ±$5.00</div>
+                                <div class="config-desc">Continuously syncs Binance Spot fills and dust drift against local state.</div>
+                            </div>
+                            <div class="config-box">
+                                <div class="config-title">Target Goal Monitor</div>
+                                <div class="config-value val-green">100 TRADES / 3 HOURS</div>
+                                <div class="config-desc">Background thread active logging live velocity and completion rate every 60s.</div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- ========================================== -->
-            <!-- 8. ANALYTICS -->
+            <!-- 9. ANALYTICS VIEW -->
             <!-- ========================================== -->
             <div id="view-analytics" class="view-container">
-                <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr);">
-                    <div class="metric-card"><div class="metric-icon-wrap bg-cyan">%</div><div class="metric-content"><span class="metric-label">WIN RATE</span><span class="metric-value" id="an-winrate">0.00%</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-blue">#</div><div class="metric-content"><span class="metric-label">TRADE COUNT</span><span class="metric-value" id="an-total">0</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-green">×</div><div class="metric-content"><span class="metric-label">PROFIT FACTOR</span><span class="metric-value" id="an-pf">0.00</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-amber">+</div><div class="metric-content"><span class="metric-label">AVERAGE WIN</span><span class="metric-value val-green" id="an-avg-win">$0.00</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-red">-</div><div class="metric-content"><span class="metric-label">AVERAGE LOSS</span><span class="metric-value val-red" id="an-avg-loss">$0.00</span></div></div>
+                <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr);">
+                    <div class="kpi-card"><div class="kpi-title">PROFIT FACTOR</div><div class="kpi-value mono" id="an-pf">0.00</div></div>
+                    <div class="kpi-card"><div class="kpi-title">AVERAGE WIN</div><div class="kpi-value mono val-green" id="an-avg-win">$0.00</div></div>
+                    <div class="kpi-card"><div class="kpi-title">AVERAGE LOSS</div><div class="kpi-value mono val-red" id="an-avg-loss">$0.00</div></div>
+                    <div class="kpi-card"><div class="kpi-title">MAX WIN TRADE</div><div class="kpi-value mono val-green" id="an-max-win">$0.00</div></div>
+                    <div class="kpi-card"><div class="kpi-title">MAX DRAWDOWN</div><div class="kpi-value mono val-red" id="an-mdd">0.00%</div></div>
                 </div>
-                <div class="dashboard-grid-2">
-                    <div class="panel" style="grid-column: span 2;">
-                        <div class="panel-header"><h3 class="panel-title">DAILY PNL HISTOGRAM</h3></div>
-                        <div class="panel-content">
-                            <div class="chart-container"><canvas id="pnlHistChart"></canvas></div>
-                        </div>
-                    </div>
-                    <div class="panel">
-                        <div class="panel-header"><h3 class="panel-title">REJECTION ANALYSIS</h3></div>
-                        <div class="panel-content">
-                            <div class="chart-container"><canvas id="rejPieChart"></canvas></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
-            <!-- ========================================== -->
-            <!-- 9. SETTINGS & 10. SYSTEM STATUS -->
-            <!-- ========================================== -->
-            <div id="view-settings" class="view-container">
                 <div class="panel">
-                    <div class="panel-header"><h3 class="panel-title">SYSTEM CONFIGURATION</h3></div>
-                    <div class="panel-content empty-state">Configuration Loaded</div>
+                    <div class="panel-header">
+                        <div class="panel-title-wrap">
+                            <h3>📊 DAILY REALIZED PNL DISTRIBUTION</h3>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="chart-wrap">
+                            <canvas id="pnlHistChart"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- BOTTOM TICKER -->
-            <div class="bottom-ticker">
-                <div class="ticker-label">MARKET TICKER &bull;</div>
-                <div class="ticker-content" id="bottom-ticker-content">
-                    <div class="ticker-item"><span class="ticker-sym">AWAITING MARKET DATA</span></div>
+            <!-- ========================================== -->
+            <!-- 10. DIAGNOSTICS VIEW -->
+            <!-- ========================================== -->
+            <div id="view-diagnostics" class="view-container">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title-wrap">
+                            <h3>⚙️ ENGINE TELEMETRY & RAW DIAGNOSTICS</h3>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <pre class="json-dump mono" id="raw-diagnostics-dump">Loading engine telemetry...</pre>
+                    </div>
                 </div>
             </div>
 
+            <!-- BOTTOM RUNNING TICKER -->
+            <footer class="bottom-ticker">
+                <div class="ticker-tag">⚡ LIVE TICKER</div>
+                <div class="ticker-stream" id="ticker-stream-content">
+                    <span class="ticker-item">Connecting to market streams...</span>
+                </div>
+            </footer>
         </main>
     </div>
 
+    <!-- MAIN APP SCRIPT -->
     <script src="/static/app.js"></script>
 </body>
 </html>
