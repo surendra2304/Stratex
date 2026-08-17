@@ -56,6 +56,15 @@ def main():
     from config import TRADING_MODE
     if TRADING_MODE == "TESTNET":
         from testnet_engine.service import TestnetService
+        for f in ['testnet_portfolio.json', 'testnet_trade_ledger.jsonl', 'testnet_opportunity_log.jsonl']:
+            if os.path.exists(f):
+                try:
+                    os.remove(f)
+                    print(f"Deleted {f}")
+                except:
+                    pass
+        
+        print("Starting bot execution...")
         service = TestnetService()
         try:
             service.run()
