@@ -141,8 +141,8 @@ async function fetchDashboardData() {
         }
 
         // Top Metrics
-        document.getElementById('pb-balance').innerText = formatCurrency(data.cash);
-        applyColor(document.getElementById('pb-today'), data.realized_pnl);
+        document.getElementById('pb-balance').innerText = formatCurrency(data.equity);
+        applyColor(document.getElementById('pb-today'), data.today_pnl);
         applyColor(document.getElementById('pb-realized'), data.realized_pnl);
         applyColor(document.getElementById('pb-unrealized'), data.unrealized_pnl);
         document.getElementById('pb-fees').innerText = formatCurrency(data.fees);
@@ -408,17 +408,15 @@ async function fetchScanner() {
         if (!data) return;
         
         // Funnel Pipeline
+        const fnMrk = document.getElementById('fn-mrk');
+        if (fnMrk) fnMrk.innerText = data.TOTAL_CANDLES || 0;
         document.getElementById('fn-signals').innerText = data.TOTAL_SIGNALS || 0;
         
-        const profRej = data.PROFITABILITY_REJECTED || 0;
-        const profAcc = Math.max(0, (data.TOTAL_SIGNALS || 0) - profRej);
-        document.getElementById('fn-prof-rej').innerText = profRej;
-        document.getElementById('fn-prof-acc').innerText = profAcc;
+        document.getElementById('fn-prof-rej').innerText = data.PROFITABILITY_REJECTED || 0;
+        document.getElementById('fn-prof-acc').innerText = data.PROFITABILITY_ACCEPTED || 0;
         
-        const riskRej = (data.RISK_REJECTED || 0) + (data.COOLDOWN_REJECTED || 0) + (data.JIT_REJECTED || 0) + (data.OTHER_REJECTED || 0);
-        const riskAcc = data.QUALIFIED || 0;
-        document.getElementById('fn-risk-rej').innerText = riskRej;
-        document.getElementById('fn-risk-acc').innerText = riskAcc;
+        document.getElementById('fn-risk-rej').innerText = (data.RISK_REJECTED || 0) + (data.COOLDOWN_REJECTED || 0) + (data.JIT_REJECTED || 0) + (data.OTHER_REJECTED || 0);
+        document.getElementById('fn-risk-acc').innerText = data.RISK_ACCEPTED || 0;
         
         document.getElementById('fn-filled').innerText = data.ORDERS_FILLED || 0;
         
@@ -523,32 +521,41 @@ async function fetchScanner() {
             let stratRows = [];
             let stratFullRows = [];
             for (const [strat, m] of Object.entries(data.strategy_metrics)) {
+                const winRate = m.fills > 0 ? (m.wins || 0) / m.fills : 0;
+                const pnlStr = m.PnL ? (m.PnL > 0 ? `<span class="val-green">+${formatCurrency(m.PnL)}</span>` : `<span class="val-red">${formatCurrency(m.PnL)}</span>`) : '-';
+                
                 stratRows.push(`<tr>
                     <td>${strat}</td>
-                    <td>${m.signals || 0}</td>
+                    <td>${m.evaluations || (m.signals || 0) + (m.HOLD || 0)}</td>
+                    <td>${m.BUY || 0}</td>
+                    <td>${m.SELL || 0}</td>
+                    <td>${m.HOLD || 0}</td>
                     <td>${m.qualified || 0}</td>
                     <td>${m.rejected || 0}</td>
-                    <td>${m.executed || 0}</td>
-                    <td><span class="tag tag-active">ACTIVE</span></td>
+                    <td>${m.orders || 0}</td>
+                    <td>${m.fills || 0}</td>
+                    <td>${formatPct(winRate)}</td>
+                    <td>${pnlStr}</td>
                 </tr>`);
                 stratFullRows.push(`<tr>
                     <td class="td-strong">${strat}</td>
-                    <td><span class="tag tag-active">ACTIVE</span></td>
-                    <td>-</td>
-                    <td>${m.signals || 0}</td>
+                    <td>${m.evaluations || (m.signals || 0) + (m.HOLD || 0)}</td>
+                    <td>${m.BUY || 0}</td>
+                    <td>${m.SELL || 0}</td>
+                    <td>${m.HOLD || 0}</td>
                     <td>${m.qualified || 0}</td>
                     <td>${m.rejected || 0}</td>
-                    <td>${m.executed || 0}</td>
-                    <td>${m.executed || 0}</td>
-                    <td>-</td>
-                    <td>-</td>
+                    <td>${m.orders || 0}</td>
+                    <td>${m.fills || 0}</td>
+                    <td>${formatPct(winRate)}</td>
+                    <td>${pnlStr}</td>
                 </tr>`);
             }
             if (stratBody) stratBody.innerHTML = stratRows.join('');
             if (stratFullBody) stratFullBody.innerHTML = stratFullRows.join('');
         } else {
-            if (stratBody) stratBody.innerHTML = '<tr><td colspan="6" class="empty-state">NO STRATEGY DATA</td></tr>';
-            if (stratFullBody) stratFullBody.innerHTML = '<tr><td colspan="10" class="empty-state">NO STRATEGY DATA</td></tr>';
+            if (stratBody) stratBody.innerHTML = '<tr><td colspan="11" class="empty-state">NO STRATEGY DATA</td></tr>';
+            if (stratFullBody) stratFullBody.innerHTML = '<tr><td colspan="11" class="empty-state">NO STRATEGY DATA</td></tr>';
         }
         
         // Timeframe Metrics
@@ -558,15 +565,20 @@ async function fetchScanner() {
             for (const [tf, m] of Object.entries(data.timeframe_metrics)) {
                 tfRows.push(`<tr>
                     <td>${tf}</td>
+                    <td>${data.TOTAL_CANDLES || 0}</td>
+                    <td>${m.evaluations || (m.signals || 0) + (m.HOLD || 0)}</td>
+                    <td>${m.BUY || 0}</td>
+                    <td>${m.SELL || 0}</td>
                     <td>${m.signals || 0}</td>
                     <td>${m.qualified || 0}</td>
                     <td>${m.rejected || 0}</td>
-                    <td>${m.executed || 0}</td>
+                    <td>${m.orders || 0}</td>
+                    <td>${m.fills || 0}</td>
                 </tr>`);
             }
             if (tfBody) tfBody.innerHTML = tfRows.join('');
         } else {
-            if (tfBody) tfBody.innerHTML = '<tr><td colspan="5" class="empty-state">NO METRICS AVAILABLE</td></tr>';
+            if (tfBody) tfBody.innerHTML = '<tr><td colspan="10" class="empty-state">NO METRICS AVAILABLE</td></tr>';
         }
         
         // Opportunities & Signals

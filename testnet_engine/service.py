@@ -505,16 +505,36 @@ class TestnetService:
                         f"decision={'SIGNAL' if side else 'HOLD'} reason={rejection_reason}"
                     )
 
+                    # Aggregate global metrics
                     if not side:
                         self.stats["HOLD_SIGNALS"] += 1
+                        if strat_name not in self.stats["strategy_metrics"]:
+                            self.stats["strategy_metrics"][strat_name] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0}
+                        if tf not in self.stats["timeframe_metrics"]:
+                            self.stats["timeframe_metrics"][tf] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0}
+                        
+                        self.stats["strategy_metrics"][strat_name]["HOLD"] = self.stats["strategy_metrics"][strat_name].get("HOLD", 0) + 1
+                        self.stats["timeframe_metrics"][tf]["HOLD"] = self.stats["timeframe_metrics"][tf].get("HOLD", 0) + 1
                         continue
-
+                        
+                    self.stats["TOTAL_SIGNALS"] += 1
                     if side == "BUY":
                         self.stats["BUY_SIGNALS"] += 1
                         self.stats["buy_predictions"] += 1
                     elif side == "SELL":
                         self.stats["SELL_SIGNALS"] += 1
                         self.stats["sell_predictions"] += 1
+                        
+                    if strat_name not in self.stats["strategy_metrics"]:
+                        self.stats["strategy_metrics"][strat_name] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0}
+                    if tf not in self.stats["timeframe_metrics"]:
+                        self.stats["timeframe_metrics"][tf] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0}
+                        
+                    self.stats["strategy_metrics"][strat_name]["signals"] = self.stats["strategy_metrics"][strat_name].get("signals", 0) + 1
+                    self.stats["timeframe_metrics"][tf]["signals"] = self.stats["timeframe_metrics"][tf].get("signals", 0) + 1
+                    
+                    self.stats["strategy_metrics"][strat_name][side] = self.stats["strategy_metrics"][strat_name].get(side, 0) + 1
+                    self.stats["timeframe_metrics"][tf][side] = self.stats["timeframe_metrics"][tf].get(side, 0) + 1
 
                     candle_timestamp = df.index[-1]
                     deterministic_str = f"{symbol}_{strat_name}_{side}_{candle_timestamp}"

@@ -258,6 +258,7 @@ def get_status():
     equity_high = None
     equity_low = None
     equity_change = None
+    today_pnl_abs = 0.0
 
     if TRADING_MODE == "TESTNET":
         # 1. Real Testnet Balance
@@ -368,6 +369,7 @@ def get_status():
                     curr_today = today_pts[-1]
                     if start_today > 0:
                         equity_change = ((curr_today - start_today) / start_today) * 100
+                        today_pnl_abs = curr_today - start_today
             except Exception as e:
                 logger.error(f"Failed reading equity history: {e}")
                 
@@ -437,6 +439,7 @@ def get_status():
         "cash": cash,
         "realized_pnl": realized_pnl,
         "unrealized_pnl": unrealized_pnl,
+        "today_pnl": today_pnl_abs,
         "fees": fees,
         "funding": funding,
         "used_margin": used_margin,
@@ -553,6 +556,8 @@ def _get_trades_data():
                         "fees": trade.get("total_fees", trade.get("fees", 0.0)),
                         "order_id": trade.get("signal_id", trade.get("entry_client_id", trade.get("order_id", "CLOSED-ORDER"))),
                         "source": source,
+                        "strategy": strategy,
+                        "timeframe": trade.get("timeframe", "4h"),
                         "matched": True
                     })
                 except Exception as e:
@@ -590,7 +595,9 @@ def _get_trades_data():
                         "pnl": p.get("unrealized_pnl", 0.0),
                         "order_id": p.get("entry_client_id", "LIVE-ORDER"),
                         "sl": p.get("sl", 0.0),
-                        "tp": p.get("tp", 0.0)
+                        "tp": p.get("tp", 0.0),
+                        "strategy": p.get("strategy", ""),
+                        "timeframe": p.get("timeframe", "4h")
                     })
         except Exception as e:
             logger.error(f"Failed parsing portfolio for trades: {e}")
@@ -740,7 +747,39 @@ def get_scanner():
             f.write(f"{datetime.datetime.utcnow().isoformat()}Z - FUNNEL DISCREPANCY: {funnel_errors}\n")
     else:
         stats["FUNNEL_ERRORS"] = ["Verified OK"]
+        
+    # Aggregate Trade Performance into Scanner Stats
+    try:
+        trades_data = _get_trades_data()
+        strat_stats = stats.get("strategy_metrics", {})
+        tf_stats = stats.get("timeframe_metrics", {})
+        
+        for p in trades_data.get("positions", []):
+            strat = p.get("strategy")
+            tf = p.get("timeframe")
+            is_closed = p.get("status") == "CLOSED"
+            pnl = float(p.get("pnl", 0.0))
+            is_win = pnl > 0 and is_closed
             
+            if strat and strat in strat_stats:
+                strat_stats[strat]["orders"] = strat_stats[strat].get("orders", 0) + 1
+                strat_stats[strat]["fills"] = strat_stats[strat].get("fills", 0) + 1
+                strat_stats[strat]["PnL"] = strat_stats[strat].get("PnL", 0.0) + pnl
+                if is_win:
+                    strat_stats[strat]["wins"] = strat_stats[strat].get("wins", 0) + 1
+                    
+            if tf and tf in tf_stats:
+                tf_stats[tf]["orders"] = tf_stats[tf].get("orders", 0) + 1
+                tf_stats[tf]["fills"] = tf_stats[tf].get("fills", 0) + 1
+                tf_stats[tf]["PnL"] = tf_stats[tf].get("PnL", 0.0) + pnl
+                if is_win:
+                    tf_stats[tf]["wins"] = tf_stats[tf].get("wins", 0) + 1
+                    
+        stats["strategy_metrics"] = strat_stats
+        stats["timeframe_metrics"] = tf_stats
+    except Exception as e:
+        get_logger("dashboard").error(f"Failed enriching stats with trades: {e}")
+
     return jsonify(stats)
 
 if __name__ == '__main__':
