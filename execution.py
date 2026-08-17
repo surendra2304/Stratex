@@ -266,7 +266,7 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         # 2. Place OCO protection (TP + SL) immediately after fill
         if sl and tp:
             state = OrderState.PROTECTION_PENDING
-            protection_client_id = f"prot-{client_order_id}" if client_order_id else None
+            protection_client_id = f"p-{client_order_id[:33]}" if client_order_id else None  # max 35 chars; Binance limit is 36
 
             try:
                 prot = place_oco_protection(
