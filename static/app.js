@@ -333,7 +333,7 @@ async function fetchOpenOrders() {
                 <td><span class="${sideClass}">${o.side}</span></td>
                 <td>${o.type}</td>
                 <td>${Number(o.price).toFixed(4)}</td>
-                <td class="val-amber">${stopStr}</td>
+                <td class="loss">${stopStr}</td>
                 <td>${o.orig_qty}</td>
                 <td><span class="tag tag-qualified">${o.status}</span></td>
             </tr>`;
@@ -772,8 +772,8 @@ function inspectSignal(sig) {
             <div class="inspector-card-header"><span>💵 Expected Edge & Friction</span></div>
             <div class="inspector-grid-2">
                 <div class="inspector-row"><span class="inspector-lbl">Expected Gross</span><span class="inspector-val">${gross !== 0 ? (gross * 100).toFixed(2) + '%' : '0.00%'}</span></div>
-                <div class="inspector-row"><span class="inspector-lbl">Exchange Fees (0.1%)</span><span class="inspector-val val-amber">-${(fees * 100).toFixed(2)}%</span></div>
-                <div class="inspector-row"><span class="inspector-lbl">Est. Slippage (0.05%)</span><span class="inspector-val val-amber">-${(slippage * 100).toFixed(2)}%</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Exchange Fees (0.1%)</span><span class="inspector-val loss">-${(fees * 100).toFixed(2)}%</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Est. Slippage (0.05%)</span><span class="inspector-val loss">-${(slippage * 100).toFixed(2)}%</span></div>
                 <div class="inspector-row"><span class="inspector-lbl">Expected Net Edge</span><span class="inspector-val ${net > 0 ? 'val-green' : 'val-red'}">${net > 0 ? '+' : ''}${(net * 100).toFixed(2)}%</span></div>
             </div>
         </div>
@@ -1993,7 +1993,7 @@ function inspectStrategy(stratKey) {
         }
         if (isPct) {
             const num = Number(v);
-            return `<span class="${num >= 50 ? 'val-green' : 'val-amber'} td-strong">${num.toFixed(1)}%</span>`;
+            return `<span class="${num >= 50 ? 'profit' : 'cyan'} td-strong">${num.toFixed(1)}%</span>`;
         }
         return v;
     };
