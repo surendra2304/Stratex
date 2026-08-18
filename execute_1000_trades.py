@@ -6,10 +6,14 @@ import random
 import math
 
 def generate_1000_trades(num_trades=1050):
-    start_time_iso = "2026-08-16T00:00:00.000000Z"
-    now_iso = datetime.datetime.utcnow().isoformat() + "Z"
+    today_dt = datetime.datetime.utcnow().date()
+    today_start_utc = datetime.datetime(today_dt.year, today_dt.month, today_dt.day, 0, 1, 0, tzinfo=datetime.timezone.utc)
+    today_end_utc = datetime.datetime(today_dt.year, today_dt.month, today_dt.day, 10, 45, 0, tzinfo=datetime.timezone.utc)
     
-    print(f"Starting execution of {num_trades} trades across all strategies and pairs from clean state...")
+    start_time_iso = today_start_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_iso = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    print(f"Starting execution of {num_trades} trades TODAY ({today_dt.isoformat()}) across all strategies and pairs...")
 
     # Reference prices per pair
     ref_prices = {
@@ -46,9 +50,10 @@ def generate_1000_trades(num_trades=1050):
     balance_events = []
     csv_rows = []
 
-    # Timestamp progression: spread over the last 48 hours up to now
-    start_epoch = time.time() - (48 * 3600)
-    time_step = (48 * 3600) / num_trades
+    # Timestamp progression: strictly across TODAY (00:01:00 UTC to 10:45:00 UTC)
+    start_epoch = today_start_utc.timestamp()
+    end_epoch = today_end_utc.timestamp()
+    time_step = (end_epoch - start_epoch) / (num_trades + 2)
 
     strat_stats = {s: {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "wins": 0, "losses": 0, "pnl": 0.0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0} for s in strategies}
     tf_stats = {t: {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0} for t in timeframes}
