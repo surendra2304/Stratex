@@ -594,7 +594,7 @@ function renderSignalsTable() {
     if (!tbody) return;
 
     if (!allRawSignals || allRawSignals.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="15" class="empty-state">NO SIGNAL EVENTS YET</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="15" class="idle-state-row">Evaluating 13 pairs across 6 multi-timeframe strategies • Awaiting setups exceeding minimum edge threshold</td></tr>';
         return;
     }
 
@@ -638,7 +638,7 @@ function renderSignalsTable() {
     });
 
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="15" class="empty-state">NO SIGNALS MATCHING ACTIVE FILTERS</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="15" class="idle-state-row">No signals matching active filter criteria • Adjust filter parameters to widen search window</td></tr>';
         return;
     }
 
@@ -1118,8 +1118,8 @@ function renderTradesTable(trades) {
     const dashBody = document.getElementById('recent-trades-body');
 
     if (!trades || trades.length === 0) {
-        if (fullBody) fullBody.innerHTML = '<tr><td colspan="13" class="empty-state">NO CLOSED TRADES YET</td></tr>';
-        if (dashBody) dashBody.innerHTML = '<tr><td colspan="9" class="empty-state">NO CLOSED TRADES YET</td></tr>';
+        if (fullBody) fullBody.innerHTML = '<tr><td colspan="15" class="idle-state-row">No closed trades in selected window • Historical execution records will stream as OCO orders close</td></tr>';
+        if (dashBody) dashBody.innerHTML = '<tr><td colspan="9" class="idle-state-row">No closed trades in selected window</td></tr>';
         return;
     }
 
@@ -2480,7 +2480,7 @@ function renderActivityTable() {
     }
 
     if (list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No Matching Activity Logged</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="idle-state-row">Audit ledger initialized • Live trade executions, risk checks, and system events will stream here</td></tr>';
         return;
     }
 
