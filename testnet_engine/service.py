@@ -452,12 +452,32 @@ class TestnetService:
             logger.warning(f"[SAFETY_HALT] Scanning halted due to RECONCILIATION MISMATCH. Rejecting {symbol} signal.")
             return
 
+        # Strategy Protection: Reject stale, unverified, or missing market data
+        if data_health_status != "OK":
+            logger.warning(f"[STRATEGY_SKIPPED] reason=STALE_MARKET_DATA symbol={symbol} tf={tf} health={data_health_status}")
+            return
+
+        if df is None or df.empty or len(df) < 20:
+            logger.warning(f"[STRATEGY_SKIPPED] reason=INSUFFICIENT_MARKET_DATA symbol={symbol} tf={tf} rows={len(df) if df is not None else 0}")
+            return
+
+        # Check candle age freshness against timeframe
+        try:
+            last_ts = df["timestamp"].iloc[-1]
+            if isinstance(last_ts, pd.Timestamp):
+                age_sec = (datetime.datetime.utcnow() - last_ts.to_pydatetime()).total_seconds()
+            else:
+                age_sec = 0
+            max_allowed_age = 300 * 3 if "5m" in tf else (900 * 3 if "15m" in tf else 3600 * 4)
+            if age_sec > max_allowed_age and age_sec > 0:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=STALE_MARKET_DATA symbol={symbol} tf={tf} age={age_sec:.1f}s")
+                return
+        except Exception:
+            pass
+
         with self.lock:
             try:
                 self.stats["TOTAL_CANDLES"] += 1
-                if df.empty or len(df) < 20:
-                    return
-                    
                 df = add_indicators(df)
                 if df.empty:
                     return

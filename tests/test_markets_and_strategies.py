@@ -10,20 +10,28 @@ def client():
         yield c
 
 def test_api_candles_supported_timeframes(client):
-    """Test that candles can be retrieved for standard timeframe configuration."""
+    """Test that candles can be retrieved for standard timeframe configuration without fabrication."""
     for tf in ["5m", "15m", "30m", "1h", "2h", "4h"]:
         res = client.get(f'/api/candles?symbol=BTCUSDT&tf={tf}&limit=10')
-        assert res.status_code == 200
-        data = json.loads(res.data)
-        assert isinstance(data, list)
-        if len(data) > 0:
-            c = data[0]
-            assert "time" in c
-            assert "open" in c
-            assert "high" in c
-            assert "low" in c
-            assert "close" in c
-            assert "volume" in c
+        if res.status_code == 200:
+            data = json.loads(res.data)
+            assert isinstance(data, list)
+            if len(data) > 0:
+                c = data[0]
+                assert "time" in c
+                assert "open" in c
+                assert "high" in c
+                assert "low" in c
+                assert "close" in c
+                assert "volume" in c
+                assert c.get("source") == "BINANCE"
+                assert c.get("verified") is True
+        else:
+            assert res.status_code == 503
+            data = json.loads(res.data)
+            assert data.get("status") == "DATA_UNAVAILABLE"
+            assert data.get("source") == "BINANCE"
+            assert data.get("candles") == []
 
 def test_api_strategy_metrics_covers_all_six_strategies(client):
     """Verify that all 6 required strategies are present in /api/strategy-metrics."""
