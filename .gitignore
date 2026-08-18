@@ -50,6 +50,7 @@ render_status.json
 render_status_audit.json
 
 # ── Trade ledgers & portfolio state ───────────────────────────────────────────
+*.jsonl
 trade_log.csv
 paper_trade_ledger.jsonl
 paper_equity_curve.jsonl
