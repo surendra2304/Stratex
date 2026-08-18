@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Algorithmic Trading Terminal • Binance Testnet</title>
-    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <title>Algorithmic Trading Terminal • Institutional Quant Operations</title>
+    <!-- Google Fonts: Inter (UI) & JetBrains Mono (Financial) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -19,149 +19,195 @@
     <div id="drawer-backdrop" class="drawer-backdrop" onclick="closeInspectorDrawer()"></div>
     <aside id="inspector-drawer" class="inspector-drawer">
         <div class="drawer-header">
-            <div class="drawer-title" id="drawer-title">INSPECTOR &bull; TELEMETRY EVENT</div>
+            <div class="drawer-title" id="drawer-title">QUANT TELEMETRY INSPECTOR</div>
             <button class="drawer-close" onclick="closeInspectorDrawer()" title="Close Inspector">&times;</button>
         </div>
         <div class="drawer-body" id="drawer-body">
-            <div class="empty-state">Select an item to inspect raw quant telemetry.</div>
+            <div class="empty-state-compact">Select an item to inspect raw quant telemetry.</div>
         </div>
     </aside>
 
     <div class="app-container">
-        <!-- ─── SIDEBAR NAVIGATION ─── -->
+        <!-- ─── 1. SIDEBAR NAVIGATION ─── -->
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="brand">
-                    <h2><span class="logo-icon">⚡</span> QUANT TERMINAL</h2>
+                    <div class="brand-title">
+                        <svg class="brand-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                        <div class="brand-text">
+                            <span class="brand-main">ALGORITHMIC</span>
+                            <span class="brand-sub">TRADING BOT</span>
+                        </div>
+                    </div>
                     <span class="badge-testnet">BINANCE TESTNET</span>
                 </div>
             </div>
             
             <nav class="sidebar-nav">
-                <a href="#dashboard" class="nav-item active" data-view="dashboard">
-                    <span class="nav-icon">📊</span>
+                <a href="#dashboard" class="nav-item active" data-view="dashboard" id="nav-dashboard">
+                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
                     <span>Overview</span>
                 </a>
-                <a href="#market" class="nav-item" data-view="market">
-                    <span class="nav-icon">🌐</span>
+                <a href="#market" class="nav-item" data-view="market" id="nav-market">
+                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                    </svg>
                     <span>Markets</span>
                 </a>
-                <a href="#signals" class="nav-item" data-view="signals">
-                    <span class="nav-icon">📡</span>
+                <a href="#signals" class="nav-item" data-view="signals" id="nav-signals">
+                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"></path>
+                        <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"></path>
+                        <circle cx="12" cy="12" r="2"></circle>
+                        <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"></path>
+                        <path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"></path>
+                    </svg>
                     <span>Signals</span>
                 </a>
-                <a href="#positions" class="nav-item" data-view="positions">
-                    <span class="nav-icon">💼</span>
+                <a href="#positions" class="nav-item" data-view="positions" id="nav-positions">
+                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                    </svg>
                     <span>Positions</span>
                 </a>
-                <a href="#trades" class="nav-item" data-view="trades">
-                    <span class="nav-icon">📑</span>
+                <a href="#trades" class="nav-item" data-view="trades" id="nav-trades">
+                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                    </svg>
                     <span>Trades</span>
                 </a>
-                <a href="#activity" class="nav-item" data-view="activity">
-                    <span class="nav-icon">📜</span>
+                <a href="#activity" class="nav-item" data-view="activity" id="nav-activity">
+                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
                     <span>Activity</span>
                 </a>
-                <a href="#strategies" class="nav-item" data-view="strategies">
-                    <span class="nav-icon">⚡</span>
+                <a href="#strategies" class="nav-item" data-view="strategies" id="nav-strategies">
+                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                        <polyline points="2 17 12 22 22 17"></polyline>
+                        <polyline points="2 12 12 17 22 12"></polyline>
+                    </svg>
                     <span>Strategies</span>
                 </a>
-                <a href="#risk" class="nav-item" data-view="risk">
-                    <span class="nav-icon">🛡️</span>
+                <a href="#risk" class="nav-item" data-view="risk" id="nav-risk">
+                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    </svg>
                     <span>Risk Gate</span>
                 </a>
-                <a href="#analytics" class="nav-item" data-view="analytics">
-                    <span class="nav-icon">📈</span>
+                <a href="#analytics" class="nav-item" data-view="analytics" id="nav-analytics">
+                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                    </svg>
                     <span>Analytics</span>
                 </a>
-                <a href="#settings" class="nav-item" data-view="settings">
-                    <span class="nav-icon">⚙️</span>
+                <a href="#settings" class="nav-item" data-view="settings" id="nav-settings">
+                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
                     <span>Settings</span>
                 </a>
             </nav>
 
-            <!-- SYSTEM SUBSYSTEM HEALTH -->
+            <!-- SIDEBAR SUBSYSTEM HEALTH -->
             <div class="sidebar-system-health">
-                <div class="sidebar-system-health-title">Subsystem Health</div>
-                <div class="health-row">
-                    <span class="health-label-wrap">Binance REST</span>
-                    <span class="dot dot-green" id="h-bn" title="Connected"></span>
+                <div class="sidebar-health-title">SYSTEM SUBSYSTEMS</div>
+                <div class="health-grid">
+                    <div class="health-item">
+                        <span class="dot dot-green" id="h-bn" title="Binance REST"></span>
+                        <span class="health-name">Binance</span>
+                    </div>
+                    <div class="health-item">
+                        <span class="dot dot-green" id="h-ws" title="WebSocket Stream"></span>
+                        <span class="health-name">WebSocket</span>
+                    </div>
+                    <div class="health-item">
+                        <span class="dot dot-green" id="h-md" title="Market Scanner"></span>
+                        <span class="health-name">Market Data</span>
+                    </div>
+                    <div class="health-item">
+                        <span class="dot dot-green" id="h-ex" title="Execution Gateway"></span>
+                        <span class="health-name">Execution</span>
+                    </div>
+                    <div class="health-item">
+                        <span class="dot dot-green" id="h-st" title="Strategy Engine"></span>
+                        <span class="health-name">Strategy</span>
+                    </div>
+                    <div class="health-item">
+                        <span class="dot dot-green" id="h-pt" title="Portfolio Manager"></span>
+                        <span class="health-name">Portfolio</span>
+                    </div>
+                    <div class="health-item">
+                        <span class="dot dot-green" id="h-rs" title="Risk Engine"></span>
+                        <span class="health-name">Risk</span>
+                    </div>
+                    <div class="health-item">
+                        <span class="dot dot-green" id="h-pe" title="Audit Persistence"></span>
+                        <span class="health-name">Persistence</span>
+                    </div>
                 </div>
-                <div class="health-row">
-                    <span class="health-label-wrap">WebSocket Stream</span>
-                    <span class="dot dot-green" id="h-ws" title="Active"></span>
-                </div>
-                <div class="health-row">
-                    <span class="health-label-wrap">Market Scanner</span>
-                    <span class="dot dot-green" id="h-md" title="Scanning"></span>
-                </div>
-                <div class="health-row">
-                    <span class="health-label-wrap">Execution Gateway</span>
-                    <span class="dot dot-green" id="h-ex" title="Ready"></span>
-                </div>
-                <div class="health-row">
-                    <span class="health-label-wrap">Strategy Engine</span>
-                    <span class="dot dot-green" id="h-st" title="Active"></span>
-                </div>
-                <div class="health-row">
-                    <span class="health-label-wrap">Portfolio Manager</span>
-                    <span class="dot dot-green" id="h-pt" title="Synchronized"></span>
-                </div>
-                <div class="health-row">
-                    <span class="health-label-wrap">Risk Engine</span>
-                    <span class="dot dot-green" id="h-rs" title="Guarded"></span>
-                </div>
-                <div class="health-row">
-                    <span class="health-label-wrap">Audit Persistence</span>
-                    <span class="dot dot-green" id="h-pe" title="Flushed"></span>
-                </div>
-                
-                <div class="sidebar-footer-meta">
-                    Quant Core v2.4.0<br>
-                    Frankfurt (DE) • 0.05% Max Risk
+                <div class="sidebar-meta-text">
+                    v2.4.0 • Spot Testnet • Multi-TF
                 </div>
             </div>
         </aside>
 
-        <!-- ─── MAIN TRADING TERMINAL ─── -->
+        <!-- ─── 2. MAIN TRADING TERMINAL CONTENT ─── -->
         <main class="main-content">
             <!-- TOP COMPACT HEADER -->
             <header class="top-header">
                 <div class="header-left">
-                    <div class="breadcrumb">
-                        <span id="page-title" class="breadcrumb-active">Overview</span>
-                        <span class="breadcrumb-sep">/</span>
-                        <span class="breadcrumb-sub">Live Quant Operations</span>
-                    </div>
+                    <span id="page-title" class="header-page-title">Overview</span>
+                    <span class="header-sep">/</span>
+                    <span class="header-sub">Quant Operations</span>
                 </div>
                 <div class="header-right">
                     <div class="header-stat">
-                        <span class="stat-label">Bot Uptime</span>
-                        <span class="stat-value" id="hdr-uptime">--:--:--</span>
-                    </div>
-                    <div class="divider"></div>
-                    <div class="header-stat">
-                        <span class="stat-label">Engine Core</span>
-                        <div class="engine-status-inner">
+                        <div class="engine-badge-wrap">
                             <span class="dot dot-green" id="hdr-engine-dot"></span>
-                            <span id="hdr-engine-text" class="status-online">ONLINE</span>
+                            <span id="hdr-engine-text" class="status-online">ENGINE ONLINE</span>
                         </div>
                     </div>
-                    <div class="divider"></div>
+                    <div class="header-divider"></div>
                     <div class="header-stat">
-                        <span class="stat-label">Environment</span>
-                        <span class="stat-value"><span class="badge badge-amber">SPOT TESTNET</span></span>
+                        <span class="stat-lbl">ENV</span>
+                        <span class="badge-mini badge-amber">TESTNET</span>
                     </div>
-                    <div class="divider"></div>
+                    <div class="header-divider"></div>
                     <div class="header-stat">
-                        <span class="stat-label">Local Clock (IST)</span>
-                        <span class="stat-value" id="nav-clock">--:--:--</span>
+                        <span class="stat-lbl">UPTIME</span>
+                        <span class="stat-mono" id="hdr-uptime">--:--:--</span>
                     </div>
-                    <div class="divider"></div>
+                    <div class="header-divider"></div>
+                    <div class="header-stat">
+                        <span class="stat-lbl">IST CLOCK</span>
+                        <span class="stat-mono" id="nav-clock">--:--:--</span>
+                    </div>
+                    <div class="header-divider"></div>
                     <div class="header-actions">
                         <div class="notif-bell-container">
-                            <button id="btn-notif-bell" class="header-toggle-btn" onclick="toggleNotificationDropdown()" title="Notification Center">
-                                🔔 <span id="notif-badge" class="badge-count" style="display:none;">0</span>
+                            <button id="btn-notif-bell" class="btn-hdr-icon" onclick="toggleNotificationDropdown()" title="Notification Center">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                                </svg>
+                                <span id="notif-badge" class="badge-count" style="display:none;">0</span>
                             </button>
                             <div id="notification-dropdown" class="notif-dropdown">
                                 <div class="notif-dropdown-header">
@@ -173,10 +219,10 @@
                                 </div>
                             </div>
                         </div>
-                        <button id="audio-toggle-btn" class="header-toggle-btn" onclick="toggleAudioAlerts()" title="Toggle Sound Alerts (Audio OFF by default)">
-                            🔇 <span id="audio-status-txt">Audio OFF</span>
+                        <button id="audio-toggle-btn" class="btn-hdr-pill" onclick="toggleAudioAlerts()" title="Toggle Sound Alerts">
+                            <span id="audio-status-txt">🔇 Audio OFF</span>
                         </button>
-                        <button class="btn-action" onclick="updateDashboard()" title="Refresh Live State">
+                        <button class="btn-hdr-action" onclick="updateDashboard()" title="Refresh Live State">
                             ↻ Refresh
                         </button>
                     </div>
@@ -184,81 +230,70 @@
             </header>
 
             <!-- ========================================== -->
-            <!-- 1. DASHBOARD OVERVIEW -->
+            <!-- 1. DASHBOARD OVERVIEW (ONE-SCREEN CONTROL CENTER) -->
             <!-- ========================================== -->
-            <div id="view-dashboard" class="view-container active">
+            <div id="view-dashboard" class="view-container active view-dashboard-grid">
                 
-                <!-- ROW 1: INSTITUTIONAL KPI CARDS -->
-                <div class="metrics-row">
-                    <div class="metric-card accent-blue">
-                        <div class="metric-icon-wrap bg-blue">💼</div>
-                        <div class="metric-content">
-                            <span class="metric-label">Total Account Equity</span>
-                            <span class="metric-value" id="pb-balance">--</span>
-                            <span class="metric-sub">USDT Cash + Holdings</span>
+                <!-- ROW 1: PRIMARY ACCOUNT METRICS (6 COMPACT CARDS) -->
+                <div class="ov-row-kpis">
+                    <div class="ov-kpi-card">
+                        <div class="ov-kpi-head">
+                            <span class="ov-kpi-label">TOTAL EQUITY</span>
+                            <span class="ov-kpi-tag tag-blue">USD</span>
                         </div>
+                        <div class="ov-kpi-val" id="pb-balance">--</div>
+                        <div class="ov-kpi-sub">Bot-Managed Capital</div>
                     </div>
-                    <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">📈</div>
-                        <div class="metric-content">
-                            <span class="metric-label">Today's PnL</span>
-                            <span class="metric-value val-green" id="pb-today">--</span>
-                            <span class="metric-sub">Realized Day Net</span>
+                    <div class="ov-kpi-card">
+                        <div class="ov-kpi-head">
+                            <span class="ov-kpi-label">TODAY'S PNL</span>
+                            <span class="ov-kpi-tag tag-green">NET</span>
                         </div>
+                        <div class="ov-kpi-val val-green" id="pb-today">--</div>
+                        <div class="ov-kpi-sub">24h Realized Yield</div>
                     </div>
-                    <div class="metric-card accent-blue">
-                        <div class="metric-icon-wrap bg-blue">💵</div>
-                        <div class="metric-content">
-                            <span class="metric-label">Total Realized PnL</span>
-                            <span class="metric-value val-green" id="pb-realized">--</span>
-                            <span class="metric-sub">Closed Trades</span>
+                    <div class="ov-kpi-card">
+                        <div class="ov-kpi-head">
+                            <span class="ov-kpi-label">REALIZED PNL</span>
+                            <span class="ov-kpi-tag tag-cyan">CUMULATIVE</span>
                         </div>
+                        <div class="ov-kpi-val" id="pb-realized">--</div>
+                        <div class="ov-kpi-sub">Closed Trades Profit</div>
                     </div>
-                    <div class="metric-card accent-amber">
-                        <div class="metric-icon-wrap bg-amber">⏱</div>
-                        <div class="metric-content">
-                            <span class="metric-label">Unrealized PnL</span>
-                            <span class="metric-value" id="pb-unrealized">--</span>
-                            <span class="metric-sub">Active Positions</span>
+                    <div class="ov-kpi-card">
+                        <div class="ov-kpi-head">
+                            <span class="ov-kpi-label">UNREALIZED PNL</span>
+                            <span class="ov-kpi-tag tag-amber">LIVE MTM</span>
                         </div>
+                        <div class="ov-kpi-val" id="pb-unrealized">--</div>
+                        <div class="ov-kpi-sub">Active Positions Value</div>
                     </div>
-                    <div class="metric-card accent-purple">
-                        <div class="metric-icon-wrap bg-purple">¢</div>
-                        <div class="metric-content">
-                            <span class="metric-label">Cumulative Fees</span>
-                            <span class="metric-value" id="pb-fees">--</span>
-                            <span class="metric-sub">0.1% Spot / OCO</span>
+                    <div class="ov-kpi-card">
+                        <div class="ov-kpi-head">
+                            <span class="ov-kpi-label">FEES</span>
+                            <span class="ov-kpi-tag tag-purple">COMMISSIONS</span>
                         </div>
+                        <div class="ov-kpi-val" id="pb-fees">--</div>
+                        <div class="ov-kpi-sub">0.1% Spot Maker/Taker</div>
                     </div>
-                    <div class="metric-card accent-red">
-                        <div class="metric-icon-wrap bg-red">🛡</div>
-                        <div class="metric-content">
-                            <span class="metric-label">Max Drawdown</span>
-                            <span class="metric-value val-red" id="pb-mdd">--</span>
-                            <span class="metric-sub">5.0% Safety Ceiling</span>
+                    <div class="ov-kpi-card">
+                        <div class="ov-kpi-head">
+                            <span class="ov-kpi-label">MAX DRAWDOWN</span>
+                            <span class="ov-kpi-tag tag-red">PEAK DROP</span>
                         </div>
+                        <div class="ov-kpi-val val-red" id="pb-mdd">--</div>
+                        <div class="ov-kpi-sub">5.0% Safety Ceiling</div>
                     </div>
                 </div>
 
-                <!-- CAPITAL DEPLOYMENT & CASH TRANSPARENCY BAR -->
-                <div class="allocation-banner-wrap">
-                    <div class="allocation-header-row">
-                        <span>⚡ <strong class="allocation-title-highlight">CAPITAL ALLOCATION:</strong> <span id="alloc-cash-txt">Liquid USDT: DATA UNAVAILABLE</span> • <span id="alloc-crypto-txt">Active Spot Trades: DATA UNAVAILABLE</span></span>
-                        <span class="alloc-note">Spot Mode: Trades deploy USDT into selected asset with automated OCO exit orders</span>
-                    </div>
-                    <div class="allocation-track">
-                        <div class="alloc-bar-cash" id="alloc-bar-cash" style="width: 100%;"></div>
-                        <div class="alloc-bar-crypto" id="alloc-bar-crypto" style="width: 0%;"></div>
-                    </div>
-                </div>
-
-                <!-- ROW 2: REAL-TIME EQUITY CURVE & COMPACT PIPELINE / HEALTH -->
-                <div class="grid-12">
-                    <!-- EQUITY CURVE (COL 8) -->
-                    <div class="panel col-8">
-                        <div class="panel-header">
+                <!-- ROW 2: EQUITY CHART (~68%) + ACCOUNT SNAPSHOT (~32%) -->
+                <div class="ov-row-charts">
+                    <!-- LEFT: REAL-TIME EQUITY & BALANCE CURVE -->
+                    <div class="panel ov-chart-panel">
+                        <div class="panel-header-compact">
                             <div class="panel-title-wrap">
-                                <h3 class="panel-title"><span>📈</span> REAL-TIME EQUITY & BALANCE CURVE</h3>
+                                <span class="panel-dot-indicator"></span>
+                                <h3 class="panel-title-clean">EQUITY & BALANCE TIMELINE</h3>
                             </div>
                             <div class="chart-tf-group">
                                 <button class="btn-tf" id="tf-1h" onclick="setEquityTimeframe('1H')">1H</button>
@@ -268,182 +303,208 @@
                                 <button class="btn-tf active" id="tf-all" onclick="setEquityTimeframe('ALL')">ALL</button>
                             </div>
                         </div>
-                        <div class="panel-content no-pad">
-                            <div class="chart-container" style="min-height: 270px;">
+                        <div class="panel-content-compact">
+                            <div class="chart-container-compact">
                                 <canvas id="equityChart"></canvas>
                             </div>
                         </div>
                     </div>
 
-                    <!-- COMPACT SIGNAL PIPELINE & RISK GUARDS (COL 4) -->
-                    <div class="col-4" style="display: flex; flex-direction: column; gap: 14px;">
-                        <!-- COMPACT 5-STAGE SIGNAL PIPELINE -->
-                        <div class="panel" style="flex: 1;">
-                            <div class="panel-header">
-                                <h3 class="panel-title"><span>🔄</span> SIGNAL PIPELINE (24H)</h3>
+                    <!-- RIGHT: ACCOUNT SNAPSHOT & TRANSPARENCY -->
+                    <div class="panel ov-snapshot-panel">
+                        <div class="panel-header-compact">
+                            <div class="panel-title-wrap">
+                                <span class="panel-dot-indicator"></span>
+                                <h3 class="panel-title-clean">ACCOUNT SNAPSHOT</h3>
                             </div>
-                            <div class="panel-content no-pad">
-                                <div class="funnel-pipeline">
-                                    <div class="funnel-node">
-                                        <div class="funnel-icon">🌐</div>
-                                        <div class="funnel-val" id="fn-mrk">0</div>
-                                        <div class="funnel-lbl">Data In</div>
-                                    </div>
-                                    <div class="funnel-line"></div>
-                                    <div class="funnel-node">
-                                        <div class="funnel-icon">📈</div>
-                                        <div class="funnel-val" id="fn-signals">0</div>
-                                        <div class="funnel-lbl">Signals</div>
-                                    </div>
-                                    <div class="funnel-line"></div>
-                                    <div class="funnel-node">
-                                        <div class="funnel-icon">💵</div>
-                                        <div class="funnel-val val-green" id="fn-prof-acc">0</div>
-                                        <div class="funnel-sub val-red"><span id="fn-prof-rej">0</span> Rej</div>
-                                        <div class="funnel-lbl">Profit</div>
-                                    </div>
-                                    <div class="funnel-line"></div>
-                                    <div class="funnel-node">
-                                        <div class="funnel-icon">🛡️</div>
-                                        <div class="funnel-val val-green" id="fn-risk-acc">0</div>
-                                        <div class="funnel-sub val-red"><span id="fn-risk-rej">0</span> Rej</div>
-                                        <div class="funnel-lbl">Risk</div>
-                                    </div>
-                                    <div class="funnel-line"></div>
-                                    <div class="funnel-node">
-                                        <div class="funnel-icon">🚀</div>
-                                        <div class="funnel-val val-green" id="fn-filled">0</div>
-                                        <div class="funnel-lbl">Filled</div>
-                                    </div>
-                                </div>
-                            </div>
+                            <span class="badge-mini badge-cyan">SPOT TESTNET</span>
                         </div>
-
-                        <!-- COMPACT RISK GUARDS -->
-                        <div class="panel" style="flex: 1;">
-                            <div class="panel-header">
-                                <h3 class="panel-title"><span>🛡️</span> RISK & SYSTEM GUARDS</h3>
-                            </div>
-                            <div class="panel-content">
-                                <div class="risk-grid">
-                                    <div class="risk-item">
-                                        <div class="risk-lbl">Exposure</div>
-                                        <div class="r-val" id="rk-exp-val">0.00%</div>
-                                        <div class="r-sub">of Total Equity</div>
-                                    </div>
-                                    <div class="risk-item">
-                                        <div class="risk-lbl">Risk Used</div>
-                                        <div class="r-val val-green" id="rk-used">0.00%</div>
-                                        <div class="r-sub">Max: 0.50% / Trade</div>
-                                    </div>
-                                    <div class="risk-item">
-                                        <div class="risk-lbl">Positions</div>
-                                        <div class="r-val" id="rk-pos">0</div>
-                                        <div class="r-sub">Max: 5 Open</div>
-                                    </div>
-                                    <div class="risk-item">
-                                        <div class="risk-lbl">Daily Return</div>
-                                        <div class="r-val val-green" id="rk-daily">$0.00</div>
-                                        <div class="r-sub">Safety Limit: -2%</div>
-                                    </div>
+                        <div class="panel-content-compact ov-snapshot-body">
+                            <div class="snap-stat-row">
+                                <div class="snap-stat-item">
+                                    <span class="snap-stat-label">BOT-MANAGED EQUITY</span>
+                                    <span class="snap-stat-val val-blue" id="snap-bot-equity">--</span>
                                 </div>
+                                <div class="snap-stat-item">
+                                    <span class="snap-stat-label">FULL BINANCE WALLET</span>
+                                    <span class="snap-stat-val" id="snap-wallet">--</span>
+                                </div>
+                            </div>
+                            <div class="snap-alloc-track">
+                                <div class="alloc-bar-cash" id="alloc-bar-cash" style="width: 100%;"></div>
+                                <div class="alloc-bar-crypto" id="alloc-bar-crypto" style="width: 0%;"></div>
+                            </div>
+                            <div class="snap-stat-grid-4">
+                                <div class="snap-mini-card">
+                                    <span class="snap-mini-label">LIQUID CASH</span>
+                                    <span class="snap-mini-val" id="snap-cash">--</span>
+                                </div>
+                                <div class="snap-mini-card">
+                                    <span class="snap-mini-label">MANAGED ASSETS</span>
+                                    <span class="snap-mini-val" id="snap-managed">--</span>
+                                </div>
+                                <div class="snap-mini-card">
+                                    <span class="snap-mini-label">OPEN POSITIONS</span>
+                                    <span class="snap-mini-val" id="snap-pos">--</span>
+                                </div>
+                                <div class="snap-mini-card">
+                                    <span class="snap-mini-label">EXPOSURE</span>
+                                    <span class="snap-mini-val" id="snap-exposure">--</span>
+                                </div>
+                            </div>
+                            <div class="snap-footer-row">
+                                <span class="snap-footer-label">Available Risk Buffer:</span>
+                                <span class="snap-footer-val val-green" id="snap-avail-risk">--</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- ROW 3: ACTIVE POSITIONS & BEST OPPORTUNITIES -->
-                <div class="grid-12">
-                    <!-- ACTIVE POSITIONS (COL 6) -->
-                    <div class="panel col-6">
-                        <div class="panel-header">
-                            <h3 class="panel-title"><span>💼</span> ACTIVE POSITIONS & WORKING EXITS</h3>
-                            <span class="panel-action" onclick="document.querySelector('[data-view=\'positions\']').click()">Positions &rarr;</span>
-                        </div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>SYMBOL</th>
-                                            <th>SIDE</th>
-                                            <th>ENTRY PRICE</th>
-                                            <th>CURRENT</th>
-                                            <th>QUANTITY</th>
-                                            <th>U.PNL</th>
-                                            <th>STOP LOSS</th>
-                                            <th>TAKE PROFIT</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="active-pos-body">
-                                        <tr><td colspan="8" class="empty-state">No Open Positions Currently Active</td></tr>
-                                    </tbody>
-                                </table>
+                <!-- ROW 3: ACTIVE POSITIONS (55%) + BEST OPPORTUNITIES (45%) -->
+                <div class="ov-row-trading">
+                    <!-- LEFT 55%: ACTIVE POSITIONS -->
+                    <div class="panel ov-pos-panel">
+                        <div class="panel-header-compact">
+                            <div class="panel-title-wrap">
+                                <span class="panel-dot-indicator"></span>
+                                <h3 class="panel-title-clean">ACTIVE POSITIONS</h3>
                             </div>
+                            <span class="panel-link-action" onclick="document.querySelector('[data-view=\'positions\']').click()">Positions Page &rarr;</span>
+                        </div>
+                        <div class="panel-content-compact no-pad table-scroll-wrap">
+                            <table class="table-compact">
+                                <thead>
+                                    <tr>
+                                        <th>SYMBOL</th>
+                                        <th>TF</th>
+                                        <th>STRATEGY</th>
+                                        <th>SIDE</th>
+                                        <th>ENTRY</th>
+                                        <th>CURRENT</th>
+                                        <th>U.PNL</th>
+                                        <th>SL</th>
+                                        <th>TP</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="active-pos-body">
+                                    <tr><td colspan="9" class="empty-state-compact">NO OPEN POSITIONS • The engine is currently flat.</td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 
-                    <!-- BEST CURRENT OPPORTUNITIES (COL 6) -->
-                    <div class="panel col-6">
-                        <div class="panel-header">
-                            <h3 class="panel-title"><span>🎯</span> BEST CURRENT OPPORTUNITIES</h3>
-                            <span class="panel-action" onclick="document.querySelector('[data-view=\'signals\']').click()">View All Signals &rarr;</span>
-                        </div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>TIME</th>
-                                            <th>SYMBOL</th>
-                                            <th>TF</th>
-                                            <th>STRATEGY</th>
-                                            <th>SIDE</th>
-                                            <th>ENTRY</th>
-                                            <th>STOP</th>
-                                            <th>TARGET</th>
-                                            <th>CONF.</th>
-                                            <th>NET EDGE</th>
-                                            <th>DECISION</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="opp-short-body">
-                                        <tr><td colspan="11" class="empty-state">No Qualifying Signals Yet</td></tr>
-                                    </tbody>
-                                </table>
+                    <!-- RIGHT 45%: BEST CURRENT OPPORTUNITIES -->
+                    <div class="panel ov-opp-panel">
+                        <div class="panel-header-compact">
+                            <div class="panel-title-wrap">
+                                <span class="panel-dot-indicator"></span>
+                                <h3 class="panel-title-clean">BEST CURRENT OPPORTUNITIES</h3>
                             </div>
+                            <span class="panel-link-action" onclick="document.querySelector('[data-view=\'signals\']').click()">Signals Terminal &rarr;</span>
+                        </div>
+                        <div class="panel-content-compact no-pad table-scroll-wrap">
+                            <table class="table-compact">
+                                <thead>
+                                    <tr>
+                                        <th>TIME</th>
+                                        <th>SYMBOL</th>
+                                        <th>TF</th>
+                                        <th>STRATEGY</th>
+                                        <th>SIDE</th>
+                                        <th>ENTRY</th>
+                                        <th>EDGE</th>
+                                        <th>RISK</th>
+                                        <th>DECISION</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="opp-short-body">
+                                    <tr>
+                                        <td colspan="9" class="empty-state-compact">
+                                            <div>NO QUALIFYING OPPORTUNITIES</div>
+                                            <div class="empty-state-sub" id="opp-empty-subtitle">Signals undergoing multi-timeframe evaluation</div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
 
-                <!-- ROW 4: RECENT EXECUTED TRADES -->
-                <div class="grid-12">
-                    <!-- RECENT TRADES (COL 12) -->
-                    <div class="panel col-12">
-                        <div class="panel-header">
-                            <h3 class="panel-title"><span>📑</span> RECENT EXECUTED TRADES</h3>
-                            <span class="panel-action" onclick="document.querySelector('[data-view=\'trades\']').click()">Full Ledger &rarr;</span>
+                <!-- ROW 4: RECENT TRADES (65%) + COMPACT SIGNAL FUNNEL (35%) -->
+                <div class="ov-row-activity">
+                    <!-- LEFT 65%: RECENT EXECUTED TRADES -->
+                    <div class="panel ov-trades-panel">
+                        <div class="panel-header-compact">
+                            <div class="panel-title-wrap">
+                                <span class="panel-dot-indicator"></span>
+                                <h3 class="panel-title-clean">RECENT TRADES</h3>
+                            </div>
+                            <span class="panel-link-action" onclick="document.querySelector('[data-view=\'trades\']').click()">View all trades &rarr;</span>
                         </div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>TIMESTAMP</th>
-                                            <th>SYMBOL</th>
-                                            <th>TF</th>
-                                            <th>STRATEGY</th>
-                                            <th>SIDE</th>
-                                            <th>ENTRY</th>
-                                            <th>EXIT</th>
-                                            <th>REALIZED PNL</th>
-                                            <th>STATUS</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="recent-trades-body">
-                                        <tr><td colspan="9" class="empty-state">No Trade History Logged</td></tr>
-                                    </tbody>
-                                </table>
+                        <div class="panel-content-compact no-pad table-scroll-wrap">
+                            <table class="table-compact">
+                                <thead>
+                                    <tr>
+                                        <th>TIME</th>
+                                        <th>SYMBOL</th>
+                                        <th>TF</th>
+                                        <th>STRATEGY</th>
+                                        <th>SIDE</th>
+                                        <th>ENTRY</th>
+                                        <th>EXIT</th>
+                                        <th>PNL</th>
+                                        <th>STATUS</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recent-trades-body">
+                                    <tr><td colspan="9" class="empty-state-compact">NO TRADES EXECUTED YET</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT 35%: COMPACT HORIZONTAL SIGNAL FUNNEL -->
+                    <div class="panel ov-funnel-panel">
+                        <div class="panel-header-compact">
+                            <div class="panel-title-wrap">
+                                <span class="panel-dot-indicator"></span>
+                                <h3 class="panel-title-clean">SIGNAL PIPELINE</h3>
+                            </div>
+                            <span class="badge-mini">24H AUDIT</span>
+                        </div>
+                        <div class="panel-content-compact ov-funnel-content">
+                            <div class="funnel-h-track">
+                                <div class="funnel-h-step">
+                                    <span class="f-num" id="fn-mrk">0</span>
+                                    <span class="f-lbl">DATA</span>
+                                </div>
+                                <span class="f-arrow">&rarr;</span>
+                                <div class="funnel-h-step">
+                                    <span class="f-num" id="fn-signals">0</span>
+                                    <span class="f-lbl">SIGNALS</span>
+                                </div>
+                                <span class="f-arrow">&rarr;</span>
+                                <div class="funnel-h-step">
+                                    <span class="f-num val-green" id="fn-prof-acc">0</span>
+                                    <span class="f-sub val-red"><span id="fn-prof-rej">0</span> REJ</span>
+                                    <span class="f-lbl">PROFIT</span>
+                                </div>
+                                <span class="f-arrow">&rarr;</span>
+                                <div class="funnel-h-step">
+                                    <span class="f-num val-green" id="fn-risk-acc">0</span>
+                                    <span class="f-sub val-red"><span id="fn-risk-rej">0</span> REJ</span>
+                                    <span class="f-lbl">RISK</span>
+                                </div>
+                                <span class="f-arrow">&rarr;</span>
+                                <div class="funnel-h-step">
+                                    <span class="f-num" id="fn-exec">0</span>
+                                    <span class="f-lbl">EXEC</span>
+                                </div>
+                                <span class="f-arrow">&rarr;</span>
+                                <div class="funnel-h-step highlight-step">
+                                    <span class="f-num val-green" id="fn-filled">0</span>
+                                    <span class="f-lbl">FILLED</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -463,8 +524,8 @@
                             <span class="panel-action" id="mkt-watchlist-count">13 Pairs</span>
                         </div>
                         <div class="panel-content no-pad">
-                            <div class="table-container" style="max-height: calc(100vh - 200px); overflow-y: auto;">
-                                <table>
+                            <div class="table-container" style="max-height: calc(100vh - 160px); overflow-y: auto;">
+                                <table class="table-compact">
                                     <thead>
                                         <tr>
                                             <th>SYMBOL</th>
@@ -489,8 +550,8 @@
                         <div class="panel-header">
                             <div class="market-chart-header-left">
                                 <span class="market-chart-symbol" id="mkt-active-sym">BTCUSDT</span>
-                                <span class="market-chart-price" id="mkt-active-price">$0.00</span>
-                                <span class="market-chart-chg" id="mkt-active-chg">0.00%</span>
+                                <span class="market-chart-price" id="mkt-active-price">--</span>
+                                <span class="market-chart-chg" id="mkt-active-chg">--</span>
                             </div>
                             <div class="chart-tf-group">
                                 <button class="btn-tf active" id="btn-mkt-tf-5m" onclick="setMarketChartTf('5m')">5m</button>
@@ -510,9 +571,9 @@
                     <div class="panel market-right-panel">
                         <div class="panel-header">
                             <h3 class="panel-title"><span>📊</span> MARKET DETAILS</h3>
-                            <span class="tag tag-qualified" id="mkt-det-badge">LIVE</span>
+                            <span class="badge-mini badge-cyan" id="mkt-det-badge">LIVE</span>
                         </div>
-                        <div class="panel-content" id="market-details-content" style="display: flex; flex-direction: column; gap: 12px; overflow-y: auto; max-height: calc(100vh - 200px);">
+                        <div class="panel-content" id="market-details-content" style="display: flex; flex-direction: column; gap: 10px; overflow-y: auto; max-height: calc(100vh - 160px);">
                             <div class="empty-state">Select a symbol to view live details</div>
                         </div>
                     </div>
@@ -524,36 +585,32 @@
             <!-- ========================================== -->
             <div id="view-signals" class="view-container">
                 <!-- TOP SUMMARY METRICS (8 CARDS) -->
-                <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 10px;">
+                <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 8px;">
                     <div class="metric-card accent-blue">
-                        <div class="metric-icon-wrap bg-blue">📡</div>
                         <div class="metric-content">
                             <span class="metric-label">TOTAL SIGNALS</span>
-                            <span class="metric-value" id="sig-kpi-total">0</span>
+                            <span class="metric-value" id="sig-kpi-total">--</span>
                             <span class="metric-sub">Session Evaluations</span>
                         </div>
                     </div>
                     <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">🟢</div>
                         <div class="metric-content">
                             <span class="metric-label">BUY SIGNALS</span>
-                            <span class="metric-value val-green" id="sig-kpi-buy">0</span>
+                            <span class="metric-value val-green" id="sig-kpi-buy">--</span>
                             <span class="metric-sub">Long Intentions</span>
                         </div>
                     </div>
                     <div class="metric-card accent-red">
-                        <div class="metric-icon-wrap bg-red">🔴</div>
                         <div class="metric-content">
                             <span class="metric-label">SELL SIGNALS</span>
-                            <span class="metric-value val-red" id="sig-kpi-sell">0</span>
+                            <span class="metric-value val-red" id="sig-kpi-sell">--</span>
                             <span class="metric-sub">Short Intentions</span>
                         </div>
                     </div>
                     <div class="metric-card accent-amber">
-                        <div class="metric-icon-wrap bg-amber">⏸</div>
                         <div class="metric-content">
                             <span class="metric-label">HOLD / PASS</span>
-                            <span class="metric-value" id="sig-kpi-hold">0</span>
+                            <span class="metric-value" id="sig-kpi-hold">--</span>
                             <span class="metric-sub">No Setup Active</span>
                         </div>
                     </div>
@@ -561,34 +618,30 @@
 
                 <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 10px;">
                     <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">✓</div>
                         <div class="metric-content">
                             <span class="metric-label">PROFITABILITY ACCEPTED</span>
-                            <span class="metric-value val-green" id="sig-kpi-prof-acc">0</span>
-                            <span class="metric-sub">Net Edge > Costs</span>
+                            <span class="metric-value val-green" id="sig-kpi-prof-acc">--</span>
+                            <span class="metric-sub">Net Edge > Friction</span>
                         </div>
                     </div>
                     <div class="metric-card accent-red">
-                        <div class="metric-icon-wrap bg-red">✕</div>
                         <div class="metric-content">
                             <span class="metric-label">PROFITABILITY REJECTED</span>
-                            <span class="metric-value val-red" id="sig-kpi-prof-rej">0</span>
-                            <span class="metric-sub">Negative / Insufficient Edge</span>
+                            <span class="metric-value val-red" id="sig-kpi-prof-rej">--</span>
+                            <span class="metric-sub">Negative / Fee Drag</span>
                         </div>
                     </div>
                     <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">🛡</div>
                         <div class="metric-content">
                             <span class="metric-label">RISK ACCEPTED</span>
-                            <span class="metric-value val-green" id="sig-kpi-risk-acc">0</span>
+                            <span class="metric-value val-green" id="sig-kpi-risk-acc">--</span>
                             <span class="metric-sub">Within Portfolio Limits</span>
                         </div>
                     </div>
                     <div class="metric-card accent-red">
-                        <div class="metric-icon-wrap bg-red">🚫</div>
                         <div class="metric-content">
                             <span class="metric-label">RISK REJECTED</span>
-                            <span class="metric-value val-red" id="sig-kpi-risk-rej">0</span>
+                            <span class="metric-value val-red" id="sig-kpi-risk-rej">--</span>
                             <span class="metric-sub">Exposures / Max Drawdown</span>
                         </div>
                     </div>
@@ -598,60 +651,16 @@
                     <div class="panel-header">
                         <h3 class="panel-title"><span>📡</span> QUANT SIGNAL TERMINAL</h3>
                         <div class="filter-group">
-                            <button class="btn-filter active" id="sig-btn-all" onclick="setSignalQuickFilter('ALL')">ALL</button>
-                            <button class="btn-filter" id="sig-btn-buy" onclick="setSignalQuickFilter('BUY')">BUY</button>
-                            <button class="btn-filter" id="sig-btn-sell" onclick="setSignalQuickFilter('SELL')">SELL</button>
-                            <button class="btn-filter" id="sig-btn-hold" onclick="setSignalQuickFilter('HOLD')">HOLD</button>
-                            <button class="btn-filter" id="sig-btn-acc" onclick="setSignalQuickFilter('ACCEPTED')">ACCEPTED</button>
-                            <button class="btn-filter" id="sig-btn-rej" onclick="setSignalQuickFilter('REJECTED')">REJECTED</button>
+                            <button class="btn-filter active" id="sig-btn-all" onclick="setSignalFilter('ALL')">ALL</button>
+                            <button class="btn-filter" id="sig-btn-buy" onclick="setSignalFilter('BUY')">BUY</button>
+                            <button class="btn-filter" id="sig-btn-sell" onclick="setSignalFilter('SELL')">SELL</button>
+                            <button class="btn-filter" id="sig-btn-acc" onclick="setSignalFilter('ACCEPTED')">ACCEPTED</button>
+                            <button class="btn-filter" id="sig-btn-rej" onclick="setSignalFilter('REJECTED')">REJECTED</button>
                         </div>
                     </div>
-
-                    <!-- ADDITIONAL FILTERS TOOLBAR -->
-                    <div class="filter-toolbar">
-                        <div class="filter-label-group">
-                            <span>Strategy:</span>
-                            <select id="sig-filter-strat" class="filter-select" onchange="applySignalFilters()">
-                                <option value="ALL">ALL STRATEGIES</option>
-                                <option value="ADX_EMA">ADX_EMA</option>
-                                <option value="AGGRESSOR">AGGRESSOR</option>
-                                <option value="SCALPER">SCALPER</option>
-                                <option value="SUPERTREND">SUPERTREND</option>
-                                <option value="SWING">SWING</option>
-                                <option value="FAST1M">FAST1M</option>
-                            </select>
-                        </div>
-                        <div class="filter-label-group">
-                            <span>Timeframe:</span>
-                            <select id="sig-filter-tf" class="filter-select" onchange="applySignalFilters()">
-                                <option value="ALL">ALL TIMEFRAMES</option>
-                                <option value="1m">1m</option>
-                                <option value="5m">5m</option>
-                                <option value="15m">15m</option>
-                                <option value="1h">1h</option>
-                                <option value="4h">4h</option>
-                                <option value="1d">1d</option>
-                            </select>
-                        </div>
-                        <div class="filter-label-group">
-                            <span>Symbol:</span>
-                            <input type="text" id="sig-filter-sym" class="filter-input" placeholder="e.g. BTCUSDT" oninput="applySignalFilters()">
-                        </div>
-                        <div class="filter-label-group">
-                            <span>Time Range:</span>
-                            <select id="sig-filter-range" class="filter-select" onchange="applySignalFilters()">
-                                <option value="ALL">ALL TIME</option>
-                                <option value="1h">LAST 1 HOUR</option>
-                                <option value="6h">LAST 6 HOURS</option>
-                                <option value="24h">LAST 24 HOURS</option>
-                                <option value="7d">LAST 7 DAYS</option>
-                            </select>
-                        </div>
-                    </div>
-
                     <div class="panel-content no-pad">
                         <div class="table-container">
-                            <table>
+                            <table class="table-compact">
                                 <thead>
                                     <tr>
                                         <th>TIME</th>
@@ -663,16 +672,15 @@
                                         <th>STOP</th>
                                         <th>TARGET</th>
                                         <th>CONFIDENCE</th>
-                                        <th>EXPECTED GROSS</th>
                                         <th>EXPECTED NET</th>
                                         <th>PROFITABILITY</th>
                                         <th>RISK</th>
-                                        <th>FINAL DECISION</th>
+                                        <th>DECISION</th>
                                         <th>REASON</th>
                                     </tr>
                                 </thead>
-                                <tbody id="signals-full-body">
-                                    <tr><td colspan="15" class="empty-state">NO SIGNAL EVENTS YET</td></tr>
+                                <tbody id="signals-body">
+                                    <tr><td colspan="14" class="empty-state">No Signals Evaluated Matching Filter</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -686,91 +694,88 @@
             <div id="view-positions" class="view-container">
                 <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 10px;">
                     <div class="metric-card accent-blue">
-                        <div class="metric-icon-wrap bg-blue">💼</div>
                         <div class="metric-content">
                             <span class="metric-label">OPEN POSITIONS</span>
-                            <span class="metric-value" id="pos-count">0</span>
-                            <span class="metric-sub">Active in Portfolio</span>
-                        </div>
-                    </div>
-                    <div class="metric-card accent-cyan">
-                        <div class="metric-icon-wrap bg-cyan">$</div>
-                        <div class="metric-content">
-                            <span class="metric-label">TOTAL EXPOSURE</span>
-                            <span class="metric-value" id="pos-exposure">$0.00</span>
-                            <span class="metric-sub">Capital Deployed</span>
+                            <span class="metric-value" id="pos-open-cnt">--</span>
+                            <span class="metric-sub">Concurrency Max: 5</span>
                         </div>
                     </div>
                     <div class="metric-card accent-amber">
-                        <div class="metric-icon-wrap bg-amber">±</div>
                         <div class="metric-content">
-                            <span class="metric-label">UNREALIZED PNL</span>
-                            <span class="metric-value" id="pos-upnl">$0.00</span>
-                            <span class="metric-sub">Mark-to-Market</span>
+                            <span class="metric-label">TOTAL EXPOSURE</span>
+                            <span class="metric-value" id="pos-exposure">--</span>
+                            <span class="metric-sub">Capital In Market</span>
                         </div>
                     </div>
                     <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">🛡</div>
                         <div class="metric-content">
-                            <span class="metric-label">AVAILABLE RISK</span>
-                            <span class="metric-value val-green" id="pos-avail-risk">0.50%</span>
-                            <span class="metric-sub">Risk Headroom</span>
+                            <span class="metric-label">UNREALIZED PNL</span>
+                            <span class="metric-value" id="pos-unrealized">--</span>
+                            <span class="metric-sub">Mark-to-Market Yield</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-cyan">
+                        <div class="metric-content">
+                            <span class="metric-label">AVAILABLE CASH</span>
+                            <span class="metric-value" id="pos-avail">--</span>
+                            <span class="metric-sub">Free Liquid USDT</span>
                         </div>
                     </div>
                 </div>
-                
-                <div class="panel" style="flex:1;">
-                    <div class="panel-header"><h3 class="panel-title"><span>💼</span> REAL OPEN POSITIONS</h3></div>
+
+                <div class="panel" style="margin-bottom: 12px;">
+                    <div class="panel-header">
+                        <h3 class="panel-title"><span>💼</span> ACTIVE POSITIONS & WORKING EXITS</h3>
+                        <span class="panel-action">Click row to open Position Inspector</span>
+                    </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
-                            <table>
+                            <table class="table-compact">
                                 <thead>
                                     <tr>
                                         <th>SYMBOL</th>
-                                        <th>TIMEFRAME</th>
+                                        <th>TF</th>
                                         <th>STRATEGY</th>
                                         <th>SIDE</th>
-                                        <th>ENTRY</th>
-                                        <th>CURRENT</th>
+                                        <th>ENTRY PRICE</th>
+                                        <th>CURRENT PRICE</th>
                                         <th>QTY</th>
-                                        <th>VALUE</th>
-                                        <th>U.PNL</th>
-                                        <th>SL</th>
-                                        <th>TP</th>
+                                        <th>VALUE ($)</th>
+                                        <th>UNREALIZED PNL</th>
+                                        <th>STOP LOSS</th>
+                                        <th>TAKE PROFIT</th>
                                         <th>DURATION</th>
-                                        <th>STATUS</th>
                                     </tr>
                                 </thead>
-                                <tbody id="pos-full-body">
-                                    <tr><td colspan="13" class="empty-state">NO OPEN POSITIONS</td></tr>
+                                <tbody id="positions-body">
+                                    <tr><td colspan="12" class="empty-state">No active open positions on Binance Testnet</td></tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 </div>
 
-                <div class="panel" style="flex:1; margin-top: 10px;">
+                <div class="panel" style="flex:1;">
                     <div class="panel-header">
-                        <h3 class="panel-title"><span>🛡️</span> LIVE BINANCE OCO WORKING ORDERS</h3>
-                        <span class="panel-action">On-Exchange Stop-Loss & Take-Profit</span>
+                        <h3 class="panel-title"><span>🛡️</span> WORKING EXIT ORDERS (OCO ON BINANCE)</h3>
                     </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
-                            <table>
+                            <table class="table-compact">
                                 <thead>
                                     <tr>
                                         <th>ORDER ID</th>
                                         <th>SYMBOL</th>
-                                        <th>SIDE</th>
                                         <th>TYPE</th>
-                                        <th>LIMIT PRICE</th>
-                                        <th>STOP TRIGGER</th>
-                                        <th>QUANTITY</th>
+                                        <th>SIDE</th>
+                                        <th>PRICE</th>
+                                        <th>STOP PRICE</th>
+                                        <th>QTY</th>
                                         <th>STATUS</th>
                                     </tr>
                                 </thead>
                                 <tbody id="open-orders-body">
-                                    <tr><td colspan="8" class="empty-state">Fetching active orders from Binance...</td></tr>
+                                    <tr><td colspan="8" class="empty-state">No open orders on Binance Testnet</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -782,9 +787,8 @@
             <!-- 5. TRADES -->
             <!-- ========================================== -->
             <div id="view-trades" class="view-container">
-                <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 10px;">
+                <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 8px;">
                     <div class="metric-card accent-blue">
-                        <div class="metric-icon-wrap bg-blue">#</div>
                         <div class="metric-content">
                             <span class="metric-label">TOTAL TRADES</span>
                             <span class="metric-value" id="tr-total">--</span>
@@ -792,7 +796,6 @@
                         </div>
                     </div>
                     <div class="metric-card accent-cyan">
-                        <div class="metric-icon-wrap bg-cyan">%</div>
                         <div class="metric-content">
                             <span class="metric-label">WIN RATE</span>
                             <span class="metric-value val-green" id="tr-rate">--</span>
@@ -800,7 +803,6 @@
                         </div>
                     </div>
                     <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">💵</div>
                         <div class="metric-content">
                             <span class="metric-label">NET PNL</span>
                             <span class="metric-value" id="tr-net">--</span>
@@ -808,7 +810,6 @@
                         </div>
                     </div>
                     <div class="metric-card accent-purple">
-                        <div class="metric-icon-wrap bg-purple">📈</div>
                         <div class="metric-content">
                             <span class="metric-label">REALIZED PNL</span>
                             <span class="metric-value" id="tr-realized">--</span>
@@ -819,7 +820,6 @@
 
                 <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 10px;">
                     <div class="metric-card accent-amber">
-                        <div class="metric-icon-wrap bg-amber">¢</div>
                         <div class="metric-content">
                             <span class="metric-label">FEES</span>
                             <span class="metric-value" id="tr-fees">--</span>
@@ -827,7 +827,6 @@
                         </div>
                     </div>
                     <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">▲</div>
                         <div class="metric-content">
                             <span class="metric-label">AVG WIN</span>
                             <span class="metric-value val-green" id="tr-avg-win">--</span>
@@ -835,7 +834,6 @@
                         </div>
                     </div>
                     <div class="metric-card accent-red">
-                        <div class="metric-icon-wrap bg-red">▼</div>
                         <div class="metric-content">
                             <span class="metric-label">AVG LOSS</span>
                             <span class="metric-value val-red" id="tr-avg-loss">--</span>
@@ -843,7 +841,6 @@
                         </div>
                     </div>
                     <div class="metric-card accent-cyan">
-                        <div class="metric-icon-wrap bg-cyan">×</div>
                         <div class="metric-content">
                             <span class="metric-label">PROFIT FACTOR</span>
                             <span class="metric-value" id="tr-pf">--</span>
@@ -862,7 +859,7 @@
                     </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
-                            <table>
+                            <table class="table-compact">
                                 <thead>
                                     <tr>
                                         <th>TRADE ID</th>
@@ -890,10 +887,10 @@
             </div>
 
             <!-- ========================================== -->
-            <!-- 5.5 ACCOUNT ACTIVITY TIMELINE -->
+            <!-- 6. ACTIVITY -->
             <!-- ========================================== -->
             <div id="view-activity" class="view-container">
-                <div class="filter-toolbar" style="margin-bottom: 12px;">
+                <div class="filter-toolbar" style="margin-bottom: 10px;">
                     <div class="filter-group">
                         <span class="filter-label">ACTIVITY TYPE:</span>
                         <div class="chart-tf-group">
@@ -905,7 +902,7 @@
                         </div>
                     </div>
                     <div class="filter-group" style="margin-left: auto;">
-                        <span class="badge badge-mono">CHRONOLOGICAL MASTER TELEMETRY AUDIT</span>
+                        <span class="badge-mini">CHRONOLOGICAL MASTER TELEMETRY AUDIT</span>
                     </div>
                 </div>
 
@@ -916,7 +913,7 @@
                     </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
-                            <table>
+                            <table class="table-compact">
                                 <thead>
                                     <tr>
                                         <th>TIME</th>
@@ -940,18 +937,18 @@
             </div>
 
             <!-- ========================================== -->
-            <!-- 6. STRATEGIES -->
+            <!-- 7. STRATEGIES -->
             <!-- ========================================== -->
             <div id="view-strategies" class="view-container">
                 <!-- TOP: STRATEGIES TABLE -->
-                <div class="panel" style="margin-bottom: 14px;">
+                <div class="panel" style="margin-bottom: 12px;">
                     <div class="panel-header">
                         <h3 class="panel-title"><span>⚡</span> MULTI-STRATEGY PERFORMANCE ATTRIBUTION</h3>
                         <span class="panel-action">6 Core Strategies • Click Strategy to Inspect</span>
                     </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
-                            <table>
+                            <table class="table-compact">
                                 <thead>
                                     <tr>
                                         <th>STRATEGY</th>
@@ -986,7 +983,7 @@
                     </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
-                            <table class="matrix-table">
+                            <table class="matrix-table table-compact">
                                 <thead>
                                     <tr>
                                         <th>STRATEGY</th>
@@ -1008,13 +1005,12 @@
             </div>
 
             <!-- ========================================== -->
-            <!-- 7. RISK -->
+            <!-- 8. RISK -->
             <!-- ========================================== -->
             <div id="view-risk" class="view-container">
                 <!-- TOP 10 METRICS CARDS -->
-                <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr); margin-bottom: 10px;">
+                <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr); margin-bottom: 8px;">
                     <div class="metric-card accent-blue">
-                        <div class="metric-icon-wrap bg-blue">💰</div>
                         <div class="metric-content">
                             <span class="metric-label">TOTAL EQUITY</span>
                             <span class="metric-value" id="rk-top-equity">--</span>
@@ -1022,7 +1018,6 @@
                         </div>
                     </div>
                     <div class="metric-card accent-cyan">
-                        <div class="metric-icon-wrap bg-cyan">💵</div>
                         <div class="metric-content">
                             <span class="metric-label">LIQUID CASH</span>
                             <span class="metric-value" id="rk-top-cash">--</span>
@@ -1030,7 +1025,6 @@
                         </div>
                     </div>
                     <div class="metric-card accent-purple">
-                        <div class="metric-icon-wrap bg-purple">🪙</div>
                         <div class="metric-content">
                             <span class="metric-label">MANAGED ASSET VALUE</span>
                             <span class="metric-value" id="rk-top-managed">--</span>
@@ -1038,7 +1032,6 @@
                         </div>
                     </div>
                     <div class="metric-card accent-amber">
-                        <div class="metric-icon-wrap bg-amber">⚡</div>
                         <div class="metric-content">
                             <span class="metric-label">EXPOSURE</span>
                             <span class="metric-value" id="rk-top-exposure">--</span>
@@ -1046,7 +1039,6 @@
                         </div>
                     </div>
                     <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">🛡️</div>
                         <div class="metric-content">
                             <span class="metric-label">RISK USED</span>
                             <span class="metric-value" id="rk-top-used">--</span>
@@ -1055,9 +1047,8 @@
                     </div>
                 </div>
 
-                <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr); margin-bottom: 14px;">
+                <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr); margin-bottom: 12px;">
                     <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">🟢</div>
                         <div class="metric-content">
                             <span class="metric-label">AVAILABLE RISK</span>
                             <span class="metric-value val-green" id="rk-top-avail">--</span>
@@ -1065,7 +1056,6 @@
                         </div>
                     </div>
                     <div class="metric-card accent-blue">
-                        <div class="metric-icon-wrap bg-blue">💼</div>
                         <div class="metric-content">
                             <span class="metric-label">OPEN POSITIONS</span>
                             <span class="metric-value" id="rk-top-open-pos">--</span>
@@ -1073,7 +1063,6 @@
                         </div>
                     </div>
                     <div class="metric-card accent-cyan">
-                        <div class="metric-icon-wrap bg-cyan">🔢</div>
                         <div class="metric-content">
                             <span class="metric-label">MAX POSITIONS</span>
                             <span class="metric-value" id="rk-top-max-pos">5</span>
@@ -1081,7 +1070,6 @@
                         </div>
                     </div>
                     <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">📈</div>
                         <div class="metric-content">
                             <span class="metric-label">DAILY PNL</span>
                             <span class="metric-value" id="rk-top-daily-pnl">--</span>
@@ -1089,7 +1077,6 @@
                         </div>
                     </div>
                     <div class="metric-card accent-red">
-                        <div class="metric-icon-wrap bg-red">⚠️</div>
                         <div class="metric-content">
                             <span class="metric-label">MAX DRAWDOWN</span>
                             <span class="metric-value val-red" id="rk-top-mdd">--</span>
@@ -1106,7 +1093,7 @@
                     </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
-                            <table>
+                            <table class="table-compact">
                                 <thead>
                                     <tr>
                                         <th>TIME</th>
@@ -1130,11 +1117,11 @@
             </div>
 
             <!-- ========================================== -->
-            <!-- 8. ANALYTICS -->
+            <!-- 9. ANALYTICS -->
             <!-- ========================================== -->
             <div id="view-analytics" class="view-container">
                 <!-- TIME CONTROLS BAR -->
-                <div class="filter-toolbar" style="margin-bottom: 12px;">
+                <div class="filter-toolbar" style="margin-bottom: 10px;">
                     <div class="filter-group">
                         <span class="filter-label">TIME HORIZON:</span>
                         <div class="chart-tf-group">
@@ -1145,49 +1132,43 @@
                         </div>
                     </div>
                     <div class="filter-group" style="margin-left: auto;">
-                        <span class="badge badge-mono">SPOT TESTNET TELEMETRY • NO SYNTHETIC / FAKE DATA</span>
+                        <span class="badge-mini">SPOT TESTNET TELEMETRY • NO SYNTHETIC / FAKE DATA</span>
                     </div>
                 </div>
 
                 <!-- 11 SUMMARY METRIC CARDS -->
-                <div class="metrics-row" style="grid-template-columns: repeat(6, 1fr); margin-bottom: 10px;">
+                <div class="metrics-row" style="grid-template-columns: repeat(6, 1fr); margin-bottom: 8px;">
                     <div class="metric-card accent-blue">
-                        <div class="metric-icon-wrap bg-blue">#</div>
                         <div class="metric-content">
                             <span class="metric-label">TOTAL TRADES</span>
                             <span class="metric-value" id="an-total">--</span>
                         </div>
                     </div>
                     <div class="metric-card accent-cyan">
-                        <div class="metric-icon-wrap bg-cyan">%</div>
                         <div class="metric-content">
                             <span class="metric-label">WIN RATE</span>
                             <span class="metric-value" id="an-winrate">INSUFFICIENT DATA</span>
                         </div>
                     </div>
                     <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">💵</div>
                         <div class="metric-content">
                             <span class="metric-label">NET PNL</span>
                             <span class="metric-value" id="an-net-pnl">--</span>
                         </div>
                     </div>
                     <div class="metric-card accent-purple">
-                        <div class="metric-icon-wrap bg-purple">📈</div>
                         <div class="metric-content">
                             <span class="metric-label">REALIZED PNL</span>
                             <span class="metric-value" id="an-realized-pnl">--</span>
                         </div>
                     </div>
                     <div class="metric-card accent-cyan">
-                        <div class="metric-icon-wrap bg-cyan">📊</div>
                         <div class="metric-content">
                             <span class="metric-label">UNREALIZED PNL</span>
                             <span class="metric-value" id="an-unrealized-pnl">--</span>
                         </div>
                     </div>
                     <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">×</div>
                         <div class="metric-content">
                             <span class="metric-label">PROFIT FACTOR</span>
                             <span class="metric-value" id="an-pf">INSUFFICIENT DATA</span>
@@ -1195,37 +1176,32 @@
                     </div>
                 </div>
 
-                <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr); margin-bottom: 14px;">
+                <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr); margin-bottom: 12px;">
                     <div class="metric-card accent-blue">
-                        <div class="metric-icon-wrap bg-blue">⚖️</div>
                         <div class="metric-content">
                             <span class="metric-label">AVERAGE TRADE</span>
                             <span class="metric-value" id="an-avg-trade">INSUFFICIENT DATA</span>
                         </div>
                     </div>
                     <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">▲</div>
                         <div class="metric-content">
                             <span class="metric-label">LARGEST WIN</span>
                             <span class="metric-value val-green" id="an-largest-win">INSUFFICIENT DATA</span>
                         </div>
                     </div>
                     <div class="metric-card accent-red">
-                        <div class="metric-icon-wrap bg-red">▼</div>
                         <div class="metric-content">
                             <span class="metric-label">LARGEST LOSS</span>
                             <span class="metric-value val-red" id="an-largest-loss">INSUFFICIENT DATA</span>
                         </div>
                     </div>
                     <div class="metric-card accent-amber">
-                        <div class="metric-icon-wrap bg-amber">¢</div>
                         <div class="metric-content">
                             <span class="metric-label">FEES</span>
                             <span class="metric-value" id="an-fees">--</span>
                         </div>
                     </div>
                     <div class="metric-card accent-red">
-                        <div class="metric-icon-wrap bg-red">⚠️</div>
                         <div class="metric-content">
                             <span class="metric-label">MAX DRAWDOWN</span>
                             <span class="metric-value val-red" id="an-mdd">--</span>
@@ -1233,160 +1209,110 @@
                     </div>
                 </div>
 
-                <!-- DIAGNOSTIC PANEL: WHY DIDN'T IT TRADE? -->
-                <div class="panel" style="margin-bottom: 14px; border: 1px solid rgba(245, 158, 11, 0.4);">
-                    <div class="panel-header" style="background-color: rgba(245, 158, 11, 0.08);">
-                        <h3 class="panel-title"><span class="val-amber">🔍</span> WHY DIDN'T IT TRADE? • PIPELINE CONVERSION DIAGNOSTICS</h3>
-                        <span class="badge badge-mono">Live Multi-Stage Audit</span>
+                <!-- WHY DIDN'T IT TRADE FUNNEL AUDIT -->
+                <div class="panel" style="flex:1;">
+                    <div class="panel-header">
+                        <h3 class="panel-title"><span>🔍</span> WHY DIDN'T IT TRADE? (EXECUTION FUNNEL AUDIT)</h3>
+                        <span class="panel-action">Signal Gate Conversion Flow</span>
                     </div>
-                    <div class="panel-content">
-                        <!-- Dominant Reason Box -->
-                        <div class="decision-banner" id="diag-summary-box" style="margin-bottom: 12px; border-left: 4px solid var(--color-amber);">
-                            <div class="decision-banner-title" id="diag-dominant-title">⚡ FUNNEL ANALYSIS</div>
-                            <div class="decision-banner-body" id="diag-dominant-reason">Awaiting pipeline audit evaluation...</div>
-                        </div>
-
-                        <!-- Funnel Stats Grid -->
-                        <div class="inspector-grid-2" style="gap: 8px;">
-                            <div class="inspector-row"><span class="inspector-lbl">Candles Ingested:</span><span class="inspector-val td-strong" id="diag-candles">0</span></div>
-                            <div class="inspector-row"><span class="inspector-lbl">Strategy Evaluations:</span><span class="inspector-val td-strong" id="diag-evals">0</span></div>
-                            <div class="inspector-row"><span class="inspector-lbl">Raw Signals Generated:</span><span class="inspector-val td-strong" id="diag-signals">0</span></div>
-                            <div class="inspector-row"><span class="inspector-lbl">Profitability Accepted:</span><span class="inspector-val val-green td-strong" id="diag-prof-acc">0</span></div>
-                            <div class="inspector-row"><span class="inspector-lbl">Profitability Rejected:</span><span class="inspector-val val-red td-strong" id="diag-prof-rej">0</span></div>
-                            <div class="inspector-row"><span class="inspector-lbl">Risk Accepted:</span><span class="inspector-val val-green td-strong" id="diag-risk-acc">0</span></div>
-                            <div class="inspector-row"><span class="inspector-lbl">Risk Rejected:</span><span class="inspector-val val-red td-strong" id="diag-risk-rej">0</span></div>
-                            <div class="inspector-row"><span class="inspector-lbl">Execution Eligible:</span><span class="inspector-val val-cyan td-strong" id="diag-exec-elig">0</span></div>
-                            <div class="inspector-row"><span class="inspector-lbl">Orders Submitted:</span><span class="inspector-val td-strong" id="diag-orders-sub">0</span></div>
-                            <div class="inspector-row"><span class="inspector-lbl">Orders Filled:</span><span class="inspector-val val-green td-strong" id="diag-orders-fill">0</span></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- CHARTS ROW: DAILY PNL & TRADE DISTRIBUTION -->
-                <div class="grid-12" style="margin-bottom: 14px;">
-                    <div class="panel col-6">
-                        <div class="panel-header"><h3 class="panel-title"><span>📊</span> DAILY PNL</h3></div>
-                        <div class="panel-content">
-                            <div class="chart-container" style="height: 240px;"><canvas id="pnlHistChart"></canvas></div>
-                        </div>
-                    </div>
-                    <div class="panel col-6">
-                        <div class="panel-header"><h3 class="panel-title"><span>📈</span> TRADE PNL DISTRIBUTION</h3></div>
-                        <div class="panel-content">
-                            <div class="chart-container" style="height: 240px;"><canvas id="pnlDistChart"></canvas></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- COMPARISONS ROW: STRATEGY, TIMEFRAME, SYMBOL -->
-                <div class="grid-12">
-                    <div class="panel col-4">
-                        <div class="panel-header"><h3 class="panel-title"><span>⚡</span> STRATEGY COMPARISON</h3></div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container" style="max-height: 220px; overflow-y: auto;">
-                                <table>
-                                    <thead><tr><th>STRATEGY</th><th>TRADES</th><th>WIN RATE</th><th>PNL</th></tr></thead>
-                                    <tbody id="an-strat-body"><tr><td colspan="4" class="empty-state">No Data</td></tr></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="panel col-4">
-                        <div class="panel-header"><h3 class="panel-title"><span>⏰</span> TIMEFRAME COMPARISON</h3></div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container" style="max-height: 220px; overflow-y: auto;">
-                                <table>
-                                    <thead><tr><th>TF</th><th>TRADES</th><th>WIN RATE</th><th>PNL</th></tr></thead>
-                                    <tbody id="an-tf-body"><tr><td colspan="4" class="empty-state">No Data</td></tr></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="panel col-4">
-                        <div class="panel-header"><h3 class="panel-title"><span>🪙</span> SYMBOL COMPARISON</h3></div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container" style="max-height: 220px; overflow-y: auto;">
-                                <table>
-                                    <thead><tr><th>SYMBOL</th><th>TRADES</th><th>WIN RATE</th><th>PNL</th></tr></thead>
-                                    <tbody id="an-sym-body"><tr><td colspan="4" class="empty-state">No Data</td></tr></tbody>
-                                </table>
-                            </div>
+                    <div class="panel-content no-pad">
+                        <div class="table-container">
+                            <table class="table-compact">
+                                <thead>
+                                    <tr>
+                                        <th>STAGE</th>
+                                        <th>COUNT</th>
+                                        <th>STATUS / DESCRIPTION</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td>1. Market Candle Evaluations</td><td class="td-strong" id="an-evals">--</td><td>Raw multi-timeframe candles scanned</td></tr>
+                                    <tr><td>2. Strategy Signals Triggered</td><td class="td-strong" id="an-signals">--</td><td>Initial directional setup triggered</td></tr>
+                                    <tr><td>3. Profitability Gate Accepted</td><td class="td-strong val-green" id="an-prof-acc">--</td><td>Expected Net > Spread + 0.1% Friction</td></tr>
+                                    <tr><td>4. Profitability Gate Rejected</td><td class="td-strong val-red" id="an-prof-rej">--</td><td>Insufficient alpha edge over costs</td></tr>
+                                    <tr><td>5. Risk Gate Accepted</td><td class="td-strong val-green" id="an-risk-acc">--</td><td>Portfolio exposure & drawdown within bounds</td></tr>
+                                    <tr><td>6. Risk Gate Rejected</td><td class="td-strong val-red" id="an-risk-rej">--</td><td>Exceeded max positions / risk limit</td></tr>
+                                    <tr><td>7. Execution Eligible</td><td class="td-strong" id="an-exec-elig">--</td><td>Passed all validation gates</td></tr>
+                                    <tr><td>8. Orders Submitted</td><td class="td-strong" id="an-ord-sub">--</td><td>Sent to Binance Testnet REST API</td></tr>
+                                    <tr><td>9. Orders Failed</td><td class="td-strong val-red" id="an-ord-fail">--</td><td>API reject / filter failure</td></tr>
+                                    <tr><td>10. Orders Filled & Working OCO</td><td class="td-strong val-green" id="an-ord-fill">--</td><td>Full execution into active trade</td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- ========================================== -->
-            <!-- 9. SETTINGS -->
+            <!-- 10. SETTINGS -->
             <!-- ========================================== -->
             <div id="view-settings" class="view-container">
-                <div class="panel">
-                    <div class="panel-header"><h3 class="panel-title"><span>⚙️</span> QUANT CORE & RISK CONFIGURATION</h3></div>
-                    <div class="panel-content">
-                        <div class="json-viewer" id="settings-viewer">
-{
-  "ENVIRONMENT": "BINANCE_TESTNET",
-  "TRADING_MODE": "SPOT",
-  "RISK_PARAMS": {
-    "MAX_RISK_PER_TRADE": "0.50%",
-    "MAX_PORTFOLIO_EXPOSURE": "5.00%",
-    "MAX_SINGLE_ASSET_EXPOSURE": "2.00%",
-    "MAX_OPEN_POSITIONS": 5,
-    "MAX_DAILY_LOSS_LIMIT": "2.00%",
-    "MAX_PORTFOLIO_DRAWDOWN": "5.00%",
-    "MIN_EXPECTED_EDGE": "0.01%"
-  },
-  "OCO_PROTECTION": {
-    "STOP_LOSS": "ATR Multiplier / Dynamic Swing",
-    "TAKE_PROFIT": "Risk:Reward 1:2.0+",
-    "FAILSAFE_EXECUTION": "Immediate Market Exit on OCO Rejection"
-  },
-  "ACTIVE_STRATEGIES": [
-    "ADX_EMA_MOMENTUM",
-    "AGGRESSOR_ORDERFLOW",
-    "SUPERTREND_VOLATILITY",
-    "SCALPER_MICRO",
-    "SWING_STRUCTURE",
-    "FAST_MOMENTUM_1M"
-  ]
-}
+                <div class="grid-12">
+                    <div class="panel col-6">
+                        <div class="panel-header">
+                            <h3 class="panel-title"><span>⚙️</span> BOT ENGINE CONFIGURATION</h3>
+                        </div>
+                        <div class="panel-content no-pad">
+                            <table class="table-compact">
+                                <tbody id="set-strat-body">
+                                    <tr><td>Trading Mode</td><td class="td-strong" id="set-mode">TESTNET</td></tr>
+                                    <tr><td>Active Strategies</td><td class="td-strong">aggressor, scalper, supertrend, ml, swing, adx_ema</td></tr>
+                                    <tr><td>Active Timeframes</td><td class="td-strong">5m, 15m, 30m, 1h, 2h, 4h</td></tr>
+                                    <tr><td>Max Open Positions</td><td class="td-strong">5 Concurrency</td></tr>
+                                    <tr><td>Max Risk Per Trade</td><td class="td-strong">0.50% Equity</td></tr>
+                                    <tr><td>Max Portfolio Risk</td><td class="td-strong">20.00% Exposure</td></tr>
+                                    <tr><td>Max Drawdown Circuit Breaker</td><td class="td-strong">5.00% Peak Drop</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="panel col-6">
+                        <div class="panel-header">
+                            <h3 class="panel-title"><span>🛡️</span> SYSTEM HEALTH & DEPLOYMENT</h3>
+                        </div>
+                        <div class="panel-content no-pad">
+                            <table class="table-compact">
+                                <tbody id="sys-health-body">
+                                    <tr><td>Binance REST Endpoint</td><td><span class="tag tag-qualified">ONLINE</span></td><td>testnet.binance.vision</td></tr>
+                                    <tr><td>Binance WebSocket Stream</td><td><span class="tag tag-qualified">ONLINE</span></td><td>wss://testnet.binance.vision/ws</td></tr>
+                                    <tr><td>Market Data Engine</td><td><span class="tag tag-qualified">ONLINE</span></td><td>13 pairs active</td></tr>
+                                    <tr><td>Strategy Matrix Engine</td><td><span class="tag tag-qualified">ONLINE</span></td><td>6 multi-TF strategies</td></tr>
+                                    <tr><td>Execution Gateway</td><td><span class="tag tag-qualified">ONLINE</span></td><td>SPOT OCO automated</td></tr>
+                                    <tr><td>Render Host / Region</td><td><span class="tag tag-qualified">ONLINE</span></td><td>Frankfurt (eu-central)</td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- ─── BOTTOM MARKET TICKER BAR ─── -->
-            <div class="bottom-ticker">
-                <div class="ticker-label">MARKET TICKER &bull;</div>
-                <div class="ticker-track">
-                    <div class="ticker-content" id="bottom-ticker-content">
-                        <div class="ticker-item"><span class="ticker-sym">BTCUSDT</span> <span class="ticker-val">$96,420.50</span> <span class="badge badge-green">+2.45%</span></div>
-                        <div class="ticker-item"><span class="ticker-sym">ETHUSDT</span> <span class="ticker-val">$2,680.10</span> <span class="badge badge-green">+1.82%</span></div>
-                        <div class="ticker-item"><span class="ticker-sym">SOLUSDT</span> <span class="ticker-val">$184.20</span> <span class="badge badge-green">+4.15%</span></div>
-                        <div class="ticker-item"><span class="ticker-sym">BNBUSDT</span> <span class="ticker-val">$645.80</span> <span class="badge badge-red">-0.35%</span></div>
-                        <div class="ticker-item"><span class="ticker-sym">LINKUSDT</span> <span class="ticker-val">$18.92</span> <span class="badge badge-green">+3.20%</span></div>
-                        <div class="ticker-item"><span class="ticker-sym">AVAXUSDT</span> <span class="ticker-val">$32.40</span> <span class="badge badge-red">-1.10%</span></div>
-                    </div>
+            <!-- ─── 3. BOTTOM STATUS STRIP ─── -->
+            <footer class="bottom-status-strip">
+                <div class="strip-left">
+                    <span class="strip-item"><span class="dot dot-green" id="btm-bn"></span> Binance</span>
+                    <span class="strip-sep">|</span>
+                    <span class="strip-item"><span class="dot dot-green" id="btm-ws"></span> WebSocket</span>
+                    <span class="strip-sep">|</span>
+                    <span class="strip-item"><span class="dot dot-green" id="btm-md"></span> Market</span>
+                    <span class="strip-sep">|</span>
+                    <span class="strip-item"><span class="dot dot-green" id="btm-ex"></span> Execution</span>
+                    <span class="strip-sep">|</span>
+                    <span class="strip-item"><span class="dot dot-green" id="btm-st"></span> Strategy</span>
+                    <span class="strip-sep">|</span>
+                    <span class="strip-item"><span class="dot dot-green" id="btm-pt"></span> Portfolio</span>
+                    <span class="strip-sep">|</span>
+                    <span class="strip-item"><span class="dot dot-green" id="btm-rs"></span> Risk</span>
                 </div>
-            </div>
+                <div class="strip-right">
+                    <span class="strip-meta">Last Market: <strong id="btm-last-mkt">--:--:--</strong></span>
+                    <span class="strip-sep">•</span>
+                    <span class="strip-meta">Last Evaluation: <strong id="btm-last-strat">--:--:--</strong></span>
+                </div>
+            </footer>
 
         </main>
     </div>
-
-    <!-- ─── INSPECTOR DRAWER ─── -->
-    <div id="drawer-backdrop" class="drawer-backdrop" onclick="closeInspectorDrawer()"></div>
-    <div id="inspector-drawer" class="inspector-drawer">
-        <div class="drawer-header">
-            <h3 id="drawer-title" class="drawer-title">INSPECTOR • QUANT TELEMETRY</h3>
-            <button class="drawer-close" onclick="closeInspectorDrawer()">✕</button>
-        </div>
-        <div id="drawer-body" class="drawer-body">
-            <!-- Dynamic Telemetry Injected Here -->
-        </div>
-    </div>
-
-    <!-- ─── REAL-TIME TRADE TOAST CONTAINER ─── -->
-    <div id="trade-toast-container" class="trade-toast-container"></div>
 
     <script src="/static/app.js"></script>
 </body>

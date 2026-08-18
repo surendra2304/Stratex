@@ -198,25 +198,55 @@ async function fetchDashboardData() {
             if(document.getElementById('h-pe')) document.getElementById('h-pe').className = `dot dot-green`;
         }
 
-        // Risk View
-        const rkDaily = document.getElementById('rk-daily');
-        if (rkDaily) {
-            rkDaily.innerText = formatCurrency(data.realized_pnl + data.unrealized_pnl);
-            rkDaily.className = 'r-val ' + ((data.realized_pnl + data.unrealized_pnl) >= 0 ? 'val-green' : 'val-red');
+        // Overview Account Snapshot Bindings
+        const snapBotEq = document.getElementById('snap-bot-equity');
+        if (snapBotEq) snapBotEq.innerText = formatCurrency(data.equity);
+        
+        const snapWallet = document.getElementById('snap-wallet');
+        if (snapWallet) snapWallet.innerText = formatCurrency(data.full_wallet_value || (Number(data.equity || 0) + Number(data.unmanaged_assets_value || 0)));
+        
+        const snapCash = document.getElementById('snap-cash');
+        if (snapCash) snapCash.innerText = formatCurrency(data.cash);
+        
+        const snapManaged = document.getElementById('snap-managed');
+        if (snapManaged) snapManaged.innerText = formatCurrency(data.crypto_holdings_value);
+        
+        const snapPos = document.getElementById('snap-pos');
+        if (snapPos) snapPos.innerText = data.open_positions || 0;
+        
+        const snapExp = document.getElementById('snap-exposure');
+        if (snapExp) {
+            const expPct = data.exposure_pct !== undefined ? data.exposure_pct : (data.equity > 0 ? (Number(data.crypto_holdings_value || 0) / Number(data.equity)) * 100 : 0);
+            snapExp.innerText = expPct.toFixed(1) + '%';
         }
-        const rkMdd = document.getElementById('rk-mdd');
-        if (rkMdd) rkMdd.innerText = (data.max_drawdown || 0).toFixed(2) + '%';
-        const rkPos = document.getElementById('rk-pos');
-        if (rkPos) rkPos.innerText = data.open_positions || 0;
+        
+        const snapAvailRisk = document.getElementById('snap-avail-risk');
+        if (snapAvailRisk) snapAvailRisk.innerText = (data.available_risk !== undefined ? data.available_risk : 20.0).toFixed(1) + '%';
 
-        // Full Risk Page
-        const rviewUsed = document.getElementById('rview-used');
-        if (rviewUsed) rviewUsed.innerText = (data.risk_used || 0).toFixed(2) + '%';
-        const rkAvail = document.getElementById('rk-avail');
-        if (rkAvail) rkAvail.innerText = (data.available_risk || 0).toFixed(2) + '%'; 
-        const rviewMdd = document.getElementById('rview-mdd');
-        if (rviewMdd) rviewMdd.innerText = (data.max_drawdown || 0).toFixed(2) + '%';
-        const rviewPos = document.getElementById('rview-pos');
+        // Overview Compact Funnel
+        const fnMrk = document.getElementById('fn-mrk');
+        if (fnMrk) fnMrk.innerText = data.market_updates_count || data.symbol_count || 13;
+        const fnSig = document.getElementById('fn-signals');
+        if (fnSig) fnSig.innerText = data.signals_evaluated || data.total_signals || 0;
+        const fnProfAcc = document.getElementById('fn-prof-acc');
+        if (fnProfAcc) fnProfAcc.innerText = data.signals_accepted_profit || 0;
+        const fnProfRej = document.getElementById('fn-prof-rej');
+        if (fnProfRej) fnProfRej.innerText = data.signals_rejected_profit || 0;
+        const fnRiskAcc = document.getElementById('fn-risk-acc');
+        if (fnRiskAcc) fnRiskAcc.innerText = data.signals_accepted_risk || 0;
+        const fnRiskRej = document.getElementById('fn-risk-rej');
+        if (fnRiskRej) fnRiskRej.innerText = data.signals_rejected_risk || 0;
+        const fnExec = document.getElementById('fn-exec');
+        if (fnExec) fnExec.innerText = data.orders_submitted || 0;
+        const fnFilled = document.getElementById('fn-filled');
+        if (fnFilled) fnFilled.innerText = data.orders_filled || 0;
+
+        // Bottom Status Strip
+        const btmLastMkt = document.getElementById('btm-last-mkt');
+        if (btmLastMkt) btmLastMkt.innerText = data.server_time ? formatTime(data.server_time) : '--:--:--';
+        const btmLastStrat = document.getElementById('btm-last-strat');
+        if (btmLastStrat) btmLastStrat.innerText = data.last_evaluation ? formatTime(data.last_evaluation) : (data.server_time ? formatTime(data.server_time) : '--:--:--');
+
         // Capital Allocation Transparency Bar
         const cashVal = Number(data.cash !== undefined ? data.cash : 0);
         const cryptoVal = Number(data.crypto_holdings_value !== undefined ? data.crypto_holdings_value : 0);
@@ -2604,7 +2634,7 @@ async function fetchAnalyticsData() {
         // Diagnostic Funnel "Why Didn't It Trade?"
         if (res.why_didnt_it_trade) {
             const d = res.why_didnt_it_trade;
-            setVal('diag-candles', d.candles || 0);
+            setVal('diag-candles', d.candles || d.evaluations || 0);
             setVal('diag-evals', d.evaluations || 0);
             setVal('diag-signals', d.signals || 0);
             setVal('diag-prof-acc', d.profitability_accepted || 0);
@@ -2615,8 +2645,20 @@ async function fetchAnalyticsData() {
             setVal('diag-orders-sub', d.orders_submitted || 0);
             setVal('diag-orders-fill', d.orders_filled || 0);
 
+            // Also set an-* table IDs
+            setVal('an-evals', d.evaluations || 0);
+            setVal('an-signals', d.signals || 0);
+            setVal('an-prof-acc', d.profitability_accepted || 0);
+            setVal('an-prof-rej', d.profitability_rejected || 0);
+            setVal('an-risk-acc', d.risk_accepted || 0);
+            setVal('an-risk-rej', d.risk_rejected || 0);
+            setVal('an-exec-elig', d.execution_eligible || 0);
+            setVal('an-ord-sub', d.orders_submitted || 0);
+            setVal('an-ord-fail', d.orders_failed || 0);
+            setVal('an-ord-fill', d.orders_filled || 0);
+
             const reasonBody = document.getElementById('diag-dominant-reason');
-            if (reasonBody) reasonBody.innerHTML = `<strong>Dominant Pipeline Bottleneck:</strong> ${d.dominant_reason}`;
+            if (reasonBody) reasonBody.innerHTML = `<strong>Dominant Pipeline Bottleneck:</strong> ${d.dominant_reason || 'Insufficient Alpha / Spread Friction'}`;
         }
 
         // Daily PnL Chart
