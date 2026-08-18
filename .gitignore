@@ -93,8 +93,11 @@ experiments/
 backtest_results/
 
 # ── Simulation files ───────────────────────────────────────────────────────────
-sim_*.json
-sim_*.json.tmp
+# ── Legacy generated docs ───────────────────────────────────────────────────────
+FINAL_24_7_TESTNET_VERIFICATION.md
+FINAL_TRADING_SYSTEM_AUDIT.md
+FINAL_VERIFICATION_COMPLETE.md
+PRODUCTION_STRATEGIES.md
 
 # ── Heartbeat variants ─────────────────────────────────────────────────────────
 *heartbeat.json
