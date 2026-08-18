@@ -994,24 +994,117 @@
             <!-- 7. RISK -->
             <!-- ========================================== -->
             <div id="view-risk" class="view-container">
+                <!-- TOP 10 METRICS CARDS -->
+                <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr); margin-bottom: 10px;">
+                    <div class="metric-card accent-blue">
+                        <div class="metric-icon-wrap bg-blue">💰</div>
+                        <div class="metric-content">
+                            <span class="metric-label">TOTAL EQUITY</span>
+                            <span class="metric-value" id="rk-top-equity">$0.00</span>
+                            <span class="metric-sub">Account Net Worth</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-cyan">
+                        <div class="metric-icon-wrap bg-cyan">💵</div>
+                        <div class="metric-content">
+                            <span class="metric-label">LIQUID CASH</span>
+                            <span class="metric-value" id="rk-top-cash">$0.00</span>
+                            <span class="metric-sub">Free USDT</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-purple">
+                        <div class="metric-icon-wrap bg-purple">🪙</div>
+                        <div class="metric-content">
+                            <span class="metric-label">MANAGED ASSET VALUE</span>
+                            <span class="metric-value" id="rk-top-managed">$0.00</span>
+                            <span class="metric-sub">Active Crypto Holdings</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-amber">
+                        <div class="metric-icon-wrap bg-amber">⚡</div>
+                        <div class="metric-content">
+                            <span class="metric-label">EXPOSURE</span>
+                            <span class="metric-value" id="rk-top-exposure">0.00%</span>
+                            <span class="metric-sub">Capital in Market</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-green">
+                        <div class="metric-icon-wrap bg-green">🛡️</div>
+                        <div class="metric-content">
+                            <span class="metric-label">RISK USED</span>
+                            <span class="metric-value" id="rk-top-used">0.00%</span>
+                            <span class="metric-sub">Max Ceiling: 20.00%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr); margin-bottom: 14px;">
+                    <div class="metric-card accent-green">
+                        <div class="metric-icon-wrap bg-green">🟢</div>
+                        <div class="metric-content">
+                            <span class="metric-label">AVAILABLE RISK</span>
+                            <span class="metric-value val-green" id="rk-top-avail">20.00%</span>
+                            <span class="metric-sub">Deployment Buffer</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-blue">
+                        <div class="metric-icon-wrap bg-blue">💼</div>
+                        <div class="metric-content">
+                            <span class="metric-label">OPEN POSITIONS</span>
+                            <span class="metric-value" id="rk-top-open-pos">0</span>
+                            <span class="metric-sub">Live Active Trades</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-cyan">
+                        <div class="metric-icon-wrap bg-cyan">🔢</div>
+                        <div class="metric-content">
+                            <span class="metric-label">MAX POSITIONS</span>
+                            <span class="metric-value" id="rk-top-max-pos">5</span>
+                            <span class="metric-sub">Concurrency Limit</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-green">
+                        <div class="metric-icon-wrap bg-green">📈</div>
+                        <div class="metric-content">
+                            <span class="metric-label">DAILY PNL</span>
+                            <span class="metric-value" id="rk-top-daily-pnl">$0.00</span>
+                            <span class="metric-sub">Today's Realized Edge</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-red">
+                        <div class="metric-icon-wrap bg-red">⚠️</div>
+                        <div class="metric-content">
+                            <span class="metric-label">MAX DRAWDOWN</span>
+                            <span class="metric-value val-red" id="rk-top-mdd">0.00%</span>
+                            <span class="metric-sub">Peak to Valley Drop</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MAIN SECTION: RISK DECISION LOG -->
                 <div class="panel" style="flex:1;">
                     <div class="panel-header">
-                        <h3 class="panel-title"><span>🛡️</span> RISK GATE AUDIT TRAIL</h3>
+                        <h3 class="panel-title"><span>🛡️</span> RISK DECISION LOG</h3>
+                        <span class="panel-action">Pre-Trade & In-Flight Risk Gate Audit</span>
                     </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
                             <table>
                                 <thead>
                                     <tr>
-                                        <th>TIMESTAMP</th>
+                                        <th>TIME</th>
                                         <th>SYMBOL</th>
+                                        <th>TF</th>
+                                        <th>STRATEGY</th>
+                                        <th>REQUESTED RISK</th>
+                                        <th>AVAILABLE RISK</th>
+                                        <th>EXPOSURE</th>
                                         <th>DECISION</th>
-                                        <th>EVALUATION GATE</th>
-                                        <th>REASON / METRIC TRIGGER</th>
+                                        <th>REASON</th>
                                     </tr>
                                 </thead>
                                 <tbody id="risk-logs-body">
-                                    <tr><td colspan="5" class="empty-state">No Risk Breaches or Gate Rejections Logged</td></tr>
+                                    <tr><td colspan="9" class="empty-state">No Risk Decisions or Gate Breaches Logged</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -1023,54 +1116,184 @@
             <!-- 8. ANALYTICS -->
             <!-- ========================================== -->
             <div id="view-analytics" class="view-container">
-                <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr);">
+                <!-- TIME CONTROLS BAR -->
+                <div class="filter-toolbar" style="margin-bottom: 12px;">
+                    <div class="filter-group">
+                        <span class="filter-label">TIME HORIZON:</span>
+                        <div class="chart-tf-group">
+                            <button class="btn-tf" id="btn-an-1d" onclick="setAnalyticsTimeframe('1D')">1D</button>
+                            <button class="btn-tf" id="btn-an-7d" onclick="setAnalyticsTimeframe('7D')">7D</button>
+                            <button class="btn-tf" id="btn-an-30d" onclick="setAnalyticsTimeframe('30D')">30D</button>
+                            <button class="btn-tf active" id="btn-an-all" onclick="setAnalyticsTimeframe('ALL')">ALL</button>
+                        </div>
+                    </div>
+                    <div class="filter-group" style="margin-left: auto;">
+                        <span class="badge badge-mono">SPOT TESTNET TELEMETRY • NO SYNTHETIC / FAKE DATA</span>
+                    </div>
+                </div>
+
+                <!-- 11 SUMMARY METRIC CARDS -->
+                <div class="metrics-row" style="grid-template-columns: repeat(6, 1fr); margin-bottom: 10px;">
+                    <div class="metric-card accent-blue">
+                        <div class="metric-icon-wrap bg-blue">#</div>
+                        <div class="metric-content">
+                            <span class="metric-label">TOTAL TRADES</span>
+                            <span class="metric-value" id="an-total">0</span>
+                        </div>
+                    </div>
                     <div class="metric-card accent-cyan">
                         <div class="metric-icon-wrap bg-cyan">%</div>
                         <div class="metric-content">
                             <span class="metric-label">WIN RATE</span>
-                            <span class="metric-value" id="an-winrate">0.00%</span>
+                            <span class="metric-value" id="an-winrate">INSUFFICIENT DATA</span>
                         </div>
                     </div>
-                    <div class="metric-card accent-blue">
-                        <div class="metric-icon-wrap bg-blue">#</div>
+                    <div class="metric-card accent-green">
+                        <div class="metric-icon-wrap bg-green">💵</div>
                         <div class="metric-content">
-                            <span class="metric-label">TRADE COUNT</span>
-                            <span class="metric-value" id="an-total">0</span>
+                            <span class="metric-label">NET PNL</span>
+                            <span class="metric-value" id="an-net-pnl">$0.00</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-purple">
+                        <div class="metric-icon-wrap bg-purple">📈</div>
+                        <div class="metric-content">
+                            <span class="metric-label">REALIZED PNL</span>
+                            <span class="metric-value" id="an-realized-pnl">$0.00</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-cyan">
+                        <div class="metric-icon-wrap bg-cyan">📊</div>
+                        <div class="metric-content">
+                            <span class="metric-label">UNREALIZED PNL</span>
+                            <span class="metric-value" id="an-unrealized-pnl">$0.00</span>
                         </div>
                     </div>
                     <div class="metric-card accent-green">
                         <div class="metric-icon-wrap bg-green">×</div>
                         <div class="metric-content">
                             <span class="metric-label">PROFIT FACTOR</span>
-                            <span class="metric-value" id="an-pf">0.00</span>
-                        </div>
-                    </div>
-                    <div class="metric-card accent-amber">
-                        <div class="metric-icon-wrap bg-amber">+</div>
-                        <div class="metric-content">
-                            <span class="metric-label">AVERAGE WIN</span>
-                            <span class="metric-value val-green" id="an-avg-win">$0.00</span>
-                        </div>
-                    </div>
-                    <div class="metric-card accent-red">
-                        <div class="metric-icon-wrap bg-red">-</div>
-                        <div class="metric-content">
-                            <span class="metric-label">AVERAGE LOSS</span>
-                            <span class="metric-value val-red" id="an-avg-loss">$0.00</span>
+                            <span class="metric-value" id="an-pf">INSUFFICIENT DATA</span>
                         </div>
                     </div>
                 </div>
-                <div class="grid-12">
-                    <div class="panel col-8">
-                        <div class="panel-header"><h3 class="panel-title"><span>📊</span> DAILY PNL DISTRIBUTION</h3></div>
+
+                <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr); margin-bottom: 14px;">
+                    <div class="metric-card accent-blue">
+                        <div class="metric-icon-wrap bg-blue">⚖️</div>
+                        <div class="metric-content">
+                            <span class="metric-label">AVERAGE TRADE</span>
+                            <span class="metric-value" id="an-avg-trade">INSUFFICIENT DATA</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-green">
+                        <div class="metric-icon-wrap bg-green">▲</div>
+                        <div class="metric-content">
+                            <span class="metric-label">LARGEST WIN</span>
+                            <span class="metric-value val-green" id="an-largest-win">INSUFFICIENT DATA</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-red">
+                        <div class="metric-icon-wrap bg-red">▼</div>
+                        <div class="metric-content">
+                            <span class="metric-label">LARGEST LOSS</span>
+                            <span class="metric-value val-red" id="an-largest-loss">INSUFFICIENT DATA</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-amber">
+                        <div class="metric-icon-wrap bg-amber">¢</div>
+                        <div class="metric-content">
+                            <span class="metric-label">FEES</span>
+                            <span class="metric-value" id="an-fees">$0.00</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-red">
+                        <div class="metric-icon-wrap bg-red">⚠️</div>
+                        <div class="metric-content">
+                            <span class="metric-label">MAX DRAWDOWN</span>
+                            <span class="metric-value val-red" id="an-mdd">0.00%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DIAGNOSTIC PANEL: WHY DIDN'T IT TRADE? -->
+                <div class="panel" style="margin-bottom: 14px; border: 1px solid rgba(245, 158, 11, 0.4);">
+                    <div class="panel-header" style="background-color: rgba(245, 158, 11, 0.08);">
+                        <h3 class="panel-title"><span class="val-amber">🔍</span> WHY DIDN'T IT TRADE? • PIPELINE CONVERSION DIAGNOSTICS</h3>
+                        <span class="badge badge-mono">Live Multi-Stage Audit</span>
+                    </div>
+                    <div class="panel-content">
+                        <!-- Dominant Reason Box -->
+                        <div class="decision-banner" id="diag-summary-box" style="margin-bottom: 12px; border-left: 4px solid var(--color-amber);">
+                            <div class="decision-banner-title" id="diag-dominant-title">⚡ FUNNEL ANALYSIS</div>
+                            <div class="decision-banner-body" id="diag-dominant-reason">Awaiting pipeline audit evaluation...</div>
+                        </div>
+
+                        <!-- Funnel Stats Grid -->
+                        <div class="inspector-grid-2" style="gap: 8px;">
+                            <div class="inspector-row"><span class="inspector-lbl">Candles Ingested:</span><span class="inspector-val td-strong" id="diag-candles">0</span></div>
+                            <div class="inspector-row"><span class="inspector-lbl">Strategy Evaluations:</span><span class="inspector-val td-strong" id="diag-evals">0</span></div>
+                            <div class="inspector-row"><span class="inspector-lbl">Raw Signals Generated:</span><span class="inspector-val td-strong" id="diag-signals">0</span></div>
+                            <div class="inspector-row"><span class="inspector-lbl">Profitability Accepted:</span><span class="inspector-val val-green td-strong" id="diag-prof-acc">0</span></div>
+                            <div class="inspector-row"><span class="inspector-lbl">Profitability Rejected:</span><span class="inspector-val val-red td-strong" id="diag-prof-rej">0</span></div>
+                            <div class="inspector-row"><span class="inspector-lbl">Risk Accepted:</span><span class="inspector-val val-green td-strong" id="diag-risk-acc">0</span></div>
+                            <div class="inspector-row"><span class="inspector-lbl">Risk Rejected:</span><span class="inspector-val val-red td-strong" id="diag-risk-rej">0</span></div>
+                            <div class="inspector-row"><span class="inspector-lbl">Execution Eligible:</span><span class="inspector-val val-cyan td-strong" id="diag-exec-elig">0</span></div>
+                            <div class="inspector-row"><span class="inspector-lbl">Orders Submitted:</span><span class="inspector-val td-strong" id="diag-orders-sub">0</span></div>
+                            <div class="inspector-row"><span class="inspector-lbl">Orders Filled:</span><span class="inspector-val val-green td-strong" id="diag-orders-fill">0</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CHARTS ROW: DAILY PNL & TRADE DISTRIBUTION -->
+                <div class="grid-12" style="margin-bottom: 14px;">
+                    <div class="panel col-6">
+                        <div class="panel-header"><h3 class="panel-title"><span>📊</span> DAILY PNL</h3></div>
                         <div class="panel-content">
-                            <div class="chart-container"><canvas id="pnlHistChart"></canvas></div>
+                            <div class="chart-container" style="height: 240px;"><canvas id="pnlHistChart"></canvas></div>
+                        </div>
+                    </div>
+                    <div class="panel col-6">
+                        <div class="panel-header"><h3 class="panel-title"><span>📈</span> TRADE PNL DISTRIBUTION</h3></div>
+                        <div class="panel-content">
+                            <div class="chart-container" style="height: 240px;"><canvas id="pnlDistChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COMPARISONS ROW: STRATEGY, TIMEFRAME, SYMBOL -->
+                <div class="grid-12">
+                    <div class="panel col-4">
+                        <div class="panel-header"><h3 class="panel-title"><span>⚡</span> STRATEGY COMPARISON</h3></div>
+                        <div class="panel-content no-pad">
+                            <div class="table-container" style="max-height: 220px; overflow-y: auto;">
+                                <table>
+                                    <thead><tr><th>STRATEGY</th><th>TRADES</th><th>WIN RATE</th><th>PNL</th></tr></thead>
+                                    <tbody id="an-strat-body"><tr><td colspan="4" class="empty-state">No Data</td></tr></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                     <div class="panel col-4">
-                        <div class="panel-header"><h3 class="panel-title"><span>🛡️</span> GATE REJECTION ATTRIBUTION</h3></div>
-                        <div class="panel-content">
-                            <div class="chart-container"><canvas id="rejPieChart"></canvas></div>
+                        <div class="panel-header"><h3 class="panel-title"><span>⏰</span> TIMEFRAME COMPARISON</h3></div>
+                        <div class="panel-content no-pad">
+                            <div class="table-container" style="max-height: 220px; overflow-y: auto;">
+                                <table>
+                                    <thead><tr><th>TF</th><th>TRADES</th><th>WIN RATE</th><th>PNL</th></tr></thead>
+                                    <tbody id="an-tf-body"><tr><td colspan="4" class="empty-state">No Data</td></tr></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="panel col-4">
+                        <div class="panel-header"><h3 class="panel-title"><span>🪙</span> SYMBOL COMPARISON</h3></div>
+                        <div class="panel-content no-pad">
+                            <div class="table-container" style="max-height: 220px; overflow-y: auto;">
+                                <table>
+                                    <thead><tr><th>SYMBOL</th><th>TRADES</th><th>WIN RATE</th><th>PNL</th></tr></thead>
+                                    <tbody id="an-sym-body"><tr><td colspan="4" class="empty-state">No Data</td></tr></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>

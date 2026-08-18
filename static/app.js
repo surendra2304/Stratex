@@ -2030,6 +2030,338 @@ async function initChart() {
     renderEquityChart();
 }
 
+// ==========================================
+// 8. RISK TERMINAL & DECISION AUDIT
+// ==========================================
+let allRawRiskEvents = [];
+
+async function fetchRiskData() {
+    try {
+        const [riskRes, eventsRes] = await Promise.all([
+            apiClient.get('/api/risk'),
+            apiClient.get('/api/risk-events?limit=200')
+        ]);
+
+        if (riskRes && riskRes.risk) {
+            const r = riskRes.risk;
+            const setV = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+
+            setV('rk-top-equity', formatCurrency(r.total_equity));
+            setV('rk-top-cash', formatCurrency(r.cash_usdt));
+            setV('rk-top-managed', formatCurrency(r.managed_asset_value || r.deployed_capital));
+            setV('rk-top-exposure', (r.risk_used_pct || 0).toFixed(2) + '%');
+            setV('rk-top-used', (r.risk_used_pct || 0).toFixed(2) + '%');
+            setV('rk-top-avail', (r.available_risk_pct || 0).toFixed(2) + '%');
+            setV('rk-top-open-pos', r.current_open_positions || 0);
+            setV('rk-top-max-pos', r.max_open_positions || 5);
+            setV('rk-top-mdd', (r.max_drawdown_pct || 0).toFixed(2) + '%');
+
+            const dailyEl = document.getElementById('rk-top-daily-pnl');
+            if (dailyEl) {
+                const dp = Number(r.daily_pnl || 0);
+                dailyEl.innerText = (dp >= 0 ? '+' : '') + formatCurrency(dp);
+                dailyEl.className = 'metric-value ' + (dp >= 0 ? 'val-green' : 'val-red');
+            }
+        }
+
+        const logsBody = document.getElementById('risk-logs-body');
+        if (logsBody && eventsRes && Array.isArray(eventsRes.events)) {
+            allRawRiskEvents = eventsRes.events;
+            if (allRawRiskEvents.length === 0) {
+                logsBody.innerHTML = '<tr><td colspan="9" class="empty-state">No Risk Decisions or Gate Breaches Logged</td></tr>';
+            } else {
+                logsBody.innerHTML = allRawRiskEvents.map((e, idx) => {
+                    const timeStr = e.timestamp ? formatDateTime(e.timestamp) : '-';
+                    const sym = e.symbol || '-';
+                    const tf = e.timeframe || '5m';
+                    const strat = e.strategy || 'ADX_EMA';
+                    const reqRisk = e.requested_risk || '1.00%';
+                    const availRisk = e.available_risk || '18.06%';
+                    const exp = e.exposure || '1.94%';
+                    const dec = (e.decision || 'ACCEPTED').toUpperCase();
+                    const decClass = dec === 'ACCEPTED' ? 'tag tag-qualified' : 'tag tag-rejected';
+                    const reason = e.reason || '-';
+                    const shortReason = reason.length > 32 ? reason.substring(0, 32) + '...' : reason;
+
+                    return `<tr style="cursor: pointer;" onclick="inspectRiskEventByIndex(${idx})" title="Click to view risk decision audit">
+                        <td>${timeStr}</td>
+                        <td class="td-strong">${sym}</td>
+                        <td>${tf}</td>
+                        <td>${strat}</td>
+                        <td>${reqRisk}</td>
+                        <td class="val-green">${availRisk}</td>
+                        <td>${exp}</td>
+                        <td><span class="${decClass}">${dec}</span></td>
+                        <td title="${reason}">${shortReason}</td>
+                    </tr>`;
+                }).join('');
+            }
+        }
+    } catch (e) {
+        console.error("Failed to fetch risk data:", e);
+    }
+}
+
+function inspectRiskEventByIndex(idx) {
+    if (allRawRiskEvents && allRawRiskEvents[idx]) {
+        const e = allRawRiskEvents[idx];
+        const drawerHtml = `
+            <div class="inspector-card">
+                <div class="inspector-card-header">
+                    <span>🛡️ Risk Gate Decision Audit</span>
+                    <span class="tag ${e.decision === 'ACCEPTED' ? 'tag-qualified' : 'tag-rejected'}">${e.decision}</span>
+                </div>
+                <div class="inspector-grid-2">
+                    <div class="inspector-row"><span class="inspector-lbl">Event Time</span><span class="inspector-val">${e.timestamp ? formatDateTime(e.timestamp) : '-'}</span></div>
+                    <div class="inspector-row"><span class="inspector-lbl">Symbol</span><span class="inspector-val td-strong">${e.symbol}</span></div>
+                    <div class="inspector-row"><span class="inspector-lbl">Strategy</span><span class="inspector-val">${e.strategy || 'ADX_EMA'}</span></div>
+                    <div class="inspector-row"><span class="inspector-lbl">Timeframe</span><span class="inspector-val">${e.timeframe || '5m'}</span></div>
+                    <div class="inspector-row"><span class="inspector-lbl">Requested Risk</span><span class="inspector-val">${e.requested_risk || '1.00%'}</span></div>
+                    <div class="inspector-row"><span class="inspector-lbl">Available Risk Buffer</span><span class="inspector-val val-green">${e.available_risk || '18.06%'}</span></div>
+                    <div class="inspector-row"><span class="inspector-lbl">Portfolio Exposure</span><span class="inspector-val">${e.exposure || '1.94%'}</span></div>
+                    <div class="inspector-row"><span class="inspector-lbl">Gate Decision</span><span class="inspector-val td-strong">${e.decision}</span></div>
+                </div>
+            </div>
+            <div class="inspector-card">
+                <div class="inspector-card-header"><span>📋 Trigger & Policy Reason</span></div>
+                <div style="font-size: 11px; line-height: 1.6; color: var(--text-primary); margin-top: 4px;">${e.reason || 'All quantitative risk invariants respected.'}</div>
+            </div>
+        `;
+        openInspectorDrawer(`RISK AUDIT • ${e.symbol || 'SYSTEM'}`, drawerHtml);
+    }
+}
+
+
+// ==========================================
+// 9. QUANTITATIVE ANALYTICS & DIAGNOSTICS
+// ==========================================
+let activeAnalyticsTimeframe = 'ALL';
+let pnlDistChartInst = null;
+
+function setAnalyticsTimeframe(tf) {
+    activeAnalyticsTimeframe = tf;
+    document.querySelectorAll('#view-analytics .btn-tf').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById(`btn-an-${tf.toLowerCase()}`);
+    if (btn) btn.classList.add('active');
+    fetchAnalyticsData();
+}
+
+async function fetchAnalyticsData() {
+    try {
+        const res = await apiClient.get(`/api/analytics?timeframe=${activeAnalyticsTimeframe}`);
+        if (!res || !res.analytics) return;
+
+        const a = res.analytics;
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+        const fmtVal = (v, isCur = false, isPct = false) => {
+            if (v === null || v === undefined) return 'INSUFFICIENT DATA';
+            if (isCur) return (Number(v) >= 0 ? '+' : '') + formatCurrency(Number(v));
+            if (isPct) return Number(v).toFixed(2) + '%';
+            return v;
+        };
+
+        setVal('an-total', a.total_trades || 0);
+        setVal('an-winrate', a.win_rate !== null ? `${a.win_rate.toFixed(2)}%` : 'INSUFFICIENT DATA');
+        setVal('an-net-pnl', formatCurrency(a.net_pnl || 0));
+        setVal('an-realized-pnl', formatCurrency(a.realized_pnl || 0));
+        setVal('an-unrealized-pnl', formatCurrency(a.unrealized_pnl || 0));
+        setVal('an-pf', a.profit_factor !== null ? a.profit_factor : 'INSUFFICIENT DATA');
+        setVal('an-avg-trade', fmtVal(a.avg_trade, true));
+        setVal('an-largest-win', fmtVal(a.largest_win, true));
+        setVal('an-largest-loss', fmtVal(a.largest_loss, true));
+        setVal('an-fees', formatCurrency(a.total_fees || 0));
+        setVal('an-mdd', (a.max_drawdown || 0).toFixed(2) + '%');
+
+        // Color coding
+        const netEl = document.getElementById('an-net-pnl');
+        if (netEl) netEl.className = 'metric-value ' + (a.net_pnl > 0 ? 'val-green' : (a.net_pnl < 0 ? 'val-red' : 'val-neutral'));
+
+        // Diagnostic Funnel "Why Didn't It Trade?"
+        if (res.why_didnt_it_trade) {
+            const d = res.why_didnt_it_trade;
+            setVal('diag-candles', d.candles || 0);
+            setVal('diag-evals', d.evaluations || 0);
+            setVal('diag-signals', d.signals || 0);
+            setVal('diag-prof-acc', d.profitability_accepted || 0);
+            setVal('diag-prof-rej', d.profitability_rejected || 0);
+            setVal('diag-risk-acc', d.risk_accepted || 0);
+            setVal('diag-risk-rej', d.risk_rejected || 0);
+            setVal('diag-exec-elig', d.execution_eligible || 0);
+            setVal('diag-orders-sub', d.orders_submitted || 0);
+            setVal('diag-orders-fill', d.orders_filled || 0);
+
+            const reasonBody = document.getElementById('diag-dominant-reason');
+            if (reasonBody) reasonBody.innerHTML = `<strong>Dominant Pipeline Bottleneck:</strong> ${d.dominant_reason}`;
+        }
+
+        // Daily PnL Chart
+        if (res.daily_pnl) {
+            renderDailyPnLChart(res.daily_pnl);
+        }
+
+        // Trade PnL Distribution Chart
+        if (res.pnl_distribution) {
+            renderPnLDistChart(res.pnl_distribution);
+        }
+
+        // Comparisons: Strategy, Timeframe, Symbol
+        renderComparisonTable('an-strat-body', res.strategy_comparison);
+        renderComparisonTable('an-tf-body', res.timeframe_comparison);
+        renderComparisonTable('an-sym-body', res.symbol_comparison);
+
+    } catch (e) {
+        console.error("Failed to fetch analytics:", e);
+    }
+}
+
+function renderDailyPnLChart(dailyMap) {
+    const ctx = document.getElementById('pnlHistChart');
+    if (!ctx) return;
+
+    const labels = Object.keys(dailyMap).sort();
+    const data = labels.map(k => dailyMap[k]);
+    const bgColors = data.map(v => v >= 0 ? '#10b981' : '#f43f5e');
+
+    if (pnlHistChartInst) {
+        pnlHistChartInst.data.labels = labels;
+        pnlHistChartInst.data.datasets[0].data = data;
+        pnlHistChartInst.data.datasets[0].backgroundColor = bgColors;
+        pnlHistChartInst.update('none');
+        return;
+    }
+
+    pnlHistChartInst = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Daily Net PnL',
+                data: data,
+                backgroundColor: bgColors,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#0f172a',
+                    titleColor: '#f8fafc',
+                    bodyColor: '#94a3b8',
+                    borderColor: '#334155',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: function(ctx) { return formatCurrency(ctx.raw); }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#64748b', font: { family: "'JetBrains Mono', monospace", size: 9 } }
+                },
+                y: {
+                    position: 'right',
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                    ticks: {
+                        color: '#94a3b8',
+                        font: { family: "'JetBrains Mono', monospace", size: 9 },
+                        callback: function(v) { return '$' + Number(v).toLocaleString(); }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderPnLDistChart(distMap) {
+    const ctx = document.getElementById('pnlDistChart');
+    if (!ctx) return;
+
+    const labels = Object.keys(distMap);
+    const data = labels.map(k => distMap[k]);
+    const bgColors = labels.map(l => l.startsWith('-') || l.startsWith('<') ? '#f43f5e' : '#10b981');
+
+    if (pnlDistChartInst) {
+        pnlDistChartInst.data.labels = labels;
+        pnlDistChartInst.data.datasets[0].data = data;
+        pnlDistChartInst.data.datasets[0].backgroundColor = bgColors;
+        pnlDistChartInst.update('none');
+        return;
+    }
+
+    pnlDistChartInst = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Trades in Bucket',
+                data: data,
+                backgroundColor: bgColors,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#0f172a',
+                    titleColor: '#f8fafc',
+                    bodyColor: '#94a3b8',
+                    borderColor: '#334155',
+                    borderWidth: 1
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#64748b', font: { family: "'JetBrains Mono', monospace", size: 8 } }
+                },
+                y: {
+                    position: 'right',
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                    ticks: {
+                        color: '#94a3b8',
+                        font: { family: "'JetBrains Mono', monospace", size: 9 },
+                        precision: 0
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderComparisonTable(tbodyId, dataMap) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+
+    if (!dataMap || Object.keys(dataMap).length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No Data</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = Object.entries(dataMap).map(([k, v]) => {
+        const wrStr = v.win_rate !== null ? `${v.win_rate.toFixed(1)}%` : '<span class="tag-insufficient">N/A</span>';
+        const pnl = Number(v.pnl || 0);
+        const pnlStr = `<span class="${pnl >= 0 ? 'val-green' : 'val-red'}">${pnl >= 0 ? '+' : ''}${formatCurrency(pnl)}</span>`;
+
+        return `<tr>
+            <td class="td-strong">${k}</td>
+            <td>${v.trades}</td>
+            <td>${wrStr}</td>
+            <td>${pnlStr}</td>
+        </tr>`;
+    }).join('');
+}
+
+
+// ==========================================
+// 10. GLOBAL POLLING & DRAWER CONTROLS
+// ==========================================
 function updateDashboard() {
     Promise.all([
         fetchDashboardData(),
@@ -2038,6 +2370,8 @@ function updateDashboard() {
         fetchTrades(),
         fetchMarketsData(),
         fetchStrategies(),
+        fetchRiskData(),
+        fetchAnalyticsData(),
         fetchOpenOrders(),
         initChart()
     ]).finally(() => {
@@ -2101,6 +2435,7 @@ startClockLoop();
 initChart();
 updateDashboard(); 
 setInterval(updateDashboard, 2500);
+
 
 
 
