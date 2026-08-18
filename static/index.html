@@ -137,15 +137,15 @@
             <div class="sidebar-system-health">
                 <div class="sidebar-health-title">
                     <span>MICROSERVICES</span>
-                    <span class="live-ping" id="ws-latency-pill">18ms</span>
+                    <span class="live-ping" id="ws-latency-pill">--</span>
                 </div>
                 <div class="health-grid">
-                    <div class="health-item"><span class="dot dot-green" id="h-bn"></span><span class="health-name">BINANCE</span></div>
-                    <div class="health-item"><span class="dot dot-green" id="h-ws"></span><span class="health-name">STREAM</span></div>
-                    <div class="health-item"><span class="dot dot-green" id="h-se"></span><span class="health-name">STRATEGY</span></div>
-                    <div class="health-item"><span class="dot dot-green" id="h-rk"></span><span class="health-name">RISK</span></div>
+                    <div class="health-item"><span class="dot dot-amber" id="h-bn"></span><span class="health-name">BINANCE</span></div>
+                    <div class="health-item"><span class="dot dot-amber" id="h-ws"></span><span class="health-name">STREAM</span></div>
+                    <div class="health-item"><span class="dot dot-amber" id="h-se"></span><span class="health-name">STRATEGY</span></div>
+                    <div class="health-item"><span class="dot dot-amber" id="h-rk"></span><span class="health-name">RISK</span></div>
                 </div>
-                <div class="sidebar-meta-text">6 STRATEGIES • 13 PAIRS</div>
+                <div class="sidebar-meta-text" id="sidebar-meta-text">-- STRATEGIES • -- PAIRS</div>
             </div>
         </aside>
 
@@ -155,30 +155,30 @@
             <header class="top-status-bar">
                 <div class="status-left">
                     <div class="engine-state-badge">
-                        <span class="dot dot-green" id="status-indicator"></span>
+                        <span class="dot dot-amber" id="status-indicator"></span>
                         <span class="engine-state-label">ENGINE:</span>
-                        <strong id="engine-status" class="engine-state-val">ACTIVE</strong>
+                        <strong id="engine-status" class="engine-state-val">CONNECTING...</strong>
                     </div>
 
                     <div class="status-sep">/</div>
 
                     <div class="status-item">
                         <span class="status-lbl">FEED:</span>
-                        <span class="status-val mono" id="feed-latency">18ms</span>
+                        <span class="status-val mono" id="feed-latency">--</span>
                     </div>
 
                     <div class="status-sep">/</div>
 
                     <div class="status-item">
                         <span class="status-lbl">PAIRS:</span>
-                        <span class="status-val mono">13 SPOT</span>
+                        <span class="status-val mono" id="hdr-pairs-count">-- SPOT</span>
                     </div>
 
                     <div class="status-sep">/</div>
 
                     <div class="status-item">
                         <span class="status-lbl">STRATEGIES:</span>
-                        <span class="status-val mono">6 ACTIVE</span>
+                        <span class="status-val mono" id="hdr-strat-count">-- ACTIVE</span>
                     </div>
                 </div>
                 
