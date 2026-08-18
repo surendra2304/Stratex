@@ -740,6 +740,81 @@ html, body {
     position: relative;
 }
 
+.chart-legend-pills {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.legend-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10.5px;
+    color: var(--text-muted);
+    font-family: var(--font-heading);
+}
+
+.legend-dot-hollow {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 2px solid var(--accent-primary);
+    background: transparent;
+    display: inline-block;
+}
+
+.legend-dot-green {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--profit-green);
+    display: inline-block;
+}
+
+.legend-dot-red {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--loss-red);
+    display: inline-block;
+}
+
+/* ─── BALANCE STATS STRIP ─── */
+.balance-stats-strip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    margin-top: 20px;
+}
+
+.balance-stat-card {
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.balance-stat-lbl {
+    font-family: var(--font-heading);
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.6px;
+}
+
+.balance-stat-val {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.balance-stat-sub {
+    font-size: 10.5px;
+    color: var(--text-muted);
+}
+
 .table-card {
     flex: 1;
     min-height: 220px;

@@ -2101,69 +2101,192 @@ function inspectStrategy(stratKey) {
 
 
 // ==========================================
-// ==========================================
-// 8. REAL-TIME EQUITY & BALANCE TIMELINE
+// 8. REAL-TIME ANNOTATED BALANCE HISTORY & EQUITY TIMELINE
 // ==========================================
 let equityChartInst = null;
 let pnlHistChartInst = null;
-let pnlDistChartInst = null;
-let equityTimeframe = 'ALL';
+let overviewEquityTimeframe = '1D';
+let balanceHistoryTimeframe = '1D';
+let cachedEquityPoints = [];
+let chartPointMetaOverview = [];
+let chartPointMetaAnalytics = [];
 
-function setEquityTimeframe(tf) {
-    equityTimeframe = tf;
+function setEquityChartTf(tf) {
+    overviewEquityTimeframe = tf;
     document.querySelectorAll('#view-dashboard .btn-tf').forEach(b => b.classList.remove('active'));
-    const btn = document.getElementById(`tf-${tf.toLowerCase()}`);
+    const btn = document.getElementById(`btn-eq-${tf.toLowerCase()}`);
     if (btn) btn.classList.add('active');
-    initChart();
+    renderAnnotatedChart('equityTimelineChart', overviewEquityTimeframe, true);
+}
+
+function setBalanceHistoryTf(tf) {
+    balanceHistoryTimeframe = tf;
+    document.querySelectorAll('#view-analytics .btn-filter').forEach(b => {
+        if (b.id && b.id.startsWith('btn-bh-')) b.classList.remove('active');
+    });
+    const btn = document.getElementById(`btn-bh-${tf.toLowerCase()}`);
+    if (btn) btn.classList.add('active');
+    renderAnnotatedChart('pnlHistChart', balanceHistoryTimeframe, false);
 }
 
 async function initChart() {
     try {
-        const eqData = await apiClient.get(`/api/equity?timeframe=${equityTimeframe}`);
-        if (!eqData || eqData.length === 0) return;
-        rawEquityPoints = eqData;
-        renderEquityChart();
+        const eqData = await apiClient.get(`/api/equity?timeframe=ALL`);
+        if (eqData && Array.isArray(eqData) && eqData.length > 0) {
+            cachedEquityPoints = eqData;
+        } else {
+            // Build fallback initial baseline point
+            const currentBal = Number(document.getElementById('db-equity')?.innerText?.replace(/[^0-9.]/g, '') || 10000);
+            cachedEquityPoints = [{ time: new Date().toISOString(), equity: currentBal, cash: currentBal }];
+        }
+        renderAnnotatedChart('equityTimelineChart', overviewEquityTimeframe, true);
+        renderAnnotatedChart('pnlHistChart', balanceHistoryTimeframe, false);
     } catch (e) {
         console.error("Failed to load equity timeline:", e);
     }
 }
 
-function renderEquityChart() {
-    const ctx = document.getElementById('equityTimelineChart') || document.getElementById('equityChart');
-    if (!ctx || !rawEquityPoints || rawEquityPoints.length === 0) return;
+function renderAnnotatedChart(canvasId, timeframe, isCompact) {
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
 
-    const points = rawEquityPoints;
-    const labels = points.map(p => {
-        const d = new Date(p.time);
-        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    });
-    const eqData = points.map(p => p.equity);
-    const cashData = points.map(p => p.cash !== undefined ? p.cash : p.equity);
+    // Filter points by timeframe
+    const now = Date.now();
+    let msRange = Infinity;
+    if (timeframe === '1D') msRange = 24 * 60 * 60 * 1000;
+    else if (timeframe === '7D') msRange = 7 * 24 * 60 * 60 * 1000;
+    else if (timeframe === '30D') msRange = 30 * 24 * 60 * 60 * 1000;
+    else if (timeframe === '90D') msRange = 90 * 24 * 60 * 60 * 1000;
 
-    if (equityChartInst) {
-        equityChartInst.data.labels = labels;
-        equityChartInst.data.datasets[0].data = eqData;
-        if (equityChartInst.data.datasets[1]) {
-            equityChartInst.data.datasets[1].data = cashData;
-        }
-        equityChartInst.update('none');
-        return;
+    let points = (cachedEquityPoints || []).filter(p => (now - new Date(p.time).getTime()) <= msRange);
+
+    // If no equity history points in window, synthesize smooth baseline with current equity
+    const currentEquity = Number(document.getElementById('db-equity')?.innerText?.replace(/[^0-9.]/g, '') || 10000);
+    const currentCash = Number(document.getElementById('snap-cash')?.innerText?.replace(/[^0-9.]/g, '') || currentEquity);
+
+    if (points.length < 2) {
+        const startTime = new Date(now - (msRange === Infinity ? 24 * 3600 * 1000 : msRange)).toISOString();
+        points = [
+            { time: startTime, equity: currentEquity, cash: currentCash },
+            { time: new Date().toISOString(), equity: currentEquity, cash: currentCash }
+        ];
     }
 
-    equityChartInst = new Chart(ctx, {
+    // Annotate points with trade milestones
+    const pointMeta = [];
+    const timelineData = [];
+    const cashData = [];
+    const labels = [];
+    const pointRadii = [];
+    const pointHoverRadii = [];
+    const pointBgColors = [];
+    const pointBorderColors = [];
+    const pointBorderWidths = [];
+
+    // Collect trade open & close events within timeframe
+    const tradeEvents = [];
+    (allRawPositions || []).forEach(p => {
+        if (p.entry_timestamp || p.timestamp) {
+            tradeEvents.push({
+                type: 'OPEN',
+                time: new Date(p.entry_timestamp || p.timestamp).getTime(),
+                trade: p,
+                balance: Number(p.cash_before_entry || currentCash)
+            });
+        }
+    });
+
+    (allRawTrades || []).forEach(t => {
+        const openTime = t.entry_timestamp || t.signal_time;
+        if (openTime) {
+            tradeEvents.push({
+                type: 'OPEN',
+                time: new Date(openTime).getTime(),
+                trade: t,
+                balance: Number(t.cash_before_entry || t.balance_before_entry || currentCash)
+            });
+        }
+        const closeTime = t.close_time || t.exit_timestamp || t.timestamp;
+        if (closeTime) {
+            const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+            tradeEvents.push({
+                type: 'CLOSE',
+                time: new Date(closeTime).getTime(),
+                trade: t,
+                isWin: net >= 0,
+                net: net,
+                balance: Number(t.cash_after_exit || t.balance_after_exit || (currentCash + net))
+            });
+        }
+    });
+
+    // Merge equity curve points and trade events chronologically
+    points.forEach(p => {
+        const pTime = new Date(p.time).getTime();
+        labels.push(new Date(p.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        timelineData.push(p.equity);
+        cashData.push(p.cash !== undefined ? p.cash : p.equity);
+
+        // Check if there is an event close to this point (within 5 mins)
+        const matchedEvent = tradeEvents.find(e => Math.abs(e.time - pTime) < 5 * 60 * 1000);
+        if (matchedEvent) {
+            pointMeta.push({
+                isTradeMarker: true,
+                eventType: matchedEvent.type,
+                isWin: matchedEvent.isWin,
+                trade: matchedEvent.trade,
+                balance: matchedEvent.balance || p.equity,
+                timeStr: new Date(p.time).toLocaleString()
+            });
+
+            if (matchedEvent.type === 'OPEN') {
+                pointRadii.push(isCompact ? 4 : 5);
+                pointHoverRadii.push(isCompact ? 6 : 8);
+                pointBgColors.push('transparent');
+                pointBorderColors.push('#5B7FFF');
+                pointBorderWidths.push(2.5);
+            } else {
+                pointRadii.push(isCompact ? 4 : 5);
+                pointHoverRadii.push(isCompact ? 6 : 8);
+                pointBgColors.push(matchedEvent.isWin ? '#22C55E' : '#FB7185');
+                pointBorderColors.push('#0A0F1E');
+                pointBorderWidths.push(2);
+            }
+        } else {
+            pointMeta.push({ isTradeMarker: false, balance: p.equity });
+            pointRadii.push(0);
+            pointHoverRadii.push(4);
+            pointBgColors.push('#5B7FFF');
+            pointBorderColors.push('#5B7FFF');
+            pointBorderWidths.push(1);
+        }
+    });
+
+    if (canvasId === 'equityTimelineChart') {
+        chartPointMetaOverview = pointMeta;
+    } else {
+        chartPointMetaAnalytics = pointMeta;
+    }
+
+    // Chart Configuration
+    const chartConfig = {
         type: 'line',
         data: {
             labels: labels,
             datasets: [
                 {
                     label: 'Managed Equity',
-                    data: eqData,
+                    data: timelineData,
                     borderColor: '#5B7FFF',
                     backgroundColor: 'rgba(91, 127, 255, 0.10)',
                     borderWidth: 2,
                     fill: true,
                     tension: 0.15,
-                    pointRadius: 0,
+                    pointRadius: pointRadii,
+                    pointHoverRadius: pointHoverRadii,
+                    pointBackgroundColor: pointBgColors,
+                    pointBorderColor: pointBorderColors,
+                    pointBorderWidth: pointBorderWidths,
                     pointHitRadius: 10
                 },
                 {
@@ -2175,13 +2298,22 @@ function renderEquityChart() {
                     fill: false,
                     tension: 0.15,
                     pointRadius: 0,
-                    pointHitRadius: 10
+                    pointHitRadius: 6
                 }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: function(evt, elements) {
+                if (!elements || elements.length === 0) return;
+                const el = elements[0];
+                const metaArray = canvasId === 'equityTimelineChart' ? chartPointMetaOverview : chartPointMetaAnalytics;
+                const meta = metaArray[el.index];
+                if (meta && meta.isTradeMarker && meta.trade) {
+                    inspectTradeLifecycle(meta.trade);
+                }
+            },
             plugins: {
                 legend: {
                     display: true,
@@ -2194,9 +2326,39 @@ function renderEquityChart() {
                     bodyColor: '#EAF0FF',
                     borderColor: '#223050',
                     borderWidth: 1,
+                    padding: 10,
                     callbacks: {
-                        label: function(ctx) {
-                            return `${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`;
+                        title: function(items) {
+                            if (!items || items.length === 0) return '';
+                            const idx = items[0].dataIndex;
+                            const metaArray = canvasId === 'equityTimelineChart' ? chartPointMetaOverview : chartPointMetaAnalytics;
+                            const meta = metaArray[idx];
+                            if (meta && meta.isTradeMarker) {
+                                const sym = meta.trade?.symbol || 'PAIR';
+                                const side = (meta.trade?.side || 'BUY').toUpperCase();
+                                if (meta.eventType === 'OPEN') {
+                                    return `⚡ Trade Open: ${sym} (${side})`;
+                                } else {
+                                    const net = Number(meta.trade?.net_pnl || meta.trade?.pnl || 0);
+                                    return `${net >= 0 ? '🏆' : '🔻'} Trade Closed: ${sym} (${net >= 0 ? '+' : ''}${formatCurrency(net)})`;
+                                }
+                            }
+                            return items[0].label;
+                        },
+                        label: function(item) {
+                            const idx = item.dataIndex;
+                            const metaArray = canvasId === 'equityTimelineChart' ? chartPointMetaOverview : chartPointMetaAnalytics;
+                            const meta = metaArray[idx];
+                            if (meta && meta.isTradeMarker) {
+                                const strat = meta.trade?.strategy || 'ADX_EMA';
+                                const tf = meta.trade?.timeframe || '5m';
+                                return [
+                                    `• Strategy: ${strat} (${tf})`,
+                                    `• Account Balance: ${formatCurrency(meta.balance)}`,
+                                    `• Click marker to inspect full lifecycle`
+                                ];
+                            }
+                            return `${item.dataset.label}: ${formatCurrency(item.raw)}`;
                         }
                     }
                 }
@@ -2217,7 +2379,83 @@ function renderEquityChart() {
                 }
             }
         }
+    };
+
+    if (canvasId === 'equityTimelineChart') {
+        if (equityChartInst) {
+            equityChartInst.destroy();
+        }
+        equityChartInst = new Chart(ctx, chartConfig);
+    } else {
+        if (pnlHistChartInst) {
+            pnlHistChartInst.destroy();
+        }
+        pnlHistChartInst = new Chart(ctx, chartConfig);
+        updateBalanceHistoryStatCards(points, msRange);
+    }
+}
+
+function updateBalanceHistoryStatCards(points, msRange) {
+    if (!points || points.length === 0) return;
+
+    const startBal = Number(points[0].equity || points[0].cash || 10000);
+    const currBal = Number(points[points.length - 1].equity || points[points.length - 1].cash || startBal);
+    const netChange = currBal - startBal;
+    const netChangePct = startBal > 0 ? (netChange / startBal) * 100 : 0;
+
+    const startEl = document.getElementById('bh-start-bal');
+    if (startEl) startEl.innerText = formatCurrency(startBal);
+
+    const currEl = document.getElementById('bh-current-bal');
+    if (currEl) currEl.innerText = formatCurrency(currBal);
+
+    const changeEl = document.getElementById('bh-net-change');
+    if (changeEl) {
+        changeEl.innerText = `${netChange >= 0 ? '+' : ''}${formatCurrency(netChange)} (${netChangePct >= 0 ? '+' : ''}${netChangePct.toFixed(2)}%)`;
+        changeEl.className = `balance-stat-val mono ${netChange >= 0 ? 'profit' : 'loss'}`;
+    }
+
+    // Compute Best & Worst Day in range
+    const dayBuckets = {};
+    const now = Date.now();
+    (allRawTrades || []).forEach(t => {
+        const rawTs = t.close_time || t.exit_timestamp || t.timestamp;
+        if (!rawTs) return;
+        const dObj = new Date(rawTs);
+        if ((now - dObj.getTime()) <= msRange) {
+            const dayKey = dObj.toISOString().split('T')[0];
+            const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+            dayBuckets[dayKey] = (dayBuckets[dayKey] || 0) + net;
+        }
     });
+
+    let bestNet = 0;
+    let bestDateStr = '--';
+    let worstNet = 0;
+    let worstDateStr = '--';
+
+    Object.keys(dayBuckets).forEach(dayKey => {
+        const net = dayBuckets[dayKey];
+        const dateLabel = new Date(dayKey).toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+        if (net > bestNet) {
+            bestNet = net;
+            bestDateStr = dateLabel;
+        }
+        if (net < worstNet) {
+            worstNet = net;
+            worstDateStr = dateLabel;
+        }
+    });
+
+    const bestEl = document.getElementById('bh-best-day');
+    const bestDateEl = document.getElementById('bh-best-day-date');
+    if (bestEl) bestEl.innerText = bestNet > 0 ? `+${formatCurrency(bestNet)}` : '$0.00';
+    if (bestDateEl) bestDateEl.innerText = bestNet > 0 ? `Recorded on ${bestDateStr}` : 'No profitable days in range';
+
+    const worstEl = document.getElementById('bh-worst-day');
+    const worstDateEl = document.getElementById('bh-worst-day-date');
+    if (worstEl) worstEl.innerText = worstNet < 0 ? formatCurrency(worstNet) : '$0.00';
+    if (worstDateEl) worstDateEl.innerText = worstNet < 0 ? `Recorded on ${worstDateStr}` : 'Zero loss days in range';
 }
 
 

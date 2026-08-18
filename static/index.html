@@ -301,10 +301,11 @@
                                     <span>EQUITY &amp; CASH ACCUMULATION TIMELINE</span>
                                 </div>
                                 <div class="chart-controls">
-                                    <button class="btn-tf active" onclick="setEquityChartTf('1D')">1D</button>
-                                    <button class="btn-tf" onclick="setEquityChartTf('7D')">7D</button>
-                                    <button class="btn-tf" onclick="setEquityChartTf('30D')">30D</button>
-                                    <button class="btn-tf" onclick="setEquityChartTf('ALL')">ALL</button>
+                                    <button class="btn-tf active" id="btn-eq-1d" onclick="setEquityChartTf('1D')">1D</button>
+                                    <button class="btn-tf" id="btn-eq-7d" onclick="setEquityChartTf('7D')">7D</button>
+                                    <button class="btn-tf" id="btn-eq-30d" onclick="setEquityChartTf('30D')">30D</button>
+                                    <button class="btn-tf" id="btn-eq-90d" onclick="setEquityChartTf('90D')">90D</button>
+                                    <button class="btn-tf" id="btn-eq-all" onclick="setEquityChartTf('ALL')">ALL</button>
                                 </div>
                             </div>
                             <div class="chart-body">
@@ -624,28 +625,69 @@
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 3: BALANCE HISTORY & ANALYTICS
+                 VIEW 3: BALANCE HISTORY & ANNOTATED EQUITY CURVE
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-analytics">
                 <div class="page-header">
                     <div class="page-title-wrap">
-                        <h1 class="page-title">Balance History &amp; Equity Curve</h1>
-                        <p class="page-subtitle">Track equity accumulation with trade execution markers and drawdown distribution.</p>
+                        <h1 class="page-title">Balance History &amp; Annotated Equity Curve</h1>
+                        <p class="page-subtitle">Interactive equity progression annotated with exact trade open (hollow) and close (filled) balance milestones.</p>
                     </div>
                     <div class="filter-group">
-                        <button class="btn-filter active" onclick="setAnalyticsTf('1D')">1D</button>
-                        <button class="btn-filter" onclick="setAnalyticsTf('7D')">7D</button>
-                        <button class="btn-filter" onclick="setAnalyticsTf('30D')">30D</button>
-                        <button class="btn-filter" onclick="setAnalyticsTf('ALL')">ALL TIME</button>
+                        <span class="filter-lbl">RANGE:</span>
+                        <button class="btn-filter active" id="btn-bh-1d" onclick="setBalanceHistoryTf('1D')">1D</button>
+                        <button class="btn-filter" id="btn-bh-7d" onclick="setBalanceHistoryTf('7D')">7D</button>
+                        <button class="btn-filter" id="btn-bh-30d" onclick="setBalanceHistoryTf('30D')">30D</button>
+                        <button class="btn-filter" id="btn-bh-90d" onclick="setBalanceHistoryTf('90D')">90D</button>
+                        <button class="btn-filter" id="btn-bh-all" onclick="setBalanceHistoryTf('ALL')">ALL TIME</button>
                     </div>
                 </div>
 
-                <div class="panel-card chart-card" style="height: 320px;">
+                <!-- MAIN ANNOTATED BALANCE CHART CARD -->
+                <div class="panel-card chart-card" style="height: 380px;">
                     <div class="panel-card-header">
-                        <div class="panel-card-title"><span>PORTFOLIO BALANCE &amp; TRADE EXECUTION TIMELINE</span></div>
+                        <div class="panel-card-title">
+                            <span class="indigo-indicator"></span>
+                            <span>PORTFOLIO BALANCE &amp; TRADE EXECUTION MILESTONES</span>
+                        </div>
+                        <div class="chart-legend-pills">
+                            <span class="legend-pill"><span class="legend-dot-hollow"></span> Open Marker</span>
+                            <span class="legend-pill"><span class="legend-dot-green"></span> Win Close</span>
+                            <span class="legend-pill"><span class="legend-dot-red"></span> Loss Close</span>
+                            <span class="badge-mono">CLICK MARKER TO INSPECT</span>
+                        </div>
                     </div>
                     <div class="chart-body">
                         <canvas id="pnlHistChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- SLIM SECONDARY ROW OF STAT CARDS -->
+                <div class="balance-stats-strip">
+                    <div class="panel-card balance-stat-card">
+                        <span class="balance-stat-lbl">STARTING BALANCE</span>
+                        <div class="balance-stat-val mono" id="bh-start-bal">$0.00</div>
+                        <span class="balance-stat-sub">Beginning of window</span>
+                    </div>
+                    <div class="panel-card balance-stat-card">
+                        <span class="balance-stat-lbl">CURRENT BALANCE</span>
+                        <div class="balance-stat-val cyan mono" id="bh-current-bal">$0.00</div>
+                        <span class="balance-stat-sub">Live streaming total</span>
+                    </div>
+                    <div class="panel-card balance-stat-card">
+                        <span class="balance-stat-lbl">NET CHANGE</span>
+                        <div class="balance-stat-val profit mono" id="bh-net-change">$0.00 (0.00%)</div>
+                        <span class="balance-stat-sub">Return for selected range</span>
+                    </div>
+                    <div class="panel-card balance-stat-card">
+                        <span class="balance-stat-lbl">BEST DAY</span>
+                        <div class="balance-stat-val profit mono" id="bh-best-day">+$0.00</div>
+                        <span class="balance-stat-sub" id="bh-best-day-date">--</span>
+                    </div>
+                    <div class="panel-card balance-stat-card">
+                        <span class="balance-stat-lbl">WORST DAY</span>
+                        <div class="balance-stat-val loss mono" id="bh-worst-day">-$0.00</div>
+                        <span class="balance-stat-sub" id="bh-worst-day-date">--</span>
                     </div>
                 </div>
 
