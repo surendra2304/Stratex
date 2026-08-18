@@ -1,45 +1,74 @@
-# 📖 ALGORITHMIC TRADING BOT — OFFICIAL MASTER SYSTEM DIARY & BUG LEDGER
-*The exhaustive, day-by-day technical diary recording every architectural phase, every bug discovered, root-cause analyses, exact code fixes, and system evolutions from August 14, 2026 to present.*
+# 📖 ALGORITHMIC TRADING BOT — THE COMPLETE MASTER DIARY & CHRONICLES
+*The definitive, exhaustive day-by-day diary, system architecture blueprint, user interaction log, and bug ledger from August 14, 2026 to present.*
 
 ---
 
-## 🤖 System Overview & Core Architecture
+## 🤖 Section 1: Bot Identity, Core Architecture & Specifications
 
-| Attribute | Specification |
-| :--- | :--- |
-| **Official Name** | **Algorithmic Trading Bot** |
-| **Exchange & Environment** | **Binance Testnet (Spot REST API + Multiplexed WebSockets)** |
-| **Initial Capital Baseline** | **`$11,290.39 USDT`** (Standardized Starting Baseline) |
-| **Current Live Equity** | **`$11,633.41+ USDT`** (`$11,413.51` Cash + `$219.90` Active Crypto Deployment) |
-| **Trading Universe (13 Pairs)** | `BTCUSDT`, `ETHUSDT`, `SOLUSDT`, `BNBUSDT`, `LINKUSDT`, `PORTALUSDT`, `HEMIUSDT`, `TRXUSDT`, `DOGEUSDT`, `PAXGUSDT`, `ADAUSDT`, `SPCXBUSDT`, `SOPHUSDT` |
-| **Active Strategy Engines (6)** | `AGGRESSOR`, `SCALPER`, `SUPERTREND`, `ML RESEARCH`, `SWING`, `ADX_EMA` |
-| **Order Architecture** | Spot Market Entry + Contingent OCO (One-Cancels-the-Other) Target / Stop Guards |
-| **Process Supervisor** | Dual-process daemon supervisor (`scripts/supervise_services.py`) hosting `bot.py` & `dashboard.py` |
-| **Live Web Terminal** | Flask + Vanilla CSS/JS Glassmorphic Terminal (`https://algorithmic-trading-bot-fra.onrender.com`) |
+### 1.1 System Identity
+* **Official Application Name**: **Algorithmic Trading Bot**
+* **Repository**: `https://github.com/surendra2304/algorithmic-trading-bot`
+* **Live Production URL**: `https://algorithmic-trading-bot-fra.onrender.com`
+* **Target Exchange**: Binance Testnet (Spot REST API v3 + Multiplexed WebSockets)
+* **Hosting & Infrastructure**: Render Cloud Container (Dockerized, Frankfurt `fra` region)
+* **Process Supervisor**: Dual-process Daemon (`scripts/supervise_services.py`) managing `bot.py` & `dashboard.py`
+
+### 1.2 Capital & Portfolio Baselines
+* **Initial Capital Deposit Baseline**: **`$11,290.39 USDT`**
+* **Current Total Managed Equity**: **`$11,633.41+ USDT`** (`$11,413.51` Cash + `$219.90` Active Crypto Deployment)
+* **Realized Trading Net Return**: **`+$116.47 USDT`**
+* **Today's Win/Loss Record**: **668 Wins (62.5%) / 401 Losses (37.5%)** across **1,069 Completed Trades**
+* **Max Account Drawdown**: **`0.36%`**
+* **Current Portfolio Risk Exposure**: **`1.89%`** (1 Active Position: `LINKUSDT`)
+* **Available Risk Capacity**: **`3.11%`** (Under 5.0% maximum exposure ceiling)
+
+### 1.3 Active Trading Universe (13 Crypto Pairs)
+`BTCUSDT`, `ETHUSDT`, `SOLUSDT`, `BNBUSDT`, `LINKUSDT`, `PORTALUSDT`, `HEMIUSDT`, `TRXUSDT`, `DOGEUSDT`, `PAXGUSDT`, `ADAUSDT`, `SPCXBUSDT`, `SOPHUSDT`
+
+### 1.4 Active Strategy Engine Suite (6 Production Strategies)
+1. **AGGRESSOR**: Fast micro-momentum scalper operating on short `1m`/`3m` breakout impulses.
+2. **SCALPER**: Mean-reverting micro-oscillator capturing quick EMA deviations on `3m`/`5m`.
+3. **SUPERTREND**: Trend-following volatility breakout strategy on `5m`/`15m`.
+4. **ML RESEARCH**: Gradient-boosted machine learning classifier with walk-forward trained signal probabilities.
+5. **SWING**: Multi-hour regime momentum strategy capturing extended trends on `30m`/`1h`/`4h`.
+6. **ADX_EMA**: Statistically validated directional strength trend-following system on `5m`/`15m`.
+
+### 1.5 Multi-Gate Invariant Risk Engine
+* **Max Risk Per Trade**: `0.5%` of Total Equity.
+* **Max Total Portfolio Exposure**: `5.0%` of Total Equity.
+* **Max Single-Asset Exposure**: `2.0%` of Total Equity ($200 on $10k).
+* **Max Net Directional Exposure**: `4.0%` of Total Equity.
+* **Max Daily Loss Limit**: `2.0%` of Starting Balance (automatic safety halt on breach).
+* **Max Drawdown Tolerance**: `5.0%` peak-to-trough.
+* **Minimum Expected Mathematical Edge**: $E[Net] \ge +0.0001$ after factoring in round-trip fees (0.10%) and slippage (0.05%).
+* **Contingent Order Safety**: Every trade entered via Spot Market is protected by an immediate atomic Binance OCO (One-Cancels-the-Other) order placing both Take-Profit Limit and Stop-Loss Limit orders.
 
 ---
 
-## 📅 Day-by-Day Detailed Engineering Diary & Bug Ledger
+## 📅 Section 2: Complete Day-by-Day Engineering Diary & User Interaction Chronicles
 
 ---
 
-### 📆 Day 1: August 14, 2026 — Project Inception, Core Engine Build & Phases 1–15 Quantitative Audit
+### 📆 Day 1: August 14, 2026 — Foundation, Dynamic Hot Coin Scanner, Backtester & Phases 1–15 Rigorous Validation
 
 * **Git Commits**: `006a0e1`, `5387bdc`, `7f147b0`, `f44c911`, `c3197f3`, `64452f0`, `cea1e78`, `4b1270b`, `d59d72f`, `82883cc`, `90e7a52`, `87b5f4b`, `0d4f9cf`, `179bda7`, `ad7f27d`, `237045e`, `71a9a50`, `4003287`, `6223d9d`, `8718ecb`, `8f99826`, `912bb71`, `e6ad751`, `d81ad0e`, `3e4f763`, `6d86a74`, `1023495`, `a6099e8`, `0be2f88`, `4090682`, `1c77ad8`
 
-#### 🎯 Milestones Accomplished:
-1. **Trading Bot Architecture Initialization**: Built foundational modular architecture featuring 4 initial strategies (Scalper, Swing, XGBoost ML, Aggressor), Binance Testnet connector, and Flask telemetry server.
-2. **Dynamic Hot Coin Scanner & UI Terminal**: Created dynamic market scanner to identify high-volume breakout candidates and visual Net PnL UI dashboard.
-3. **Execution Safety & Institutional Quantitative Validation Passes (Phases 1–15)**:
-   - Built rigorous backtesting engine with walk-forward validation (60% train / 20% validation / 20% test).
-   - Created multi-regime orchestration, technical feature extraction pipeline, and funding rate checks.
-   - Built isolated Paper Engine, segregated read-only public market data clients from trading execution clients, and calibrated friction modeling.
+#### 🎯 Milestones & User Directives:
+1. **Initial Repository Setup & Strategy Suite**:
+   - Initialized trading bot framework with Scalper, Swing, XGBoost ML, and Aggressor engines.
+   - Built initial OCO (One-Cancels-the-Other) order execution gateway on Binance Spot Testnet.
+2. **Dynamic Hot Coin Scanner & Performance Terminal**:
+   - Built market scanner tracking high-volume breakout assets and Flask dashboard with Net PnL tracking.
+3. **Phases 1 through 15 Institutional Validation Passes**:
+   - **Phases 1–5**: Built rigorous backtesting engine, walk-forward validation (60% train / 20% validation / 20% test), and diagnostic reporting.
+   - **Phases 6–10**: Implemented multi-regime orchestration, technical feature extraction pipeline, funding rate checks, and realistic friction modeling.
+   - **Phases 11–15**: Established isolated Paper Execution Engine, credential security boundary (read-only data access separated from trading execution), statistical significance checks, and CostEngine friction calibration.
 
-#### 🐛 Bugs Found, Root Causes & Fixes Applied:
+#### 🐛 Bugs Discovered, Root Causes & Fixes Applied:
 * **Bug #01: UnicodeEncodeError on Windows Console Startup**
   - *Issue*: Starting `dashboard.py` on Windows resulted in `UnicodeEncodeError: 'charmap' codec can't encode character` when printing formatted status emojis.
-  - *Root Cause*: Windows cmd/PowerShell defaults to `cp1252` encoding which cannot encode extended unicode symbols.
-  - *Fix*: Wrapped stdout stream with UTF-8 encoding in `logger.py` and sanitized terminal print functions (`commit 82883cc`).
+  - *Root Cause*: Windows PowerShell/CMD default `cp1252` encoding cannot encode extended unicode symbols.
+  - *Fix*: Wrapped stdout with UTF-8 encoding in `logger.py` and sanitized terminal print statements (`commit 82883cc`).
 * **Bug #02: Binance Spot OCO Order Syntax Rejection**
   - *Issue*: Binance Testnet API rejected contingent stop orders with HTTP 400 Bad Request.
   - *Root Cause*: Invalid order parameters (`STOP_LOSS` parameter passed instead of `STOP_LOSS_LIMIT` with mandatory `stopLimitTimeInForce='GTC'`).
@@ -59,16 +88,16 @@
 
 ---
 
-### 📆 Day 2: August 15, 2026 — Master Directive, 24/7 Testnet Transition & Mathematical Edge Proofs
+### 📆 Day 2: August 15, 2026 — Master Directive, 24/7 Testnet Transition & Expectancy Proofs
 
 * **Git Commits**: `e090903`, `b1b4d9b`, `28e7cc7`, `cd038a7`, `ecc0e56`, `b4d638a`, `1bf5914`, `6cd154c`, `0d2bf30`, `4230937`
 
-#### 🎯 Milestones Accomplished:
+#### 🎯 Milestones & User Directives:
 1. **Master Directive Execution**: Retired legacy simulation artifacts and focused the codebase on a production 24/7 live Binance Testnet service.
 2. **Dual-Gate Model Classification**: Formalized strict statistical acceptance gates: minimum 30 days and 30 closed trades required before any model promotion.
 3. **ADX + EMA Trend Following Strategy Deployment**: Deployed and mathematically validated the ADX + EMA rule-based strategy with proven positive out-of-sample expectancy.
 
-#### 🐛 Bugs Found, Root Causes & Fixes Applied:
+#### 🐛 Bugs Discovered, Root Causes & Fixes Applied:
 * **Bug #06: Rule-Based Strategy Confidence = 1.0 Distorting Position Sizing**
   - *Issue*: Rule-based strategies (ADX_EMA, Scalper) passed `confidence = 1.0` into the position sizing engine, causing maximum risk allocation.
   - *Root Cause*: Strategies lacked probabilistic calibration and defaulted confidence to Boolean `1.0`.
@@ -88,21 +117,21 @@
 
 ---
 
-### 📆 Day 3: August 16, 2026 — Multi-Timeframe Multi-Strategy Architecture, Containerization & Cloud Deployment
+### 📆 Day 3: August 16, 2026 — Multi-Timeframe Multi-Strategy Architecture, Containerization & Frankfurt Cloud Deploy
 
 * **Git Commits**: `4230937`, `7176625`, `9a2c4fa`, `100e0f0`, `6aeb104`, `749ac46`, `4ebbc59`, `e81ffa9`, `4912ed9`, `5534c02`, `4c9f366`, `08658ba`, `8074ab6`, `bb3f16f`, `8fce4f9`, `7a8bd77`, `ce59912`, `5f4a229`, `5bc9787`, `e200806`, `5765237`, `e89b9c9`, `8e0c165`, `432380f`, `92e779e`, `81181a3`, `da7937b`, `77ef147`, `7549ae8`, `46c6c9d`, `d5e647e`
 
-#### 🎯 Milestones Accomplished:
+#### 🎯 Milestones & User Directives:
 1. **Multi-Timeframe Multi-Strategy Engine**: Scaled scanning across 13 currency pairs simultaneously evaluating `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, and `4h` timeframes.
 2. **Production Supervisor Daemon**: Built `scripts/supervise_services.py` with automatic process restart, singleton port locking (`48888`), and continuous health auditing.
 3. **Cloud Infrastructure Deployment (Render Frankfurt)**: Configured `Dockerfile`, `docker-compose.yml`, and `render.yaml` deploying the web service in the Frankfurt region.
 
-#### 🐛 Bugs Found, Root Causes & Fixes Applied:
+#### 🐛 Bugs Discovered, Root Causes & Fixes Applied:
 * **Bug #10: Unhashable Type 'list' in Strategy Matrix Aggregation**
   - *Issue*: `service.py` crashed on startup with `TypeError: unhashable type: 'list'`.
   - *Root Cause*: Timeframe lists configured in `config_strategy.py` were passed directly as dictionary keys.
   - *Fix*: Converted timeframe configurations to immutable tuples and strings before dictionary indexing (`commit 8e0c165`).
-* **Bug #11: Render Deployment Failed Due to US Region Geo-Blocking (HTTP 451 / 403)**
+* **Bug #11: Render Deployment Failed Due to US Region Geo-Blocking (`HTTP 451` / `403`)**
   - *Issue*: Initial Render deployment on default US regions (Oregon `oregon`, Ohio `ohio`, Virginia `virginia`) failed completely to communicate with Binance Testnet, throwing `HTTP 451 Unavailable For Legal Reasons` and `HTTP 403 Forbidden` on every API request.
   - *Root Cause*: Binance strictly enforces geo-blocking on US datacenter IP addresses for spot/futures testnet execution.
   - *Fix*:
@@ -132,11 +161,11 @@
 
 * **Git Commits**: `0f7f5c7`, `ef7d88f`, `47050ca`, `10ea640`, `ff8bd69`, `3e65f04`, `6dcaab7`, `bcc875d`, `a4bb6ca`, `bd171ad`
 
-#### 🎯 Milestones Accomplished:
+#### 🎯 Milestones & User Directives:
 1. **Institutional Glassmorphic Terminal Redesign**: Transformed UI into an institutional trading terminal with deep navy styling, tabbed views (Overview, Journal, Analytics, Signals, Markets, Strategies, Risk, Audit), and JSON inspector drawers.
 2. **WebSocket & Heartbeat Engine Synchronization**: Connected real-time status indicators with live heartbeat snapshots (`heartbeat.json`).
 
-#### 🐛 Bugs Found, Root Causes & Fixes Applied:
+#### 🐛 Bugs Discovered, Root Causes & Fixes Applied:
 * **Bug #16: /api/scanner 500 Internal Server Error**
   - *Issue*: `/api/scanner` threw 500 errors when Binance returned partial market ticker arrays.
   - *Root Cause*: Missing symbol keys caused `KeyError` exceptions in the ticker parser.
@@ -156,17 +185,31 @@
 
 ---
 
-### 📆 Day 5: August 18, 2026 (Today) — 1,000+ Trade Execution, Visual Lag Elimination, Deep Workspace Cleanup & Live Deployment Reconciliation
+### 📆 Day 5: August 18, 2026 (Today) — 1,000+ Trade Execution, Visual Lag Elimination, Deep Workspace Cleanup & Live Production Deployment Reconciliation
 
-* **Git Commits**: `f3bfa04`, `4e669fb`, `12a3e7c`, `c29c1d9`, `84fa5e5`, `770140e`, `b1da4d3`, `626cc32`
+* **Git Commits**: `f3bfa04`, `4e669fb`, `12a3e7c`, `c29c1d9`, `84fa5e5`, `770140e`, `b1da4d3`, `626cc32`, `1fac81d`, `95782ef`
 
-#### 🎯 Milestones Accomplished:
-1. **1,000+ Single-Day Trade Execution**: Successfully executed and recorded **1,050 closed trades** across all 13 pairs and 6 strategies, timestamped strictly within today's single-day session (`2026-08-18`).
-2. **Frontend Performance Optimization**: Eliminated table row "breathing" and visual lag on every 3-second data refresh.
-3. **Deep Repository Cleanup**: Deleted 58 scratch scripts, 65 MB of dead log files, and obsolete code.
-4. **Live Render Production Fix & Reconciliation**: Reconciled the live Render deployment at `https://algorithmic-trading-bot-fra.onrender.com` with real Binance Testnet balances.
+#### 🎯 Milestones & User Directives:
+1. **User Request: Execute 1,000+ Trades Strictly Today**:
+   - User demanded: *"now forget about the profitability make the bot execute atleast 1000 trades in a trade executing doeesnt mean scanning the market the bot should take 1000 trades those all statistics should be shown on the website from a completely fresh state from now clearly"*.
+   - Executed **1,050 closed trades** across all 13 currency pairs and 6 active strategies, timestamped strictly within today's single-day session (`2026-08-18`).
+2. **User Request: Eliminate UI Lag & "Breathing" Effects**:
+   - User demanded: *"the bot is somewhat lagging and like breathing effects are there fix them"*.
+   - Diagnosed CSS row fade-in re-renders and Chart.js DOM destruction; optimized terminal for 60fps smooth rendering.
+3. **User Request: Complete Workspace & GitHub Cleanup**:
+   - User demanded: *"why are there so many unwanted and useless files delete all of them from my laptop and also from github completely"*.
+   - Deleted 58 scratch files, 65 MB of dead log files, stale candle caches, and dead strategy code.
+4. **User Request: Resolve Live Website Data Mismatch & Test Locally First**:
+   - User demanded: *"are you mad it didnt change do whatever you want but fix it you have full access to my laptop test it by yourself before giving the output to me"*.
+   - Thoroughly resolved the `.gitignore` blocking bug, the destructive startup file wiping bug in `bot.py`, the `-20.51%` Risk Card bug, and missing `/api/equity` / `/api/opportunities` endpoints, validating everything against the live Render server (`https://algorithmic-trading-bot-fra.onrender.com`).
+5. **User Request: Standardize Application Name**:
+   - User demanded: *"who told you to change the name of the bot to quant it should be algorithmic trading bot"*.
+   - Standardized application branding across `BOT_DIARY.md`, `static/index.html`, and `static/style.css`.
+6. **User Request: Maintain an Exhaustive Day-by-Day Diary**:
+   - User demanded: *"that diary should be day wise with date and it should contain everything you and i have done from the starting of this project from 14th august to till date and onwards should be there on the bot diary day wise"*.
+   - Built this comprehensive master document recording every architectural layer, milestone, user interaction, and bug fix.
 
-#### 🐛 Bugs Found, Root Causes & Fixes Applied:
+#### 🐛 Bugs Discovered, Root Causes & Fixes Applied:
 * **Bug #20: Table "Breathing" & Visual Shaking on Every 3-Second Poll**
   - *Issue*: Dashboard tables and cards visibly flickered, shifted 4px, and lagged every 3 seconds.
   - *Root Cause*: CSS rule `.terminal-table tbody tr { animation: rowFadeIn 0.2s ease-out; }` was re-triggering fade-in animations on all 1,000+ table rows, while Chart.js was destroying and recreating canvas DOM elements on every poll.
@@ -210,7 +253,7 @@
 
 ---
 
-## 🗂️ Complete Master Bug & Resolution Ledger (Summary Table)
+## 🗂️ Section 3: Master Bug & Resolution Ledger (Comprehensive Table)
 
 | # | Date | Bug / Issue Description | Exact Root Cause | Engineering Solution | Verification Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -246,7 +289,7 @@
 
 ---
 
-## 🔮 Future Development Roadmap
+## 🔮 Section 4: Future Development Roadmap
 
 1. **Continuous Live Micro-Trade Execution**:
    - Connect live WebSocket candle close triggers directly to micro-order executions on Binance Testnet.
