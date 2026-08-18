@@ -102,10 +102,13 @@
   - *Issue*: `service.py` crashed on startup with `TypeError: unhashable type: 'list'`.
   - *Root Cause*: Timeframe lists configured in `config_strategy.py` were passed directly as dictionary keys.
   - *Fix*: Converted timeframe configurations to immutable tuples and strings before dictionary indexing (`commit 8e0c165`).
-* **Bug #11: Binance Testnet Cloud Geo-Blocking on US Datacenters**
-  - *Issue*: Cloud deployment on default Render regions failed with HTTP 451 / 403 geo-restriction errors from Binance.
-  - *Root Cause*: Binance restricts Testnet access from US-based datacenter IP ranges.
-  - *Fix*: Added `render.yaml` infrastructure-as-code to explicitly pin deployments to the **Frankfurt (`fra`)** region (`commit 92e779e`, `81181a3`, `da7937b`).
+* **Bug #11: Render Deployment Failed Due to US Region Geo-Blocking (HTTP 451 / 403)**
+  - *Issue*: Initial Render deployment on default US regions (Oregon `oregon`, Ohio `ohio`, Virginia `virginia`) failed completely to communicate with Binance Testnet, throwing `HTTP 451 Unavailable For Legal Reasons` and `HTTP 403 Forbidden` on every API request.
+  - *Root Cause*: Binance strictly enforces geo-blocking on US datacenter IP addresses for spot/futures testnet execution.
+  - *Fix*:
+    1. Created `render.yaml` (Infrastructure-as-Code Blueprint) to explicitly force Render to build and run the container in Europe (`region: frankfurt` / `fra`).
+    2. Fixed blueprint region naming error where shorthand `region: fra` threw a blueprint schema validation failure, correcting it to `region: frankfurt` (`commit 92e779e`, `81181a3`, `da7937b`).
+    3. Re-created the service under `algorithmic-trading-bot-fra`, allowing 100% unrestricted WebSocket and REST API access to Binance.
 * **Bug #12: Docker Entrypoint Failure Due to Windows CRLF Line Endings**
   - *Issue*: Docker container crashed on boot with `/bin/sh^M: bad interpreter: No such file or directory`.
   - *Root Cause*: `start.sh` was saved with Windows CRLF line terminators on the host machine.
@@ -221,7 +224,7 @@
 | **08** | 15-Aug | Cross-contamination of forward metrics | Lack of session ID filtering in telemetry manager | Enforced strict session ID tagging in telemetry | ✅ **Resolved** |
 | **09** | 15-Aug | Sample size gate flaw (< 30 trades) | Evaluated `duration >= 30 OR trades >= 30` | Changed logic to strictly require `AND` | ✅ **Resolved** |
 | **10** | 16-Aug | `TypeError: unhashable type: 'list'` | Timeframe lists used as dictionary keys | Converted lists to immutable tuples/strings | ✅ **Resolved** |
-| **11** | 16-Aug | Binance Testnet Cloud Geo-Blocking | US datacenter IP ranges blocked by Binance | Added `render.yaml` pinning deployment to Frankfurt | ✅ **Resolved** |
+| **11** | 16-Aug | Render US Region Geo-Blocking (HTTP 451/403) | US datacenter IP ranges blocked by Binance | Added `render.yaml` pinning Frankfurt region (`frankfurt`) | ✅ **Resolved** |
 | **12** | 16-Aug | Docker `/bin/sh^M` entrypoint crash | Windows CRLF line endings in `start.sh` | Converted shell scripts to Unix LF | ✅ **Resolved** |
 | **13** | 16-Aug | Realized PnL double-counting | Realized profit added to cash balance twice | Formula: `Total Equity = Cash + Crypto Holdings` | ✅ **Resolved** |
 | **14** | 16-Aug | Duplicate exit order ID pollution | Partial fills recorded multiple exit events | Added exit order deduplication map | ✅ **Resolved** |
