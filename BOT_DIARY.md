@@ -47,7 +47,7 @@
 | **Active Open Positions** | **`1 Position (LINKUSDT)`** | Quantity: 23.24 LINK, Entry: $9.4070, TP: $14.1040, SL: $9.0300 |
 | **Max Account Drawdown** | **`0.36%`** | Peak-to-trough historical drawdown |
 | **Portfolio Risk Exposure** | **`1.88%`** | Under 5.0% maximum risk allocation ceiling |
-| **Automated Test Suite** | **`382 passed / 382 tests (100%)`** | Verified across 2 full consecutive test runs |
+| **Automated Test Suite** | **`387 passed / 387 tests (100%)`** | Verified across 2 full consecutive test runs |
 
 ---
 
