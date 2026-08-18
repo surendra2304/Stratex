@@ -2033,6 +2033,12 @@ def api_risk_events():
             sym = s.get("symbol", "")
             if symbol_filter and sym != symbol_filter:
                 continue
+            
+            # Format dynamic risk numbers
+            req_risk_val = s.get("requested_risk_pct", config.MAX_TESTNET_RISK_PER_TRADE * 100)
+            avail_risk_val = s.get("available_risk_pct", config.MAX_TESTNET_EXPOSURE * 100)
+            exp_val = s.get("exposure_pct", 0.0)
+
             risk_events.append({
                 "timestamp": s.get("timestamp", ""),
                 "event_type": f"RISK_{r_dec}",
@@ -2040,9 +2046,9 @@ def api_risk_events():
                 "strategy": s.get("strategy", "ADX_EMA"),
                 "timeframe": s.get("timeframe", "5m"),
                 "trade_id": s.get("signal_id", ""),
-                "requested_risk": "1.00%",
-                "available_risk": "18.06%",
-                "exposure": "1.94%",
+                "requested_risk": f"{req_risk_val:.2f}%" if isinstance(req_risk_val, (int, float)) else str(req_risk_val),
+                "available_risk": f"{avail_risk_val:.2f}%" if isinstance(avail_risk_val, (int, float)) else str(avail_risk_val),
+                "exposure": f"{exp_val:.2f}%" if isinstance(exp_val, (int, float)) else str(exp_val),
                 "reason": s.get("risk_reason", r_dec),
                 "decision": r_dec,
                 "entry_price": float(s.get("entry", 0.0)),
@@ -2064,6 +2070,10 @@ def api_risk_events():
             sym = e.get("symbol", "")
             if symbol_filter and sym != symbol_filter:
                 continue
+            req_risk_val = e.get("requested_risk_pct", config.MAX_TESTNET_RISK_PER_TRADE * 100)
+            avail_risk_val = e.get("available_risk_pct", config.MAX_TESTNET_EXPOSURE * 100)
+            exp_val = e.get("exposure_pct", 0.0)
+
             risk_events.append({
                 "timestamp": e.get("timestamp", ""),
                 "event_type": "ORDER_FAILED",
@@ -2071,9 +2081,9 @@ def api_risk_events():
                 "strategy": e.get("strategy", "ADX_EMA"),
                 "timeframe": e.get("timeframe", "5m"),
                 "trade_id": e.get("trade_id", ""),
-                "requested_risk": "1.00%",
-                "available_risk": "18.06%",
-                "exposure": "1.94%",
+                "requested_risk": f"{req_risk_val:.2f}%" if isinstance(req_risk_val, (int, float)) else str(req_risk_val),
+                "available_risk": f"{avail_risk_val:.2f}%" if isinstance(avail_risk_val, (int, float)) else str(avail_risk_val),
+                "exposure": f"{exp_val:.2f}%" if isinstance(exp_val, (int, float)) else str(exp_val),
                 "reason": e.get("error_message", err_code),
                 "decision": "REJECTED",
                 "error_code": err_code,
