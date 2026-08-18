@@ -208,9 +208,22 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         active_trades = _load_active_trades()
         if client_order_id:
             for t in active_trades:
-                if t.get("signal_id") == client_order_id or t.get("entry_client_id") == client_order_id:
-                    sys_logger.warning(f"[{strategy_name}] 🚫 Duplicate Client ID {client_order_id} rejected.")
+                if t.get("signal_id") == client_order_id or t.get("entry_client_id") == client_order_id or t.get("trade_id") == client_order_id or str(t.get("entry_order_id")) == str(client_order_id):
+                    sys_logger.warning(f"[{strategy_name}] 🚫 Duplicate Client/Signal ID {client_order_id} rejected.")
                     return None
+            # Also check recent ledger records for deduplication
+            ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
+            if os.path.exists(ledger_file):
+                try:
+                    with open(ledger_file, "r", encoding="utf-8") as lf:
+                        for line in lf:
+                            if not line.strip(): continue
+                            rec = json.loads(line)
+                            if rec.get("signal_id") == client_order_id or rec.get("entry_client_id") == client_order_id or rec.get("trade_id") == client_order_id or str(rec.get("entry_order_id")) == str(client_order_id):
+                                sys_logger.warning(f"[{strategy_name}] 🚫 Duplicate signal already executed in ledger: {client_order_id}")
+                                return None
+                except Exception:
+                    pass
     except StateCorruptionError as e:
         sys_logger.critical(f"State corruption prevents new orders: {e}")
         return None
@@ -350,16 +363,22 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         order["_final_state"] = state
         return order
     except BinanceAPIException as e:
-        notional = float(quantity) * current_price if 'current_price' in locals() else "UNKNOWN"
+        est_price = actual_price if 'actual_price' in locals() and actual_price > 0 else (sl or tp or 0.0)
         sys_logger.error(
-            f"[EXECUTION_FAILED] Binance API Error {e.status_code} | "
-            f"Symbol: {symbol} | Side: {side} | Qty: {quantity} | Notional: {notional} | "
-            f"Params: {order_params} | Code: {e.code} | Message: {e.message}",
-            extra={"strategy": strategy_name, "symbol": symbol}
+            f"[EXECUTION_FAILED] Binance API Error | Code: {e.code} | Message: {e.message} | "
+            f"Symbol: {symbol} | Side: {side} | Quantity: {quantity} | Price: {est_price} | "
+            f"Order Type: {Client.ORDER_TYPE_MARKET} | Client Order ID: {client_order_id}",
+            extra={"strategy": strategy_name, "symbol": symbol, "api_code": e.code, "api_message": e.message}
         )
         raise
     except Exception as e:
-        sys_logger.error(f"[EXEC] ❌ Unexpected error placing entry order: {e}", extra={"strategy": strategy_name, "symbol": symbol})
+        est_price = actual_price if 'actual_price' in locals() and actual_price > 0 else (sl or tp or 0.0)
+        sys_logger.error(
+            f"[EXECUTION_FAILED] Unexpected Exception: {e} | Symbol: {symbol} | Side: {side} | "
+            f"Quantity: {quantity} | Price: {est_price} | Order Type: {Client.ORDER_TYPE_MARKET} | "
+            f"Client Order ID: {client_order_id}",
+            extra={"strategy": strategy_name, "symbol": symbol}
+        )
         raise
 
 

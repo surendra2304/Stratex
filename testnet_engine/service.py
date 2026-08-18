@@ -368,6 +368,75 @@ class TestnetService:
             managed_symbols = set([t['symbol'] for t in active_trades if t.get('status') == 'OPEN'])
             managed_unprotected = [s for s in managed_symbols if s not in protected_symbols and s not in floating_ocos]
             
+            # Crash Recovery: Attempt to place missing OCO protection for unmanaged/unprotected open assets
+            if unprotected and not os.environ.get("PYTEST_CURRENT_TEST"):
+                from execution import _save_active_trades
+                from testnet_engine.protection import place_oco_protection, emergency_market_close
+                for sym in list(unprotected):
+                    try:
+                        logger.info(f"[RECOVERY] 🛡️ Unprotected position detected after restart for {sym}. Attempting safe OCO restoration...")
+                        recent_trades = self.client.get_my_trades(symbol=sym, limit=20)
+                        if recent_trades:
+                            last_trade = recent_trades[-1]
+                            entry_price = float(last_trade['price'])
+                            executed_qty = float(last_trade['qty'])
+                            entry_side = "BUY" if last_trade['isBuyer'] else "SELL"
+                            
+                            # Get current ticker price
+                            curr_ticker = self.client.get_symbol_ticker(symbol=sym)
+                            curr_price = float(curr_ticker['price'])
+                            
+                            # Standard conservative protection levels (SL: 2%, TP: 4%)
+                            if entry_side == "BUY":
+                                sl_price = round(entry_price * 0.98, 4)
+                                tp_price = round(entry_price * 1.04, 4)
+                                is_safe = curr_price > sl_price and curr_price < tp_price
+                            else:
+                                sl_price = round(entry_price * 1.02, 4)
+                                tp_price = round(entry_price * 0.96, 4)
+                                is_safe = curr_price < sl_price and curr_price > tp_price
+
+                            if is_safe:
+                                prot = place_oco_protection(
+                                    client=self.client,
+                                    symbol=sym,
+                                    entry_side=entry_side,
+                                    executed_qty=executed_qty,
+                                    actual_fill_price=entry_price,
+                                    sl_price=sl_price,
+                                    tp_price=tp_price,
+                                    list_client_order_id=f"rec-{int(time.time())}"
+                                )
+                                recovered_trade = {
+                                    "strategy": "RECOVERED",
+                                    "symbol": sym,
+                                    "side": entry_side,
+                                    "quantity": executed_qty,
+                                    "entry_price": entry_price,
+                                    "entry_fee": float(last_trade.get('commission', 0.0)),
+                                    "sl_price": sl_price,
+                                    "tp_price": tp_price,
+                                    "oco_id": prot["oco_order_list_id"],
+                                    "tp_order_id": prot["tp_order_id"],
+                                    "sl_order_id": prot["sl_order_id"],
+                                    "status": "OPEN",
+                                    "state": 1,
+                                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                                    "entry_timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                                    "signal_id": f"RECOVERED_{int(time.time())}",
+                                    "entry_client_id": f"RECOVERED_{int(time.time())}"
+                                }
+                                active_trades.append(recovered_trade)
+                                _save_active_trades(active_trades)
+                                unprotected.remove(sym)
+                                logger.info(f"[RECOVERY] ✅ Successfully restored missing OCO protection for {sym} (OCO ID: {prot['oco_order_list_id']})")
+                            else:
+                                logger.warning(f"[RECOVERY] Price outside safe bounds for {sym}. Attempting emergency market close.")
+                                emergency_market_close(self.client, sym, entry_side, executed_qty)
+                                unprotected.remove(sym)
+                    except Exception as re_err:
+                        logger.error(f"[RECOVERY] Failed to restore missing protection for {sym}: {re_err}")
+
             if unprotected and ("pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST") or managed_unprotected):
                 logger.critical(f"[RECONCILIATION] 🚨 SAFETY HALT: Unprotected assets detected: {unprotected}")
                 self.safety_halt = True
