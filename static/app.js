@@ -57,125 +57,11 @@ const applyColor = (el, val, isPct = false) => {
 };
 
 // ==========================================
-// AUDIO & TOAST NOTIFICATION ENGINE
+// STATE DECLARATIONS
 // ==========================================
-let audioAlertsEnabled = true;
-let audioCtx = null;
-const knownTradeOrderIds = new Set();
 let rawEquityPoints = [];
-let equityTimeframe = 'ALL';
 let rawOpportunities = [];
 let signalFilterState = 'ALL';
-
-function getAudioContext() {
-    if (!audioCtx) {
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (AudioContextClass) audioCtx = new AudioContextClass();
-    }
-    if (audioCtx && audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
-    return audioCtx;
-}
-
-function playTradeChime() {
-    if (!audioAlertsEnabled) return;
-    try {
-        const ctx = getAudioContext();
-        if (!ctx) return;
-        
-        const now = ctx.currentTime;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, now); // D5
-        osc.frequency.exponentialRampToValueAtTime(880.00, now + 0.12); // A5
-        
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-        
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        
-        osc.start(now);
-        osc.stop(now + 0.35);
-    } catch (e) {
-        console.warn("Audio chime error:", e);
-    }
-}
-
-function toggleAudioAlerts() {
-    audioAlertsEnabled = !audioAlertsEnabled;
-    const btn = document.getElementById('audio-toggle-btn');
-    const txt = document.getElementById('audio-status-txt');
-    if (btn) {
-        if (audioAlertsEnabled) {
-            btn.classList.add('active');
-            if (txt) txt.innerText = 'Audio ON';
-            playTradeChime();
-        } else {
-            btn.classList.remove('active');
-            if (txt) txt.innerText = 'Audio OFF';
-        }
-    }
-}
-
-function showTradeToast(trade) {
-    const container = document.getElementById('trade-toast-container');
-    if (!container) return;
-    
-    playTradeChime();
-    
-    const toast = document.createElement('div');
-    toast.className = 'trade-toast';
-    const isWin = (trade.pnl || 0) >= 0;
-    const pnlTxt = trade.pnl !== undefined ? (isWin ? `+$${Number(trade.pnl).toFixed(2)}` : `-$${Math.abs(trade.pnl).toFixed(2)}`) : '';
-    
-    toast.innerHTML = `
-        <div class="toast-header">
-            <div class="toast-title">⚡ ${trade.status === 'CLOSED' ? 'TRADE CLOSED' : 'ORDER EXECUTED'}</div>
-            <div class="toast-time">${new Date().toLocaleTimeString()}</div>
-        </div>
-        <div class="toast-body">
-            <div class="toast-detail-row">
-                <span>Symbol / Side</span>
-                <span class="toast-detail-val">${trade.symbol} • ${trade.action || trade.side}</span>
-            </div>
-            <div class="toast-detail-row">
-                <span>Price / Qty</span>
-                <span class="toast-detail-val">${Number(trade.entry_price || trade.price || 0).toFixed(4)} (${trade.quantity})</span>
-            </div>
-            ${pnlTxt ? `<div class="toast-detail-row"><span>Realized PnL</span><span class="toast-detail-val ${isWin ? 'val-green' : 'val-red'}">${pnlTxt}</span></div>` : ''}
-        </div>
-    `;
-    container.appendChild(toast);
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateY(10px)';
-        setTimeout(() => toast.remove(), 400);
-    }, 5000);
-}
-
-async function exportTradesJSON() {
-    const data = await apiClient.get('/api/trades');
-    if (!data || !data.positions) return;
-    const blob = new Blob([JSON.stringify(data.positions, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'binance_trade_ledger.json';
-    a.click();
-    URL.revokeObjectURL(url);
-}
-
-function setEquityTimeframe(tf) {
-    equityTimeframe = tf;
-    document.querySelectorAll('.btn-tf').forEach(b => b.classList.remove('active'));
-    const btn = document.getElementById('tf-' + tf.toLowerCase());
-    if (btn) btn.classList.add('active');
-    renderEquityChart();
-}
 
 function setSignalFilter(filterType) {
     signalFilterState = filterType;
@@ -1937,34 +1823,51 @@ function inspectStrategy(stratKey) {
 
 
 // ==========================================
-// 8. GLOBAL POLLING & DRAWER CONTROLS
+// ==========================================
+// 8. REAL-TIME EQUITY & BALANCE TIMELINE
 // ==========================================
 let equityChartInst = null;
 let pnlHistChartInst = null;
-let rejPieChartInst = null;
+let pnlDistChartInst = null;
+let equityTimeframe = 'ALL';
+
+function setEquityTimeframe(tf) {
+    equityTimeframe = tf;
+    document.querySelectorAll('#view-dashboard .btn-tf').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById(`tf-${tf.toLowerCase()}`);
+    if (btn) btn.classList.add('active');
+    initChart();
+}
+
+async function initChart() {
+    try {
+        const eqData = await apiClient.get(`/api/equity?timeframe=${equityTimeframe}`);
+        if (!eqData || eqData.length === 0) return;
+        rawEquityPoints = eqData;
+        renderEquityChart();
+    } catch (e) {
+        console.error("Failed to load equity timeline:", e);
+    }
+}
 
 function renderEquityChart() {
     const ctx = document.getElementById('equityChart');
     if (!ctx || !rawEquityPoints || rawEquityPoints.length === 0) return;
 
-    let points = rawEquityPoints;
-    const now = Date.now();
-    if (equityTimeframe === '1D') {
-        points = rawEquityPoints.filter(p => now - p.time <= 86400000);
-    } else if (equityTimeframe === '7D') {
-        points = rawEquityPoints.filter(p => now - p.time <= 7 * 86400000);
-    }
-    if (points.length === 0) points = rawEquityPoints;
-
+    const points = rawEquityPoints;
     const labels = points.map(p => {
         const d = new Date(p.time);
         return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     });
-    const data = points.map(p => p.equity);
+    const eqData = points.map(p => p.equity);
+    const cashData = points.map(p => p.cash !== undefined ? p.cash : p.equity);
 
     if (equityChartInst) {
         equityChartInst.data.labels = labels;
-        equityChartInst.data.datasets[0].data = data;
+        equityChartInst.data.datasets[0].data = eqData;
+        if (equityChartInst.data.datasets[1]) {
+            equityChartInst.data.datasets[1].data = cashData;
+        }
         equityChartInst.update('none');
         return;
     }
@@ -1973,45 +1876,81 @@ function renderEquityChart() {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [{
-                label: 'Equity',
-                data: data,
-                borderColor: '#2563eb',
-                backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                borderWidth: 2,
-                fill: true,
-                tension: 0.1,
-                pointRadius: 0,
-                pointHitRadius: 10
-            }]
+            datasets: [
+                {
+                    label: 'Total Equity',
+                    data: eqData,
+                    borderColor: '#2563eb',
+                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.15,
+                    pointRadius: 0,
+                    pointHitRadius: 10
+                },
+                {
+                    label: 'Liquid Cash',
+                    data: cashData,
+                    borderColor: 'rgba(16, 185, 129, 0.6)',
+                    borderWidth: 1.5,
+                    borderDash: [4, 4],
+                    fill: false,
+                    tension: 0.15,
+                    pointRadius: 0,
+                    pointHitRadius: 10
+                }
+            ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { display: false },
+                legend: {
+                    display: true,
+                    labels: { color: '#94a3b8', font: { family: "'JetBrains Mono', monospace", size: 9 }, boxWidth: 12 }
+                },
                 tooltip: {
                     mode: 'index',
                     intersect: false,
-                    backgroundColor: '#1e293b',
+                    backgroundColor: '#0f172a',
                     titleColor: '#f8fafc',
                     bodyColor: '#94a3b8',
                     borderColor: '#334155',
-                    borderWidth: 1
+                    borderWidth: 1,
+                    callbacks: {
+                        title: function(items) {
+                            if (items.length > 0 && points[items[0].dataIndex]) {
+                                const p = points[items[0].dataIndex];
+                                return formatDateTime(p.timestamp || p.time);
+                            }
+                            return '';
+                        },
+                        afterBody: function(items) {
+                            if (items.length > 0 && points[items[0].dataIndex]) {
+                                const p = points[items[0].dataIndex];
+                                return [
+                                    `Cash: ${formatCurrency(p.cash || 0)}`,
+                                    `Managed Assets: ${formatCurrency(p.managed_assets || 0)}`,
+                                    `Realized PnL: ${formatCurrency(p.realized_pnl || 0)}`,
+                                    `Unrealized PnL: ${formatCurrency(p.unrealized_pnl || 0)}`
+                                ];
+                            }
+                            return [];
+                        }
+                    }
                 }
             },
             scales: {
                 x: { display: false },
-                y: { 
-                    display: true, 
+                y: {
+                    display: true,
                     position: 'right',
-                    grid: { color: '#1e293b' },
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
                     ticks: {
                         color: '#64748b',
                         font: { family: "'JetBrains Mono', monospace", size: 9 },
-                        callback: function(value) { return '$' + value.toLocaleString(); }
-                    },
-                    border: { display: false }
+                        callback: function(v) { return '$' + Number(v).toLocaleString(); }
+                    }
                 }
             },
             interaction: {
@@ -2023,15 +1962,492 @@ function renderEquityChart() {
     });
 }
 
-async function initChart() {
-    const eqData = await apiClient.get('/api/equity');
-    if (!eqData || eqData.length === 0) return;
-    rawEquityPoints = eqData;
-    renderEquityChart();
-}
 
 // ==========================================
-// 8. RISK TERMINAL & DECISION AUDIT
+// 9. AUDIO ALERTS & NOTIFICATION CENTER
+// ==========================================
+let isAudioEnabled = localStorage.getItem('trade_audio_enabled') === 'true';
+let audioCtx = null;
+let notificationHistory = [];
+let seenNotificationIds = new Set();
+let unreadNotifCount = 0;
+let seenToastIds = new Set();
+let isInitialLifecycleLoad = true;
+
+function updateAudioUI() {
+    const btn = document.getElementById('audio-toggle-btn');
+    const txt = document.getElementById('audio-status-txt');
+    if (btn) {
+        if (isAudioEnabled) {
+            btn.classList.add('active');
+            btn.innerHTML = '🔊 <span id="audio-status-txt">Audio ON</span>';
+        } else {
+            btn.classList.remove('active');
+            btn.innerHTML = '🔇 <span id="audio-status-txt">Audio OFF</span>';
+        }
+    }
+}
+
+function toggleAudioAlerts() {
+    isAudioEnabled = !isAudioEnabled;
+    localStorage.setItem('trade_audio_enabled', isAudioEnabled ? 'true' : 'false');
+    updateAudioUI();
+    if (isAudioEnabled) {
+        playAudioAlert('trade_opened');
+    }
+}
+
+function playAudioAlert(type) {
+    if (!isAudioEnabled) return;
+    try {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+
+        const now = audioCtx.currentTime;
+        if (type === 'trade_opened') {
+            [523.25, 659.25, 783.99].forEach((freq, i) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now + i * 0.09);
+                gain.gain.setValueAtTime(0.12, now + i * 0.09);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.25);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now + i * 0.09);
+                osc.stop(now + i * 0.09 + 0.26);
+            });
+        } else if (type === 'trade_closed_win') {
+            [783.99, 1046.50].forEach((freq, i) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now + i * 0.12);
+                gain.gain.setValueAtTime(0.15, now + i * 0.12);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.35);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now + i * 0.12);
+                osc.stop(now + i * 0.12 + 0.36);
+            });
+        } else if (type === 'trade_closed_loss') {
+            [440.0, 349.23].forEach((freq, i) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now + i * 0.14);
+                gain.gain.setValueAtTime(0.12, now + i * 0.14);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.14 + 0.35);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now + i * 0.14);
+                osc.stop(now + i * 0.14 + 0.36);
+            });
+        } else if (type === 'critical_engine_failure' || type === 'order_failed') {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(220, now);
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.41);
+        }
+    } catch (err) {
+        console.error("Audio playback error:", err);
+    }
+}
+
+function pushNotification({ id, title, type, desc, payload, playSoundType }) {
+    if (!id || seenNotificationIds.has(id)) return;
+    seenNotificationIds.add(id);
+
+    const notif = {
+        id,
+        title: title || 'SYSTEM EVENT',
+        type: type || 'INFO',
+        desc: desc || '',
+        time: Date.now(),
+        payload: payload || {}
+    };
+
+    notificationHistory.unshift(notif);
+    if (notificationHistory.length > 50) notificationHistory.pop();
+
+    unreadNotifCount++;
+    updateNotifBadge();
+    renderNotificationList();
+
+    if (playSoundType) {
+        playAudioAlert(playSoundType);
+    }
+}
+
+function updateNotifBadge() {
+    const badge = document.getElementById('notif-badge');
+    if (badge) {
+        if (unreadNotifCount > 0) {
+            badge.innerText = unreadNotifCount > 99 ? '99+' : unreadNotifCount;
+            badge.style.display = 'inline-block';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+function toggleNotificationDropdown() {
+    const dd = document.getElementById('notification-dropdown');
+    if (dd) {
+        dd.classList.toggle('show');
+        if (dd.classList.contains('show')) {
+            unreadNotifCount = 0;
+            updateNotifBadge();
+        }
+    }
+}
+
+function clearNotifications() {
+    notificationHistory = [];
+    unreadNotifCount = 0;
+    updateNotifBadge();
+    renderNotificationList();
+}
+
+function renderNotificationList() {
+    const body = document.getElementById('notif-dropdown-body');
+    if (!body) return;
+
+    if (notificationHistory.length === 0) {
+        body.innerHTML = '<div class="notif-empty">No recent notifications</div>';
+        return;
+    }
+
+    body.innerHTML = notificationHistory.map((n, idx) => {
+        const timeStr = formatTime(n.time);
+        const tagClass = n.type === 'TRADE_OPENED' ? 'tag tag-long' : (n.type === 'TRADE_CLOSED' ? 'tag tag-qualified' : (n.type === 'FAILED' ? 'tag tag-rejected' : 'tag tag-neutral'));
+        return `<div class="notif-item" onclick="inspectNotification(${idx})">
+            <div class="notif-item-top">
+                <span class="${tagClass}">${n.title}</span>
+                <span class="notif-time">${timeStr}</span>
+            </div>
+            <div class="notif-item-desc">${n.desc}</div>
+        </div>`;
+    }).join('');
+}
+
+function inspectNotification(idx) {
+    if (notificationHistory[idx]) {
+        const n = notificationHistory[idx];
+        openInspectorDrawer(`EVENT • ${n.title}`, n.payload || { description: n.desc, time: formatDateTime(n.time) });
+    }
+}
+
+// ─── TOAST NOTIFICATIONS ───
+function showTradeOpenedToast(trade) {
+    const toastId = `OPEN_${trade.trade_id || trade.symbol}_${trade.fill_timestamp || trade.timestamp || Date.now()}`;
+    if (seenToastIds.has(toastId)) return;
+    seenToastIds.add(toastId);
+
+    const container = document.getElementById('trade-toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'trade-toast toast-open';
+    const sym = trade.symbol || 'PAIR';
+    const tf = trade.timeframe || '5m';
+    const strat = trade.strategy || 'ADX_EMA';
+    const side = trade.side || 'BUY';
+    const entry = Number(trade.entry_price || trade.entry || 0);
+    const qty = Number(trade.quantity || 0);
+    const stop = Number(trade.stop_loss || trade.stop || 0);
+    const target = Number(trade.take_profit || trade.target || 0);
+    const balEntry = Number(trade.cash_before_entry || trade.balance || 0);
+    const timeStr = formatTime(trade.fill_timestamp || trade.timestamp || Date.now());
+
+    toast.innerHTML = `
+        <div class="toast-header">
+            <div class="toast-badge-title">
+                <span class="tag tag-long">🟢 TRADE OPENED</span>
+                <span>${sym}</span>
+            </div>
+            <span class="toast-time">${timeStr}</span>
+        </div>
+        <div class="toast-grid">
+            <div class="toast-row"><span class="toast-lbl">Strategy:</span><span class="toast-val">${strat} (${tf})</span></div>
+            <div class="toast-row"><span class="toast-lbl">Side / Qty:</span><span class="toast-val td-strong">${side} ${qty}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Entry Price:</span><span class="toast-val val-green">$${entry.toFixed(4)}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Stop Loss:</span><span class="toast-val val-amber">${stop > 0 ? '$' + stop.toFixed(4) : '-'}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Target:</span><span class="toast-val val-cyan">${target > 0 ? '$' + target.toFixed(4) : '-'}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Bal @ Entry:</span><span class="toast-val">$${balEntry.toFixed(2)}</span></div>
+        </div>
+        <div class="toast-actions">
+            <button class="toast-btn-action" onclick="inspectTrade(${JSON.stringify(trade).replace(/"/g, '&quot;')})">VIEW TRADE</button>
+            <button class="toast-btn-dismiss" onclick="this.closest('.trade-toast').remove()">Dismiss</button>
+        </div>
+    `;
+
+    container.appendChild(toast);
+    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 9000);
+
+    pushNotification({
+        id: toastId,
+        title: `TRADE OPENED • ${sym}`,
+        type: 'TRADE_OPENED',
+        desc: `${side} ${qty} ${sym} @ $${entry.toFixed(4)} (${strat})`,
+        payload: trade,
+        playSoundType: 'trade_opened'
+    });
+}
+
+function showTradeClosedToast(trade) {
+    const toastId = `CLOSE_${trade.trade_id || trade.symbol}_${trade.close_timestamp || trade.timestamp || Date.now()}`;
+    if (seenToastIds.has(toastId)) return;
+    seenToastIds.add(toastId);
+
+    const container = document.getElementById('trade-toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    const netPnl = Number(trade.net_pnl !== undefined ? trade.net_pnl : (trade.pnl || 0));
+    const isWin = netPnl >= 0;
+    toast.className = `trade-toast ${isWin ? 'toast-close-win' : 'toast-close-loss'}`;
+
+    const sym = trade.symbol || 'PAIR';
+    const tf = trade.timeframe || '5m';
+    const strat = trade.strategy || 'ADX_EMA';
+    const side = trade.side || 'BUY';
+    const entry = Number(trade.entry_price || 0);
+    const exit = Number(trade.exit_price || 0);
+    const grossPnl = Number(trade.gross_pnl || netPnl);
+    const fees = Number(trade.total_fees || trade.fees || 0);
+    const durStr = trade.duration_seconds ? `${Math.round(trade.duration_seconds)}s` : '-';
+    const closeReason = trade.close_reason || trade.exit_reason || 'OCO_EXIT';
+    const timeStr = formatTime(trade.close_timestamp || trade.timestamp || Date.now());
+
+    toast.innerHTML = `
+        <div class="toast-header">
+            <div class="toast-badge-title">
+                <span class="tag ${isWin ? 'tag-qualified' : 'tag-rejected'}">${isWin ? '🏆 TRADE CLOSED (WIN)' : '🔻 TRADE CLOSED (LOSS)'}</span>
+                <span>${sym}</span>
+            </div>
+            <span class="toast-time">${timeStr}</span>
+        </div>
+        <div class="toast-grid">
+            <div class="toast-row"><span class="toast-lbl">Strategy:</span><span class="toast-val">${strat} (${tf})</span></div>
+            <div class="toast-row"><span class="toast-lbl">Net PnL:</span><span class="toast-val ${isWin ? 'val-green' : 'val-red'} td-strong">${isWin ? '+' : ''}${formatCurrency(netPnl)}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Entry / Exit:</span><span class="toast-val">$${entry.toFixed(4)} → $${exit.toFixed(4)}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Gross / Fees:</span><span class="toast-val">$${grossPnl.toFixed(2)} / $${fees.toFixed(2)}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Duration:</span><span class="toast-val">${durStr}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Reason:</span><span class="toast-val">${closeReason}</span></div>
+        </div>
+        <div class="toast-actions">
+            <button class="toast-btn-action" onclick="inspectTrade(${JSON.stringify(trade).replace(/"/g, '&quot;')})">VIEW TRADE</button>
+            <button class="toast-btn-dismiss" onclick="this.closest('.trade-toast').remove()">Dismiss</button>
+        </div>
+    `;
+
+    container.appendChild(toast);
+    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 9000);
+
+    pushNotification({
+        id: toastId,
+        title: `TRADE CLOSED • ${sym} (${isWin ? '+' : ''}${formatCurrency(netPnl)})`,
+        type: 'TRADE_CLOSED',
+        desc: `Closed ${side} ${sym} via ${closeReason} @ $${exit.toFixed(4)} (Net PnL: ${formatCurrency(netPnl)})`,
+        payload: trade,
+        playSoundType: isWin ? 'trade_closed_win' : 'trade_closed_loss'
+    });
+}
+
+function showOrderFailedToast(event) {
+    const toastId = `FAIL_${event.symbol || 'ORD'}_${event.timestamp || Date.now()}`;
+    if (seenToastIds.has(toastId)) return;
+    seenToastIds.add(toastId);
+
+    const container = document.getElementById('trade-toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'trade-toast toast-failed';
+    const sym = event.symbol || '-';
+    const strat = event.strategy || 'ADX_EMA';
+    const side = event.side || 'BUY';
+    const reason = event.reason || event.error_message || 'Exchange order rejected';
+    const errCode = event.error_code || '';
+    const timeStr = formatTime(event.timestamp || Date.now());
+
+    toast.innerHTML = `
+        <div class="toast-header">
+            <div class="toast-badge-title">
+                <span class="tag tag-rejected">⚠️ ORDER FAILED</span>
+                <span>${sym}</span>
+            </div>
+            <span class="toast-time">${timeStr}</span>
+        </div>
+        <div class="toast-grid">
+            <div class="toast-row"><span class="toast-lbl">Strategy:</span><span class="toast-val">${strat}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Side:</span><span class="toast-val">${side}</span></div>
+            <div class="toast-row" style="grid-column: span 2;"><span class="toast-lbl">Reason:</span><span class="toast-val val-red">${reason} ${errCode ? '(' + errCode + ')' : ''}</span></div>
+        </div>
+        <div class="toast-actions">
+            <button class="toast-btn-action" onclick="openInspectorDrawer('ORDER FAILURE AUDIT', ${JSON.stringify(event).replace(/"/g, '&quot;')})">VIEW DETAILS</button>
+            <button class="toast-btn-dismiss" onclick="this.closest('.trade-toast').remove()">Dismiss</button>
+        </div>
+    `;
+
+    container.appendChild(toast);
+    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 9000);
+
+    pushNotification({
+        id: toastId,
+        title: `ORDER FAILED • ${sym}`,
+        type: 'FAILED',
+        desc: `Order failed on ${sym}: ${reason}`,
+        payload: event,
+        playSoundType: 'critical_engine_failure'
+    });
+}
+
+function showEngineEventToast(title, msg, type = 'ENGINE_EVENT') {
+    const toastId = `ENG_${title}_${Date.now()}`;
+    const container = document.getElementById('trade-toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'trade-toast toast-engine';
+    toast.innerHTML = `
+        <div class="toast-header">
+            <div class="toast-badge-title">
+                <span class="tag ${title.includes('OFFLINE') || title.includes('HALT') ? 'tag-rejected' : 'tag-qualified'}">⚡ ${title}</span>
+            </div>
+            <span class="toast-time">${formatTime(Date.now())}</span>
+        </div>
+        <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.4;">${msg}</div>
+        <div class="toast-actions">
+            <button class="toast-btn-dismiss" style="margin-left: auto;" onclick="this.closest('.trade-toast').remove()">Dismiss</button>
+        </div>
+    `;
+
+    container.appendChild(toast);
+    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 8000);
+
+    pushNotification({
+        id: toastId,
+        title: title,
+        type: type,
+        desc: msg,
+        payload: { title, msg, timestamp: new Date().toISOString() },
+        playSoundType: (title.includes('OFFLINE') || title.includes('HALT')) ? 'critical_engine_failure' : null
+    });
+}
+
+
+// ==========================================
+// 10. ACCOUNT ACTIVITY TIMELINE
+// ==========================================
+let allRawActivity = [];
+let currentActivityFilter = 'ALL';
+
+function filterActivity(filterType) {
+    currentActivityFilter = filterType;
+    document.querySelectorAll('#view-activity .btn-tf').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById(`btn-act-${filterType.toLowerCase()}`);
+    if (btn) btn.classList.add('active');
+    renderActivityTable();
+}
+
+async function fetchActivity() {
+    try {
+        const res = await apiClient.get('/api/activity?limit=100');
+        if (!res || !Array.isArray(res.activity)) return;
+
+        allRawActivity = res.activity;
+        const countEl = document.getElementById('activity-count');
+        if (countEl) countEl.innerText = `${allRawActivity.length} Events Logged`;
+
+        // Check for new trades / events to dispatch toasts (only after initial load to avoid toast flood on boot)
+        if (!isInitialLifecycleLoad) {
+            allRawActivity.forEach(ev => {
+                if (ev.type === 'TRADE OPENED' && !seenToastIds.has(`OPEN_${ev.trade_id}_${ev.timestamp}`)) {
+                    showTradeOpenedToast(ev.raw || ev);
+                } else if (ev.type === 'TRADE CLOSED' && !seenToastIds.has(`CLOSE_${ev.trade_id}_${ev.timestamp}`)) {
+                    showTradeClosedToast(ev.raw || ev);
+                } else if (ev.type === 'ORDER FAILED' && !seenToastIds.has(`FAIL_${ev.symbol}_${ev.timestamp}`)) {
+                    showOrderFailedToast(ev.raw || ev);
+                }
+            });
+        }
+        isInitialLifecycleLoad = false;
+
+        renderActivityTable();
+    } catch (e) {
+        console.error("Failed to fetch account activity:", e);
+    }
+}
+
+function renderActivityTable() {
+    const tbody = document.getElementById('activity-logs-body');
+    if (!tbody) return;
+
+    let list = allRawActivity;
+    if (currentActivityFilter === 'TRADES') {
+        list = allRawActivity.filter(a => a.event && (a.event.includes('Trade') || a.type.includes('TRADE')));
+    } else if (currentActivityFilter === 'BALANCE') {
+        list = allRawActivity.filter(a => a.event && (a.event.includes('Balance') || a.event.includes('Fee') || a.event.includes('Reconciliation')));
+    } else if (currentActivityFilter === 'SYSTEM') {
+        list = allRawActivity.filter(a => a.event && (a.event.includes('Engine') || a.event.includes('Order failed') || a.event.includes('Safety')));
+    } else if (currentActivityFilter === 'SIGNALS') {
+        list = allRawActivity.filter(a => a.event && a.event.includes('signal'));
+    }
+
+    if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No Matching Activity Logged</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = list.map((ev, idx) => {
+        const timeStr = ev.timestamp ? formatDateTime(ev.timestamp) : '-';
+        const evName = ev.event || ev.type || 'Event';
+        const evTagClass = evName.includes('Trade opened') ? 'tag tag-long' : (evName.includes('Trade closed') ? 'tag tag-qualified' : (evName.includes('Order failed') ? 'tag tag-rejected' : (evName.includes('Fee') ? 'tag tag-short' : 'tag tag-neutral')));
+        const sym = ev.symbol || '-';
+        const strat = ev.strategy || '-';
+        const balStr = ev.balance !== undefined ? formatCurrency(Number(ev.balance)) : '-';
+        const eqStr = ev.equity !== undefined ? formatCurrency(Number(ev.equity)) : '-';
+        const pnl = Number(ev.pnl || 0);
+        const pnlStr = ev.value_pnl && ev.value_pnl !== '-' ? ev.value_pnl : (pnl !== 0 ? `<span class="${pnl >= 0 ? 'val-green' : 'val-red'}">${pnl >= 0 ? '+' : ''}${formatCurrency(pnl)}</span>` : '-');
+        const tid = ev.trade_id || '-';
+        const desc = ev.description || '-';
+
+        return `<tr style="cursor: pointer;" onclick="inspectActivityByIndex(${idx})" title="Click to view full event audit payload">
+            <td>${timeStr}</td>
+            <td><span class="${evTagClass}">${evName}</span></td>
+            <td class="td-strong">${sym}</td>
+            <td>${strat}</td>
+            <td>${balStr}</td>
+            <td>${eqStr}</td>
+            <td>${pnlStr}</td>
+            <td>${tid}</td>
+            <td title="${desc}">${desc.length > 40 ? desc.substring(0, 40) + '...' : desc}</td>
+        </tr>`;
+    }).join('');
+}
+
+function inspectActivityByIndex(idx) {
+    if (allRawActivity[idx]) {
+        const ev = allRawActivity[idx];
+        openInspectorDrawer(`EVENT AUDIT • ${ev.event || ev.type}`, ev.raw || ev);
+    }
+}
+
+
+// ==========================================
+// 11. RISK TERMINAL & DECISION AUDIT
 // ==========================================
 let allRawRiskEvents = [];
 
@@ -2133,10 +2549,9 @@ function inspectRiskEventByIndex(idx) {
 
 
 // ==========================================
-// 9. QUANTITATIVE ANALYTICS & DIAGNOSTICS
+// 12. QUANTITATIVE ANALYTICS & DIAGNOSTICS
 // ==========================================
 let activeAnalyticsTimeframe = 'ALL';
-let pnlDistChartInst = null;
 
 function setAnalyticsTimeframe(tf) {
     activeAnalyticsTimeframe = tf;
@@ -2360,7 +2775,7 @@ function renderComparisonTable(tbodyId, dataMap) {
 
 
 // ==========================================
-// 10. GLOBAL POLLING & DRAWER CONTROLS
+// 13. GLOBAL POLLING & DRAWER CONTROLS
 // ==========================================
 function updateDashboard() {
     Promise.all([
@@ -2372,6 +2787,7 @@ function updateDashboard() {
         fetchStrategies(),
         fetchRiskData(),
         fetchAnalyticsData(),
+        fetchActivity(),
         fetchOpenOrders(),
         initChart()
     ]).finally(() => {
@@ -2432,6 +2848,7 @@ function exportTradesJSON() {
 // INITIALIZATION
 // ==========================================
 startClockLoop(); 
+updateAudioUI();
 initChart();
 updateDashboard(); 
 setInterval(updateDashboard, 2500);

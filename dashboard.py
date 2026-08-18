@@ -597,28 +597,102 @@ def _get_trades_data():
     }
 
 @app.route('/api/equity')
+@app.route('/api/equity-timeline')
+@app.route('/api/balance-timeline')
 def api_equity():
-    """Returns historical equity curve points for chart."""
-    eq_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
+    """Returns historical equity & balance curve points with rich snapshot data for chart."""
+    from testnet_engine.telemetry_manager import get_telemetry_manager
+    tf_filter = request.args.get("timeframe", "ALL").upper()
+    now = datetime.datetime.utcnow()
+    cutoff = None
+    if tf_filter == "1H":
+        cutoff = now - datetime.timedelta(hours=1)
+    elif tf_filter == "6H":
+        cutoff = now - datetime.timedelta(hours=6)
+    elif tf_filter == "1D":
+        cutoff = now - datetime.timedelta(days=1)
+    elif tf_filter == "7D":
+        cutoff = now - datetime.timedelta(days=7)
+
+    tm = get_telemetry_manager()
+    raw_snaps = tm.get_equity_timeline(time_range="all")
+    
     points = []
-    if os.path.exists(eq_file):
-        try:
-            with open(eq_file, "r") as f:
-                for line in f:
-                    if not line.strip(): continue
-                    try:
-                        snap = json.loads(line)
-                        ts_str = snap.get("timestamp", "")
-                        if ts_str:
-                            dt = datetime.datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
-                            points.append({
-                                "time": int(dt.timestamp() * 1000),
-                                "equity": float(snap.get("equity", 0.0))
-                            })
-                    except Exception:
-                        pass
-        except Exception as e:
-            logger.error(f"Error reading equity history: {e}")
+    for snap in raw_snaps:
+        ts_str = snap.get("timestamp", "")
+        if ts_str:
+            try:
+                dt = datetime.datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                if cutoff and dt < cutoff:
+                    continue
+                cash = float(snap.get("cash_usdt", snap.get("cash", 0.0)))
+                managed = float(snap.get("asset_market_value", snap.get("crypto_holdings_value", 0.0)))
+                eq = float(snap.get("total_equity", snap.get("equity", cash + managed)))
+                realized = float(snap.get("realized_pnl", 0.0))
+                unrealized = float(snap.get("unrealized_pnl", 0.0))
+
+                points.append({
+                    "time": int(dt.timestamp() * 1000),
+                    "timestamp": ts_str,
+                    "equity": eq,
+                    "cash": cash,
+                    "managed_assets": managed,
+                    "realized_pnl": realized,
+                    "unrealized_pnl": unrealized
+                })
+            except Exception:
+                pass
+
+    # Fallback to local equity file if telemetry store empty
+    if not points:
+        eq_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
+        if os.path.exists(eq_file):
+            try:
+                with open(eq_file, "r") as f:
+                    for line in f:
+                        if not line.strip(): continue
+                        try:
+                            snap = json.loads(line)
+                            ts_str = snap.get("timestamp", "")
+                            if ts_str:
+                                dt = datetime.datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                                if cutoff and dt < cutoff:
+                                    continue
+                                cash = float(snap.get("cash_usdt", snap.get("cash", 0.0)))
+                                managed = float(snap.get("asset_market_value", snap.get("crypto_holdings_value", 0.0)))
+                                eq = float(snap.get("total_equity", snap.get("equity", cash + managed)))
+                                realized = float(snap.get("realized_pnl", 0.0))
+                                unrealized = float(snap.get("unrealized_pnl", 0.0))
+
+                                points.append({
+                                    "time": int(dt.timestamp() * 1000),
+                                    "timestamp": ts_str,
+                                    "equity": eq,
+                                    "cash": cash,
+                                    "managed_assets": managed,
+                                    "realized_pnl": realized,
+                                    "unrealized_pnl": unrealized
+                                })
+                        except Exception:
+                            pass
+            except Exception as e:
+                logger.error(f"Error reading equity history: {e}")
+
+    # If still empty, supply current live holdings snapshot
+    if not points:
+        holdings = get_live_account_and_holdings()
+        cash = holdings["usdt_total_cash"]
+        managed = holdings["active_trade_holdings_value"]
+        points.append({
+            "time": int(now.timestamp() * 1000),
+            "timestamp": now.isoformat() + "Z",
+            "equity": round(cash + managed, 2),
+            "cash": round(cash, 2),
+            "managed_assets": round(managed, 2),
+            "realized_pnl": 0.0,
+            "unrealized_pnl": 0.0
+        })
+
     return jsonify(points)
 
 @app.route('/api/scanner')
@@ -1695,137 +1769,200 @@ def api_opportunities():
 
 @app.route('/api/activity')
 @app.route('/api/telemetry/activity')
+@app.route('/api/account-activity')
 def api_activity():
     """
     Returns unified chronological event feed containing:
-    SIGNAL, PROFITABILITY ACCEPTED, PROFITABILITY REJECTED,
-    RISK ACCEPTED, RISK REJECTED, ORDER SUBMITTED, ORDER FILLED,
-    POSITION OPENED, POSITION CLOSED, BALANCE CHANGE.
+    Trade opened, Trade closed, Fee, Reconciliation, Balance change,
+    Equity change, Engine recovery, Order failed, Safety halt, Signal.
     """
     try:
         from testnet_engine.telemetry_manager import get_telemetry_manager
         tm = get_telemetry_manager()
-        limit = int(request.args.get('limit', 50))
+        limit = int(request.args.get('limit', 100))
         
         events = []
-        
-        # 1. Signals & Gate Events
-        raw_signals = tm.get_signals_log(limit=100)
+        account_holdings = get_live_account_and_holdings()
+        curr_cash = account_holdings["usdt_total_cash"]
+        curr_eq = curr_cash + account_holdings["active_trade_holdings_value"]
+
+        # 1. Canonical Trades (Opened & Closed)
+        raw_trades = tm.query_trades(limit=100)
+        for t in raw_trades:
+            tid = t.get("trade_id", "")
+            sym = t.get("symbol", "")
+            strat = t.get("strategy", "")
+            tf = t.get("timeframe", "5m")
+            side = t.get("side", "BUY")
+            
+            # Opened event
+            open_ts = t.get("fill_timestamp") or t.get("order_submit_timestamp") or t.get("signal_timestamp")
+            if open_ts:
+                eq_open = float(t.get("equity_before_entry") or t.get("equity_after_entry") or curr_eq)
+                bal_open = float(t.get("cash_before_entry") or t.get("cash_after_entry") or curr_cash)
+                events.append({
+                    "time": open_ts,
+                    "timestamp": open_ts,
+                    "event": "Trade opened",
+                    "type": "TRADE OPENED",
+                    "symbol": sym,
+                    "strategy": strat,
+                    "timeframe": tf,
+                    "trade_id": tid,
+                    "balance": bal_open,
+                    "equity": eq_open,
+                    "pnl": 0.0,
+                    "value_pnl": "$0.00",
+                    "description": f"Opened {side} {t.get('quantity', 0)} {sym} @ ${float(t.get('entry_price', 0)):,.4f} ({strat})",
+                    "raw": t
+                })
+
+            # Closed event
+            close_ts = t.get("close_timestamp") or t.get("close_time")
+            if close_ts and t.get("status") == "CLOSED":
+                net_pnl = float(t.get("net_pnl", t.get("pnl", 0.0)))
+                fees = float(t.get("total_fees", t.get("fees", 0.0)))
+                eq_close = float(t.get("equity_after_exit") or t.get("equity_before_exit") or curr_eq)
+                bal_close = float(t.get("cash_after_exit") or t.get("cash_before_exit") or curr_cash)
+                
+                events.append({
+                    "time": close_ts,
+                    "timestamp": close_ts,
+                    "event": "Trade closed",
+                    "type": "TRADE CLOSED",
+                    "symbol": sym,
+                    "strategy": strat,
+                    "timeframe": tf,
+                    "trade_id": tid,
+                    "balance": bal_close,
+                    "equity": eq_close,
+                    "pnl": net_pnl,
+                    "value_pnl": f"{'+' if net_pnl >= 0 else ''}${net_pnl:,.2f}",
+                    "description": f"Closed {side} {sym} via {t.get('close_reason', 'OCO_TARGET')} @ ${float(t.get('exit_price', 0)):,.4f} (Net PnL: {'+' if net_pnl >= 0 else ''}${net_pnl:,.2f})",
+                    "raw": t
+                })
+
+                if fees > 0:
+                    events.append({
+                        "time": close_ts,
+                        "timestamp": close_ts,
+                        "event": "Fee",
+                        "type": "FEE",
+                        "symbol": sym,
+                        "strategy": strat,
+                        "timeframe": tf,
+                        "trade_id": tid,
+                        "balance": bal_close,
+                        "equity": eq_close,
+                        "pnl": -fees,
+                        "value_pnl": f"-${fees:,.4f}",
+                        "description": f"Exchange commission deducted: ${fees:,.4f} for {tid}",
+                        "raw": {"trade_id": tid, "fees": fees, "timestamp": close_ts}
+                    })
+
+        # 2. Balance & Reconciliation Events
+        raw_bal = tm.get_balance_events(limit=100)
+        for b in raw_bal:
+            ts = b.get("timestamp", "")
+            ev_type = str(b.get("event_type", "BALANCE_CHANGE")).upper()
+            delta = float(b.get("delta", 0.0))
+            b_after = float(b.get("balance_after", curr_cash))
+            
+            tag_name = "Reconciliation" if "RECONCIL" in ev_type else ("Fee" if "FEE" in ev_type else "Balance change")
+            events.append({
+                "time": ts,
+                "timestamp": ts,
+                "event": tag_name,
+                "type": ev_type,
+                "symbol": b.get("symbol", "USDT"),
+                "strategy": b.get("strategy", "-"),
+                "timeframe": b.get("timeframe", "-"),
+                "trade_id": b.get("trade_id", "-"),
+                "balance": b_after,
+                "equity": curr_eq,
+                "pnl": float(b.get("realized_pnl_delta", delta)),
+                "value_pnl": f"{'+' if delta >= 0 else ''}${delta:,.2f}",
+                "description": f"Balance update: ${float(b.get('balance_before', 0)):,.2f} -> ${b_after:,.2f} ({b.get('reason', ev_type)})",
+                "raw": b
+            })
+
+        # 3. Execution & Failure Events
+        raw_exec = tm.get_execution_events(limit=100)
+        for e in raw_exec:
+            ts = e.get("timestamp", "")
+            ev_type = str(e.get("event_type", "")).upper()
+            sym = e.get("symbol", "")
+            strat = e.get("strategy", "")
+            tf = e.get("timeframe", "5m")
+            
+            if ev_type == "ORDER_FAILED":
+                events.append({
+                    "time": ts,
+                    "timestamp": ts,
+                    "event": "Order failed",
+                    "type": "ORDER FAILED",
+                    "symbol": sym,
+                    "strategy": strat,
+                    "timeframe": tf,
+                    "trade_id": e.get("trade_id", "-"),
+                    "balance": curr_cash,
+                    "equity": curr_eq,
+                    "pnl": 0.0,
+                    "value_pnl": "-",
+                    "description": f"Order failure on {sym}: {e.get('error_message', e.get('error_code', 'Exchange rejected order'))}",
+                    "raw": e
+                })
+            elif "RECOVERY" in ev_type or "HEARTBEAT" in ev_type:
+                events.append({
+                    "time": ts,
+                    "timestamp": ts,
+                    "event": "Engine recovery",
+                    "type": "ENGINE RECOVERY",
+                    "symbol": sym or "SYSTEM",
+                    "strategy": strat or "-",
+                    "timeframe": tf,
+                    "trade_id": e.get("trade_id", "-"),
+                    "balance": curr_cash,
+                    "equity": curr_eq,
+                    "pnl": 0.0,
+                    "value_pnl": "-",
+                    "description": f"Engine state reconciled: {e.get('details', 'State successfully restored')}",
+                    "raw": e
+                })
+
+        # 4. Signals
+        raw_signals = tm.get_signals_log(limit=50)
         for s in raw_signals:
             ts = s.get("timestamp", "")
             sym = s.get("symbol", "")
             strat = s.get("strategy", "")
             tf = s.get("timeframe", "5m")
             dec = s.get("decision", "HOLD")
-            p_dec = s.get("profitability_decision", "")
-            r_dec = s.get("risk_decision", "")
-            
-            # Base signal
-            events.append({
-                "time": ts,
-                "type": "SIGNAL",
-                "symbol": sym,
-                "strategy": strat,
-                "timeframe": tf,
-                "description": f"Generated {dec} signal (Confidence {int(float(s.get('confidence', 0))*100)}%)",
-                "value_pnl": f"${float(s.get('entry', 0)):,.2f}" if float(s.get('entry', 0)) > 0 else "-",
-                "raw": s
-            })
-            
-            # Profitability gate
-            if p_dec in ["ACCEPTED", "REJECTED"]:
+            f_dec = s.get("final_decision", "")
+
+            if f_dec in ["ACCEPTED", "EXECUTED"] or dec in ["BUY", "SELL"]:
                 events.append({
                     "time": ts,
-                    "type": f"PROFITABILITY {p_dec}",
+                    "timestamp": ts,
+                    "event": "New qualifying signal",
+                    "type": "QUALIFYING SIGNAL",
                     "symbol": sym,
                     "strategy": strat,
                     "timeframe": tf,
-                    "description": f"Profitability Gate: {s.get('profitability_reason', p_dec)} (Exp. Net: {float(s.get('expected_net', 0))*100:.2f}%)",
-                    "value_pnl": f"{float(s.get('expected_net', 0))*100:+.2f}%",
+                    "trade_id": s.get("signal_id", "-"),
+                    "balance": curr_cash,
+                    "equity": curr_eq,
+                    "pnl": 0.0,
+                    "value_pnl": f"${float(s.get('entry', 0)):,.2f}" if float(s.get('entry', 0)) > 0 else "-",
+                    "description": f"New Qualifying Signal: {dec} {sym} ({strat}, {tf}) Confidence {int(float(s.get('confidence', 0))*100)}%",
                     "raw": s
                 })
-                
-            # Risk gate
-            if r_dec in ["ACCEPTED", "REJECTED"]:
-                events.append({
-                    "time": ts,
-                    "type": f"RISK {r_dec}",
-                    "symbol": sym,
-                    "strategy": strat,
-                    "timeframe": tf,
-                    "description": f"Risk Gate: {s.get('risk_reason', r_dec)}",
-                    "value_pnl": "-",
-                    "raw": s
-                })
-
-        # 2. Execution Events
-        raw_exec = tm.get_execution_events(limit=100)
-        for e in raw_exec:
-            ts = e.get("timestamp", "")
-            sym = e.get("symbol", "")
-            strat = e.get("strategy", "")
-            tf = e.get("timeframe", "5m")
-            ev_type = str(e.get("event_type", "execution_attempt")).upper().replace("_", " ")
-            
-            type_name = "ORDER SUBMITTED" if "SUBMIT" in ev_type else ("ORDER FILLED" if "FILL" in ev_type else ("POSITION OPENED" if "OPEN" in ev_type else ("POSITION CLOSED" if "CLOSE" in ev_type else ev_type)))
-            
-            desc = f"{e.get('side', 'BUY')} {e.get('quantity', '')} {sym} @ ${float(e.get('price', 0)):,.4f}"
-            if e.get("error_message"):
-                desc += f" (Error: {e.get('error_message')})"
-                
-            events.append({
-                "time": ts,
-                "type": type_name,
-                "symbol": sym,
-                "strategy": strat,
-                "timeframe": tf,
-                "description": desc,
-                "value_pnl": f"${float(e.get('price', 0))*float(e.get('quantity', 0)):,.2f}" if float(e.get('price', 0)) > 0 else "-",
-                "raw": e
-            })
-
-        # 3. Trade Events (Fills & Closures)
-        trades_info = _get_trades_data()
-        for t in trades_info.get("positions", [])[:50]:
-            ts = t.get("timestamp", "")
-            sym = t.get("symbol", "")
-            strat = t.get("strategy", "")
-            pnl = float(t.get("pnl", 0.0))
-            side = t.get("action", "BUY")
-            
-            events.append({
-                "time": ts,
-                "type": "POSITION CLOSED",
-                "symbol": sym,
-                "strategy": strat,
-                "timeframe": "15m",
-                "description": f"Closed {side} position via {t.get('exit_reason', 'OCO_TARGET')} @ ${float(t.get('exit_price', 0)):,.4f}",
-                "value_pnl": f"{'+' if pnl >= 0 else ''}${pnl:,.2f}",
-                "pnl": pnl,
-                "raw": t
-            })
-
-        # 4. Balance Changes
-        raw_bal = tm.get_balance_events(limit=50)
-        for b in raw_bal:
-            ts = b.get("timestamp", "")
-            delta = float(b.get("delta", 0.0))
-            events.append({
-                "time": ts,
-                "type": "BALANCE CHANGE",
-                "symbol": b.get("symbol", "USDT"),
-                "strategy": b.get("strategy", "-"),
-                "timeframe": b.get("timeframe", "-"),
-                "description": f"Balance transitioned: ${float(b.get('balance_before', 0)):,.2f} -> ${float(b.get('balance_after', 0)):,.2f} ({b.get('reason', b.get('event_type', ''))})",
-                "value_pnl": f"{'+' if delta >= 0 else ''}${delta:,.2f}",
-                "raw": b
-            })
 
         # Deduplicate & Sort newest first
         unique_events = []
         seen = set()
         for ev in sorted(events, key=lambda x: str(x.get("time", "")), reverse=True):
-            k = f"{ev.get('time')}_{ev.get('type')}_{ev.get('symbol')}_{ev.get('description')[:20]}"
+            k = f"{ev.get('time')}_{ev.get('type')}_{ev.get('trade_id')}_{ev.get('symbol')}"
             if k not in seen:
                 seen.add(k)
                 unique_events.append(ev)
@@ -1834,6 +1971,7 @@ def api_activity():
             "status": "OK",
             "count": len(unique_events[:limit]),
             "activity": unique_events[:limit],
+            "events": unique_events[:limit],
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         })
     except Exception as e:

@@ -58,6 +58,10 @@
                     <span class="nav-icon">📑</span>
                     <span>Trades</span>
                 </a>
+                <a href="#activity" class="nav-item" data-view="activity">
+                    <span class="nav-icon">📜</span>
+                    <span>Activity</span>
+                </a>
                 <a href="#strategies" class="nav-item" data-view="strategies">
                     <span class="nav-icon">⚡</span>
                     <span>Strategies</span>
@@ -155,10 +159,24 @@
                     </div>
                     <div class="divider"></div>
                     <div class="header-actions">
-                        <button id="audio-toggle-btn" class="header-toggle-btn active" onclick="toggleAudioAlerts()" title="Toggle Execution Sound Alerts">
-                            🔔 <span id="audio-status-txt">Audio ON</span>
+                        <div class="notif-bell-container">
+                            <button id="btn-notif-bell" class="header-toggle-btn" onclick="toggleNotificationDropdown()" title="Notification Center">
+                                🔔 <span id="notif-badge" class="badge-count" style="display:none;">0</span>
+                            </button>
+                            <div id="notification-dropdown" class="notif-dropdown">
+                                <div class="notif-dropdown-header">
+                                    <span>NOTIFICATION CENTER</span>
+                                    <button class="btn-xs" onclick="clearNotifications()">Clear All</button>
+                                </div>
+                                <div id="notif-dropdown-body" class="notif-dropdown-body">
+                                    <div class="notif-empty">No recent notifications</div>
+                                </div>
+                            </div>
+                        </div>
+                        <button id="audio-toggle-btn" class="header-toggle-btn" onclick="toggleAudioAlerts()" title="Toggle Sound Alerts (Audio OFF by default)">
+                            🔇 <span id="audio-status-txt">Audio OFF</span>
                         </button>
-                        <button class="btn-action" onclick="fetchStatus();fetchTrades();fetchScanner();" title="Refresh Live State">
+                        <button class="btn-action" onclick="updateDashboard()" title="Refresh Live State">
                             ↻ Refresh
                         </button>
                     </div>
@@ -240,9 +258,11 @@
                     <div class="panel col-6">
                         <div class="panel-header">
                             <div class="panel-title-wrap">
-                                <h3 class="panel-title"><span>📈</span> REAL-TIME EQUITY CURVE</h3>
+                                <h3 class="panel-title"><span>📈</span> REAL-TIME EQUITY & BALANCE CURVE</h3>
                             </div>
                             <div class="chart-tf-group">
+                                <button class="btn-tf" id="tf-1h" onclick="setEquityTimeframe('1H')">1H</button>
+                                <button class="btn-tf" id="tf-6h" onclick="setEquityTimeframe('6H')">6H</button>
                                 <button class="btn-tf" id="tf-1d" onclick="setEquityTimeframe('1D')">1D</button>
                                 <button class="btn-tf" id="tf-7d" onclick="setEquityTimeframe('7D')">7D</button>
                                 <button class="btn-tf active" id="tf-all" onclick="setEquityTimeframe('ALL')">ALL</button>
@@ -923,6 +943,56 @@
             </div>
 
             <!-- ========================================== -->
+            <!-- 5.5 ACCOUNT ACTIVITY TIMELINE -->
+            <!-- ========================================== -->
+            <div id="view-activity" class="view-container">
+                <div class="filter-toolbar" style="margin-bottom: 12px;">
+                    <div class="filter-group">
+                        <span class="filter-label">ACTIVITY TYPE:</span>
+                        <div class="chart-tf-group">
+                            <button class="btn-tf active" id="btn-act-all" onclick="filterActivity('ALL')">ALL</button>
+                            <button class="btn-tf" id="btn-act-trades" onclick="filterActivity('TRADES')">TRADES</button>
+                            <button class="btn-tf" id="btn-act-balance" onclick="filterActivity('BALANCE')">BALANCE & FEES</button>
+                            <button class="btn-tf" id="btn-act-system" onclick="filterActivity('SYSTEM')">SYSTEM & ENGINE</button>
+                            <button class="btn-tf" id="btn-act-signals" onclick="filterActivity('SIGNALS')">SIGNALS</button>
+                        </div>
+                    </div>
+                    <div class="filter-group" style="margin-left: auto;">
+                        <span class="badge badge-mono">CHRONOLOGICAL MASTER TELEMETRY AUDIT</span>
+                    </div>
+                </div>
+
+                <div class="panel" style="flex:1;">
+                    <div class="panel-header">
+                        <h3 class="panel-title"><span>📜</span> ACCOUNT ACTIVITY TIMELINE</h3>
+                        <span class="panel-action" id="activity-count">Loading events...</span>
+                    </div>
+                    <div class="panel-content no-pad">
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>TIME</th>
+                                        <th>EVENT</th>
+                                        <th>SYMBOL</th>
+                                        <th>STRATEGY</th>
+                                        <th>BALANCE</th>
+                                        <th>EQUITY</th>
+                                        <th>PNL</th>
+                                        <th>TRADE ID</th>
+                                        <th>DESCRIPTION</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="activity-logs-body">
+                                    <tr><td colspan="9" class="empty-state">No Account Activity Events Recorded</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
             <!-- 6. STRATEGIES -->
             <!-- ========================================== -->
             <div id="view-strategies" class="view-container">
@@ -1355,6 +1425,21 @@
 
         </main>
     </div>
+
+    <!-- ─── INSPECTOR DRAWER ─── -->
+    <div id="drawer-backdrop" class="drawer-backdrop" onclick="closeInspectorDrawer()"></div>
+    <div id="inspector-drawer" class="inspector-drawer">
+        <div class="drawer-header">
+            <h3 id="drawer-title" class="drawer-title">INSPECTOR • QUANT TELEMETRY</h3>
+            <button class="drawer-close" onclick="closeInspectorDrawer()">✕</button>
+        </div>
+        <div id="drawer-body" class="drawer-body">
+            <!-- Dynamic Telemetry Injected Here -->
+        </div>
+    </div>
+
+    <!-- ─── REAL-TIME TRADE TOAST CONTAINER ─── -->
+    <div id="trade-toast-container" class="trade-toast-container"></div>
 
     <script src="/static/app.js"></script>
 </body>
