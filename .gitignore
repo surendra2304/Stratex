@@ -36,44 +36,12 @@ bot.log.*
 test_bot.log
 *.log
 
-# ── Runtime state / JSON state files ──────────────────────────────────────────
-active_trades.json
-heartbeat.json
-testnet_heartbeat.json
+# ── Runtime state / JSON state files (Untracked local temps only) ─────────────
 sim_heartbeat.json
-health.json
-forward_health.json
-engine-health.json
-bot.pid
-status.json
-render_status.json
-render_status_audit.json
-
-# ── Trade ledgers & portfolio state ───────────────────────────────────────────
-*.jsonl
-trade_log.csv
-paper_trade_ledger.jsonl
-paper_equity_curve.jsonl
-paper_portfolio.json
-testnet_portfolio.json
-testnet_portfolio.json.tmp
-testnet_opportunity_log.jsonl
-testnet_trade_ledger.jsonl
-testnet_equity_history.jsonl
-testnet_initial_deposit.json
-testnet_baseline.json
-forward_reconciliation.jsonl
-forward_signal_log.jsonl
-
-# ── Scanner / market data snapshots ───────────────────────────────────────────
-render_scanner.json
-render_scanner_audit.json
-render_trades.json
-render_trades_audit.json
-binance_state.json
 sim_portfolio.json
 sim_session.json
-forward_*.json
+bot.pid
+testnet_portfolio.json.tmp
 
 # ── Data cache ─────────────────────────────────────────────────────────────────
 data_cache/

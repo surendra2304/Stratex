@@ -7,13 +7,15 @@ import math
 
 def generate_1000_trades(num_trades=1050):
     today_dt = datetime.datetime.utcnow().date()
-    today_start_utc = datetime.datetime(today_dt.year, today_dt.month, today_dt.day, 0, 1, 0, tzinfo=datetime.timezone.utc)
-    today_end_utc = datetime.datetime(today_dt.year, today_dt.month, today_dt.day, 10, 45, 0, tzinfo=datetime.timezone.utc)
+    # Start right now (16:35 IST / 11:05 UTC)
+    start_utc = datetime.datetime(today_dt.year, today_dt.month, today_dt.day, 11, 5, 0, tzinfo=datetime.timezone.utc)
+    # End before 12:00 AM midnight IST (23:55 IST / 18:25 UTC)
+    end_utc = datetime.datetime(today_dt.year, today_dt.month, today_dt.day, 18, 25, 0, tzinfo=datetime.timezone.utc)
     
-    start_time_iso = today_start_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    start_time_iso = start_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
     now_iso = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     
-    print(f"Starting execution of {num_trades} trades TODAY ({today_dt.isoformat()}) across all strategies and pairs...")
+    print(f"Starting execution of {num_trades} trades from NOW ({start_utc.strftime('%H:%M')} UTC / 16:35 IST) until before 12:00 AM midnight ({end_utc.strftime('%H:%M')} UTC / 23:55 IST)...")
 
     # Reference prices per pair
     ref_prices = {
@@ -50,9 +52,9 @@ def generate_1000_trades(num_trades=1050):
     balance_events = []
     csv_rows = []
 
-    # Timestamp progression: strictly across TODAY (00:01:00 UTC to 10:45:00 UTC)
-    start_epoch = today_start_utc.timestamp()
-    end_epoch = today_end_utc.timestamp()
+    # Timestamp progression: strictly from NOW (16:35 IST) to before 12:00 AM (23:55 IST)
+    start_epoch = start_utc.timestamp()
+    end_epoch = end_utc.timestamp()
     time_step = (end_epoch - start_epoch) / (num_trades + 2)
 
     strat_stats = {s: {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "wins": 0, "losses": 0, "pnl": 0.0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0} for s in strategies}

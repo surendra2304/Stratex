@@ -1,0 +1,183 @@
+{
+  "initial_deposit": 11290.39,
+  "service_start_time": "2026-08-18T11:05:00Z",
+  "safety_halt": false,
+  "cash": 13158.335,
+  "equity": 13158.335,
+  "realized_pnl": 1867.945,
+  "used_margin": 0.0,
+  "fees": 670.383,
+  "funding": 0.0,
+  "open_positions": 0,
+  "positions": {},
+  "max_drawdown": -0.0036,
+  "scanner_stats": {
+    "TOTAL_SIGNALS": 1170,
+    "PROFITABILITY_ACCEPTED": 1050,
+    "PROFITABILITY_REJECTED": 80,
+    "RISK_ACCEPTED": 1050,
+    "RISK_REJECTED": 40,
+    "EXECUTION_ELIGIBLE": 1050,
+    "EXECUTION_REJECTED": 0,
+    "COOLDOWN_REJECTED": 0,
+    "MARKET_DATA_REJECTED": 0,
+    "JIT_REJECTED": 0,
+    "OTHER_REJECTED": 0,
+    "QUALIFIED": 1050,
+    "ORDERS_SUBMITTED": 1050,
+    "ORDERS_FILLED": 1050,
+    "ORDERS_FAILED": 0,
+    "OPEN_POSITIONS": 0,
+    "CLOSED_TRADES": 1050,
+    "symbols_scanned": 13,
+    "strategy_evaluations": 4167,
+    "BUY_SIGNALS": 765,
+    "SELL_SIGNALS": 285,
+    "HOLD_SIGNALS": 450,
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "BNBUSDT",
+      "SOLUSDT",
+      "LINKUSDT",
+      "DOGEUSDT",
+      "ADAUSDT",
+      "TRXUSDT",
+      "PAXGUSDT",
+      "PORTALUSDT",
+      "SOPHUSDT",
+      "HEMIUSDT",
+      "SPCXBUSDT"
+    ],
+    "strategy_metrics": {
+      "aggressor": {
+        "signals": 174,
+        "qualified": 174,
+        "rejected": 0,
+        "executed": 174,
+        "wins": 115,
+        "losses": 59,
+        "pnl": 405.50920000000025,
+        "evaluations": 695,
+        "BUY": 132,
+        "SELL": 42,
+        "HOLD": 0
+      },
+      "scalper": {
+        "signals": 174,
+        "qualified": 174,
+        "rejected": 0,
+        "executed": 174,
+        "wins": 112,
+        "losses": 62,
+        "pnl": 329.9264000000002,
+        "evaluations": 670,
+        "BUY": 128,
+        "SELL": 46,
+        "HOLD": 0
+      },
+      "supertrend": {
+        "signals": 185,
+        "qualified": 185,
+        "rejected": 0,
+        "executed": 185,
+        "wins": 104,
+        "losses": 81,
+        "pnl": 229.75009999999997,
+        "evaluations": 730,
+        "BUY": 135,
+        "SELL": 50,
+        "HOLD": 0
+      },
+      "ml": {
+        "signals": 185,
+        "qualified": 185,
+        "rejected": 0,
+        "executed": 185,
+        "wins": 120,
+        "losses": 65,
+        "pnl": 391.9147,
+        "evaluations": 753,
+        "BUY": 141,
+        "SELL": 44,
+        "HOLD": 0
+      },
+      "swing": {
+        "signals": 141,
+        "qualified": 141,
+        "rejected": 0,
+        "executed": 141,
+        "wins": 95,
+        "losses": 46,
+        "pnl": 259.6581000000001,
+        "evaluations": 569,
+        "BUY": 106,
+        "SELL": 35,
+        "HOLD": 0
+      },
+      "adx_ema": {
+        "signals": 191,
+        "qualified": 191,
+        "rejected": 0,
+        "executed": 191,
+        "wins": 113,
+        "losses": 78,
+        "pnl": 251.18650000000008,
+        "evaluations": 750,
+        "BUY": 123,
+        "SELL": 68,
+        "HOLD": 0
+      }
+    },
+    "timeframe_metrics": {
+      "1m": {
+        "signals": 140,
+        "qualified": 140,
+        "rejected": 0,
+        "executed": 140
+      },
+      "3m": {
+        "signals": 115,
+        "qualified": 115,
+        "rejected": 0,
+        "executed": 115
+      },
+      "5m": {
+        "signals": 117,
+        "qualified": 117,
+        "rejected": 0,
+        "executed": 117
+      },
+      "15m": {
+        "signals": 118,
+        "qualified": 118,
+        "rejected": 0,
+        "executed": 118
+      },
+      "30m": {
+        "signals": 144,
+        "qualified": 144,
+        "rejected": 0,
+        "executed": 144
+      },
+      "1h": {
+        "signals": 143,
+        "qualified": 143,
+        "rejected": 0,
+        "executed": 143
+      },
+      "2h": {
+        "signals": 146,
+        "qualified": 146,
+        "rejected": 0,
+        "executed": 146
+      },
+      "4h": {
+        "signals": 127,
+        "qualified": 127,
+        "rejected": 0,
+        "executed": 127
+      }
+    }
+  }
+}

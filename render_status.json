@@ -1,0 +1,24 @@
+{
+  "mode": "TESTNET",
+  "overall_health": "OK",
+  "engine_status": "ONLINE",
+  "engine_healthy": true,
+  "equity": 13158.335,
+  "cash": 13158.335,
+  "realized_pnl": 1867.945,
+  "unrealized_pnl": 0.0,
+  "open_positions": 0,
+  "fees": 670.383,
+  "funding": 0.0,
+  "used_margin": 0.0,
+  "max_drawdown": -0.0036,
+  "bot_start_time": "2026-08-18T11:05:00Z",
+  "server_time": "2026-08-18T11:03:11Z",
+  "components": {
+    "binance": "OK",
+    "data": "OK",
+    "engine": "OK",
+    "execution": "OK",
+    "strategy": "OK"
+  }
+}
