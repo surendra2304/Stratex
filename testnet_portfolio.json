@@ -2,12 +2,12 @@
   "initial_deposit": 11290.39,
   "service_start_time": "2026-08-18T00:01:00Z",
   "safety_halt": false,
-  "cash": 11405.29,
-  "equity": 11625.12,
-  "realized_pnl": 114.899,
-  "unrealized_pnl": 16.56,
-  "used_margin": 0.0,
-  "fees": 183.5302,
+  "cash": 11413.51,
+  "equity": 11633.99,
+  "realized_pnl": 116.47,
+  "unrealized_pnl": 10.12,
+  "used_margin": 220.48,
+  "fees": 68.42,
   "funding": 0.0,
   "open_positions": 1,
   "positions": {
@@ -15,20 +15,20 @@
       "symbol": "LINKUSDT",
       "side": "BUY",
       "entry_price": 10.45,
-      "current_price": 11.24,
+      "current_price": 11.28,
       "quantity": 19.55,
-      "notional": 219.83,
+      "notional": 220.48,
       "sl_price": 9.95,
       "tp_price": 12.5,
-      "unrealized_pnl": 15.44,
+      "unrealized_pnl": 10.12,
       "status": "OPEN",
       "strategy": "aggressor",
       "timeframe": "5m",
-      "entry_timestamp": "2026-08-18T11:07:11Z",
-      "timestamp": "2026-08-18T11:07:11Z"
+      "entry_timestamp": "2026-08-18T11:23:27Z",
+      "timestamp": "2026-08-18T11:23:27Z"
     }
   },
-  "max_drawdown": -0.0036,
+  "max_drawdown": 0.0036,
   "scanner_stats": {
     "TOTAL_SIGNALS": 1170,
     "PROFITABILITY_ACCEPTED": 1050,
@@ -48,154 +48,18 @@
     "OPEN_POSITIONS": 1,
     "CLOSED_TRADES": 1050,
     "symbols_scanned": 13,
-    "strategy_evaluations": 3653,
-    "BUY_SIGNALS": 799,
-    "SELL_SIGNALS": 252,
+    "strategy_evaluations": 4167,
+    "BUY_SIGNALS": 765,
+    "SELL_SIGNALS": 285,
     "HOLD_SIGNALS": 450,
     "symbols": [
       "BTCUSDT",
       "ETHUSDT",
-      "BNBUSDT",
       "SOLUSDT",
+      "BNBUSDT",
       "LINKUSDT",
       "DOGEUSDT",
-      "ADAUSDT",
-      "TRXUSDT",
-      "PAXGUSDT",
-      "PORTALUSDT",
-      "SOPHUSDT",
-      "HEMIUSDT",
-      "SPCXBUSDT"
-    ],
-    "strategy_metrics": {
-      "aggressor": {
-        "signals": 173,
-        "qualified": 173,
-        "rejected": 0,
-        "executed": 173,
-        "wins": 107,
-        "losses": 66,
-        "pnl": 17.91979999999999,
-        "evaluations": 590,
-        "BUY": 127,
-        "SELL": 46,
-        "HOLD": 0
-      },
-      "scalper": {
-        "signals": 161,
-        "qualified": 161,
-        "rejected": 0,
-        "executed": 161,
-        "wins": 109,
-        "losses": 52,
-        "pnl": 22.206399999999988,
-        "evaluations": 569,
-        "BUY": 127,
-        "SELL": 34,
-        "HOLD": 0
-      },
-      "supertrend": {
-        "signals": 175,
-        "qualified": 175,
-        "rejected": 0,
-        "executed": 175,
-        "wins": 97,
-        "losses": 78,
-        "pnl": 13.431799999999997,
-        "evaluations": 598,
-        "BUY": 130,
-        "SELL": 45,
-        "HOLD": 0
-      },
-      "ml": {
-        "signals": 186,
-        "qualified": 186,
-        "rejected": 0,
-        "executed": 186,
-        "wins": 112,
-        "losses": 74,
-        "pnl": 18.115999999999996,
-        "evaluations": 659,
-        "BUY": 140,
-        "SELL": 46,
-        "HOLD": 0
-      },
-      "swing": {
-        "signals": 161,
-        "qualified": 161,
-        "rejected": 0,
-        "executed": 161,
-        "wins": 108,
-        "losses": 53,
-        "pnl": 20.920800000000003,
-        "evaluations": 573,
-        "BUY": 125,
-        "SELL": 36,
-        "HOLD": 0
-      },
-      "adx_ema": {
-        "signals": 194,
-        "qualified": 194,
-        "rejected": 0,
-        "executed": 194,
-        "wins": 122,
-        "losses": 72,
-        "pnl": 22.304199999999994,
-        "evaluations": 664,
-        "BUY": 149,
-        "SELL": 45,
-        "HOLD": 0
-      }
-    },
-    "timeframe_metrics": {
-      "1m": {
-        "signals": 125,
-        "qualified": 125,
-        "rejected": 0,
-        "executed": 125
-      },
-      "3m": {
-        "signals": 143,
-        "qualified": 143,
-        "rejected": 0,
-        "executed": 143
-      },
-      "5m": {
-        "signals": 119,
-        "qualified": 119,
-        "rejected": 0,
-        "executed": 119
-      },
-      "15m": {
-        "signals": 142,
-        "qualified": 142,
-        "rejected": 0,
-        "executed": 142
-      },
-      "30m": {
-        "signals": 129,
-        "qualified": 129,
-        "rejected": 0,
-        "executed": 129
-      },
-      "1h": {
-        "signals": 128,
-        "qualified": 128,
-        "rejected": 0,
-        "executed": 128
-      },
-      "2h": {
-        "signals": 141,
-        "qualified": 141,
-        "rejected": 0,
-        "executed": 141
-      },
-      "4h": {
-        "signals": 123,
-        "qualified": 123,
-        "rejected": 0,
-        "executed": 123
-      }
-    }
+      "ADAUSDT"
+    ]
   }
 }
