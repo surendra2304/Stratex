@@ -271,15 +271,34 @@ async function fetchDashboardData() {
         }
         safeSetText('jnl-open-count', openPosCount);
         
-        // 3. Header Status Indicators
+        // 3. Measured Feed & API Latency
+        const measuredLatencyMs = Math.max(1, Math.round(requestEnd - requestStart));
+        const latencyStr = `${measuredLatencyMs}ms`;
+        safeSetText('feed-latency', latencyStr);
+        safeSetText('ws-latency-pill', latencyStr);
+
+        // 4. Dynamic Symbol and Strategy Counts
+        const engineData = data.engine_data || {};
+        const activeSymbols = data.symbols || engineData.symbols || [];
+        const symbolCount = data.symbol_count || engineData.symbol_count || (activeSymbols.length > 0 ? activeSymbols.length : '--');
+        const activeStrategies = data.strategies || engineData.strategies || [];
+        const stratCount = data.strategy_count || engineData.strategy_count || (activeStrategies.length > 0 ? activeStrategies.length : '--');
+        
+        safeSetText('hdr-pairs-count', symbolCount !== '--' ? `${symbolCount} SPOT` : '-- SPOT');
+        safeSetText('hdr-strat-count', stratCount !== '--' ? `${stratCount} ACTIVE` : '-- ACTIVE');
+        safeSetText('sidebar-meta-text', (stratCount !== '--' && symbolCount !== '--') ? `${stratCount} STRATEGIES • ${symbolCount} PAIRS` : '-- STRATEGIES • -- PAIRS');
+
+        // 5. Header Engine Status Indicator
         const engineDot = document.getElementById('status-indicator') || document.getElementById('hdr-engine-dot');
         const engineText = document.getElementById('engine-status') || document.getElementById('hdr-engine-text');
+        const isEngineOnline = (data.engine_status === 'ONLINE' || data.engine_healthy === true);
+
         if (engineDot && engineText) {
             if (data.safety_halt) {
                 engineDot.className = 'dot dot-red';
                 engineText.className = 'engine-state-val status-offline';
                 engineText.innerText = 'SAFETY HALT';
-            } else if (data.engine_status === 'ONLINE' || data.engine_healthy) {
+            } else if (isEngineOnline) {
                 engineDot.className = 'dot dot-green';
                 engineText.className = 'engine-state-val';
                 engineText.innerText = 'ACTIVE';
@@ -289,31 +308,45 @@ async function fetchDashboardData() {
                 engineText.innerText = 'OFFLINE';
             }
         }
-        safeSetText('feed-latency', '18ms');
-        safeSetText('ws-latency-pill', '18ms');
         
-        // 4. Sidebar Health Dots
-        const h_status = (state) => state === 'OK' ? 'dot dot-green' : 'dot dot-red';
+        // 6. Authoritative Microservice Health Binding (Sidebar + Footer Synchronization)
         const comp = data.components || {};
-        safeSetClass('h-bn', h_status(comp.binance || 'OK'));
-        safeSetClass('h-ws', h_status(comp.data || 'OK'));
-        safeSetClass('h-se', h_status(comp.strategy || 'OK'));
-        safeSetClass('h-rk', h_status('OK'));
-        safeSetClass('h-md', h_status(comp.data || 'OK'));
-        safeSetClass('h-ex', h_status(comp.execution || 'OK'));
+        const calcDotClass = (compKey, directFlag) => {
+            if (!isEngineOnline) return 'dot dot-red';
+            const val = comp[compKey];
+            if (val === 'OK' || directFlag === true) return 'dot dot-green';
+            if (val === 'STALE' || val === 'DEGRADED') return 'dot dot-amber';
+            if (val === 'ERROR' || val === 'OFFLINE' || directFlag === false) return 'dot dot-red';
+            return isEngineOnline ? 'dot dot-green' : 'dot dot-red';
+        };
 
-        // 5. Footer Diagnostic Bar
-        safeSetClass('btm-bn', 'dot dot-green');
-        safeSetClass('btm-ws', 'dot dot-green');
-        safeSetClass('btm-md', 'dot dot-green');
-        safeSetClass('btm-ex', 'dot dot-green');
-        safeSetClass('btm-st', 'dot dot-green');
-        safeSetClass('btm-rs', 'dot dot-green');
+        const bnClass = calcDotClass('binance', data.binance_connected);
+        const wsClass = calcDotClass('data', data.websocket_connected);
+        const seClass = calcDotClass('strategy', isEngineOnline);
+        const rkClass = isEngineOnline ? 'dot dot-green' : 'dot dot-red';
+        const exClass = calcDotClass('execution', isEngineOnline);
+        const mdClass = wsClass;
+
+        // Apply to Sidebar Health Dots
+        safeSetClass('h-bn', bnClass);
+        safeSetClass('h-ws', wsClass);
+        safeSetClass('h-se', seClass);
+        safeSetClass('h-rk', rkClass);
+        safeSetClass('h-md', mdClass);
+        safeSetClass('h-ex', exClass);
+
+        // Apply to Footer Diagnostic Bar (Identical Health Semantics)
+        safeSetClass('btm-bn', bnClass);
+        safeSetClass('btm-ws', wsClass);
+        safeSetClass('btm-md', mdClass);
+        safeSetClass('btm-ex', exClass);
+        safeSetClass('btm-st', seClass);
+        safeSetClass('btm-rs', rkClass);
         safeSetText('btm-last-mkt', data.server_time ? formatTime(data.server_time) : '--:--:--');
         safeSetText('btm-last-strat', data.last_evaluation ? formatTime(data.last_evaluation) : (data.server_time ? formatTime(data.server_time) : '--:--:--'));
 
-        // 6. Overview Compact Funnel
-        safeSetText('fn-mrk', data.market_updates_count || data.symbol_count || 13);
+        // 7. Overview Compact Funnel
+        safeSetText('fn-mrk', symbolCount !== '--' ? symbolCount : '--');
         safeSetText('fn-signals', data.signals_evaluated || data.total_signals || 0);
         safeSetText('fn-prof-acc', data.signals_accepted_profit || 0);
         safeSetText('fn-prof-rej', data.signals_rejected_profit || 0);
@@ -322,7 +355,7 @@ async function fetchDashboardData() {
         safeSetText('fn-exec', data.orders_submitted || 0);
         safeSetText('fn-filled', data.orders_filled || 0);
 
-        // 7. Capital Allocation Transparency Bar
+        // 8. Capital Allocation Transparency Bar
         const totalVal = (cashVal + cryptoVal) || equityVal;
         const allocCashTxt = document.getElementById('alloc-cash-txt');
         const allocCryptoTxt = document.getElementById('alloc-crypto-txt');
@@ -347,28 +380,27 @@ async function fetchDashboardData() {
             if (snapExpBadge) snapExpBadge.innerText = `0.0% EXPOSURE`;
         }
 
-        // 8. Settings View Data
+        // 9. Settings View Data
         safeSetText('set-mode', data.mode || "TESTNET");
-        const engineData = data.engine_data || {};
         const stratBody = document.getElementById('set-strat-body');
         if (stratBody) {
             stratBody.innerHTML = `
-                <tr><td>Active Strategies</td><td class="td-strong">${(engineData.strategies || []).join(', ') || '-'}</td></tr>
+                <tr><td>Active Strategies</td><td class="td-strong">${activeStrategies.join(', ') || '-'}</td></tr>
                 <tr><td>Active Timeframes</td><td class="td-strong">${(engineData.timeframes || []).join(', ') || '-'}</td></tr>
-                <tr><td>Symbols Tracked</td><td class="td-strong">${engineData.symbol_count || 13}</td></tr>
+                <tr><td>Symbols Tracked</td><td class="td-strong">${symbolCount}</td></tr>
             `;
         }
         
         const sysHealthBody = document.getElementById('sys-health-body');
         if (sysHealthBody) {
-            const h_tag = (s) => s === 'OK' ? '<span class="tag tag-qualified">ONLINE</span>' : '<span class="tag tag-offline">ERROR</span>';
+            const h_tag = (s) => (s === 'dot dot-green' || s === 'OK') ? '<span class="tag tag-qualified">ONLINE</span>' : '<span class="tag tag-offline">ERROR</span>';
             sysHealthBody.innerHTML = `
-                <tr><td>Binance REST Gateway</td><td>${h_tag(comp.binance || 'OK')}</td><td>Ping: 18ms</td></tr>
-                <tr><td>Binance WebSocket Feed</td><td>${h_tag(comp.data || 'OK')}</td><td>Stream active</td></tr>
-                <tr><td>Candle Ingestion Buffer</td><td>${h_tag(comp.data || 'OK')}</td><td>13 pairs active</td></tr>
-                <tr><td>Strategy Matrix Engine</td><td>${h_tag(comp.strategy || 'OK')}</td><td>6 multi-TF strategies</td></tr>
-                <tr><td>Execution Gateway</td><td>${h_tag(comp.execution || 'OK')}</td><td>SPOT OCO active</td></tr>
-                <tr><td>Risk Engine</td><td>${h_tag('OK')}</td><td>Guard ON (Max 20% limit)</td></tr>
+                <tr><td>Binance REST Gateway</td><td>${h_tag(bnClass)}</td><td>Ping: ${latencyStr}</td></tr>
+                <tr><td>Binance WebSocket Feed</td><td>${h_tag(wsClass)}</td><td>Stream ${wsClass.includes('green') ? 'Active' : 'Offline'}</td></tr>
+                <tr><td>Candle Ingestion Buffer</td><td>${h_tag(wsClass)}</td><td>${symbolCount} pairs monitored</td></tr>
+                <tr><td>Strategy Matrix Engine</td><td>${h_tag(seClass)}</td><td>${stratCount} multi-TF strategies</td></tr>
+                <tr><td>Execution Gateway</td><td>${h_tag(exClass)}</td><td>SPOT OCO ${exClass.includes('green') ? 'Active' : 'Offline'}</td></tr>
+                <tr><td>Risk Engine</td><td>${h_tag(rkClass)}</td><td>Guard ON (${availRiskPct.toFixed(1)}% limit)</td></tr>
             `;
         }
 
@@ -376,6 +408,38 @@ async function fetchDashboardData() {
         console.error("Failed to fetch status:", e);
         handleDataUnavailable();
     }
+}
+
+function handleDataUnavailable() {
+    safeSetText('db-equity', '--');
+    safeSetText('snap-bot-equity', '--');
+    safeSetText('snap-wallet', '--');
+    safeSetText('snap-cash', '--');
+    safeSetText('db-today-pnl', '--');
+    safeSetText('db-realized-pnl', '--');
+    safeSetText('db-unrealized-pnl', '--');
+    safeSetText('snap-managed', '--');
+    safeSetText('snap-pos', '-- / --');
+    safeSetText('snap-exposure', '--');
+    safeSetText('db-drawdown', '--');
+    safeSetText('snap-avail-risk', '--');
+    safeSetText('db-fees', '--');
+    safeSetText('feed-latency', '--');
+    safeSetText('ws-latency-pill', '--');
+    safeSetText('hdr-pairs-count', '-- SPOT');
+    safeSetText('hdr-strat-count', '-- ACTIVE');
+    safeSetText('sidebar-meta-text', '-- STRATEGIES • -- PAIRS');
+
+    const engineDot = document.getElementById('status-indicator') || document.getElementById('hdr-engine-dot');
+    const engineText = document.getElementById('engine-status') || document.getElementById('hdr-engine-text');
+    if (engineDot) engineDot.className = 'dot dot-red';
+    if (engineText) {
+        engineText.className = 'engine-state-val status-offline';
+        engineText.innerText = 'OFFLINE';
+    }
+
+    ['h-bn', 'h-ws', 'h-se', 'h-rk', 'h-md', 'h-ex'].forEach(id => safeSetClass(id, 'dot dot-red'));
+    ['btm-bn', 'btm-ws', 'btm-md', 'btm-ex', 'btm-st', 'btm-rs'].forEach(id => safeSetClass(id, 'dot dot-red'));
 }
 
 async function fetchOpenOrders() {
@@ -1146,7 +1210,21 @@ async function fetchTrades() {
             }
         }
 
-        allRawTrades = trades;
+        // Production Provenance Filter:
+        // Only display trades that are verifiably from Binance Testnet execution.
+        // Exclude synthetic, paper, test, fixture, fuzz, and unverified records.
+        const INVALID_SOURCES = ['TEST', 'PAPER', 'SYNTHETIC', 'SYNTHETIC_GENERATED', 'MOCK', 'FIXTURE', 'FUZZ', 'UNVERIFIED', 'SIMULATION'];
+        const VALID_SOURCES = ['BINANCE_EXECUTION', 'RECOVERY_FROM_BINANCE'];
+        allRawTrades = trades.filter(t => {
+            const src = (t.source || '').toUpperCase();
+            if (INVALID_SOURCES.some(s => src.includes(s))) return false;
+            // Require valid Binance order ID evidence
+            const hasEntryOrderId = t.entry_order_id && t.entry_order_id !== 'None' && t.entry_order_id !== '';
+            const hasSignalId = (t.signal_id || '').startsWith('SIG_');
+            const isValidSource = VALID_SOURCES.includes(src) || src === '';
+            return isValidSource && (hasEntryOrderId || hasSignalId);
+        });
+
         renderTradeJournal();
         checkLifecycleDeltas(allRawPositions, allRawTrades);
     } catch (e) {

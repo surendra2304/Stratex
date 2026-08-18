@@ -364,8 +364,9 @@ html, body {
     flex-shrink: 0;
 }
 
-.dot-green { background-color: var(--profit-green); box-shadow: 0 0 5px var(--profit-green); }
-.dot-red { background-color: var(--loss-red); box-shadow: 0 0 5px var(--loss-red); }
+.dot-green  { background-color: var(--profit-green);   box-shadow: 0 0 5px var(--profit-green); }
+.dot-red    { background-color: var(--loss-red);        box-shadow: 0 0 5px var(--loss-red); }
+.dot-amber  { background-color: var(--warning-amber);   box-shadow: 0 0 5px var(--warning-amber); }
 
 /* ─── 2. MAIN WORKSPACE ─── */
 .main-content {
