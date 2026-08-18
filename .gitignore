@@ -96,9 +96,5 @@ backtest_results/
 sim_*.json
 sim_*.json.tmp
 
-# ── FINAL_*.md verification reports (generated docs) ──────────────────────────
-FINAL_*.md
-PRODUCTION_*.md
-
 # ── Heartbeat variants ─────────────────────────────────────────────────────────
 *heartbeat.json
