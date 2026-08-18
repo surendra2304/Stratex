@@ -826,12 +826,116 @@ def api_equity_history():
 
 @app.route('/api/trade-history')
 def api_trade_history():
-    """Returns closed trade history from the authoritative ledger."""
+    """
+    Returns closed trade history from the authoritative 40-field canonical
+    telemetry store (testnet_trade_events.jsonl). Falls back to the thin
+    testnet_trade_ledger.jsonl if the canonical store is empty.
+    Each record answers all 15 lifecycle questions:
+    WHEN/WHY opened, WHICH strategy/timeframe, WHAT was balance/equity
+    at entry and exit, ENTRY/EXIT prices, SL/TP, net PnL, fees, close reason.
+    """
+    from testnet_engine.telemetry_manager import get_telemetry_manager
+    try:
+        telemetry = get_telemetry_manager()
+        # Prefer the rich canonical store
+        canonical_events = telemetry.get_trade_events(limit=500)
+        closed_canonical = [e for e in canonical_events if e.get("status") == "CLOSED"]
+
+        if closed_canonical:
+            # Compute summary stats from canonical events
+            net_pnl = sum(float(e.get("net_pnl", 0.0)) for e in closed_canonical)
+            wins = sum(1 for e in closed_canonical if float(e.get("net_pnl", 0.0)) > 0)
+            losses = sum(1 for e in closed_canonical if float(e.get("net_pnl", 0.0)) < 0)
+            total_fees = sum(float(e.get("total_fees", 0.0)) for e in closed_canonical)
+            # Normalise field names for frontend compatibility
+            trades_out = []
+            for e in closed_canonical:
+                dur_s = float(e.get("duration_seconds", 0.0))
+                dur_str = ""
+                if dur_s > 0:
+                    h, rem = divmod(int(dur_s), 3600)
+                    m, s = divmod(rem, 60)
+                    dur_str = f"{h}h {m}m {s}s" if h else (f"{m}m {s}s" if m else f"{s}s")
+                trades_out.append({
+                    # Identity
+                    "trade_id": e.get("trade_id", ""),
+                    "symbol": e.get("symbol", ""),
+                    "strategy": e.get("strategy", ""),
+                    "timeframe": e.get("timeframe", ""),
+                    "side": e.get("side", ""),
+                    "action": e.get("side", ""),
+                    "status": e.get("status", "CLOSED"),
+                    # Lifecycle timestamps
+                    "signal_time": e.get("signal_timestamp", e.get("entry_signal_timestamp", "")),
+                    "order_submit_time": e.get("order_submit_timestamp", ""),
+                    "fill_time": e.get("fill_timestamp", ""),
+                    "close_time": e.get("close_timestamp", ""),
+                    "timestamp": e.get("close_timestamp", e.get("order_submit_timestamp", "")),
+                    # Order IDs
+                    "entry_order_id": e.get("entry_order_id", ""),
+                    "exit_order_id": e.get("exit_order_id", ""),
+                    "order_id": e.get("exit_order_id") or e.get("entry_order_id", ""),
+                    # Prices & Sizing
+                    "entry_price": float(e.get("entry_price", 0.0)),
+                    "exit_price": float(e.get("exit_price", 0.0)),
+                    "quantity": float(e.get("quantity", 0.0)),
+                    "notional": float(e.get("notional", 0.0)),
+                    # Protection
+                    "stop_loss": float(e.get("stop_loss", 0.0)),
+                    "take_profit": float(e.get("take_profit", 0.0)),
+                    "sl": float(e.get("stop_loss", 0.0)),
+                    "tp": float(e.get("take_profit", 0.0)),
+                    # PnL & Fees
+                    "gross_pnl": float(e.get("gross_pnl", 0.0)),
+                    "fees": float(e.get("total_fees", 0.0)),
+                    "pnl": float(e.get("net_pnl", 0.0)),
+                    "net_pnl": float(e.get("net_pnl", 0.0)),
+                    # Balance/Equity state at entry
+                    "balance_before_entry": float(e.get("cash_before_entry", 0.0)),
+                    "balance_after_entry": float(e.get("cash_after_entry", 0.0)),
+                    "equity_before_entry": float(e.get("equity_before_entry", 0.0)),
+                    "equity_after_entry": float(e.get("equity_after_entry", 0.0)),
+                    # Balance/Equity state at exit
+                    "balance_before_exit": float(e.get("cash_before_exit", 0.0)),
+                    "balance_after_exit": float(e.get("cash_after_exit", 0.0)),
+                    "equity_before_exit": float(e.get("equity_before_exit", 0.0)),
+                    "equity_after_exit": float(e.get("equity_after_exit", 0.0)),
+                    # Rationale
+                    "close_reason": e.get("close_reason", e.get("exit_reason", "")),
+                    "exit_reason": e.get("close_reason", e.get("exit_reason", "")),
+                    "profitability_decision": e.get("profitability_decision", ""),
+                    "profitability_reason": e.get("profitability_reason", ""),
+                    "risk_decision": e.get("risk_decision", ""),
+                    "risk_reason": e.get("risk_reason", ""),
+                    "expected_gross_return": float(e.get("expected_gross_return", 0.0)),
+                    "expected_net_return": float(e.get("expected_net_return", 0.0)),
+                    # Duration
+                    "duration_seconds": dur_s,
+                    "duration": dur_str,
+                    "source": e.get("source", ""),
+                })
+            return jsonify({
+                "status": "SUCCESS",
+                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                "data_age": 0.0,
+                "source": "canonical_telemetry",
+                "total_trades": len(trades_out),
+                "wins": wins,
+                "losses": losses,
+                "realized_pnl": round(net_pnl, 4),
+                "total_fees": round(total_fees, 4),
+                "trades": trades_out
+            })
+    except Exception as te_err:
+        logger.warning(f"[TRADE_HISTORY] Canonical store unavailable, falling back to ledger: {te_err}")
+
+    # Fallback: thin ledger
     trades_data = _get_trades_data()
     return jsonify({
         "status": "SUCCESS",
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
         "data_age": 0.0,
+        "source": "ledger_fallback",
         "total_trades": len(trades_data.get("positions", [])),
         "realized_pnl": trades_data.get("net_pnl", 0.0),
         "trades": trades_data.get("positions", [])
@@ -1036,6 +1140,120 @@ def api_system_health():
         }
     })
 
+def get_funnel():
+    """
+    Builds the signal funnel pipeline statistics and top live opportunities.
+    Reads from testnet_portfolio.json (scanner_stats) and
+    testnet_opportunity_log.jsonl (live opportunity records).
+    """
+    stats = {
+        "symbols_scanned": 0,
+        "TOTAL_SIGNALS": 0,
+        "PROFITABILITY_ACCEPTED": 0,
+        "PROFITABILITY_REJECTED": 0,
+        "RISK_ACCEPTED": 0,
+        "RISK_REJECTED": 0,
+        "COOLDOWN_REJECTED": 0,
+        "JIT_REJECTED": 0,
+        "OTHER_REJECTED": 0,
+        "QUALIFIED": 0,
+        "EXECUTION_REJECTED": 0,
+        "ORDERS_SUBMITTED": 0,
+        "ORDERS_FILLED": 0,
+        "ORDERS_FAILED": 0,
+        "CLOSED_TRADES": 0,
+        "top_opportunities": [],
+        "strategy_metrics": {},
+        "timeframe_metrics": {}
+    }
+
+    # Load scanner_stats from portfolio state
+    port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+    if os.path.exists(port_file):
+        try:
+            with open(port_file, "r") as f:
+                port = json.load(f)
+            scanner_stats = port.get("scanner_stats", {})
+            stats.update({k: v for k, v in scanner_stats.items() if k in stats})
+            # Also pull symbols_scanned
+            stats["symbols_scanned"] = scanner_stats.get("symbols_scanned", len(port.get("symbols", [])))
+            stats["strategy_metrics"] = scanner_stats.get("strategy_metrics", {})
+            stats["timeframe_metrics"] = scanner_stats.get("timeframe_metrics", {})
+        except Exception as e:
+            logger.warning(f"[FUNNEL] Error reading portfolio scanner stats: {e}")
+
+    # Read live opportunity log (last 15 minutes)
+    opp_file = os.getenv("TESTNET_OPPORTUNITY_LOG", "testnet_opportunity_log.jsonl")
+    if os.path.exists(opp_file):
+        try:
+            opps = []
+            now = datetime.datetime.utcnow()
+            with open(opp_file, "r") as f:
+                for line in f:
+                    if not line.strip():
+                        continue
+                    try:
+                        opp = json.loads(line)
+                        ts_str = opp.get("timestamp", "")
+                        if ts_str:
+                            ts = datetime.datetime.fromisoformat(
+                                ts_str.replace("Z", "+00:00")
+                            ).replace(tzinfo=None)
+                            if (now - ts).total_seconds() < 900:
+                                opps.append(opp)
+                        else:
+                            opps.append(opp)  # include if no timestamp
+                    except Exception:
+                        pass
+            stats["top_opportunities"] = sorted(
+                opps, key=lambda x: x.get("timestamp", ""), reverse=True
+            )[:15]
+        except Exception as e:
+            logger.error(f"[FUNNEL] Error reading opportunity log: {e}")
+
+    # Fallback strategy_metrics from trade ledger
+    if not stats["strategy_metrics"]:
+        trades_info = _get_trades_data()
+        strat_metrics = {}
+        for s_name in ["ADX_EMA", "ML", "SCALPER", "SUPERTREND", "SWING", "AGGRESSOR", "FAST1M"]:
+            strat_metrics[s_name] = {
+                "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0,
+                "qualified": 0, "rejected": 0, "orders": 0, "fills": 0,
+                "wins": 0, "losses": 0, "PnL": 0.0
+            }
+        for t in trades_info.get("positions", []):
+            st = str(t.get("strategy", "AGGRESSOR")).upper()
+            if st not in strat_metrics:
+                strat_metrics[st] = {
+                    "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0,
+                    "qualified": 0, "rejected": 0, "orders": 0, "fills": 0,
+                    "wins": 0, "losses": 0, "PnL": 0.0
+                }
+            strat_metrics[st]["fills"] += 1
+            strat_metrics[st]["orders"] += 1
+            strat_metrics[st]["qualified"] += 1
+            strat_metrics[st]["evaluations"] += 1
+            side = t.get("action", "").upper()
+            if side in ["BUY", "LONG"]:
+                strat_metrics[st]["BUY"] += 1
+            else:
+                strat_metrics[st]["SELL"] += 1
+            pnl = float(t.get("pnl", 0.0))
+            strat_metrics[st]["PnL"] += pnl
+            if pnl > 0:
+                strat_metrics[st]["wins"] += 1
+            elif pnl < 0:
+                strat_metrics[st]["losses"] += 1
+        stats["strategy_metrics"] = strat_metrics
+
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data_age": 0.0,
+        **stats
+    })
+
+
 @app.route('/api/opportunities')
 def api_opportunities():
     """Returns candidate funnel pipeline opportunities."""
@@ -1201,6 +1419,156 @@ def api_balance_events():
         "data_age": 0.0,
         "count": len(events),
         "events": events
+    })
+
+
+@app.route('/api/risk-events')
+def api_risk_events():
+    """
+    Returns risk gate rejection and acceptance events.
+    Sources:
+      - Signal events where risk_decision == REJECTED
+      - Execution events where event_type == order_failed with risk-related error codes
+    Supports ?limit=N and ?symbol=SYM query params.
+    """
+    from testnet_engine.telemetry_manager import get_telemetry_manager
+    limit = int(request.args.get("limit", 100))
+    symbol_filter = request.args.get("symbol")
+    telemetry = get_telemetry_manager()
+
+    risk_events = []
+
+    # 1. Signal-level risk gate decisions
+    signals = telemetry.get_signals_log(limit=500)
+    for s in signals:
+        r_dec = s.get("risk_decision", "")
+        if r_dec in ["REJECTED", "ACCEPTED"]:
+            sym = s.get("symbol", "")
+            if symbol_filter and sym != symbol_filter:
+                continue
+            risk_events.append({
+                "timestamp": s.get("timestamp", ""),
+                "event_type": f"RISK_{r_dec}",
+                "symbol": sym,
+                "strategy": s.get("strategy", ""),
+                "timeframe": s.get("timeframe", ""),
+                "trade_id": s.get("signal_id", ""),
+                "reason": s.get("risk_reason", r_dec),
+                "decision": r_dec,
+                "entry_price": float(s.get("entry", 0.0)),
+                "confidence": float(s.get("confidence", 0.0)),
+                "expected_net": float(s.get("expected_net", 0.0)),
+                "source": "signal_gate"
+            })
+
+    # 2. Execution-level risk failures (order_failed)
+    exec_events = telemetry.get_execution_events(limit=500)
+    risk_codes = {
+        "POSITION_LIMIT", "RISK_REJECTED", "MAX_EXPOSURE_EXCEEDED",
+        "DAILY_LOSS_EXCEEDED", "DRAWDOWN_LIMIT", "SAFETY_HALT",
+        "LOCAL_ORDER_BLOCKED"
+    }
+    for e in exec_events:
+        if e.get("event_type") == "order_failed":
+            err_code = e.get("error_code", "")
+            sym = e.get("symbol", "")
+            if symbol_filter and sym != symbol_filter:
+                continue
+            risk_events.append({
+                "timestamp": e.get("timestamp", ""),
+                "event_type": "ORDER_FAILED",
+                "symbol": sym,
+                "strategy": e.get("strategy", ""),
+                "timeframe": e.get("timeframe", ""),
+                "trade_id": e.get("trade_id", ""),
+                "reason": e.get("error_message", err_code),
+                "decision": "REJECTED",
+                "error_code": err_code,
+                "source": "execution_gate"
+            })
+
+    risk_events.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data_age": 0.0,
+        "count": len(risk_events[:limit]),
+        "events": risk_events[:limit]
+    })
+
+
+@app.route('/api/system-events')
+def api_system_events():
+    """
+    Returns system-level events:
+      - ENGINE_RECOVERY events from execution log
+      - RECONCILIATION events from balance events
+      - Engine heartbeat state changes
+      - SAFETY_HALT triggers
+    Supports ?limit=N query param.
+    """
+    from testnet_engine.telemetry_manager import get_telemetry_manager
+    limit = int(request.args.get("limit", 100))
+    telemetry = get_telemetry_manager()
+
+    system_events = []
+
+    # 1. Recovery and reconciliation from execution events
+    exec_events = telemetry.get_execution_events(limit=500)
+    system_event_types = {
+        "engine_recovery", "engine_start", "safety_halt",
+        "reconciliation", "reconnect", "restart"
+    }
+    for e in exec_events:
+        ev_type = e.get("event_type", "").lower()
+        if any(t in ev_type for t in system_event_types):
+            system_events.append({
+                "timestamp": e.get("timestamp", ""),
+                "event_type": e.get("event_type", "").upper(),
+                "symbol": e.get("symbol", "SYSTEM"),
+                "strategy": e.get("strategy", "-"),
+                "message": e.get("error_message", e.get("event_type", "")),
+                "status": e.get("status", ""),
+                "source": "execution_log"
+            })
+
+    # 2. RECONCILIATION events from balance audit
+    bal_events = telemetry.get_balance_events(limit=200)
+    for b in bal_events:
+        ev_type = b.get("event_type", "").upper()
+        if ev_type in ["RECONCILIATION", "DEPOSIT", "WITHDRAWAL", "ENGINE_RECOVERY"]:
+            system_events.append({
+                "timestamp": b.get("timestamp", ""),
+                "event_type": ev_type,
+                "symbol": b.get("symbol", "USDT"),
+                "strategy": b.get("strategy", "-"),
+                "message": b.get("reason", ev_type),
+                "balance_before": float(b.get("balance_before", 0.0)),
+                "balance_after": float(b.get("balance_after", 0.0)),
+                "delta": float(b.get("delta", 0.0)),
+                "source": "balance_audit"
+            })
+
+    # 3. Engine heartbeat state
+    engine_data = get_engine_health_data()
+    system_events.append({
+        "timestamp": engine_data.get("timestamp", datetime.datetime.utcnow().isoformat() + "Z"),
+        "event_type": "ENGINE_HEARTBEAT",
+        "symbol": "SYSTEM",
+        "strategy": "-",
+        "message": f"Engine {engine_data.get('engine_status', 'UNKNOWN')} — heartbeat age {engine_data.get('heartbeat_age_seconds', 0)}s",
+        "status": engine_data.get("engine_status", "UNKNOWN"),
+        "healthy": engine_data.get("healthy", False),
+        "source": "heartbeat"
+    })
+
+    system_events.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data_age": 0.0,
+        "count": len(system_events[:limit]),
+        "events": system_events[:limit]
     })
 
 @app.route('/api/diagnostics')
