@@ -32,6 +32,14 @@ def add_header(response):
 def serve_index():
     return send_from_directory('static', 'index.html')
 
+@app.route('/style.css')
+def serve_root_css():
+    return send_from_directory('static', 'style.css')
+
+@app.route('/app.js')
+def serve_root_js():
+    return send_from_directory('static', 'app.js')
+
 @app.route('/api/candles')
 def get_candles():
     """Fetches live candles for chart."""
