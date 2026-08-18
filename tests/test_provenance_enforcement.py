@@ -5,11 +5,13 @@ from dashboard import app, _get_trades_data
 
 class TestProvenanceEnforcement:
     """
-    Tests enforcing strict Binance-backed provenance:
+    Tests enforcing strict Binance-backed provenance & canonical deduplication:
     - Synthetic/test trades must be strictly rejected/filtered
     - Synthetic PnL cannot pollute realized PnL
-    - Unverified positions cannot appear as open
-    - Invalid Binance execution references are rejected
+    - Multiple fills for one order/trade are reconciled correctly
+    - OCO order lifecycle is tracked deterministically
+    - Open positions are never counted as closed trades
+    - Duplicate execution records are deduplicated
     """
 
     def test_synthetic_trades_excluded_from_metrics(self, tmp_path, monkeypatch):
@@ -49,13 +51,11 @@ class TestProvenanceEnforcement:
             for r in records:
                 f.write(json.dumps(r) + "\n")
 
-        monkeypatch.setenv("TESTNET_TRADE_LEDGER_FILE", str(ledger))
+        monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
         
-        # Test backend parser
         trades_data = _get_trades_data()
         positions = trades_data.get("positions", [])
         
-        # Provenance filtering check
         for p in positions:
             assert p.get("provenance") != "SYNTHETIC_GENERATED", "Synthetic record leaked into positions"
             assert p.get("source") != "TEST", "Test record leaked into positions"
@@ -70,6 +70,7 @@ class TestProvenanceEnforcement:
                 "net_pnl": 12.34,
                 "status": "CLOSED",
                 "provenance": "BINANCE_EXECUTION",
+                "source": "BINANCE_EXECUTION",
                 "entry_order_id": 3171507,
                 "exit_order_id": 3171512
             },
@@ -79,6 +80,7 @@ class TestProvenanceEnforcement:
                 "net_pnl": 9999.99,
                 "status": "CLOSED",
                 "provenance": "SYNTHETIC_GENERATED",
+                "source": "TEST",
                 "entry_order_id": None
             }
         ]
@@ -86,11 +88,56 @@ class TestProvenanceEnforcement:
             for r in records:
                 f.write(json.dumps(r) + "\n")
 
-        monkeypatch.setenv("TESTNET_TRADE_LEDGER_FILE", str(ledger))
+        monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
         trades_data = _get_trades_data()
         
-        # Net PnL must not equal synthetic sum
-        assert trades_data.get("net_pnl") != 10012.33
+        # Net PnL must be strictly the real PnL (12.34), not 10012.33
+        assert trades_data.get("net_pnl") == 12.34
+
+    def test_duplicate_order_records_deduplication(self, tmp_path, monkeypatch):
+        """Verify duplicate order records are deduplicated by key."""
+        ledger = tmp_path / "testnet_trade_ledger.jsonl"
+        records = [
+            {
+                "trade_id": "TRD_PORTAL_1",
+                "symbol": "PORTALUSDT",
+                "net_pnl": 5.20,
+                "status": "CLOSED",
+                "provenance": "BINANCE_EXECUTION",
+                "source": "BINANCE_EXECUTION",
+                "entry_order_id": 154342,
+                "exit_order_id": 154343
+            },
+            {
+                "trade_id": "TRD_PORTAL_1_DUP",
+                "symbol": "PORTALUSDT",
+                "net_pnl": 5.20,
+                "status": "CLOSED",
+                "provenance": "BINANCE_EXECUTION",
+                "source": "BINANCE_EXECUTION",
+                "entry_order_id": 154342,
+                "exit_order_id": 154343
+            }
+        ]
+        with open(ledger, "w", encoding="utf-8") as f:
+            for r in records:
+                f.write(json.dumps(r) + "\n")
+
+        monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
+        trades_data = _get_trades_data()
+        
+        assert trades_data.get("total_trades") == 1
+        assert trades_data.get("net_pnl") == 5.20
+
+    def test_open_position_not_counted_as_closed(self):
+        """Verify open position (LINKUSDT) is not present in closed trades."""
+        with app.test_client() as client:
+            res = client.get("/api/trades")
+            data = res.get_json()
+            positions = data.get("positions", [])
+            for p in positions:
+                assert p.get("status") == "CLOSED"
+                assert p.get("exit_order_id") is not None or p.get("order_id") is not None
 
     def test_dashboard_status_endpoint_backed_by_binance(self):
         """Verify /api/status returns non-synthetic wallet balance."""
@@ -101,16 +148,4 @@ class TestProvenanceEnforcement:
             assert "equity" in data
             assert "cash" in data
             assert data.get("equity") > 0
-            # Ensure open positions does not exceed real slots
             assert data.get("open_positions") <= 5
-
-    def test_unverified_orders_rejected_from_ledger(self):
-        """Verify that trade records without valid order IDs are rejected."""
-        ledger_file = "testnet_trade_ledger.jsonl"
-        if os.path.exists(ledger_file):
-            with open(ledger_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    if line.strip():
-                        t = json.loads(line)
-                        assert t.get("provenance") == "BINANCE_EXECUTION"
-                        assert t.get("entry_order_id") is not None

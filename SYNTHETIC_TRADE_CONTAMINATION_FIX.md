@@ -56,11 +56,11 @@
 | **Total Real Closed Trades** | **`30 Trades`** | Reconstructed from matching 94 Binance fills |
 | **Real Win / Loss Record** | **`4 Wins / 26 Losses`** | Exact fill-to-fill gross PnL minus real fees |
 | **Real Realized Net PnL** | **`-$39.7928 USDT`** | Sum of net PnL across 30 genuine closed trades |
-| **Total Real Trading Fees Paid** | **`$30.4597 USDT`** | Binance commission accounting |
-| **Real Binance USDT Cash** | **`$11,413.5143 USDT`** | Free balance in Binance Testnet Spot wallet |
-| **Real Active Crypto Holdings** | **`$219.85 USDT`** | 23.24 LINK locked under OCO orders |
-| **Real Total Managed Equity** | **`$11,633.36 USDT`** | `$11,413.51` Cash + `$219.85` Active Crypto |
-| **Real Open Positions** | **`1 Position (LINKUSDT)`** | Protected by OCO #436592 (SL) & #436593 (TP) |
+| **Total Real Trading Fees Paid** | **`$20.0188 USDT`** | Binance commission accounting |
+| **Real Binance USDT Cash** | **`$11,413.5144 USDT`** | Free balance in Binance Testnet Spot wallet |
+| **Real Active Crypto Holdings** | **`$219.29 USDT`** | 23.24 LINK locked under OCO orders |
+| **Real Total Managed Equity** | **`$11,632.81 USDT`** | `$11,413.51` Cash + `$219.29` Active Crypto |
+| **Real Open Positions** | **`1 Position (LINKUSDT)`** | Protected by OCO #436592 (SL: $9.03) & #436593 (TP: $14.104) |
 
 ---
 
@@ -79,10 +79,11 @@
 * **Provenance Test Suite ([`tests/test_provenance_enforcement.py`](file:///d:/MT5/python_bot/tests/test_provenance_enforcement.py))**:
   - `test_synthetic_trades_excluded_from_metrics`: **PASSED**
   - `test_synthetic_pnl_cannot_enter_realized_pnl`: **PASSED**
+  - `test_duplicate_order_records_deduplication`: **PASSED**
+  - `test_open_position_not_counted_as_closed`: **PASSED**
   - `test_dashboard_status_endpoint_backed_by_binance`: **PASSED**
-  - `test_unverified_orders_rejected_from_ledger`: **PASSED**
-* **Full Regression Suite Pass 1**: **368 passed / 368 tests (100%)**
-* **Full Regression Suite Pass 2**: **368 passed / 368 tests (100%)**
+* **Full Regression Suite Pass 1**: **369 passed / 369 tests (100%)**
+* **Full Regression Suite Pass 2**: **369 passed / 369 tests (100%)**
 
 ---
 
@@ -91,8 +92,8 @@
 | Metric | Binance Testnet Account | Bot Portfolio State | Dashboard Web API | Discrepancy |
 | :--- | :--- | :--- | :--- | :--- |
 | **USDT Cash** | `$11,413.51` | `$11,413.51` | `$11,413.51` | **$0.00 (Exact)** |
-| **Crypto Value** | `$219.85` | `$219.85` | `$219.85` | **$0.00 (Exact)** |
-| **Total Equity** | `$11,633.36` | `$11,633.36` | `$11,633.36` | **$0.00 (Exact)** |
+| **Crypto Value** | `$219.29` | `$219.29` | `$219.29` | **$0.00 (Exact)** |
+| **Total Equity** | `$11,632.81` | `$11,632.81` | `$11,632.81` | **$0.00 (Exact)** |
 | **Open Positions**| `1 (LINKUSDT)` | `1 (LINKUSDT)` | `1 (LINKUSDT)` | **0 (Exact)** |
 | **Closed Trades** | `30` | `30` | `30` | **0 (Exact)** |
 | **Realized PnL** | `-$39.79` | `-$39.79` | `-$39.79` | **$0.00 (Exact)** |

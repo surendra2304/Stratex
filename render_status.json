@@ -1,10 +1,10 @@
 {
-  "equity": 11633.36,
+  "equity": 11632.81,
   "cash": 11413.51,
-  "crypto_holdings_value": 219.85,
+  "crypto_holdings_value": 219.29,
   "realized_pnl": -39.7928,
-  "unrealized_pnl": 1.23,
-  "today_pnl": -38.5628,
+  "unrealized_pnl": -2.231,
+  "today_pnl": -42.0238,
   "max_drawdown": 0.36,
   "exposure_pct": 1.89,
   "available_risk": 3.11,
@@ -12,5 +12,5 @@
   "total_trades": 30,
   "wins": 4,
   "losses": 26,
-  "last_update": "2026-08-18T12:10:31.428566Z"
+  "last_update": "2026-08-18T12:39:16.879339Z"
 }
