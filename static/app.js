@@ -1077,6 +1077,7 @@ async function fetchTrades() {
 
         allRawTrades = trades;
         renderTradeJournal();
+        checkLifecycleDeltas(allRawPositions, allRawTrades);
     } catch (e) {
         console.error("Failed to fetch trade journal data:", e);
     }
@@ -2467,30 +2468,35 @@ let audioCtx = null;
 let notificationHistory = [];
 let seenNotificationIds = new Set();
 let unreadNotifCount = 0;
-let seenToastIds = new Set();
+let seenOpenTradeIds = new Set();
+let seenClosedTradeIds = new Set();
 let isInitialLifecycleLoad = true;
 
 function updateAudioUI() {
-    const btn = document.getElementById('audio-toggle-btn');
-    const txt = document.getElementById('audio-status-txt');
+    const btn = document.getElementById('btn-sound-toggle') || document.getElementById('audio-toggle-btn');
+    const txt = document.getElementById('sound-status-text') || document.getElementById('audio-status-txt');
     if (btn) {
         if (isAudioEnabled) {
             btn.classList.add('active');
-            btn.innerHTML = '🔊 <span id="audio-status-txt">Audio ON</span>';
+            if (txt) txt.innerText = '🔊 AUDIO ON';
         } else {
             btn.classList.remove('active');
-            btn.innerHTML = '🔇 <span id="audio-status-txt">Audio OFF</span>';
+            if (txt) txt.innerText = '🔇 AUDIO OFF';
         }
     }
 }
 
-function toggleAudioAlerts() {
+function toggleSoundAlerts() {
     isAudioEnabled = !isAudioEnabled;
     localStorage.setItem('trade_audio_enabled', isAudioEnabled ? 'true' : 'false');
     updateAudioUI();
     if (isAudioEnabled) {
         playAudioAlert('trade_opened');
     }
+}
+
+function toggleAudioAlerts() {
+    toggleSoundAlerts();
 }
 
 function playAudioAlert(type) {
@@ -2505,58 +2511,50 @@ function playAudioAlert(type) {
 
         const now = audioCtx.currentTime;
         if (type === 'trade_opened') {
+            // Calm ascending two-tone chime
             [523.25, 659.25, 783.99].forEach((freq, i) => {
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(freq, now + i * 0.09);
-                gain.gain.setValueAtTime(0.12, now + i * 0.09);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.25);
+                osc.frequency.setValueAtTime(freq, now + i * 0.08);
+                gain.gain.setValueAtTime(0.08, now + i * 0.08);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.22);
                 osc.connect(gain);
                 gain.connect(audioCtx.destination);
-                osc.start(now + i * 0.09);
-                osc.stop(now + i * 0.09 + 0.26);
+                osc.start(now + i * 0.08);
+                osc.stop(now + i * 0.08 + 0.23);
             });
         } else if (type === 'trade_closed_win') {
+            // Crisp positive resolution chime
             [783.99, 1046.50].forEach((freq, i) => {
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(freq, now + i * 0.12);
-                gain.gain.setValueAtTime(0.15, now + i * 0.12);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.35);
+                osc.frequency.setValueAtTime(freq, now + i * 0.10);
+                gain.gain.setValueAtTime(0.10, now + i * 0.10);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.10 + 0.28);
                 osc.connect(gain);
                 gain.connect(audioCtx.destination);
-                osc.start(now + i * 0.12);
-                osc.stop(now + i * 0.12 + 0.36);
+                osc.start(now + i * 0.10);
+                osc.stop(now + i * 0.10 + 0.29);
             });
         } else if (type === 'trade_closed_loss') {
-            [440.0, 349.23].forEach((freq, i) => {
+            // Soft calm tone
+            [440.0, 392.0].forEach((freq, i) => {
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(freq, now + i * 0.14);
-                gain.gain.setValueAtTime(0.12, now + i * 0.14);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.14 + 0.35);
+                osc.frequency.setValueAtTime(freq, now + i * 0.12);
+                gain.gain.setValueAtTime(0.07, now + i * 0.12);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.28);
                 osc.connect(gain);
                 gain.connect(audioCtx.destination);
-                osc.start(now + i * 0.14);
-                osc.stop(now + i * 0.14 + 0.36);
+                osc.start(now + i * 0.12);
+                osc.stop(now + i * 0.12 + 0.29);
             });
-        } else if (type === 'critical_engine_failure' || type === 'order_failed') {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(220, now);
-            gain.gain.setValueAtTime(0.15, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start(now);
-            osc.stop(now + 0.41);
         }
     } catch (err) {
-        console.error("Audio playback error:", err);
+        console.warn("Audio playback error:", err);
     }
 }
 
@@ -2576,11 +2574,13 @@ function pushNotification({ id, title, type, desc, payload, playSoundType }) {
     notificationHistory.unshift(notif);
     if (notificationHistory.length > 50) notificationHistory.pop();
 
-    unreadNotifCount++;
-    updateNotifBadge();
+    if (!isInitialLifecycleLoad) {
+        unreadNotifCount++;
+        updateNotifBadge();
+    }
     renderNotificationList();
 
-    if (playSoundType) {
+    if (playSoundType && !isInitialLifecycleLoad) {
         playAudioAlert(playSoundType);
     }
 }
@@ -2608,6 +2608,17 @@ function toggleNotificationDropdown() {
     }
 }
 
+// Close dropdown on outside click
+document.addEventListener('click', function(e) {
+    const notifBtn = document.getElementById('btn-notif');
+    const dd = document.getElementById('notification-dropdown');
+    if (dd && dd.classList.contains('show')) {
+        if (!dd.contains(e.target) && notifBtn && !notifBtn.contains(e.target)) {
+            dd.classList.remove('show');
+        }
+    }
+});
+
 function clearNotifications() {
     notificationHistory = [];
     unreadNotifCount = 0;
@@ -2620,181 +2631,245 @@ function renderNotificationList() {
     if (!body) return;
 
     if (notificationHistory.length === 0) {
-        body.innerHTML = '<div class="notif-empty">No recent notifications</div>';
+        body.innerHTML = '<div class="notif-empty">No logged trade lifecycle events</div>';
         return;
     }
 
     body.innerHTML = notificationHistory.map((n, idx) => {
         const timeStr = formatTime(n.time);
-        const tagClass = n.type === 'TRADE_OPENED' ? 'tag tag-long' : (n.type === 'TRADE_CLOSED' ? 'tag tag-qualified' : (n.type === 'FAILED' ? 'tag tag-rejected' : 'tag tag-neutral'));
-        return `<div class="notif-item" onclick="inspectNotification(${idx})">
-            <div class="notif-item-top">
-                <span class="${tagClass}">${n.title}</span>
-                <span class="notif-time">${timeStr}</span>
+        const tagClass = n.type === 'TRADE_OPENED' ? 'tag-buy' : (n.type === 'TRADE_CLOSED_WIN' ? 'tag-pass' : (n.type === 'TRADE_CLOSED_LOSS' ? 'tag-rej' : 'badge-mono'));
+        return `
+            <div class="notif-item" onclick="jumpToNotifTrade(${idx})" title="Click to view in Trade Journal">
+                <div class="notif-item-top">
+                    <span class="${tagClass}">${n.title}</span>
+                    <span class="notif-time">${timeStr}</span>
+                </div>
+                <div class="notif-item-desc">${n.desc}</div>
             </div>
-            <div class="notif-item-desc">${n.desc}</div>
-        </div>`;
+        `;
     }).join('');
 }
 
-function inspectNotification(idx) {
+function jumpToNotifTrade(idx) {
+    const dd = document.getElementById('notification-dropdown');
+    if (dd) dd.classList.remove('show');
+
     if (notificationHistory[idx]) {
         const n = notificationHistory[idx];
-        openInspectorDrawer(`EVENT • ${n.title}`, n.payload || { description: n.desc, time: formatDateTime(n.time) });
+        showView('trades');
+        if (n.payload && typeof n.payload === 'object') {
+            inspectTradeLifecycle(n.payload);
+        }
     }
 }
 
-// ─── TOAST NOTIFICATIONS ───
+// ─── TOAST POPUPS (NON-BLOCKING, HOVER-PAUSED, QUEUED) ───
 function showTradeOpenedToast(trade) {
-    const toastId = `OPEN_${trade.trade_id || trade.symbol}_${trade.fill_timestamp || trade.timestamp || Date.now()}`;
-    if (seenToastIds.has(toastId)) return;
-    seenToastIds.add(toastId);
+    const tradeKey = trade.trade_id || `${trade.symbol}_${trade.entry_timestamp || trade.timestamp || Date.now()}`;
+    const toastId = `OPEN_${tradeKey}`;
+
+    pushNotification({
+        id: toastId,
+        title: `TRADE OPENED • ${trade.symbol || 'PAIR'}`,
+        type: 'TRADE_OPENED',
+        desc: `Opened ${trade.side || 'BUY'} on ${trade.symbol} @ $${Number(trade.entry_price || trade.price || 0).toFixed(4)} (${trade.strategy || 'ADX_EMA'})`,
+        payload: trade,
+        playSoundType: 'trade_opened'
+    });
+
+    if (isInitialLifecycleLoad) return;
 
     const container = document.getElementById('trade-toast-container');
     if (!container) return;
+
+    // Enforce max 3 toasts in queue
+    while (container.children.length >= 3) {
+        container.firstElementChild.remove();
+    }
 
     const toast = document.createElement('div');
     toast.className = 'trade-toast toast-open';
     const sym = trade.symbol || 'PAIR';
     const tf = trade.timeframe || '5m';
+    const strat = trade.strategy || 'ADX_EMA';
     const side = (trade.side || trade.action || 'BUY').toUpperCase();
-    const entry = Number(trade.entry_price || trade.entry || trade.price || 0);
+    const entryPx = Number(trade.entry_price || trade.entry || trade.price || 0);
     const qty = trade.quantity || trade.orig_qty || '-';
     const timeStr = formatTime(trade.entry_timestamp || trade.timestamp || Date.now());
 
     toast.innerHTML = `
         <div class="toast-header">
             <div class="toast-badge-title">
-                <span class="tag tag-qualified">⚡ OPENED</span>
+                <span class="tag-buy">⚡ OPENED</span>
                 <span>${sym}</span>
             </div>
-            <span class="toast-time">${timeStr}</span>
+            <span class="toast-time mono">${timeStr}</span>
         </div>
         <div class="toast-grid">
-            <div class="toast-row"><span class="toast-lbl">Strat:</span><span class="toast-val">${strat} (${tf})</span></div>
-            <div class="toast-row"><span class="toast-lbl">Side:</span><span class="toast-val val-green">${side}</span></div>
-            <div class="toast-row"><span class="toast-lbl">Entry:</span><span class="toast-val">$${entry.toFixed(4)}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Strategy:</span><span class="toast-val cyan">${strat} (${tf})</span></div>
+            <div class="toast-row"><span class="toast-lbl">Side:</span><span class="toast-val profit">${side}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Entry:</span><span class="toast-val">$${entryPx.toFixed(4)}</span></div>
             <div class="toast-row"><span class="toast-lbl">Qty:</span><span class="toast-val">${qty}</span></div>
         </div>
         <div class="toast-actions">
-            <button class="toast-btn-action" onclick="inspectTrade(${JSON.stringify(trade).replace(/"/g, '&quot;')})">VIEW</button>
-            <button class="toast-btn-dismiss" onclick="this.closest('.trade-toast').remove()">✕</button>
+            <button class="toast-btn-action" onclick="event.stopPropagation(); showView('trades'); inspectTradeLifecycle(${JSON.stringify(trade).replace(/"/g, '&quot;')}); this.closest('.trade-toast').remove();">INSPECT</button>
+            <button class="toast-btn-dismiss" onclick="event.stopPropagation(); this.closest('.trade-toast').remove();">&times;</button>
         </div>
     `;
 
-    container.appendChild(toast);
-    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 5000);
+    toast.onclick = function() {
+        showView('trades');
+        inspectTradeLifecycle(trade);
+        toast.remove();
+    };
 
-    pushNotification({
-        id: toastId,
-        title: `TRADE OPENED • ${sym}`,
-        type: 'TRADE_OPENED',
-        desc: `${side} ${qty} ${sym} @ $${entry.toFixed(4)} (${strat})`,
-        payload: trade,
-        playSoundType: 'trade_opened'
-    });
+    // Hover Pause Timer Management (~6 seconds)
+    let timeLeft = 6000;
+    let startTime = Date.now();
+    let timer = null;
+
+    const dismiss = () => {
+        toast.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(110%)';
+        setTimeout(() => { if (toast.parentElement) toast.remove(); }, 250);
+    };
+
+    const startTimer = () => {
+        startTime = Date.now();
+        timer = setTimeout(dismiss, timeLeft);
+    };
+
+    const pauseTimer = () => {
+        clearTimeout(timer);
+        timeLeft -= (Date.now() - startTime);
+        if (timeLeft < 1000) timeLeft = 1000;
+    };
+
+    toast.addEventListener('mouseenter', pauseTimer);
+    toast.addEventListener('mouseleave', startTimer);
+    startTimer();
+
+    container.appendChild(toast);
 }
 
 function showTradeClosedToast(trade) {
-    const toastId = `CLOSE_${trade.trade_id || trade.symbol}_${trade.close_timestamp || trade.timestamp || Date.now()}`;
-    if (seenToastIds.has(toastId)) return;
-    seenToastIds.add(toastId);
+    const tradeKey = trade.trade_id || `${trade.symbol}_${trade.close_time || trade.exit_timestamp || Date.now()}`;
+    const toastId = `CLOSE_${tradeKey}`;
 
-    const container = document.getElementById('trade-toast-container');
-    if (!container) return;
-    while (container.children.length >= 2) container.firstElementChild.remove();
-
-    const toast = document.createElement('div');
-    const netPnl = Number(trade.net_pnl !== undefined ? trade.net_pnl : (trade.pnl || 0));
-    const isWin = netPnl >= 0;
-    toast.className = `trade-toast ${isWin ? 'toast-close-win' : 'toast-close-loss'}`;
-
+    const net = Number(trade.net_pnl !== undefined ? trade.net_pnl : (trade.pnl || 0));
+    const isWin = net >= 0;
     const sym = trade.symbol || 'PAIR';
     const tf = trade.timeframe || '5m';
     const strat = trade.strategy || 'ADX_EMA';
-    const entry = Number(trade.entry_price || 0);
-    const exit = Number(trade.exit_price || 0);
-    const closeReason = trade.close_reason || trade.exit_reason || 'OCO_EXIT';
-    const timeStr = formatTime(trade.close_timestamp || trade.timestamp || Date.now());
-
-    toast.innerHTML = `
-        <div class="toast-header">
-            <div class="toast-badge-title">
-                <span class="tag ${isWin ? 'tag-qualified' : 'tag-rejected'}">${isWin ? '🏆 WIN' : '🔻 LOSS'}</span>
-                <span>${sym}</span>
-            </div>
-            <span class="toast-time">${timeStr}</span>
-        </div>
-        <div class="toast-grid">
-            <div class="toast-row"><span class="toast-lbl">PnL:</span><span class="toast-val ${isWin ? 'val-green' : 'val-red'} td-strong">${isWin ? '+' : ''}${formatCurrency(netPnl)}</span></div>
-            <div class="toast-row"><span class="toast-lbl">Strat:</span><span class="toast-val">${strat} (${tf})</span></div>
-            <div class="toast-row"><span class="toast-lbl">Exit:</span><span class="toast-val">$${exit.toFixed(4)}</span></div>
-            <div class="toast-row"><span class="toast-lbl">Reason:</span><span class="toast-val">${closeReason}</span></div>
-        </div>
-        <div class="toast-actions">
-            <button class="toast-btn-action" onclick="inspectTrade(${JSON.stringify(trade).replace(/"/g, '&quot;')})">VIEW</button>
-            <button class="toast-btn-dismiss" onclick="this.closest('.trade-toast').remove()">✕</button>
-        </div>
-    `;
-
-    container.appendChild(toast);
-    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 5000);
+    const exitPx = Number(trade.exit_price || 0);
+    const closeReason = trade.close_reason || trade.exit_reason || (isWin ? 'TAKE_PROFIT' : 'STOP_LOSS');
+    const timeStr = formatTime(trade.close_time || trade.exit_timestamp || Date.now());
+    const currentEquity = Number(document.getElementById('db-equity')?.innerText?.replace(/[^0-9.]/g, '') || 10000);
+    const postBalance = Number(trade.cash_after_exit || (currentEquity + net));
 
     pushNotification({
         id: toastId,
-        title: `TRADE CLOSED • ${sym} (${isWin ? '+' : ''}${formatCurrency(netPnl)})`,
-        type: 'TRADE_CLOSED',
-        desc: `Closed ${sym} via ${closeReason} @ $${exit.toFixed(4)} (Net PnL: ${formatCurrency(netPnl)})`,
+        title: `TRADE CLOSED • ${sym} (${isWin ? '+' : ''}${formatCurrency(net)})`,
+        type: isWin ? 'TRADE_CLOSED_WIN' : 'TRADE_CLOSED_LOSS',
+        desc: `Closed ${sym} via ${closeReason} @ $${exitPx.toFixed(4)} • Net: ${formatCurrency(net)} (Balance: ${formatCurrency(postBalance)})`,
         payload: trade,
         playSoundType: isWin ? 'trade_closed_win' : 'trade_closed_loss'
     });
-}
 
-function showOrderFailedToast(event) {
-    const toastId = `FAIL_${event.symbol || 'ORD'}_${event.timestamp || Date.now()}`;
-    if (seenToastIds.has(toastId)) return;
-    seenToastIds.add(toastId);
+    if (isInitialLifecycleLoad) return;
 
     const container = document.getElementById('trade-toast-container');
     if (!container) return;
-    while (container.children.length >= 2) container.firstElementChild.remove();
+
+    while (container.children.length >= 3) {
+        container.firstElementChild.remove();
+    }
 
     const toast = document.createElement('div');
-    toast.className = 'trade-toast toast-failed';
-    const sym = event.symbol || '-';
-    const strat = event.strategy || 'ADX_EMA';
-    const reason = event.reason || event.error_message || 'Exchange order rejected';
-    const timeStr = formatTime(event.timestamp || Date.now());
+    toast.className = `trade-toast ${isWin ? 'toast-close-win' : 'toast-close-loss'}`;
 
     toast.innerHTML = `
         <div class="toast-header">
             <div class="toast-badge-title">
-                <span class="tag tag-rejected">⚠️ FAILED</span>
+                <span class="${isWin ? 'tag-pass' : 'tag-rej'}">${isWin ? '🏆 WIN' : '🔻 LOSS'}</span>
                 <span>${sym}</span>
             </div>
-            <span class="toast-time">${timeStr}</span>
+            <span class="toast-time mono">${timeStr}</span>
         </div>
         <div class="toast-grid">
-            <div class="toast-row"><span class="toast-lbl">Strat:</span><span class="toast-val">${strat}</span></div>
-            <div class="toast-row"><span class="toast-lbl">Reason:</span><span class="toast-val val-red">${reason}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Outcome:</span><span class="toast-val ${isWin ? 'profit' : 'loss'} td-strong">${isWin ? '+' : ''}${formatCurrency(net)}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Strategy:</span><span class="toast-val cyan">${strat} (${tf})</span></div>
+            <div class="toast-row"><span class="toast-lbl">Exit Fill:</span><span class="toast-val">$${exitPx.toFixed(4)}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Balance:</span><span class="toast-val cyan">${formatCurrency(postBalance)}</span></div>
         </div>
         <div class="toast-actions">
-            <button class="toast-btn-action" onclick="openInspectorDrawer('ORDER FAILURE AUDIT', ${JSON.stringify(event).replace(/"/g, '&quot;')})">VIEW</button>
-            <button class="toast-btn-dismiss" onclick="this.closest('.trade-toast').remove()">✕</button>
+            <button class="toast-btn-action" onclick="event.stopPropagation(); showView('trades'); inspectTradeLifecycle(${JSON.stringify(trade).replace(/"/g, '&quot;')}); this.closest('.trade-toast').remove();">INSPECT</button>
+            <button class="toast-btn-dismiss" onclick="event.stopPropagation(); this.closest('.trade-toast').remove();">&times;</button>
         </div>
     `;
 
-    container.appendChild(toast);
-    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 5000);
+    toast.onclick = function() {
+        showView('trades');
+        inspectTradeLifecycle(trade);
+        toast.remove();
+    };
 
-    pushNotification({
-        id: toastId,
-        title: `ORDER FAILED • ${sym}`,
-        type: 'FAILED',
-        desc: `Order failed on ${sym}: ${reason}`,
-        payload: event,
-        playSoundType: 'critical_engine_failure'
+    // Hover Pause Timer Management (~6 seconds)
+    let timeLeft = 6000;
+    let startTime = Date.now();
+    let timer = null;
+
+    const dismiss = () => {
+        toast.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(110%)';
+        setTimeout(() => { if (toast.parentElement) toast.remove(); }, 250);
+    };
+
+    const startTimer = () => {
+        startTime = Date.now();
+        timer = setTimeout(dismiss, timeLeft);
+    };
+
+    const pauseTimer = () => {
+        clearTimeout(timer);
+        timeLeft -= (Date.now() - startTime);
+        if (timeLeft < 1000) timeLeft = 1000;
+    };
+
+    toast.addEventListener('mouseenter', pauseTimer);
+    toast.addEventListener('mouseleave', startTimer);
+    startTimer();
+
+    container.appendChild(toast);
+}
+
+// Diffing engine for trade lifecycle notifications
+function checkLifecycleDeltas(activePositions, closedTrades) {
+    if (!activePositions && !closedTrades) return;
+
+    // Check newly opened positions
+    (activePositions || []).forEach(p => {
+        const key = p.trade_id || p.position_id || `${p.symbol}_${p.entry_timestamp || p.timestamp}`;
+        if (!seenOpenTradeIds.has(key)) {
+            seenOpenTradeIds.add(key);
+            showTradeOpenedToast(p);
+        }
     });
+
+    // Check newly closed trades
+    (closedTrades || []).forEach(t => {
+        const key = t.trade_id || `${t.symbol}_${t.close_time || t.exit_timestamp || t.timestamp}`;
+        if (!seenClosedTradeIds.has(key)) {
+            seenClosedTradeIds.add(key);
+            showTradeClosedToast(t);
+        }
+    });
+
+    if (isInitialLifecycleLoad) {
+        isInitialLifecycleLoad = false;
+    }
 }
 
 function showEngineEventToast(title, msg, type = 'ENGINE_EVENT') {
