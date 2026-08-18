@@ -212,7 +212,7 @@ async function fetchDashboardData() {
         if (snapManaged) snapManaged.innerText = formatCurrency(data.crypto_holdings_value);
         
         const snapPos = document.getElementById('snap-pos');
-        if (snapPos) snapPos.innerText = data.open_positions || 0;
+        if (snapPos) snapPos.innerText = `${data.open_positions || 0} / 5`;
         
         const snapExp = document.getElementById('snap-exposure');
         if (snapExp) {
@@ -256,22 +256,20 @@ async function fetchDashboardData() {
         const allocCryptoTxt = document.getElementById('alloc-crypto-txt');
         const barCash = document.getElementById('alloc-bar-cash');
         const barCrypto = document.getElementById('alloc-bar-crypto');
+        const snapExpBadge = document.getElementById('snap-exposure-badge');
 
         if (totalVal > 0) {
             const cashPct = Math.min(100, Math.max(0, (cashVal / totalVal) * 100));
             const cryptoPct = Math.min(100, Math.max(0, 100 - cashPct));
-            const activeAssets = (data.holdings || [])
-                .filter(h => h.asset !== 'USDT' && Number(h.value_usdt || h.value || 0) > 0.5)
-                .map(h => h.asset);
-            const activeAssetsStr = activeAssets.length > 0 ? ` (${activeAssets.join(', ')})` : '';
 
-            if (allocCashTxt) allocCashTxt.innerHTML = `Liquid USDT: <strong>${formatCurrency(cashVal)} (${cashPct.toFixed(1)}%)</strong>`;
-            if (allocCryptoTxt) allocCryptoTxt.innerHTML = `Active Spot Trades${activeAssetsStr}: <strong>${formatCurrency(cryptoVal)} (${cryptoPct.toFixed(1)}%)</strong>`;
+            if (allocCashTxt) allocCashTxt.innerText = formatCurrency(cashVal);
+            if (allocCryptoTxt) allocCryptoTxt.innerText = formatCurrency(cryptoVal);
             if (barCash) barCash.style.width = `${cashPct.toFixed(1)}%`;
             if (barCrypto) barCrypto.style.width = `${cryptoPct.toFixed(1)}%`;
+            if (snapExpBadge) snapExpBadge.innerText = `${cryptoPct.toFixed(1)}% EXPOSURE`;
         } else {
-            if (allocCashTxt) allocCashTxt.innerHTML = `Liquid USDT: <strong>DATA UNAVAILABLE</strong>`;
-            if (allocCryptoTxt) allocCryptoTxt.innerHTML = `Active Spot Trades: <strong>DATA UNAVAILABLE</strong>`;
+            if (allocCashTxt) allocCashTxt.innerText = '--';
+            if (allocCryptoTxt) allocCryptoTxt.innerText = '--';
             if (barCash) barCash.style.width = `100%`;
             if (barCrypto) barCrypto.style.width = `0%`;
         }
@@ -2181,39 +2179,33 @@ function showTradeOpenedToast(trade) {
     toast.className = 'trade-toast toast-open';
     const sym = trade.symbol || 'PAIR';
     const tf = trade.timeframe || '5m';
-    const strat = trade.strategy || 'ADX_EMA';
-    const side = trade.side || 'BUY';
-    const entry = Number(trade.entry_price || trade.entry || 0);
-    const qty = Number(trade.quantity || 0);
-    const stop = Number(trade.stop_loss || trade.stop || 0);
-    const target = Number(trade.take_profit || trade.target || 0);
-    const balEntry = Number(trade.cash_before_entry || trade.balance || 0);
-    const timeStr = formatTime(trade.fill_timestamp || trade.timestamp || Date.now());
+    const side = (trade.side || trade.action || 'BUY').toUpperCase();
+    const entry = Number(trade.entry_price || trade.entry || trade.price || 0);
+    const qty = trade.quantity || trade.orig_qty || '-';
+    const timeStr = formatTime(trade.entry_timestamp || trade.timestamp || Date.now());
 
     toast.innerHTML = `
         <div class="toast-header">
             <div class="toast-badge-title">
-                <span class="tag tag-long">🟢 TRADE OPENED</span>
+                <span class="tag tag-qualified">⚡ OPENED</span>
                 <span>${sym}</span>
             </div>
             <span class="toast-time">${timeStr}</span>
         </div>
         <div class="toast-grid">
-            <div class="toast-row"><span class="toast-lbl">Strategy:</span><span class="toast-val">${strat} (${tf})</span></div>
-            <div class="toast-row"><span class="toast-lbl">Side / Qty:</span><span class="toast-val td-strong">${side} ${qty}</span></div>
-            <div class="toast-row"><span class="toast-lbl">Entry Price:</span><span class="toast-val val-green">$${entry.toFixed(4)}</span></div>
-            <div class="toast-row"><span class="toast-lbl">Stop Loss:</span><span class="toast-val val-amber">${stop > 0 ? '$' + stop.toFixed(4) : '-'}</span></div>
-            <div class="toast-row"><span class="toast-lbl">Target:</span><span class="toast-val val-cyan">${target > 0 ? '$' + target.toFixed(4) : '-'}</span></div>
-            <div class="toast-row"><span class="toast-lbl">Bal @ Entry:</span><span class="toast-val">$${balEntry.toFixed(2)}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Strat:</span><span class="toast-val">${strat} (${tf})</span></div>
+            <div class="toast-row"><span class="toast-lbl">Side:</span><span class="toast-val val-green">${side}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Entry:</span><span class="toast-val">$${entry.toFixed(4)}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Qty:</span><span class="toast-val">${qty}</span></div>
         </div>
         <div class="toast-actions">
-            <button class="toast-btn-action" onclick="inspectTrade(${JSON.stringify(trade).replace(/"/g, '&quot;')})">VIEW TRADE</button>
-            <button class="toast-btn-dismiss" onclick="this.closest('.trade-toast').remove()">Dismiss</button>
+            <button class="toast-btn-action" onclick="inspectTrade(${JSON.stringify(trade).replace(/"/g, '&quot;')})">VIEW</button>
+            <button class="toast-btn-dismiss" onclick="this.closest('.trade-toast').remove()">✕</button>
         </div>
     `;
 
     container.appendChild(toast);
-    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 9000);
+    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 5000);
 
     pushNotification({
         id: toastId,
@@ -2232,6 +2224,7 @@ function showTradeClosedToast(trade) {
 
     const container = document.getElementById('trade-toast-container');
     if (!container) return;
+    while (container.children.length >= 2) container.firstElementChild.remove();
 
     const toast = document.createElement('div');
     const netPnl = Number(trade.net_pnl !== undefined ? trade.net_pnl : (trade.pnl || 0));
@@ -2241,45 +2234,39 @@ function showTradeClosedToast(trade) {
     const sym = trade.symbol || 'PAIR';
     const tf = trade.timeframe || '5m';
     const strat = trade.strategy || 'ADX_EMA';
-    const side = trade.side || 'BUY';
     const entry = Number(trade.entry_price || 0);
     const exit = Number(trade.exit_price || 0);
-    const grossPnl = Number(trade.gross_pnl || netPnl);
-    const fees = Number(trade.total_fees || trade.fees || 0);
-    const durStr = trade.duration_seconds ? `${Math.round(trade.duration_seconds)}s` : '-';
     const closeReason = trade.close_reason || trade.exit_reason || 'OCO_EXIT';
     const timeStr = formatTime(trade.close_timestamp || trade.timestamp || Date.now());
 
     toast.innerHTML = `
         <div class="toast-header">
             <div class="toast-badge-title">
-                <span class="tag ${isWin ? 'tag-qualified' : 'tag-rejected'}">${isWin ? '🏆 TRADE CLOSED (WIN)' : '🔻 TRADE CLOSED (LOSS)'}</span>
+                <span class="tag ${isWin ? 'tag-qualified' : 'tag-rejected'}">${isWin ? '🏆 WIN' : '🔻 LOSS'}</span>
                 <span>${sym}</span>
             </div>
             <span class="toast-time">${timeStr}</span>
         </div>
         <div class="toast-grid">
-            <div class="toast-row"><span class="toast-lbl">Strategy:</span><span class="toast-val">${strat} (${tf})</span></div>
-            <div class="toast-row"><span class="toast-lbl">Net PnL:</span><span class="toast-val ${isWin ? 'val-green' : 'val-red'} td-strong">${isWin ? '+' : ''}${formatCurrency(netPnl)}</span></div>
-            <div class="toast-row"><span class="toast-lbl">Entry / Exit:</span><span class="toast-val">$${entry.toFixed(4)} → $${exit.toFixed(4)}</span></div>
-            <div class="toast-row"><span class="toast-lbl">Gross / Fees:</span><span class="toast-val">$${grossPnl.toFixed(2)} / $${fees.toFixed(2)}</span></div>
-            <div class="toast-row"><span class="toast-lbl">Duration:</span><span class="toast-val">${durStr}</span></div>
+            <div class="toast-row"><span class="toast-lbl">PnL:</span><span class="toast-val ${isWin ? 'val-green' : 'val-red'} td-strong">${isWin ? '+' : ''}${formatCurrency(netPnl)}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Strat:</span><span class="toast-val">${strat} (${tf})</span></div>
+            <div class="toast-row"><span class="toast-lbl">Exit:</span><span class="toast-val">$${exit.toFixed(4)}</span></div>
             <div class="toast-row"><span class="toast-lbl">Reason:</span><span class="toast-val">${closeReason}</span></div>
         </div>
         <div class="toast-actions">
-            <button class="toast-btn-action" onclick="inspectTrade(${JSON.stringify(trade).replace(/"/g, '&quot;')})">VIEW TRADE</button>
-            <button class="toast-btn-dismiss" onclick="this.closest('.trade-toast').remove()">Dismiss</button>
+            <button class="toast-btn-action" onclick="inspectTrade(${JSON.stringify(trade).replace(/"/g, '&quot;')})">VIEW</button>
+            <button class="toast-btn-dismiss" onclick="this.closest('.trade-toast').remove()">✕</button>
         </div>
     `;
 
     container.appendChild(toast);
-    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 9000);
+    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 5000);
 
     pushNotification({
         id: toastId,
         title: `TRADE CLOSED • ${sym} (${isWin ? '+' : ''}${formatCurrency(netPnl)})`,
         type: 'TRADE_CLOSED',
-        desc: `Closed ${side} ${sym} via ${closeReason} @ $${exit.toFixed(4)} (Net PnL: ${formatCurrency(netPnl)})`,
+        desc: `Closed ${sym} via ${closeReason} @ $${exit.toFixed(4)} (Net PnL: ${formatCurrency(netPnl)})`,
         payload: trade,
         playSoundType: isWin ? 'trade_closed_win' : 'trade_closed_loss'
     });
@@ -2292,37 +2279,35 @@ function showOrderFailedToast(event) {
 
     const container = document.getElementById('trade-toast-container');
     if (!container) return;
+    while (container.children.length >= 2) container.firstElementChild.remove();
 
     const toast = document.createElement('div');
     toast.className = 'trade-toast toast-failed';
     const sym = event.symbol || '-';
     const strat = event.strategy || 'ADX_EMA';
-    const side = event.side || 'BUY';
     const reason = event.reason || event.error_message || 'Exchange order rejected';
-    const errCode = event.error_code || '';
     const timeStr = formatTime(event.timestamp || Date.now());
 
     toast.innerHTML = `
         <div class="toast-header">
             <div class="toast-badge-title">
-                <span class="tag tag-rejected">⚠️ ORDER FAILED</span>
+                <span class="tag tag-rejected">⚠️ FAILED</span>
                 <span>${sym}</span>
             </div>
             <span class="toast-time">${timeStr}</span>
         </div>
         <div class="toast-grid">
-            <div class="toast-row"><span class="toast-lbl">Strategy:</span><span class="toast-val">${strat}</span></div>
-            <div class="toast-row"><span class="toast-lbl">Side:</span><span class="toast-val">${side}</span></div>
-            <div class="toast-row" style="grid-column: span 2;"><span class="toast-lbl">Reason:</span><span class="toast-val val-red">${reason} ${errCode ? '(' + errCode + ')' : ''}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Strat:</span><span class="toast-val">${strat}</span></div>
+            <div class="toast-row"><span class="toast-lbl">Reason:</span><span class="toast-val val-red">${reason}</span></div>
         </div>
         <div class="toast-actions">
-            <button class="toast-btn-action" onclick="openInspectorDrawer('ORDER FAILURE AUDIT', ${JSON.stringify(event).replace(/"/g, '&quot;')})">VIEW DETAILS</button>
-            <button class="toast-btn-dismiss" onclick="this.closest('.trade-toast').remove()">Dismiss</button>
+            <button class="toast-btn-action" onclick="openInspectorDrawer('ORDER FAILURE AUDIT', ${JSON.stringify(event).replace(/"/g, '&quot;')})">VIEW</button>
+            <button class="toast-btn-dismiss" onclick="this.closest('.trade-toast').remove()">✕</button>
         </div>
     `;
 
     container.appendChild(toast);
-    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 9000);
+    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 5000);
 
     pushNotification({
         id: toastId,
@@ -2348,14 +2333,9 @@ function showEngineEventToast(title, msg, type = 'ENGINE_EVENT') {
             </div>
             <span class="toast-time">${formatTime(Date.now())}</span>
         </div>
-        <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.4;">${msg}</div>
-        <div class="toast-actions">
-            <button class="toast-btn-dismiss" style="margin-left: auto;" onclick="this.closest('.trade-toast').remove()">Dismiss</button>
-        </div>
     `;
-
     container.appendChild(toast);
-    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 8000);
+    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 5000);
 
     pushNotification({
         id: toastId,
@@ -2391,8 +2371,15 @@ async function fetchActivity() {
         const countEl = document.getElementById('activity-count');
         if (countEl) countEl.innerText = `${allRawActivity.length} Events Logged`;
 
-        // Check for new trades / events to dispatch toasts (only after initial load to avoid toast flood on boot)
-        if (!isInitialLifecycleLoad) {
+        // Populate seen IDs on first boot to prevent toast flood
+        if (isInitialLifecycleLoad) {
+            allRawActivity.forEach(ev => {
+                seenToastIds.add(`OPEN_${ev.trade_id}_${ev.timestamp}`);
+                seenToastIds.add(`CLOSE_${ev.trade_id}_${ev.timestamp}`);
+                seenToastIds.add(`FAIL_${ev.symbol}_${ev.timestamp}`);
+            });
+            isInitialLifecycleLoad = false;
+        } else {
             allRawActivity.forEach(ev => {
                 if (ev.type === 'TRADE OPENED' && !seenToastIds.has(`OPEN_${ev.trade_id}_${ev.timestamp}`)) {
                     showTradeOpenedToast(ev.raw || ev);
@@ -2403,7 +2390,6 @@ async function fetchActivity() {
                 }
             });
         }
-        isInitialLifecycleLoad = false;
 
         renderActivityTable();
     } catch (e) {
