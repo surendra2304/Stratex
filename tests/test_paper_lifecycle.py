@@ -12,10 +12,11 @@ def test_paper_trading_lifecycle():
     """
     Part 38: FINAL ACCEPTANCE TEST
     """
-    if os.path.exists("test_paper_portfolio.json"):
-        os.remove("test_paper_portfolio.json")
+    for f in ["test_paper_portfolio.json", "test_paper_ledger.jsonl", "test_paper_equity.jsonl"]:
+        if os.path.exists(f):
+            os.remove(f)
         
-    portfolio = PaperPortfolio(filename="test_paper_portfolio.json")
+    portfolio = PaperPortfolio(filename="test_paper_portfolio.json", ledger_file="test_paper_ledger.jsonl", equity_file="test_paper_equity.jsonl")
     market_data = MarketDataFeed()
     cost = CostEngine(entry_fee=0.001, exit_fee=0.001, entry_slip=0.0005, exit_slip=0.0005)
     sim = PaperSimulator(portfolio, market_data, cost)
@@ -65,12 +66,13 @@ def test_paper_trading_lifecycle():
     # 6. Verify Restart
     portfolio._save()
     
-    portfolio_restarted = PaperPortfolio(filename="test_paper_portfolio.json")
+    portfolio_restarted = PaperPortfolio(filename="test_paper_portfolio.json", ledger_file="test_paper_ledger.jsonl", equity_file="test_paper_equity.jsonl")
     assert portfolio_restarted.cash == portfolio.cash
     assert portfolio_restarted.realized_pnl == portfolio.realized_pnl
     assert "pos_1" in portfolio_restarted.positions
     assert portfolio_restarted.positions["pos_1"]["status"] == "CLOSED"
     
     # Clean up
-    if os.path.exists("test_paper_portfolio.json"):
-        os.remove("test_paper_portfolio.json")
+    for f in ["test_paper_portfolio.json", "test_paper_ledger.jsonl", "test_paper_equity.jsonl"]:
+        if os.path.exists(f):
+            os.remove(f)

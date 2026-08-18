@@ -729,7 +729,7 @@ function renderSignalsTable() {
     if (!tbody) return;
 
     if (!allRawSignals || allRawSignals.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="15" class="idle-state-row">Evaluating 13 pairs across 6 multi-timeframe strategies • Awaiting setups exceeding minimum edge threshold</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="15" class="idle-state-row">No signals recorded yet — scanner evaluating setups</td></tr>';
         return;
     }
 
@@ -976,7 +976,7 @@ function renderPositionsTable(positions) {
 
     if (!positions || positions.length === 0) {
         if (fullBody) fullBody.innerHTML = '<tr><td colspan="13" class="idle-state-row">No active positions on Binance Testnet</td></tr>';
-        if (dashBody) dashBody.innerHTML = '<tr><td colspan="6" class="idle-state-row"><div class="idle-state-content"><span class="radar-pulse"></span><span>All 5 execution slots available • Continuous scanning active across 13 spot pairs</span></div></td></tr>';
+        if (dashBody) dashBody.innerHTML = '<tr><td colspan="6" class="idle-state-row"><div class="idle-state-content"><span class="radar-pulse"></span><span>No open positions \u2014 scanner active</span></div></td></tr>';
         const posCountEl = document.getElementById('pos-count');
         if (posCountEl) posCountEl.innerText = '0 / 5';
         const posNotionalEl = document.getElementById('pos-notional');
@@ -1302,7 +1302,7 @@ function renderTradeJournal() {
         if (activeSection) activeSection.style.display = 'block';
         if (activeBody) {
             if (activePositions.length === 0) {
-                activeBody.innerHTML = `<tr><td colspan="11" class="idle-state-row"><div class="idle-state-content"><span class="radar-pulse"></span><span>All 5 execution slots available • Continuous scanning active across 13 spot pairs</span></div></td></tr>`;
+                activeBody.innerHTML = `<tr><td colspan="11" class="idle-state-row"><div class="idle-state-content"><span class="radar-pulse"></span><span>No open positions \u2014 scanner active</span></div></td></tr>`;
             } else {
                 activeBody.innerHTML = activePositions.map((p, idx) => {
                     const sym = p.symbol || '-';
@@ -1915,6 +1915,7 @@ async function fetchMarketsData() {
         if (data.market_data && Object.keys(data.market_data).length > 0) {
             const syms = Object.keys(data.market_data);
             if (countEl) countEl.innerText = `${syms.length} Pairs`;
+            safeSetText('mkt-pairs-badge', `${syms.length} PAIRS`);
 
             rawMarketDataMap = {};
             const rowsHtml = syms.map(sym => {

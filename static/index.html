@@ -338,7 +338,7 @@
                                             <td colspan="6" class="idle-state-row">
                                                 <div class="idle-state-content">
                                                     <span class="radar-pulse"></span>
-                                                    <span>All 5 execution slots available • Continuous scanning active across 13 spot pairs</span>
+                                                    <span id="pos-idle-msg">No open positions — scanner active</span>
                                                 </div>
                                             </td>
                                         </tr>
@@ -567,7 +567,7 @@
                                         <td colspan="11" class="idle-state-row">
                                             <div class="idle-state-content">
                                                 <span class="radar-pulse"></span>
-                                                <span>All 5 execution slots available • Continuous scanning active across 13 spot pairs</span>
+                                                <span id="journal-open-idle-msg">No open positions — scanner active</span>
                                             </div>
                                         </td>
                                     </tr>
@@ -798,7 +798,7 @@
                                 </tr>
                             </thead>
                             <tbody id="signals-full-body">
-                                <tr><td colspan="15" class="idle-state-row">Evaluating 13 pairs across 6 multi-timeframe strategies • Awaiting setups exceeding minimum edge threshold</td></tr>
+                                <tr><td colspan="15" class="idle-state-row">No signals recorded yet — scanner evaluating setups</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -813,7 +813,7 @@
                     <div class="panel-card market-watch-panel">
                         <div class="panel-card-header">
                             <div class="panel-card-title"><span>📡 LIVE SPOT WATCHLIST</span></div>
-                            <span class="badge-mono">13 PAIRS</span>
+                            <span class="badge-mono" id="mkt-pairs-badge">-- PAIRS</span>
                         </div>
                         <div class="panel-table-wrap">
                             <table class="terminal-table">
@@ -1004,12 +1004,7 @@
                             <table class="terminal-table">
                                 <thead><tr><th>SUBSYSTEM</th><th>STATUS</th><th>TELEMETRY</th></tr></thead>
                                 <tbody id="sys-health-body">
-                                    <tr><td>Binance REST Gateway</td><td><span class="tag-pass">ONLINE</span></td><td>Ping: 18ms</td></tr>
-                                    <tr><td>Binance WebSocket Feed</td><td><span class="tag-pass">ONLINE</span></td><td>Stream active</td></tr>
-                                    <tr><td>Candle Ingestion Buffer</td><td><span class="tag-pass">ONLINE</span></td><td>13 pairs active</td></tr>
-                                    <tr><td>Strategy Matrix Engine</td><td><span class="tag-pass">ONLINE</span></td><td>6 multi-TF strategies</td></tr>
-                                    <tr><td>Execution Gateway</td><td><span class="tag-pass">ONLINE</span></td><td>SPOT OCO active</td></tr>
-                                    <tr><td>Render Host / Region</td><td><span class="tag-pass">ONLINE</span></td><td>Frankfurt (eu-central)</td></tr>
+                                    <tr><td colspan="3" class="idle-state-row" style="text-align:center;padding:10px;">Loading system health...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -1020,17 +1015,17 @@
             <!-- PERSISTENT DIAGNOSTIC FOOTER -->
             <footer class="bottom-diagnostic-footer">
                 <div class="footer-left">
-                    <span class="footer-item"><span class="dot dot-green" id="btm-bn"></span> BINANCE REST</span>
+                    <span class="footer-item"><span class="dot dot-amber" id="btm-bn"></span> BINANCE REST</span>
                     <span class="footer-sep">/</span>
-                    <span class="footer-item"><span class="dot dot-green" id="btm-ws"></span> WS FEED</span>
+                    <span class="footer-item"><span class="dot dot-amber" id="btm-ws"></span> WS FEED</span>
                     <span class="footer-sep">/</span>
-                    <span class="footer-item"><span class="dot dot-green" id="btm-md"></span> MARKET</span>
+                    <span class="footer-item"><span class="dot dot-amber" id="btm-md"></span> MARKET</span>
                     <span class="footer-sep">/</span>
-                    <span class="footer-item"><span class="dot dot-green" id="btm-ex"></span> EXECUTION</span>
+                    <span class="footer-item"><span class="dot dot-amber" id="btm-ex"></span> EXECUTION</span>
                     <span class="footer-sep">/</span>
-                    <span class="footer-item"><span class="dot dot-green" id="btm-st"></span> STRATEGY</span>
+                    <span class="footer-item"><span class="dot dot-amber" id="btm-st"></span> STRATEGY</span>
                     <span class="footer-sep">/</span>
-                    <span class="footer-item"><span class="dot dot-green" id="btm-rs"></span> RISK</span>
+                    <span class="footer-item"><span class="dot dot-amber" id="btm-rs"></span> RISK</span>
                 </div>
                 <div class="footer-right">
                     <span class="footer-meta">FEED TIME: <strong id="btm-last-mkt" class="mono">--:--:--</strong></span>

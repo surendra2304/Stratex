@@ -10,7 +10,7 @@ class PaperPortfolio:
     Central Portfolio for Capital Accounting.
     Tracks Cash, Realized PnL, Used Margin, Unrealized PnL.
     """
-    def __init__(self, filename="paper_portfolio.json"):
+    def __init__(self, filename="paper_portfolio.json", ledger_file=None, equity_file=None):
         self.filename = filename
         self.starting_capital = STARTING_PAPER_CAPITAL
         self.cash = STARTING_PAPER_CAPITAL
@@ -33,8 +33,8 @@ class PaperPortfolio:
         self.daily_funding = 0.0
         self.last_day_ts = self._get_day_start(time.time())
         
-        self.ledger_file = "paper_trade_ledger.jsonl"
-        self.equity_file = "paper_equity_curve.jsonl"
+        self.ledger_file = ledger_file or os.getenv("PAPER_LEDGER_FILE", "paper_trade_ledger.jsonl")
+        self.equity_file = equity_file or os.getenv("PAPER_EQUITY_FILE", "paper_equity_curve.jsonl")
         
         self._load()
         

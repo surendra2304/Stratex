@@ -492,7 +492,8 @@ def get_status():
     if usdt_cash > 0 or crypto_trade_val > 0:
         total_equity = usdt_cash + crypto_trade_val
     else:
-        total_equity = 10000.0 + realized_pnl + unrealized_pnl
+        base_cap = float(port.get("starting_equity", port.get("starting_balance", 10000.0))) if (isinstance(port, dict) if 'port' in locals() else False) else 10000.0
+        total_equity = base_cap + realized_pnl + unrealized_pnl
 
     engine_data = get_engine_health_data()
     components["engine"] = "OK" if engine_data["healthy"] else "ERROR"
@@ -508,8 +509,8 @@ def get_status():
         risk_used = (crypto_trade_val / total_equity) * 100
     available_risk = max(0.0, (config.MAX_TESTNET_EXPOSURE * 100) - risk_used)
     
-    # Sanitize drawdown to reflect real account peak-to-trough
-    clean_mdd = abs(mdd) if abs(mdd) < 5.0 else 0.36
+    # Use raw drawdown value — never synthesize a fake number
+    clean_mdd = abs(mdd) if mdd != 0.0 else 0.0
 
     return jsonify({
         "mode": TRADING_MODE,
@@ -876,9 +877,9 @@ def get_scanner():
 
     return jsonify(stats)
 
-@app.route('/api/opportunities')
+@app.route('/api/opportunity-log')
 def api_get_opportunities():
-    """Returns top opportunities for dashboard radar."""
+    """Returns raw opportunity log records for debug inspection."""
     opps = []
     if os.path.exists("testnet_opportunity_log.jsonl"):
         try:
@@ -1043,28 +1044,6 @@ def api_account():
         }
     })
 
-@app.route('/api/equity')
-def api_get_equity_timeline():
-    """Returns equity curve time series array for Chart.js visualization."""
-    hist_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
-    points = []
-    if os.path.exists(hist_file):
-        try:
-            with open(hist_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    if not line.strip(): continue
-                    try:
-                        rec = json.loads(line.strip())
-                        points.append({
-                            "time": rec.get("timestamp", ""),
-                            "equity": float(rec.get("equity", rec.get("balance", 0.0))),
-                            "cash": float(rec.get("cash", rec.get("equity", 0.0)))
-                        })
-                    except Exception:
-                        pass
-        except Exception as e:
-            logger.error(f"Error loading equity history: {e}")
-    return jsonify(points)
 
 @app.route('/api/equity-history')
 def api_equity_history():
@@ -2041,10 +2020,13 @@ def get_funnel():
                 strat_metrics[st]["losses"] += 1
         stats["strategy_metrics"] = strat_metrics
 
+    stats["count"] = len(stats.get("top_opportunities", []))
+
     return jsonify({
         "status": "SUCCESS",
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
         "data_age": 0.0,
+        "count": stats["count"],
         **stats
     })
 

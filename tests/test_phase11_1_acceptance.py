@@ -21,9 +21,7 @@ def test_phase11_1_acceptance():
             os.remove(f)
             
     # 2. Init
-    port = PaperPortfolio(filename="test_port.json")
-    port.ledger_file = "test_ledger.jsonl"
-    port.equity_file = "test_equity.jsonl"
+    port = PaperPortfolio(filename="test_port.json", ledger_file="test_ledger.jsonl", equity_file="test_equity.jsonl")
     
     md = MarketDataFeed(max_stale_seconds=5)
     cost = CostEngine(entry_fee=0.001, exit_fee=0.001, entry_slip=0.0005, exit_slip=0.0005)
