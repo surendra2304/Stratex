@@ -177,8 +177,19 @@ def get_live_account_and_holdings(force_refresh=False):
         total_crypto_value = 0.0
         active_trade_holdings_value = 0.0
         
-        # Active traded coins by our bot (to distinguish from default testnet faucet assets)
-        bot_traded_assets = {"PORTAL", "LINK", "HEMI", "TRX", "SPCXB", "PAXG", "BNB", "DOGE", "SOL", "SOPH", "BTC", "ETH"}
+        # Identify genuine active bot assets from the portfolio state
+        port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+        active_bot_assets = set()
+        if os.path.exists(port_file):
+            try:
+                with open(port_file, "r") as pf:
+                    p_data = json.load(pf)
+                    for sym, pos in p_data.get("positions", {}).items():
+                        if isinstance(pos, dict) and pos.get("status") == "OPEN":
+                            base_asset = sym.replace("USDT", "").replace("USDC", "").replace("BUSD", "").replace("FDUSD", "")
+                            active_bot_assets.add(base_asset)
+            except Exception as pe:
+                logger.error(f"[DASHBOARD] Error reading portfolio for active holdings: {pe}")
         
         try:
             client = get_exchange_client()
@@ -213,7 +224,10 @@ def get_live_account_and_holdings(force_refresh=False):
                     usd_val = total_qty
                     
                 if usd_val > 0.05:
-                    is_bot_trade = (asset in bot_traded_assets) or (locked > 0)
+                    # A holding is a genuine active bot trade ONLY if locked in an exchange order (e.g. OCO)
+                    # or recorded as an open position in the local portfolio state.
+                    # Unmanaged faucet airdrops with locked == 0 are classified as unmanaged holdings.
+                    is_bot_trade = (asset in active_bot_assets) or (locked > 0)
                     h_info = {
                         "asset": asset,
                         "symbol": pair if price > 0 else asset,
@@ -226,18 +240,20 @@ def get_live_account_and_holdings(force_refresh=False):
                     }
                     holdings.append(h_info)
                     total_crypto_value += usd_val
-                    if is_bot_trade and asset not in ['USDC', 'TUSD', 'FDUSD', 'WBTC', 'BTC', 'ETH']:
-                        active_trade_holdings_value += usd_val
+                    if is_bot_trade and asset not in ['USDC', 'TUSD', 'FDUSD', 'USDS', 'USDP', 'RLUSD']:
+                        # If locked, only the locked portion is deployed in the bot trade
+                        trade_qty = locked if locked > 0 else total_qty
+                        active_trade_holdings_value += trade_qty * price
         except Exception as e:
             logger.error(f"[DASHBOARD] Error calculating live holdings: {e}")
             
         holdings.sort(key=lambda x: x['usd_value'], reverse=True)
         res_dict = {
-            "usdt_free": usdt_free,
-            "usdt_locked": usdt_locked,
-            "usdt_total_cash": usdt_free + usdt_locked,
-            "total_crypto_value": total_crypto_value,
-            "active_trade_holdings_value": active_trade_holdings_value,
+            "usdt_free": round(usdt_free, 2),
+            "usdt_locked": round(usdt_locked, 2),
+            "usdt_total_cash": round(usdt_free + usdt_locked, 2),
+            "total_crypto_value": round(total_crypto_value, 2),
+            "active_trade_holdings_value": round(active_trade_holdings_value, 2),
             "holdings": holdings
         }
         _holdings_cache = res_dict

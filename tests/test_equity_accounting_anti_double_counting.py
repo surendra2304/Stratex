@@ -120,3 +120,64 @@ def test_dashboard_status_endpoint_accounting(monkeypatch):
     assert data["cash"] == 8000.0
     assert data["crypto_holdings_value"] == 2000.0
     assert data["realized_pnl"] == 500.0
+
+def test_unmanaged_faucet_tokens_not_counted_in_active_equity(monkeypatch, tmp_path):
+    """
+    Verifies that unmanaged testnet faucet tokens (e.g. PAXG, BNB, DOGE)
+    with locked == 0 and NOT in active positions are excluded from
+    active_trade_holdings_value, preventing $19k inflation.
+    """
+    import dashboard
+    from unittest.mock import MagicMock
+    
+    port_file = tmp_path / "testnet_portfolio.json"
+    port_data = {
+        "initial_deposit": 10000.0,
+        "positions": {
+            "LINKUSDT": {
+                "symbol": "LINKUSDT",
+                "quantity": 23.24,
+                "entry_price": 9.407,
+                "status": "OPEN"
+            }
+        }
+    }
+    with open(port_file, "w") as f:
+        json.dump(port_data, f)
+        
+    monkeypatch.setenv("TESTNET_PORTFOLIO_FILE", str(port_file))
+    
+    mock_client = MagicMock()
+    mock_client.get_account.return_value = {
+        "balances": [
+            {"asset": "USDT", "free": "11413.51", "locked": "0.0"},
+            {"asset": "LINK", "free": "0.0", "locked": "23.24"},
+            {"asset": "PAXG", "free": "1.0", "locked": "0.0"},
+            {"asset": "BNB", "free": "1.0", "locked": "0.0"},
+            {"asset": "DOGE", "free": "7154.0", "locked": "0.0"}
+        ]
+    }
+    
+    monkeypatch.setattr("execution.get_exchange_client", lambda: mock_client)
+    
+    mock_md = MagicMock()
+    mock_md.is_available.return_value = True
+    mock_md.get_ticker.return_value = [
+        {"symbol": "LINKUSDT", "lastPrice": "10.0"},
+        {"symbol": "PAXGUSDT", "lastPrice": "4000.0"},
+        {"symbol": "BNBUSDT", "lastPrice": "600.0"},
+        {"symbol": "DOGEUSDT", "lastPrice": "0.10"}
+    ]
+    monkeypatch.setattr("data_client.MarketDataClient", lambda: mock_md)
+    
+    # Force fresh computation
+    res = dashboard.get_live_account_and_holdings(force_refresh=True)
+    
+    assert res["usdt_total_cash"] == 11413.51
+    # Only LINK should be in active_trade_holdings_value (23.24 * 10.0 = $232.40)
+    # PAXG ($4000), BNB ($600), DOGE ($715.40) MUST NOT be included in active_trade_holdings_value!
+    assert res["active_trade_holdings_value"] == 232.40
+    
+    # Total crypto value on exchange still tracks all balances
+    assert res["total_crypto_value"] > 5000.0
+

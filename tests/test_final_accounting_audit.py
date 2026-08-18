@@ -83,8 +83,25 @@ def test_e_f_multi_asset_unrealized_pnl_calculation(client, tmp_path, monkeypatc
     with open(portfolio_file, "w") as f:
         json.dump(port_state, f)
         
+    import dashboard
+    monkeypatch.setattr(dashboard, "_holdings_cache", None)
+    
     mock_client = MagicMock()
-    mock_client.get_account.return_value = {'balances': [{'asset': 'USDT', 'free': '10000.0', 'locked': '0.0'}]}
+    mock_client.get_account.return_value = {
+        'balances': [
+            {'asset': 'USDT', 'free': '9910.0', 'locked': '0.0'},
+            {'asset': 'BTC', 'free': '0.0', 'locked': '0.001'},
+            {'asset': 'ETH', 'free': '0.0', 'locked': '0.01'}
+        ]
+    }
+    
+    mock_md = MagicMock()
+    mock_md.is_available.return_value = True
+    mock_md.get_ticker.return_value = [
+        {"symbol": "BTCUSDT", "lastPrice": "62000.0"},
+        {"symbol": "ETHUSDT", "lastPrice": "3100.0"}
+    ]
+    monkeypatch.setattr("data_client.MarketDataClient", lambda: mock_md)
     
     import pandas as pd
     def mock_fetch_candles(symbol, timeframe, limit):
@@ -101,6 +118,7 @@ def test_e_f_multi_asset_unrealized_pnl_calculation(client, tmp_path, monkeypatc
         data = res.get_json()
         # Unrealized PnL should be exactly 2.00 + 1.00 = 3.00
         assert pytest.approx(data["unrealized_pnl"], 0.001) == 3.00
+        # Total equity = $9,910 cash + $93 crypto value ($62 BTC + $31 ETH) = $10,003.00
         assert pytest.approx(data["equity"], 0.001) == 10003.00
 
 def test_g_malformed_position_does_not_break_status(client, tmp_path, monkeypatch):
