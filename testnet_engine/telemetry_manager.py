@@ -207,12 +207,20 @@ class TelemetryManager:
             self.base_dir = base_dir or ""
             
             # File paths
-            self.trade_events_file = os.path.join(self.base_dir, os.getenv("TESTNET_TRADE_EVENTS_FILE", "testnet_trade_events.jsonl")) if self.base_dir else os.getenv("TESTNET_TRADE_EVENTS_FILE", "testnet_trade_events.jsonl")
-            self.equity_history_file = os.path.join(self.base_dir, os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")) if self.base_dir else os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
-            self.balance_events_file = os.path.join(self.base_dir, os.getenv("TESTNET_BALANCE_EVENTS_FILE", "testnet_balance_events.jsonl")) if self.base_dir else os.getenv("TESTNET_BALANCE_EVENTS_FILE", "testnet_balance_events.jsonl")
-            self.signals_log_file = os.path.join(self.base_dir, os.getenv("TESTNET_SIGNALS_LOG_FILE", "testnet_signals_log.jsonl")) if self.base_dir else os.getenv("TESTNET_SIGNALS_LOG_FILE", "testnet_signals_log.jsonl")
-            self.execution_events_file = os.path.join(self.base_dir, os.getenv("TESTNET_EXECUTION_EVENTS_FILE", "testnet_execution_events.jsonl")) if self.base_dir else os.getenv("TESTNET_EXECUTION_EVENTS_FILE", "testnet_execution_events.jsonl")
-            self.position_history_file = os.path.join(self.base_dir, os.getenv("TESTNET_POSITION_HISTORY_FILE", "testnet_position_history.jsonl")) if self.base_dir else os.getenv("TESTNET_POSITION_HISTORY_FILE", "testnet_position_history.jsonl")
+            if self.base_dir:
+                self.trade_events_file = os.path.join(self.base_dir, "testnet_trade_events.jsonl")
+                self.equity_history_file = os.path.join(self.base_dir, "testnet_equity_history.jsonl")
+                self.balance_events_file = os.path.join(self.base_dir, "testnet_balance_events.jsonl")
+                self.signals_log_file = os.path.join(self.base_dir, "testnet_signals_log.jsonl")
+                self.execution_events_file = os.path.join(self.base_dir, "testnet_execution_events.jsonl")
+                self.position_history_file = os.path.join(self.base_dir, "testnet_position_history.jsonl")
+            else:
+                self.trade_events_file = os.getenv("TESTNET_TRADE_EVENTS_FILE", "testnet_trade_events.jsonl")
+                self.equity_history_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
+                self.balance_events_file = os.getenv("TESTNET_BALANCE_EVENTS_FILE", "testnet_balance_events.jsonl")
+                self.signals_log_file = os.getenv("TESTNET_SIGNALS_LOG_FILE", "testnet_signals_log.jsonl")
+                self.execution_events_file = os.getenv("TESTNET_EXECUTION_EVENTS_FILE", "testnet_execution_events.jsonl")
+                self.position_history_file = os.getenv("TESTNET_POSITION_HISTORY_FILE", "testnet_position_history.jsonl")
             
             # In-memory indices for rapid query response
             self._trade_events: Dict[str, dict] = {}

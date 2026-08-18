@@ -578,7 +578,10 @@ def _get_trades_data():
                     prov = str(trade.get("provenance", "")).upper()
                     source = str(trade.get("source", "")).upper()
                     strategy = str(trade.get("strategy", "")).upper()
-                    if source in ["TEST", "SYNTHETIC", "SYNTHETIC_GENERATED"] or prov in ["TEST", "SYNTHETIC", "SYNTHETIC_GENERATED"] or strategy == "TEST":
+                    status = str(trade.get("status", "")).upper()
+                    
+                    INVALID_PROVENANCES = ["TEST", "PAPER", "SYNTHETIC", "SYNTHETIC_GENERATED", "UNVERIFIED", "MOCK", "RECOVERED_WITHOUT_BINANCE_PROOF"]
+                    if source in INVALID_PROVENANCES or prov in INVALID_PROVENANCES or strategy in INVALID_PROVENANCES or status == "OPEN":
                         continue
                     
                     symbol = trade.get("symbol", "")

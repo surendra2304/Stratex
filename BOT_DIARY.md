@@ -47,7 +47,7 @@
 | **Active Open Positions** | **`1 Position (LINKUSDT)`** | Quantity: 23.24 LINK, Entry: $9.4070, TP: $14.1040, SL: $9.0300 |
 | **Max Account Drawdown** | **`0.36%`** | Peak-to-trough historical drawdown |
 | **Portfolio Risk Exposure** | **`1.88%`** | Under 5.0% maximum risk allocation ceiling |
-| **Automated Test Suite** | **`374 passed / 374 tests (100%)`** | Verified across 2 full consecutive test runs |
+| **Automated Test Suite** | **`382 passed / 382 tests (100%)`** | Verified across 2 full consecutive test runs |
 
 ---
 
@@ -145,8 +145,9 @@
   - **Bug #30**: Equity Timeline Gap & Unscaled Y-Axis (Commit `88b4ba2`)
   - **Bug #31**: Opportunity Scanner REJECT False Positive (Commit `88b4ba2`)
   - **Bug #32**: Elimination of Synthetic Trade Generator & 100% Binance Reconciliation (Commit `65a67a1` / `07f7b73`)
-  - **Bug #33**: Market Data Fabrication in `/api/candles` Endpoint (Commit `TBD`)
-* **Key Commits**: `365b451`, `bf4f064`, `f3bfa04`, `b1da4d3`, `88b4ba2`, `65a67a1`, `07f7b73`.
+  - **Bug #33**: Market Data Fabrication in `/api/candles` Endpoint (Commit `3e2c3f0`)
+  - **Bug #34**: Telemetry Test Artifacts Pollution in Production Balance/Trade Event Ledgers (Commit `TBD`)
+* **Key Commits**: `365b451`, `bf4f064`, `f3bfa04`, `b1da4d3`, `88b4ba2`, `65a67a1`, `07f7b73`, `3e2c3f0`.
 * **End-of-Day State**: Cash: $11,413.51 | Managed Equity: $11,632.81 | Realized PnL: -$39.7928 | Closed Trades: 30 | Open Positions: 1 (LINKUSDT).
 
 ---
@@ -188,6 +189,7 @@
 | **31** | 18-Aug | Opportunity Scanner REJECT false positive | `s.decision` string evaluated to boolean false | Fixed `isPass` to evaluate `profitability_decision` | ✅ **Resolved** |
 | **32** | 18-Aug | Synthetic 1,050-trade contamination | Local pseudo-random script wrote fake records | Purged fake data, reconciled 94 Binance fills | ✅ **Resolved** |
 | **33** | 18-Aug | Fake candle fallback in `/api/candles` | Hardcoded prices/synthetic volume returned on offline | Removed fabrication; return 503 `DATA_UNAVAILABLE` | ✅ **Resolved** |
+| **34** | 18-Aug | Telemetry test artifacts in event stream | Unit test fixtures wrote mock events into repo files | Hardened event stream, redirected tests, added IDs | ✅ **Resolved** |
 
 ---
 
