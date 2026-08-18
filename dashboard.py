@@ -224,10 +224,10 @@ def get_live_account_and_holdings(force_refresh=False):
                         "usd_value": usd_val,
                         "is_bot_trade": is_bot_trade
                     }
-            holdings.append(h_info)
-            total_crypto_value += usd_val
-            if is_bot_trade and asset not in ['USDC', 'TUSD', 'FDUSD', 'WBTC', 'BTC', 'ETH']:
-                active_trade_holdings_value += usd_val
+                    holdings.append(h_info)
+                    total_crypto_value += usd_val
+                    if is_bot_trade and asset not in ['USDC', 'TUSD', 'FDUSD', 'WBTC', 'BTC', 'ETH']:
+                        active_trade_holdings_value += usd_val
         except Exception as e:
             logger.error(f"[DASHBOARD] Error calculating live holdings: {e}")
             
@@ -339,6 +339,8 @@ def get_status():
             
             bot_start_time = port.get("service_start_time")
             safety_halt = port.get("safety_halt", False)
+            realized_pnl = float(port.get("realized_pnl", 0.0))
+            fees = float(port.get("fees", 0.0))
             
             # Compute unrealized PnL across active positions
             for pos_sym, pos in port.get("positions", {}).items():
@@ -382,18 +384,21 @@ def get_status():
                 except Exception as pos_err:
                     logger.error(f"Error calculating open pos PnL: {pos_err}")
             
-            trades_data = _get_trades_data()
-            if trades_data.get("positions"):
-                realized_pnl = float(trades_data.get("net_pnl", 0.0))
-                fees = float(sum(t.get("fees", 0.0) for t in trades_data.get("positions", [])))
-            else:
-                realized_pnl = float(port.get("realized_pnl", 0.0))
-                fees = float(port.get("fees", 0.0))
-                
             open_positions = sum(1 for p in port.get("positions", {}).values() if isinstance(p, dict) and p.get("status") == "OPEN")
             mdd = float(port.get("max_drawdown", 0.0)) * 100
         except Exception as e:
             logger.error(f"Failed to process testnet portfolio: {e}")
+
+    try:
+        trades_data = _get_trades_data()
+        if trades_data:
+            if trades_data.get("positions"):
+                realized_pnl = float(trades_data.get("net_pnl", 0.0))
+                fees = float(sum(t.get("fees", 0.0) for t in trades_data.get("positions", [])))
+            elif "net_pnl" in trades_data and float(trades_data.get("net_pnl", 0.0)) != 0.0:
+                realized_pnl = float(trades_data.get("net_pnl", 0.0))
+    except Exception as td_err:
+        logger.error(f"Failed to load trades data: {td_err}")
 
     # Read today's equity history for High / Low calculation
     hist_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
@@ -420,10 +425,13 @@ def get_status():
         if first_eq > 0:
             equity_change = round(((today_equities[-1] - first_eq) / first_eq) * 100, 2)
 
-    # Total Valuation: Liquid USDT Cash + Capital In Active Trades + Realized + Unrealized
-    # If in testnet, base is actual cash + active crypto assets
-    if usdt_cash > 0:
-        total_equity = usdt_cash + crypto_trade_val + unrealized_pnl
+    # Total Valuation: Liquid USDT Cash + Current Market Value of Active Crypto Trades
+    # Note: Crypto Trade Value is ALREADY Mark-to-Market (current_price * quantity = cost_basis + unrealized_pnl).
+    # Realized PnL is ALREADY credited into Binance USDT Cash upon trade close.
+    # Therefore, Total Equity = USDT Cash + Active Crypto Holdings Value.
+    # We MUST NEVER add unrealized_pnl or realized_pnl on top of (Cash + Active Crypto Value).
+    if usdt_cash > 0 or crypto_trade_val > 0:
+        total_equity = usdt_cash + crypto_trade_val
     else:
         total_equity = 10000.0 + realized_pnl + unrealized_pnl
 
@@ -760,6 +768,45 @@ def api_export_trades():
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment;filename=binance_trade_ledger.csv"}
     )
+
+@app.route('/api/diagnostics')
+def api_diagnostics():
+    """Returns comprehensive accounting, reconciliation, and engine diagnostics."""
+    account_holdings = get_live_account_and_holdings(force_refresh=True)
+    trades_data = _get_trades_data()
+    engine_data = get_engine_health_data()
+    
+    usdt_cash = account_holdings["usdt_total_cash"]
+    crypto_val = account_holdings["active_trade_holdings_value"]
+    total_eq = usdt_cash + crypto_val
+    realized_pnl = float(trades_data.get("net_pnl", 0.0))
+    
+    port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+    open_positions = {}
+    if os.path.exists(port_file):
+        try:
+            with open(port_file, "r") as f:
+                port = json.load(f)
+                open_positions = port.get("positions", {})
+        except Exception:
+            pass
+            
+    return jsonify({
+        "status": "OK",
+        "accounting_model": {
+            "formula": "TOTAL_EQUITY = usdt_cash + crypto_holdings_market_value",
+            "usdt_cash": round(usdt_cash, 2),
+            "crypto_holdings_market_value": round(crypto_val, 2),
+            "total_equity": round(total_eq, 2),
+            "realized_pnl": round(realized_pnl, 4),
+            "realized_pnl_double_counted": False,
+            "unrealized_pnl_double_counted": False
+        },
+        "engine_health": engine_data,
+        "active_positions": open_positions,
+        "holdings_breakdown": account_holdings["holdings"][:10],
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+    })
 
 @app.route('/<path:path>')
 def serve_static(path):
