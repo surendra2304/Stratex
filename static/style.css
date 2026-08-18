@@ -1486,10 +1486,128 @@ tbody tr:last-child td {
     background: var(--border-bright);
 }
 
+/* ─── MARKETS TERMINAL 3-COLUMN LAYOUT ─── */
+.market-terminal-grid {
+    display: grid;
+    grid-template-columns: 380px 1fr 340px;
+    gap: var(--space-md);
+    flex: 1;
+    min-height: calc(100vh - 140px);
+}
+
+.market-left-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.market-center-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.market-right-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.market-chart-header-left {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.market-chart-symbol {
+    font-size: 14px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    letter-spacing: 0.5px;
+}
+
+.market-chart-price {
+    font-size: 14px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--color-cyan-bright);
+}
+
+.market-chart-chg {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+}
+
+.market-row-active {
+    background-color: rgba(37, 99, 235, 0.18) !important;
+    border-left: 3px solid var(--brand-primary);
+}
+
+/* ─── STRATEGY × TIMEFRAME MATRIX ─── */
+.matrix-table th {
+    text-align: center;
+}
+
+.matrix-table td:not(:first-child) {
+    text-align: center;
+    padding: 10px 8px;
+}
+
+.matrix-cell {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 10px;
+    border-radius: var(--radius-xs);
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-subtle);
+    min-width: 90px;
+    transition: all 0.15s ease;
+}
+
+.matrix-cell.active {
+    border-color: rgba(37, 99, 235, 0.4);
+    background-color: rgba(37, 99, 235, 0.06);
+}
+
+.matrix-cell.standby {
+    opacity: 0.4;
+}
+
+.matrix-cell-status {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.matrix-cell-stats {
+    font-size: 9px;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+}
+
+.tag-insufficient {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+    border: 1px dashed var(--border-medium);
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: var(--radius-xs);
+}
+
 /* ─── RESPONSIVE BREAKPOINTS ─── */
 @media (max-width: 1600px) {
     .metrics-row {
         grid-template-columns: repeat(3, 1fr);
+    }
+    .market-terminal-grid {
+        grid-template-columns: 320px 1fr 300px;
     }
 }
 
@@ -1505,6 +1623,10 @@ tbody tr:last-child td {
     }
     .risk-grid {
         grid-template-columns: repeat(2, 1fr);
+    }
+    .market-terminal-grid {
+        grid-template-columns: 1fr;
+        height: auto;
     }
 }
 
@@ -1544,3 +1666,4 @@ tbody tr:last-child td {
         display: none;
     }
 }
+

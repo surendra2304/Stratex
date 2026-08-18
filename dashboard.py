@@ -1022,42 +1022,225 @@ def api_signals():
 
 @app.route('/api/strategy-metrics')
 def api_strategy_metrics():
-    """Returns detailed metrics breakdown per strategy."""
-    trades_info = _get_trades_data()
-    positions = trades_info.get("positions", [])
-    strats = {
-        "aggressor": {"trades": 0, "wins": 0, "losses": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0},
-        "scalper": {"trades": 0, "wins": 0, "losses": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0},
-        "supertrend": {"trades": 0, "wins": 0, "losses": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0},
-        "ml": {"trades": 0, "wins": 0, "losses": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0},
-        "adx_ema": {"trades": 0, "wins": 0, "losses": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0},
-        "swing": {"trades": 0, "wins": 0, "losses": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0},
-        "other": {"trades": 0, "wins": 0, "losses": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0}
+    """
+    Returns detailed metrics breakdown per strategy and Strategy x Timeframe matrix.
+    Covers: aggressor, scalper, supertrend, ml, swing, adx_ema.
+    """
+    from testnet_engine.telemetry_manager import get_telemetry_manager
+    telemetry = get_telemetry_manager()
+    trades = telemetry.query_trades(limit=500)
+    signals = telemetry.get_signals_log(limit=500)
+
+    # Core 6 strategies definition
+    strategy_keys = ["aggressor", "scalper", "supertrend", "ml", "swing", "adx_ema"]
+    timeframe_keys = ["5m", "15m", "30m", "1h", "2h", "4h"]
+    strategy_timeframe_config = {
+        "aggressor": ["5m", "15m", "1h"],
+        "scalper": ["5m", "15m"],
+        "supertrend": ["15m", "1h", "4h"],
+        "ml": ["5m", "15m", "1h", "4h"],
+        "swing": ["1h", "4h"],
+        "adx_ema": ["5m", "15m", "1h", "4h"]
     }
-    for t in positions:
-        st = t.get("strategy", "other").lower()
-        if st not in strats:
-            st = "other"
-        strats[st]["trades"] += 1
-        pnl = float(t.get("pnl", 0.0))
-        strats[st]["net_pnl"] += pnl
-        if pnl > 0:
-            strats[st]["wins"] += 1
-            strats[st]["gross_profit"] += pnl
-        elif pnl < 0:
-            strats[st]["losses"] += 1
-            strats[st]["gross_loss"] += abs(pnl)
-            
+
+    # Load scanner stats from portfolio if available
+    port_stats = {}
+    port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+    if os.path.exists(port_file):
+        try:
+            with open(port_file, "r") as f:
+                p_data = json.load(f)
+                port_stats = p_data.get("scanner_stats", {}).get("strategy_metrics", {})
+        except Exception:
+            pass
+
+    strats = {}
+    for sk in strategy_keys:
+        p_stat = port_stats.get(sk, {})
+        strats[sk] = {
+            "name": sk.upper(),
+            "status": "ACTIVE",
+            "timeframes": strategy_timeframe_config.get(sk, ["5m"]),
+            "evaluations": p_stat.get("evaluations", p_stat.get("HOLD", 0) + p_stat.get("signals", 0)),
+            "BUY": p_stat.get("BUY", 0),
+            "SELL": p_stat.get("SELL", 0),
+            "HOLD": p_stat.get("HOLD", 0),
+            "qualified": p_stat.get("qualified", 0),
+            "profitability_rejected": p_stat.get("rejected", 0),
+            "risk_rejected": 0,
+            "orders": p_stat.get("orders", p_stat.get("executed", 0)),
+            "fills": p_stat.get("fills", p_stat.get("executed", 0)),
+            "trades": 0,
+            "wins": 0,
+            "losses": 0,
+            "gross_profit": 0.0,
+            "gross_loss": 0.0,
+            "net_pnl": 0.0,
+            "avg_trade": None,
+            "best_trade": None,
+            "worst_trade": None,
+            "win_rate": None,
+            "profit_factor": None,
+            "drawdown": 0.0,
+            "profitability_rejection_rate": None,
+            "risk_rejection_rate": None,
+            "execution_success_rate": None,
+            "recent_signals": [],
+            "recent_trades": []
+        }
+
+    # Populate from signals telemetry
+    for s in signals:
+        st = str(s.get("strategy", "")).lower().strip()
+        if st in strats:
+            strats[st]["evaluations"] = max(strats[st]["evaluations"], strats[st]["evaluations"] + 1)
+            dec = str(s.get("decision", "")).upper()
+            if dec in ["BUY", "LONG"]:
+                strats[st]["BUY"] += 1
+            elif dec in ["SELL", "SHORT"]:
+                strats[st]["SELL"] += 1
+            else:
+                strats[st]["HOLD"] += 1
+
+            p_dec = str(s.get("profitability_decision", "")).upper()
+            r_dec = str(s.get("risk_decision", "")).upper()
+            f_dec = str(s.get("final_decision", "")).upper()
+
+            if p_dec == "ACCEPTED" and r_dec == "ACCEPTED":
+                strats[st]["qualified"] += 1
+            if p_dec == "REJECTED":
+                strats[st]["profitability_rejected"] += 1
+            if r_dec == "REJECTED":
+                strats[st]["risk_rejected"] += 1
+            if f_dec in ["EXECUTED", "ACCEPTED"]:
+                strats[st]["orders"] += 1
+                strats[st]["fills"] += 1
+
+            if len(strats[st]["recent_signals"]) < 10:
+                strats[st]["recent_signals"].append({
+                    "timestamp": s.get("timestamp"),
+                    "symbol": s.get("symbol"),
+                    "timeframe": s.get("timeframe", "5m"),
+                    "side": s.get("decision"),
+                    "entry": s.get("entry"),
+                    "confidence": s.get("confidence"),
+                    "profitability_decision": s.get("profitability_decision"),
+                    "risk_decision": s.get("risk_decision"),
+                    "final_decision": s.get("final_decision"),
+                    "reason": s.get("profitability_reason") or s.get("risk_reason") or ""
+                })
+
+    # Populate from trade history
+    trade_pnls = {sk: [] for sk in strategy_keys}
+    for t in trades:
+        st = str(t.get("strategy", "")).lower().strip()
+        if st in strats:
+            pnl = float(t.get("net_pnl", t.get("pnl", 0.0)))
+            strats[st]["trades"] += 1
+            strats[st]["net_pnl"] += pnl
+            trade_pnls[st].append(pnl)
+
+            if pnl > 0:
+                strats[st]["wins"] += 1
+                strats[st]["gross_profit"] += pnl
+            elif pnl < 0:
+                strats[st]["losses"] += 1
+                strats[st]["gross_loss"] += abs(pnl)
+
+            if len(strats[st]["recent_trades"]) < 10:
+                strats[st]["recent_trades"].append({
+                    "trade_id": t.get("trade_id", t.get("order_id")),
+                    "timestamp": t.get("close_timestamp", t.get("close_time", t.get("fill_timestamp", t.get("timestamp")))),
+                    "symbol": t.get("symbol"),
+                    "timeframe": t.get("timeframe", "5m"),
+                    "side": t.get("side", t.get("action")),
+                    "entry_price": t.get("entry_price"),
+                    "exit_price": t.get("exit_price"),
+                    "quantity": t.get("quantity"),
+                    "net_pnl": pnl,
+                    "close_reason": t.get("close_reason", "")
+                })
+
+    # Compute rates and KPIs per strategy
     for st, data in strats.items():
-        data["win_rate"] = round((data["wins"] / data["trades"] * 100), 2) if data["trades"] > 0 else 0.0
-        data["profit_factor"] = round((data["gross_profit"] / data["gross_loss"]), 2) if data["gross_loss"] > 0 else (999.0 if data["gross_profit"] > 0 else 0.0)
+        tr_count = data["trades"]
+        pnls = trade_pnls.get(st, [])
+        if tr_count > 0:
+            data["win_rate"] = round((data["wins"] / tr_count) * 100, 2)
+            data["profit_factor"] = round((data["gross_profit"] / data["gross_loss"]), 2) if data["gross_loss"] > 0 else (999.0 if data["gross_profit"] > 0 else None)
+            data["avg_trade"] = round(data["net_pnl"] / tr_count, 4)
+            data["best_trade"] = round(max(pnls), 4) if pnls else None
+            data["worst_trade"] = round(min(pnls), 4) if pnls else None
+            # Peak to trough drawdown in trades
+            peak = 0.0
+            cum = 0.0
+            max_dd = 0.0
+            for p in pnls:
+                cum += p
+                if cum > peak:
+                    peak = cum
+                dd = peak - cum
+                if dd > max_dd:
+                    max_dd = dd
+            data["drawdown"] = round(max_dd, 4)
+        else:
+            data["win_rate"] = None
+            data["profit_factor"] = None
+            data["avg_trade"] = None
+            data["best_trade"] = None
+            data["worst_trade"] = None
+            data["drawdown"] = 0.0
+
         data["net_pnl"] = round(data["net_pnl"], 4)
-        
+        data["gross_profit"] = round(data["gross_profit"], 4)
+        data["gross_loss"] = round(data["gross_loss"], 4)
+
+        # Gate rejection rates
+        total_evals = data["qualified"] + data["profitability_rejected"]
+        if total_evals > 0:
+            data["profitability_rejection_rate"] = round((data["profitability_rejected"] / total_evals) * 100, 2)
+        else:
+            data["profitability_rejection_rate"] = None
+
+        total_risk_evals = data["qualified"] + data["risk_rejected"]
+        if total_risk_evals > 0:
+            data["risk_rejection_rate"] = round((data["risk_rejected"] / total_risk_evals) * 100, 2)
+        else:
+            data["risk_rejection_rate"] = None
+
+        if data["orders"] > 0:
+            data["execution_success_rate"] = round((data["fills"] / data["orders"]) * 100, 2)
+        else:
+            data["execution_success_rate"] = None
+
+    # Strategy x Timeframe Matrix
+    matrix = {}
+    for sk in strategy_keys:
+        matrix[sk] = {}
+        for tf in timeframe_keys:
+            # Aggregate from signals & trades matching this pair
+            pair_signals = [s for s in signals if str(s.get("strategy", "")).lower() == sk and str(s.get("timeframe", "")).lower() == tf.lower()]
+            pair_trades = [t for t in trades if str(t.get("strategy", "")).lower() == sk and str(t.get("timeframe", "")).lower() == tf.lower()]
+            pair_pnl = sum(float(t.get("net_pnl", t.get("pnl", 0.0))) for t in pair_trades)
+            pair_wins = sum(1 for t in pair_trades if float(t.get("net_pnl", t.get("pnl", 0.0))) > 0)
+            pair_wr = round((pair_wins / len(pair_trades)) * 100, 1) if pair_trades else None
+
+            is_configured = tf in strategy_timeframe_config.get(sk, [])
+            matrix[sk][tf] = {
+                "active": is_configured,
+                "signals": len(pair_signals),
+                "trades": len(pair_trades),
+                "win_rate": pair_wr,
+                "pnl": round(pair_pnl, 4)
+            }
+
     return jsonify({
         "status": "SUCCESS",
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
         "data_age": 0.0,
-        "strategies": strats
+        "strategies": strats,
+        "timeframe_keys": timeframe_keys,
+        "matrix": matrix
     })
 
 @app.route('/api/timeframe-metrics')

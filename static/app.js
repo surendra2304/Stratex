@@ -1343,207 +1343,601 @@ function inspectTrade(trade) {
 
 
 // ==========================================
-// 6. OVERVIEW & SCANNER DATA POLLING
+// 6. MARKETS TERMINAL (3-COLUMN LAYOUT)
 // ==========================================
+let activeMarketSymbol = 'BTCUSDT';
+let activeMarketTf = '5m';
+let marketChartInst = null;
+let rawMarketDataMap = {};
+let latestCandlesData = [];
 
+function setMarketChartTf(tf) {
+    activeMarketTf = tf;
+    document.querySelectorAll('.market-center-panel .btn-tf').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById(`btn-mkt-tf-${tf}`);
+    if (btn) btn.classList.add('active');
+    loadMarketCandles();
+}
 
-async function fetchScanner() {
+function selectMarketSymbol(symbol) {
+    if (!symbol) return;
+    activeMarketSymbol = symbol.toUpperCase();
+    
+    // Highlight in watchlist table
+    document.querySelectorAll('#market-watchlist-body tr').forEach(tr => {
+        if (tr.getAttribute('data-sym') === activeMarketSymbol) {
+            tr.classList.add('market-row-active');
+        } else {
+            tr.classList.remove('market-row-active');
+        }
+    });
+
+    const info = rawMarketDataMap[activeMarketSymbol] || {};
+    const symEl = document.getElementById('mkt-active-sym');
+    if (symEl) symEl.innerText = activeMarketSymbol;
+
+    const pxEl = document.getElementById('mkt-active-price');
+    if (pxEl && info.close !== undefined) pxEl.innerText = formatCurrency(info.close);
+
+    const chgEl = document.getElementById('mkt-active-chg');
+    if (chgEl && info.change_24h !== undefined) {
+        const chg = Number(info.change_24h);
+        chgEl.innerHTML = chg > 0 ? `<span class="val-green">+${chg.toFixed(2)}%</span>` : `<span class="val-red">${chg.toFixed(2)}%</span>`;
+    }
+
+    renderMarketDetails(activeMarketSymbol);
+    loadMarketCandles();
+}
+
+async function loadMarketCandles() {
+    try {
+        const res = await apiClient.get(`/api/candles?symbol=${activeMarketSymbol}&tf=${activeMarketTf}&limit=100`);
+        if (res && Array.isArray(res)) {
+            latestCandlesData = res;
+            renderMarketChart(res);
+            renderMarketDetails(activeMarketSymbol);
+        }
+    } catch (e) {
+        console.error("Failed to load candles for", activeMarketSymbol, activeMarketTf, e);
+    }
+}
+
+function renderMarketChart(candles) {
+    const ctx = document.getElementById('marketChart');
+    if (!ctx || !candles || candles.length === 0) return;
+
+    const labels = candles.map(c => {
+        const d = new Date(c.time * 1000);
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    });
+    const closes = candles.map(c => c.close);
+    const volumes = candles.map(c => c.volume);
+
+    // Calculate EMA20
+    const ema20 = [];
+    const k = 2 / (20 + 1);
+    let prevEma = closes[0];
+    for (let i = 0; i < closes.length; i++) {
+        if (i < 20) {
+            let sum = 0;
+            for (let j = 0; j <= i; j++) sum += closes[j];
+            prevEma = sum / (i + 1);
+        } else {
+            prevEma = (closes[i] * k) + (prevEma * (1 - k));
+        }
+        ema20.push(prevEma);
+    }
+
+    const firstPx = closes[0] || 1;
+    const lastPx = closes[closes.length - 1] || 1;
+    const isBull = lastPx >= firstPx;
+    const lineColor = isBull ? '#10b981' : '#f43f5e';
+    const fillColor = isBull ? 'rgba(16, 185, 129, 0.08)' : 'rgba(244, 63, 94, 0.08)';
+
+    if (marketChartInst) {
+        marketChartInst.data.labels = labels;
+        marketChartInst.data.datasets[0].data = closes;
+        marketChartInst.data.datasets[0].borderColor = lineColor;
+        marketChartInst.data.datasets[0].backgroundColor = fillColor;
+        marketChartInst.data.datasets[1].data = ema20;
+        marketChartInst.update('none');
+        return;
+    }
+
+    marketChartInst = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Price',
+                    data: closes,
+                    borderColor: lineColor,
+                    backgroundColor: fillColor,
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.15,
+                    pointRadius: 0,
+                    pointHitRadius: 8
+                },
+                {
+                    label: 'EMA (20)',
+                    data: ema20,
+                    borderColor: '#f59e0b',
+                    borderWidth: 1.5,
+                    borderDash: [4, 4],
+                    fill: false,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: { color: '#94a3b8', boxWidth: 12, font: { family: "'JetBrains Mono', monospace", size: 10 } }
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: '#0f172a',
+                    titleColor: '#f8fafc',
+                    bodyColor: '#94a3b8',
+                    borderColor: '#334155',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: function(ctx) {
+                            return `${ctx.dataset.label}: $${Number(ctx.raw).toFixed(4)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    ticks: { color: '#64748b', font: { family: "'JetBrains Mono', monospace", size: 9 }, maxTicksLimit: 8 }
+                },
+                y: {
+                    position: 'right',
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: {
+                        color: '#94a3b8',
+                        font: { family: "'JetBrains Mono', monospace", size: 9 },
+                        callback: function(v) { return '$' + Number(v).toLocaleString(); }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderMarketDetails(symbol) {
+    const container = document.getElementById('market-details-content');
+    if (!container) return;
+
+    const info = rawMarketDataMap[symbol] || {};
+    const price = Number(info.close || 0);
+    const chg = Number(info.change_24h || 0);
+    const chgClass = chg > 0 ? 'val-green' : (chg < 0 ? 'val-red' : 'val-neutral');
+    const chgSign = chg > 0 ? '+' : '';
+
+    // Find latest signal for this symbol
+    let symSig = allRawSignals.find(s => (s.symbol || '').toUpperCase() === symbol);
+    let sigSide = symSig ? (symSig.decision || symSig.side || 'HOLD').toUpperCase() : 'HOLD';
+    let sigSideClass = (sigSide === 'BUY' || sigSide === 'LONG') ? 'tag tag-long' : ((sigSide === 'SELL' || sigSide === 'SHORT') ? 'tag tag-short' : 'tag tag-neutral');
+    let sigConf = symSig && Number(symSig.confidence || 0) > 0 ? (Number(symSig.confidence) * 100).toFixed(1) + '%' : '-';
+    let sigStrat = symSig ? (symSig.strategy || 'ADX_EMA') : 'MULTI-SCAN';
+
+    let lastEvalTime = '-';
+    if (info.last_eval) {
+        lastEvalTime = formatDateTime(info.last_eval);
+    } else if (info.last_update) {
+        lastEvalTime = formatDateTime(info.last_update);
+    }
+
+    let lastCandleTime = '-';
+    if (latestCandlesData && latestCandlesData.length > 0) {
+        const lastC = latestCandlesData[latestCandlesData.length - 1];
+        lastCandleTime = formatDateTime(new Date(lastC.time * 1000).toISOString());
+    }
+
+    container.innerHTML = `
+        <div class="inspector-card">
+            <div class="inspector-card-header">
+                <span class="td-strong" style="font-size: 13px;">${symbol}</span>
+                <span class="tag tag-qualified">SPOT TRADING</span>
+            </div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Current Price</span><span class="inspector-val td-strong">${price > 0 ? formatCurrency(price) : '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">24h Change</span><span class="inspector-val ${chgClass} td-strong">${chgSign}${chg.toFixed(2)}%</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">24h Volume</span><span class="inspector-val">${info.volume ? Number(info.volume).toFixed(2) : '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Active TF</span><span class="inspector-val td-strong">${activeMarketTf}</span></div>
+            </div>
+        </div>
+
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>⏰ Stream & Engine Cadence</span></div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Last Candle</span><span class="inspector-val">${lastCandleTime}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Last Strategy Eval</span><span class="inspector-val">${lastEvalTime}</span></div>
+            </div>
+        </div>
+
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>⚡ Active Strategies</span></div>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">
+                <span class="badge badge-mono">AGGRESSOR</span>
+                <span class="badge badge-mono">SCALPER</span>
+                <span class="badge badge-mono">ADX_EMA</span>
+                <span class="badge badge-mono">ML</span>
+                <span class="badge badge-mono">SUPERTREND</span>
+                <span class="badge badge-mono">SWING</span>
+            </div>
+        </div>
+
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>📡 Current Signal State</span></div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Signal Decision</span><span class="inspector-val"><span class="${sigSideClass}">${sigSide}</span></span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Leading Strategy</span><span class="inspector-val">${sigStrat}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Confidence</span><span class="inspector-val">${sigConf}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Stop Loss</span><span class="inspector-val val-red">${symSig && Number(symSig.stop || symSig.sl || 0) > 0 ? Number(symSig.stop || symSig.sl).toFixed(4) : '-'}</span></div>
+            </div>
+        </div>
+    `;
+}
+
+async function fetchMarketsData() {
     try {
         const data = await apiClient.get('/api/scanner');
         if (!data) return;
-        
-        // Funnel Pipeline
-        const fnMrk = document.getElementById('fn-mrk');
-        if (fnMrk) fnMrk.innerText = data.TOTAL_CANDLES || 0;
-        const fnSig = document.getElementById('fn-signals');
-        if (fnSig) fnSig.innerText = data.TOTAL_SIGNALS || 0;
-        
-        const fnProfRej = document.getElementById('fn-prof-rej');
-        if (fnProfRej) fnProfRej.innerText = data.PROFITABILITY_REJECTED || 0;
-        const fnProfAcc = document.getElementById('fn-prof-acc');
-        if (fnProfAcc) fnProfAcc.innerText = data.PROFITABILITY_ACCEPTED || 0;
-        
-        const fnRiskRej = document.getElementById('fn-risk-rej');
-        if (fnRiskRej) fnRiskRej.innerText = (data.RISK_REJECTED || 0) + (data.COOLDOWN_REJECTED || 0) + (data.JIT_REJECTED || 0) + (data.OTHER_REJECTED || 0);
-        const fnRiskAcc = document.getElementById('fn-risk-acc');
-        if (fnRiskAcc) fnRiskAcc.innerText = data.RISK_ACCEPTED || 0;
-        
-        const fnFilled = document.getElementById('fn-filled');
-        if (fnFilled) fnFilled.innerText = data.ORDERS_FILLED || 0;
-        
-        // Markets Data (Matrix)
-        let dataReceivingCount = 0;
-        let evaluatedCount = 0;
-        const marketRows = [];
-        const marketFullRows = [];
+
+        const watchlistBody = document.getElementById('market-watchlist-body');
+        const countEl = document.getElementById('mkt-watchlist-count');
 
         if (data.market_data && Object.keys(data.market_data).length > 0) {
-            for (const sym of Object.keys(data.market_data)) {
-                dataReceivingCount++;
+            const syms = Object.keys(data.market_data);
+            if (countEl) countEl.innerText = `${syms.length} Pairs`;
+
+            rawMarketDataMap = {};
+            const rowsHtml = syms.map(sym => {
                 const info = data.market_data[sym] || {};
-                const tsStr = data.last_market_update ? data.last_market_update[sym] : null;
-                const ts = tsStr ? new Date(tsStr).getTime() : 0;
+                const lastUpStr = data.last_market_update ? data.last_market_update[sym] : null;
+                const lastEvalStr = data.last_evaluation ? data.last_evaluation[sym] : null;
                 
-                const price = info.close || 0;
-                const chg = info.change_24h || 0;
-                const chgStr = chg > 0 ? `<span class="val-green">+${chg.toFixed(2)}%</span>` : `<span class="val-red">${chg.toFixed(2)}%</span>`;
-                
-                marketRows.push(`<tr>
-                    <td>${sym}</td>
-                    <td>-</td>
-                    <td>-</td>
-                    <td>-</td>
-                    <td><span class="tag tag-active">CONNECTED</span></td>
-                    <td>${formatTime(ts)}</td>
-                </tr>`);
-                
-                marketFullRows.push(`<tr>
+                rawMarketDataMap[sym] = {
+                    ...info,
+                    last_update: lastUpStr,
+                    last_eval: lastEvalStr
+                };
+
+                const price = Number(info.close || 0);
+                const chg = Number(info.change_24h || 0);
+                const chgClass = chg > 0 ? 'val-green' : (chg < 0 ? 'val-red' : 'val-neutral');
+                const chgSign = chg > 0 ? '+' : '';
+
+                // Signal match
+                const sig = allRawSignals.find(s => (s.symbol || '').toUpperCase() === sym);
+                const sigSide = sig ? (sig.decision || sig.side || 'HOLD').toUpperCase() : 'HOLD';
+                const sigClass = (sigSide === 'BUY' || sigSide === 'LONG') ? 'tag tag-long' : ((sigSide === 'SELL' || sigSide === 'SHORT') ? 'tag tag-short' : 'tag tag-neutral');
+
+                const trendStr = chg > 1.0 ? '▲ BULL' : (chg < -1.0 ? '▼ BEAR' : '▶ RANGE');
+                const trendClass = chg > 1.0 ? 'val-green' : (chg < -1.0 ? 'val-red' : 'val-neutral');
+
+                const upTime = lastUpStr ? formatTime(lastUpStr) : '-';
+                const isActive = sym === activeMarketSymbol ? 'market-row-active' : '';
+
+                return `<tr data-sym="${sym}" class="${isActive}" style="cursor: pointer;" onclick="selectMarketSymbol('${sym}')">
                     <td class="td-strong">${sym}</td>
                     <td>${price.toFixed(4)}</td>
-                    <td>${chgStr}</td>
-                    <td>-</td>
-                    <td><span class="tag tag-active">CONNECTED</span></td>
-                    <td>${formatTime(ts)}</td>
-                    <td>-</td>
-                    <td>-</td>
-                    <td>-</td>
-                </tr>`);
-            }
-        }
-        
-        const marketBody = document.getElementById('market-body');
-        if (marketBody) {
-            if (marketRows.length > 0) marketBody.innerHTML = marketRows.join('');
-            else marketBody.innerHTML = '<tr><td colspan="6" class="empty-state">No active symbols scanned</td></tr>';
-        }
-        
-        const marketFullBody = document.getElementById('market-full-body');
-        if (marketFullBody) {
-            if (marketFullRows.length > 0) marketFullBody.innerHTML = marketFullRows.join('');
-            else marketFullBody.innerHTML = '<tr><td colspan="9" class="empty-state">AWAITING MARKET DATA</td></tr>';
-        }
-
-        if (data.last_evaluation) {
-            for (const sym of Object.keys(data.last_evaluation)) {
-                evaluatedCount++;
-            }
-        }
-        
-        const scEval = document.getElementById('sc-eval-ratio');
-        if (scEval) scEval.innerText = `${evaluatedCount} Symbols`;
-        if (fnMrk) fnMrk.innerText = dataReceivingCount || 0;
-        
-        // Ticker
-        const tickerContent = document.getElementById('bottom-ticker-content');
-        if (data.market_data && Object.keys(data.market_data).length > 0 && tickerContent) {
-            let mkts = [];
-            for (const [sym, info] of Object.entries(data.market_data)) {
-                if (info && info.close !== undefined) {
-                    mkts.push({ sym, price: info.close, chg: info.change_24h || 0 });
-                }
-            }
-            if (mkts.length > 0) {
-                const tickerHtml = mkts.map(m => {
-                    const colorClass = m.chg > 0 ? 'val-green' : 'val-red';
-                    const sign = m.chg > 0 ? '▲' : '▼';
-                    return `<div class="ticker-item"><span class="ticker-sym">${m.sym}</span><span class="ticker-px ${colorClass}">${m.price.toFixed(4)} ${sign} ${Math.abs(m.chg).toFixed(2)}%</span></div>`;
-                });
-                tickerContent.innerHTML = tickerHtml.join('') + tickerHtml.join('');
-            }
-        }
-        
-        // Strategy Metrics
-        const stratBody = document.getElementById('strategy-metrics-body');
-        const stratFullBody = document.getElementById('strat-full-body');
-        if (data.strategy_metrics && Object.keys(data.strategy_metrics).length > 0) {
-            let stratRows = [];
-            let stratFullRows = [];
-            for (const [strat, m] of Object.entries(data.strategy_metrics)) {
-                const winRate = m.fills > 0 ? (m.wins || 0) / m.fills : 0;
-                const pnlStr = m.PnL ? (m.PnL > 0 ? `<span class="val-green">+${formatCurrency(m.PnL)}</span>` : `<span class="val-red">${formatCurrency(m.PnL)}</span>`) : '-';
-                
-                const row = `<tr>
-                    <td class="td-strong">${strat}</td>
-                    <td>${m.evaluations || (m.signals || 0) + (m.HOLD || 0)}</td>
-                    <td>${m.BUY || 0}</td>
-                    <td>${m.SELL || 0}</td>
-                    <td>${m.HOLD || 0}</td>
-                    <td>${m.qualified || 0}</td>
-                    <td>${m.rejected || 0}</td>
-                    <td>${m.orders || 0}</td>
-                    <td>${m.fills || 0}</td>
-                    <td>${formatPct(winRate)}</td>
-                    <td>${pnlStr}</td>
+                    <td class="${chgClass}">${chgSign}${chg.toFixed(2)}%</td>
+                    <td>${info.volume ? Number(info.volume).toFixed(1) : '-'}</td>
+                    <td class="${trendClass}">${trendStr}</td>
+                    <td>${upTime}</td>
+                    <td><span class="${sigClass}">${sigSide}</span></td>
                 </tr>`;
-                stratRows.push(row);
-                stratFullRows.push(row);
-            }
-            if (stratBody) stratBody.innerHTML = stratRows.join('');
-            if (stratFullBody) stratFullBody.innerHTML = stratFullRows.join('');
-        } else {
-            if (stratBody) stratBody.innerHTML = '<tr><td colspan="6" class="empty-state">NO STRATEGY DATA</td></tr>';
-            if (stratFullBody) stratFullBody.innerHTML = '<tr><td colspan="11" class="empty-state">NO STRATEGY DATA</td></tr>';
-        }
-        
-        // Timeframe Metrics
-        const tfBody = document.getElementById('timeframe-metrics-body');
-        if (data.timeframe_metrics && Object.keys(data.timeframe_metrics).length > 0) {
-            let tfRows = [];
-            for (const [tf, m] of Object.entries(data.timeframe_metrics)) {
-                tfRows.push(`<tr>
-                    <td>${tf}</td>
-                    <td>${data.TOTAL_CANDLES || 0}</td>
-                    <td>${m.evaluations || (m.signals || 0) + (m.HOLD || 0)}</td>
-                    <td>${m.BUY || 0}</td>
-                    <td>${m.orders || 0}</td>
-                    <td>${m.fills || 0}</td>
-                </tr>`);
-            }
-            if (tfBody) tfBody.innerHTML = tfRows.join('');
-        } else {
-            if (tfBody) tfBody.innerHTML = '<tr><td colspan="6" class="empty-state">NO METRICS AVAILABLE</td></tr>';
-        }
-        
-        // Best current opportunities table on Overview
-        const oppBody = document.getElementById('opp-short-body');
-        const rawOpps = data.top_opportunities || [];
-        if (oppBody) {
-            if (rawOpps.length === 0) {
-                oppBody.innerHTML = '<tr><td colspan="11" class="empty-state">No Qualifying Signals Yet</td></tr>';
-            } else {
-                oppBody.innerHTML = rawOpps.slice(0, 5).map(o => {
-                    const side = (o.side || 'BUY').toUpperCase();
-                    const sideClass = (side === 'BUY' || side === 'LONG') ? 'tag tag-long' : 'tag tag-short';
-                    const net = Number(o.expected_net_return || 0);
-                    const netStr = net !== 0 ? `<span class="${net > 0 ? 'val-green' : 'val-red'}">${net > 0 ? '+' : ''}${(net * 100).toFixed(2)}%</span>` : '-';
-                    const decClass = o.decision === 'ACCEPTED' ? 'tag tag-qualified' : 'tag tag-rejected';
-                    const shTs = o.timestamp ? String(o.timestamp).substring(11, 19) : '-';
+            }).join('');
 
+            if (watchlistBody) watchlistBody.innerHTML = rowsHtml;
+
+            // Overview Market Table
+            const marketBody = document.getElementById('market-body');
+            if (marketBody) {
+                marketBody.innerHTML = syms.map(sym => {
+                    const info = data.market_data[sym] || {};
+                    const lastUpStr = data.last_market_update ? data.last_market_update[sym] : null;
+                    const ts = lastUpStr ? new Date(lastUpStr).getTime() : 0;
                     return `<tr>
-                        <td>${shTs}</td>
-                        <td class="td-strong">${o.symbol}</td>
-                        <td>${o.timeframe || '5m'}</td>
-                        <td>${o.strategy || 'ADX_EMA'}</td>
-                        <td><span class="${sideClass}">${side}</span></td>
-                        <td>${Number(o.current_price || 0).toFixed(4)}</td>
-                        <td>${Number(o.sl || 0) > 0 ? Number(o.sl).toFixed(4) : '-'}</td>
-                        <td>${Number(o.tp || 0) > 0 ? Number(o.tp).toFixed(4) : '-'}</td>
-                        <td>${Number(o.confidence || 0) > 0 ? (Number(o.confidence) * 100).toFixed(1) + '%' : '-'}</td>
-                        <td>${netStr}</td>
-                        <td><span class="${decClass}">${o.decision || '-'}</span></td>
+                        <td class="td-strong">${sym}</td>
+                        <td>${Number(info.close || 0).toFixed(4)}</td>
+                        <td>${Number(info.change_24h || 0) >= 0 ? '+' : ''}${Number(info.change_24h || 0).toFixed(2)}%</td>
+                        <td>${info.volume ? Number(info.volume).toFixed(1) : '-'}</td>
+                        <td><span class="tag tag-active">CONNECTED</span></td>
+                        <td>${formatTime(ts)}</td>
                     </tr>`;
                 }).join('');
             }
-        }
 
+            // Ticker & Movers
+            const tickerContent = document.getElementById('bottom-ticker-content');
+            if (tickerContent) {
+                let mkts = [];
+                for (const [sym, info] of Object.entries(data.market_data)) {
+                    if (info && info.close !== undefined) {
+                        mkts.push({ sym, price: info.close, chg: info.change_24h || 0 });
+                    }
+                }
+                if (mkts.length > 0) {
+                    const tickerHtml = mkts.map(m => {
+                        const colorClass = m.chg > 0 ? 'val-green' : 'val-red';
+                        const sign = m.chg > 0 ? '▲' : '▼';
+                        return `<div class="ticker-item"><span class="ticker-sym">${m.sym}</span><span class="ticker-px ${colorClass}">${m.price.toFixed(4)} ${sign} ${Math.abs(m.chg).toFixed(2)}%</span></div>`;
+                    });
+                    tickerContent.innerHTML = tickerHtml.join('') + tickerHtml.join('');
+                }
+            }
+
+            // Funnel Pipeline
+            const fnMrk = document.getElementById('fn-mrk');
+            if (fnMrk) fnMrk.innerText = syms.length;
+            const fnSig = document.getElementById('fn-signals');
+            if (fnSig) fnSig.innerText = data.TOTAL_SIGNALS || allRawSignals.length || 0;
+            const fnProfRej = document.getElementById('fn-prof-rej');
+            if (fnProfRej) fnProfRej.innerText = data.PROFITABILITY_REJECTED || 0;
+            const fnProfAcc = document.getElementById('fn-prof-acc');
+            if (fnProfAcc) fnProfAcc.innerText = data.PROFITABILITY_ACCEPTED || 0;
+            const fnRiskRej = document.getElementById('fn-risk-rej');
+            if (fnRiskRej) fnRiskRej.innerText = (data.RISK_REJECTED || 0) + (data.COOLDOWN_REJECTED || 0) + (data.JIT_REJECTED || 0) + (data.OTHER_REJECTED || 0);
+            const fnRiskAcc = document.getElementById('fn-risk-acc');
+            if (fnRiskAcc) fnRiskAcc.innerText = data.RISK_ACCEPTED || 0;
+            const fnFilled = document.getElementById('fn-filled');
+            if (fnFilled) fnFilled.innerText = data.ORDERS_FILLED || 0;
+
+            // Load initial chart if not loaded
+            if (!latestCandlesData || latestCandlesData.length === 0) {
+                selectMarketSymbol(activeMarketSymbol);
+            }
+        }
     } catch (e) {
-        console.error("Failed to fetch scanner stats:", e);
+        console.error("Failed to fetch markets watchlist:", e);
     }
 }
 
 
 // ==========================================
-// 7. CHARTS & HISTOGRAMS
+// 7. MULTI-STRATEGY TERMINAL & MATRIX
+// ==========================================
+let rawStrategyData = {};
+
+async function fetchStrategies() {
+    try {
+        const res = await apiClient.get('/api/strategy-metrics');
+        if (!res || !res.strategies) return;
+
+        rawStrategyData = res.strategies;
+        renderStrategiesTable(res.strategies);
+        if (res.matrix && res.timeframe_keys) {
+            renderStrategyMatrix(res.strategies, res.matrix, res.timeframe_keys);
+        }
+    } catch (e) {
+        console.error("Failed to fetch strategy metrics:", e);
+    }
+}
+
+function renderStrategiesTable(strategies) {
+    const tbody = document.getElementById('strat-full-body');
+    if (!tbody) return;
+
+    const stratKeys = ["aggressor", "scalper", "supertrend", "ml", "swing", "adx_ema"];
+    const rowsHtml = stratKeys.map(k => {
+        const s = strategies[k] || {
+            name: k.toUpperCase(),
+            status: "ACTIVE",
+            timeframes: ["5m"],
+            evaluations: 0,
+            BUY: 0,
+            SELL: 0,
+            HOLD: 0,
+            qualified: 0,
+            profitability_rejected: 0,
+            risk_rejected: 0,
+            orders: 0,
+            fills: 0,
+            trades: 0,
+            win_rate: null,
+            net_pnl: 0.0
+        };
+
+        const tfsStr = Array.isArray(s.timeframes) ? s.timeframes.join(', ') : '5m';
+        
+        let winRateHtml = '<span class="tag-insufficient">INSUFFICIENT DATA</span>';
+        if (s.win_rate !== null && s.win_rate !== undefined && s.trades > 0) {
+            winRateHtml = `<span class="${s.win_rate >= 50 ? 'val-green' : 'val-red'} td-strong">${s.win_rate.toFixed(1)}%</span>`;
+        }
+
+        let pnlHtml = '$0.00';
+        if (s.trades > 0) {
+            const pnl = Number(s.net_pnl || 0);
+            pnlHtml = `<span class="${pnl >= 0 ? 'val-green' : 'val-red'} td-strong">${pnl >= 0 ? '+' : ''}${formatCurrency(pnl)}</span>`;
+        }
+
+        return `<tr style="cursor: pointer;" onclick="inspectStrategy('${k}')" title="Click to view deep strategy telemetry and diagnostics">
+            <td class="td-strong">${s.name}</td>
+            <td><span class="tag tag-qualified">${s.status || 'ACTIVE'}</span></td>
+            <td>${tfsStr}</td>
+            <td>${s.evaluations || 0}</td>
+            <td class="val-green">${s.BUY || 0}</td>
+            <td class="val-red">${s.SELL || 0}</td>
+            <td>${s.HOLD || 0}</td>
+            <td><span class="tag tag-active">${s.qualified || 0}</span></td>
+            <td>${s.profitability_rejected || 0}</td>
+            <td>${s.risk_rejected || 0}</td>
+            <td>${s.orders || 0}</td>
+            <td>${s.fills || 0}</td>
+            <td>${winRateHtml}</td>
+            <td>${pnlHtml}</td>
+        </tr>`;
+    }).join('');
+
+    tbody.innerHTML = rowsHtml;
+}
+
+function renderStrategyMatrix(strategies, matrix, timeframes) {
+    const tbody = document.getElementById('strat-matrix-body');
+    if (!tbody) return;
+
+    const stratKeys = ["aggressor", "scalper", "supertrend", "ml", "swing", "adx_ema"];
+    const rowsHtml = stratKeys.map(sk => {
+        const sName = (strategies[sk]?.name || sk).toUpperCase();
+        const tfCells = timeframes.map(tf => {
+            const cell = matrix[sk] ? matrix[sk][tf] : null;
+            if (!cell || !cell.active) {
+                return `<td><div class="matrix-cell standby"><span class="matrix-cell-status val-neutral">STANDBY</span><span class="matrix-cell-stats">-</span></div></td>`;
+            }
+
+            let statText = `${cell.signals || 0} Sig`;
+            if (cell.trades > 0) {
+                const pnl = Number(cell.pnl || 0);
+                statText += ` • ${pnl >= 0 ? '+' : ''}${formatCurrency(pnl)}`;
+            }
+
+            return `<td><div class="matrix-cell active"><span class="matrix-cell-status val-green">ACTIVE</span><span class="matrix-cell-stats">${statText}</span></div></td>`;
+        }).join('');
+
+        return `<tr><td class="td-strong">${sName}</td>${tfCells}</tr>`;
+    }).join('');
+
+    tbody.innerHTML = rowsHtml;
+}
+
+function inspectStrategy(stratKey) {
+    const s = rawStrategyData[stratKey];
+    if (!s) return;
+
+    const sName = (s.name || stratKey).toUpperCase();
+    const tfsStr = Array.isArray(s.timeframes) ? s.timeframes.join(', ') : '5m';
+
+    const fmtStat = (v, isCurrency = false, isPct = false) => {
+        if (v === null || v === undefined) return '<span class="tag-insufficient">INSUFFICIENT DATA</span>';
+        if (isCurrency) {
+            const num = Number(v);
+            return `<span class="${num >= 0 ? 'val-green' : 'val-red'} td-strong">${num >= 0 ? '+' : ''}${formatCurrency(num)}</span>`;
+        }
+        if (isPct) {
+            const num = Number(v);
+            return `<span class="${num >= 50 ? 'val-green' : 'val-amber'} td-strong">${num.toFixed(1)}%</span>`;
+        }
+        return v;
+    };
+
+    // Signals table
+    let signalsHtml = '<div class="empty-state">No recent signals recorded for this strategy</div>';
+    if (s.recent_signals && s.recent_signals.length > 0) {
+        signalsHtml = `
+            <div class="table-container" style="max-height: 180px; overflow-y: auto;">
+                <table>
+                    <thead>
+                        <tr><th>TIME</th><th>SYMBOL</th><th>TF</th><th>SIDE</th><th>PRICE</th><th>CONF</th><th>GATE</th></tr>
+                    </thead>
+                    <tbody>
+                        ${s.recent_signals.map(sig => `
+                            <tr>
+                                <td>${sig.timestamp ? formatTime(sig.timestamp) : '-'}</td>
+                                <td class="td-strong">${sig.symbol}</td>
+                                <td>${sig.timeframe}</td>
+                                <td><span class="tag ${sig.side === 'BUY' ? 'tag-long' : 'tag-short'}">${sig.side}</span></td>
+                                <td>${Number(sig.entry || 0).toFixed(4)}</td>
+                                <td>${sig.confidence ? (Number(sig.confidence) * 100).toFixed(1) + '%' : '-'}</td>
+                                <td><span class="tag ${sig.final_decision === 'ACCEPTED' ? 'tag-qualified' : 'tag-rejected'}">${sig.final_decision || 'EVAL'}</span></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    // Trades table
+    let tradesHtml = '<div class="empty-state">No executed trades yet for this strategy</div>';
+    if (s.recent_trades && s.recent_trades.length > 0) {
+        tradesHtml = `
+            <div class="table-container" style="max-height: 180px; overflow-y: auto;">
+                <table>
+                    <thead>
+                        <tr><th>TIME</th><th>SYMBOL</th><th>ENTRY</th><th>EXIT</th><th>PNL</th><th>REASON</th></tr>
+                    </thead>
+                    <tbody>
+                        ${s.recent_trades.map(tr => `
+                            <tr>
+                                <td>${tr.timestamp ? formatTime(tr.timestamp) : '-'}</td>
+                                <td class="td-strong">${tr.symbol}</td>
+                                <td>${Number(tr.entry_price || 0).toFixed(4)}</td>
+                                <td>${Number(tr.exit_price || 0).toFixed(4)}</td>
+                                <td>${fmtStat(tr.net_pnl, true)}</td>
+                                <td>${tr.close_reason || 'OCO'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    const drawerHtml = `
+        <div class="inspector-card">
+            <div class="inspector-card-header">
+                <span class="td-strong" style="font-size: 13px;">⚡ ${sName} PERFORMANCE ATTRIBUTION</span>
+                <span class="tag tag-qualified">${s.status || 'ACTIVE'}</span>
+            </div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Configured Horiz.</span><span class="inspector-val td-strong">${tfsStr}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Total Evaluations</span><span class="inspector-val">${s.evaluations || 0}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Signals (BUY / SELL)</span><span class="inspector-val"><span class="val-green">${s.BUY || 0}</span> / <span class="val-red">${s.SELL || 0}</span></span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Orders & Fills</span><span class="inspector-val">${s.orders || 0} / ${s.fills || 0}</span></div>
+            </div>
+        </div>
+
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>📊 Economic Performance & Attribution</span></div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Win Rate</span><span class="inspector-val">${fmtStat(s.win_rate, false, true)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Net PnL</span><span class="inspector-val">${s.trades > 0 ? fmtStat(s.net_pnl, true) : '<span class="tag-insufficient">INSUFFICIENT DATA</span>'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Average Trade</span><span class="inspector-val">${fmtStat(s.avg_trade, true)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Best Trade</span><span class="inspector-val">${fmtStat(s.best_trade, true)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Worst Trade</span><span class="inspector-val">${fmtStat(s.worst_trade, true)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Max Drawdown</span><span class="inspector-val">${s.trades > 0 ? formatCurrency(s.drawdown) : '<span class="tag-insufficient">INSUFFICIENT DATA</span>'}</span></div>
+            </div>
+        </div>
+
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>🛡️ Multi-Gate Conversion Rates</span></div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Prof. Rejection Rate</span><span class="inspector-val">${fmtStat(s.profitability_rejection_rate, false, true)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Risk Rejection Rate</span><span class="inspector-val">${fmtStat(s.risk_rejection_rate, false, true)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Execution Success</span><span class="inspector-val">${fmtStat(s.execution_success_rate, false, true)}</span></div>
+            </div>
+        </div>
+
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>📡 Recent Strategy Signals</span></div>
+            ${signalsHtml}
+        </div>
+
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>💼 Recent Strategy Executions</span></div>
+            ${tradesHtml}
+        </div>
+    `;
+
+    openInspectorDrawer(`STRATEGY INSPECTOR • ${sName}`, drawerHtml);
+}
+
+
+// ==========================================
+// 8. GLOBAL POLLING & DRAWER CONTROLS
 // ==========================================
 let equityChartInst = null;
 let pnlHistChartInst = null;
@@ -1564,7 +1958,7 @@ function renderEquityChart() {
 
     const labels = points.map(p => {
         const d = new Date(p.time);
-        return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     });
     const data = points.map(p => p.equity);
 
@@ -1636,18 +2030,15 @@ async function initChart() {
     renderEquityChart();
 }
 
-
-// ==========================================
-// 8. GLOBAL POLLING & DRAWER CONTROLS
-// ==========================================
 function updateDashboard() {
     Promise.all([
         fetchDashboardData(),
         fetchSignals(),
         fetchPositions(),
         fetchTrades(),
+        fetchMarketsData(),
+        fetchStrategies(),
         fetchOpenOrders(),
-        fetchScanner(),
         initChart()
     ]).finally(() => {
         // finished iteration
@@ -1686,6 +2077,23 @@ function closeInspectorDrawer() {
     }
 }
 
+function exportTradesJSON() {
+    fetch('/api/trades')
+        .then(res => res.json())
+        .then(data => {
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `binance_trade_ledger_${Date.now()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        })
+        .catch(err => console.error("Export JSON error:", err));
+}
+
 // ==========================================
 // INITIALIZATION
 // ==========================================
@@ -1693,5 +2101,6 @@ startClockLoop();
 initChart();
 updateDashboard(); 
 setInterval(updateDashboard, 2500);
+
 
 

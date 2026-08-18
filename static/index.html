@@ -488,31 +488,65 @@
             <!-- 2. MARKETS -->
             <!-- ========================================== -->
             <div id="view-market" class="view-container">
-                <div class="panel" style="flex:1;">
-                    <div class="panel-header">
-                        <h3 class="panel-title"><span>🌐</span> MARKET SCANNER OVERVIEW</h3>
-                        <span class="panel-action">14 Monitored Pairs</span>
+                <div class="market-terminal-grid">
+                    <!-- LEFT: WATCHLIST -->
+                    <div class="panel market-left-panel">
+                        <div class="panel-header">
+                            <h3 class="panel-title"><span>📡</span> WATCHLIST</h3>
+                            <span class="panel-action" id="mkt-watchlist-count">13 Pairs</span>
+                        </div>
+                        <div class="panel-content no-pad">
+                            <div class="table-container" style="max-height: calc(100vh - 200px); overflow-y: auto;">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>SYMBOL</th>
+                                            <th>PRICE</th>
+                                            <th>24H %</th>
+                                            <th>VOLUME</th>
+                                            <th>TREND</th>
+                                            <th>UPDATED</th>
+                                            <th>SIGNAL</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="market-watchlist-body">
+                                        <tr><td colspan="7" class="empty-state">Loading Watchlist...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
-                    <div class="panel-content no-pad">
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>SYMBOL</th>
-                                        <th>PRICE</th>
-                                        <th>24H CHANGE</th>
-                                        <th>24H VOLUME</th>
-                                        <th>TF STATUS</th>
-                                        <th>LAST UPDATE</th>
-                                        <th>TREND</th>
-                                        <th>CURRENT SIGNAL</th>
-                                        <th>VOLATILITY</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="market-full-body">
-                                    <tr><td colspan="9" class="empty-state">Awaiting Market Data Stream...</td></tr>
-                                </tbody>
-                            </table>
+
+                    <!-- CENTER: LARGE CHART -->
+                    <div class="panel market-center-panel">
+                        <div class="panel-header">
+                            <div class="market-chart-header-left">
+                                <span class="market-chart-symbol" id="mkt-active-sym">BTCUSDT</span>
+                                <span class="market-chart-price" id="mkt-active-price">$0.00</span>
+                                <span class="market-chart-chg" id="mkt-active-chg">0.00%</span>
+                            </div>
+                            <div class="chart-tf-group">
+                                <button class="btn-tf active" id="btn-mkt-tf-5m" onclick="setMarketChartTf('5m')">5m</button>
+                                <button class="btn-tf" id="btn-mkt-tf-15m" onclick="setMarketChartTf('15m')">15m</button>
+                                <button class="btn-tf" id="btn-mkt-tf-30m" onclick="setMarketChartTf('30m')">30m</button>
+                                <button class="btn-tf" id="btn-mkt-tf-1h" onclick="setMarketChartTf('1h')">1h</button>
+                                <button class="btn-tf" id="btn-mkt-tf-2h" onclick="setMarketChartTf('2h')">2h</button>
+                                <button class="btn-tf" id="btn-mkt-tf-4h" onclick="setMarketChartTf('4h')">4h</button>
+                            </div>
+                        </div>
+                        <div class="panel-content" style="display: flex; flex-direction: column; flex: 1; min-height: 480px; position: relative;">
+                            <canvas id="marketChart" style="flex: 1; width: 100%; height: 100%;"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT: MARKET DETAILS -->
+                    <div class="panel market-right-panel">
+                        <div class="panel-header">
+                            <h3 class="panel-title"><span>📊</span> MARKET DETAILS</h3>
+                            <span class="tag tag-qualified" id="mkt-det-badge">LIVE</span>
+                        </div>
+                        <div class="panel-content" id="market-details-content" style="display: flex; flex-direction: column; gap: 12px; overflow-y: auto; max-height: calc(100vh - 200px);">
+                            <div class="empty-state">Select a symbol to view live details</div>
                         </div>
                     </div>
                 </div>
@@ -892,9 +926,11 @@
             <!-- 6. STRATEGIES -->
             <!-- ========================================== -->
             <div id="view-strategies" class="view-container">
-                <div class="panel" style="flex:1;">
+                <!-- TOP: STRATEGIES TABLE -->
+                <div class="panel" style="margin-bottom: 14px;">
                     <div class="panel-header">
                         <h3 class="panel-title"><span>⚡</span> MULTI-STRATEGY PERFORMANCE ATTRIBUTION</h3>
+                        <span class="panel-action">6 Core Strategies • Click Strategy to Inspect</span>
                     </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
@@ -902,20 +938,51 @@
                                 <thead>
                                     <tr>
                                         <th>STRATEGY</th>
+                                        <th>STATUS</th>
+                                        <th>TIMEFRAMES</th>
                                         <th>EVALUATIONS</th>
-                                        <th>BUY SIGNALS</th>
-                                        <th>SELL SIGNALS</th>
+                                        <th>BUY</th>
+                                        <th>SELL</th>
                                         <th>HOLD</th>
                                         <th>QUALIFIED</th>
-                                        <th>REJECTED</th>
-                                        <th>ORDERS SUBMITTED</th>
+                                        <th>PROF. REJECTED</th>
+                                        <th>RISK REJECTED</th>
+                                        <th>ORDERS</th>
                                         <th>FILLS</th>
                                         <th>WIN RATE</th>
-                                        <th>REALIZED PNL</th>
+                                        <th>PNL</th>
                                     </tr>
                                 </thead>
                                 <tbody id="strat-full-body">
-                                    <tr><td colspan="11" class="empty-state">Awaiting Strategy Engine Attribution Data</td></tr>
+                                    <tr><td colspan="14" class="empty-state">Loading Strategy Performance Metrics...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BOTTOM: STRATEGY X TIMEFRAME MATRIX -->
+                <div class="panel" style="flex:1;">
+                    <div class="panel-header">
+                        <h3 class="panel-title"><span>🔲</span> STRATEGY × TIMEFRAME MATRIX</h3>
+                        <span class="panel-action">Signals & Live Execution by Horizon</span>
+                    </div>
+                    <div class="panel-content no-pad">
+                        <div class="table-container">
+                            <table class="matrix-table">
+                                <thead>
+                                    <tr>
+                                        <th>STRATEGY</th>
+                                        <th>5m</th>
+                                        <th>15m</th>
+                                        <th>30m</th>
+                                        <th>1h</th>
+                                        <th>2h</th>
+                                        <th>4h</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="strat-matrix-body">
+                                    <tr><td colspan="7" class="empty-state">Loading Strategy × Timeframe Matrix...</td></tr>
                                 </tbody>
                             </table>
                         </div>
