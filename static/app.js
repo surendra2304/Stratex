@@ -578,8 +578,9 @@ async function fetchTrades() {
             const orderIdStr = p.order_id ? String(p.order_id).substring(0, 8) + '...' : '-';
             const pnlStr = p.pnl > 0 ? `<span class="val-green">+${formatCurrency(p.pnl)}</span>` : (p.pnl < 0 ? `<span class="val-red">${formatCurrency(p.pnl)}</span>` : '$0.00');
             const netStr = (p.pnl - (p.fees||0)) > 0 ? `<span class="val-green">+${formatCurrency(p.pnl - (p.fees||0))}</span>` : (p.pnl - (p.fees||0) < 0 ? `<span class="val-red">${formatCurrency(p.pnl - (p.fees||0))}</span>` : '$0.00');
+            const escapedJSON = encodeURIComponent(JSON.stringify(p));
             
-            return `<tr>
+            return `<tr style="cursor: pointer;" onclick="openInspectorDrawer('TRADE AUDIT • ${p.symbol}', JSON.parse(decodeURIComponent('${escapedJSON}')))" title="Click to inspect complete trade ledger details">
                 <td>${tsShort}</td>
                 <td>-</td>
                 <td>${p.symbol}</td>
@@ -600,8 +601,9 @@ async function fetchTrades() {
             const tsShort = p.timestamp ? formatDateTime(p.timestamp) : '-';
             const pnlStr = p.pnl > 0 ? `<span class="val-green">+${formatCurrency(p.pnl)}</span>` : (p.pnl < 0 ? `<span class="val-red">${formatCurrency(p.pnl)}</span>` : '$0.00');
             const statusTag = p.pnl >= 0 ? '<span class="tag tag-win">WIN</span>' : '<span class="tag tag-loss">LOSS</span>';
+            const escapedJSON = encodeURIComponent(JSON.stringify(p));
             
-            return `<tr>
+            return `<tr style="cursor: pointer;" onclick="openInspectorDrawer('TRADE AUDIT • ${p.symbol}', JSON.parse(decodeURIComponent('${escapedJSON}')))" title="Click to inspect complete trade ledger details">
                 <td>${tsShort}</td>
                 <td class="td-strong">${p.symbol}</td>
                 <td><span class="${sideClass}">${p.action}</span></td>
@@ -893,12 +895,13 @@ const mapOpp = (o, full) => {
     const priceStr = o.current_price ? Number(o.current_price).toFixed(2) : '-';
     const decClass = o.decision === 'ACCEPTED' || o.decision === 'APPROVED' ? 'tag tag-qualified' : 'tag tag-rejected';
     const shortReason = o.reason ? (o.reason.length > 30 ? o.reason.substring(0, 30) + '...' : o.reason) : '-';
+    const escapedJSON = encodeURIComponent(JSON.stringify(o));
     
     const strat = o.strategy || '-';
     const tf = o.timeframe || '-';
     
     if (full) {
-        return `<tr>
+        return `<tr style="cursor: pointer;" onclick="openInspectorDrawer('SIGNAL INSPECTION • ${o.symbol}', JSON.parse(decodeURIComponent('${escapedJSON}')))" title="Click to inspect signal payload">
             <td>${tsShort}</td><td class="td-strong">${o.symbol}</td><td>${tf}</td><td>${strat}</td><td><span class="${sideClass}">${o.side}</span></td>
             <td>${priceStr}</td><td>${confStr}</td><td>${netStr}</td>
             <td>-</td><td>-</td>
@@ -906,7 +909,7 @@ const mapOpp = (o, full) => {
         </tr>`;
     } else {
         const shTs = o.timestamp ? String(o.timestamp).substring(11, 19) : '-';
-        return `<tr>
+        return `<tr style="cursor: pointer;" onclick="openInspectorDrawer('OPPORTUNITY • ${o.symbol}', JSON.parse(decodeURIComponent('${escapedJSON}')))" title="Click to inspect opportunity">
             <td>${shTs}</td><td class="td-strong">${o.symbol}</td><td>${tf}</td><td>${strat}</td><td><span class="${sideClass}">${o.side}</span></td>
             <td>${priceStr}</td><td>${confStr}</td><td>${netStr}</td>
             <td><span class="${decClass}">${o.decision || '-'}</span></td>
@@ -1141,6 +1144,47 @@ function updateDashboard() {
     });
 }
 
+function openInspectorDrawer(title, payload) {
+    const drawer = document.getElementById('inspector-drawer');
+    const backdrop = document.getElementById('drawer-backdrop');
+    const titleEl = document.getElementById('drawer-title');
+    const bodyEl = document.getElementById('drawer-body');
+    if (!drawer || !backdrop || !titleEl || !bodyEl) return;
+
+    titleEl.innerText = title || "INSPECTOR • QUANT TELEMETRY";
+    if (typeof payload === 'string') {
+        bodyEl.innerHTML = `<div class="json-viewer">${payload}</div>`;
+    } else {
+        bodyEl.innerHTML = `<div class="json-viewer">${JSON.stringify(payload, null, 2)}</div>`;
+    }
+    drawer.classList.add('open');
+    backdrop.classList.add('open');
+}
+
+function closeInspectorDrawer() {
+    const drawer = document.getElementById('inspector-drawer');
+    const backdrop = document.getElementById('drawer-backdrop');
+    if (drawer) drawer.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('open');
+}
+
+function exportTradesJSON() {
+    fetch('/api/trades')
+        .then(res => res.json())
+        .then(data => {
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `binance_trade_ledger_${Date.now()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        })
+        .catch(err => console.error("Export JSON error:", err));
+}
+
 // ==========================================
 // INITIALIZATION
 // ==========================================
@@ -1148,3 +1192,4 @@ startClockLoop();
 initChart();
 updateDashboard(); 
 setInterval(updateDashboard, 2000);
+

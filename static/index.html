@@ -3,80 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Algorithmic Trading Terminal</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <title>Algorithmic Trading Terminal • Binance Testnet</title>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <!-- REAL-TIME TRADE EXECUTION POPUP CONTAINER -->
+    <!-- REAL-TIME TRADE EXECUTION NOTIFICATION CONTAINER -->
     <div id="trade-toast-container" class="toast-container"></div>
 
+    <!-- INSPECTOR DRAWER & BACKDROP -->
+    <div id="drawer-backdrop" class="drawer-backdrop" onclick="closeInspectorDrawer()"></div>
+    <aside id="inspector-drawer" class="inspector-drawer">
+        <div class="drawer-header">
+            <div class="drawer-title" id="drawer-title">INSPECTOR &bull; TELEMETRY EVENT</div>
+            <button class="drawer-close" onclick="closeInspectorDrawer()" title="Close Inspector">&times;</button>
+        </div>
+        <div class="drawer-body" id="drawer-body">
+            <div class="empty-state">Select an item to inspect raw quant telemetry.</div>
+        </div>
+    </aside>
+
     <div class="app-container">
-        <!-- SIDEBAR -->
+        <!-- ─── SIDEBAR NAVIGATION ─── -->
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="brand">
-                    <h2><span class="logo-icon">⚡</span> ALGORITHMIC TRADING BOT</h2>
+                    <h2><span class="logo-icon">⚡</span> QUANT TERMINAL</h2>
                     <span class="badge-testnet">BINANCE TESTNET</span>
                 </div>
             </div>
             
             <nav class="sidebar-nav">
                 <a href="#dashboard" class="nav-item active" data-view="dashboard">
+                    <span class="nav-icon">📊</span>
                     <span>Overview</span>
                 </a>
                 <a href="#market" class="nav-item" data-view="market">
+                    <span class="nav-icon">🌐</span>
                     <span>Markets</span>
                 </a>
                 <a href="#signals" class="nav-item" data-view="signals">
+                    <span class="nav-icon">📡</span>
                     <span>Signals</span>
                 </a>
                 <a href="#positions" class="nav-item" data-view="positions">
+                    <span class="nav-icon">💼</span>
                     <span>Positions</span>
                 </a>
                 <a href="#trades" class="nav-item" data-view="trades">
+                    <span class="nav-icon">📑</span>
                     <span>Trades</span>
                 </a>
                 <a href="#strategies" class="nav-item" data-view="strategies">
+                    <span class="nav-icon">⚡</span>
                     <span>Strategies</span>
                 </a>
                 <a href="#risk" class="nav-item" data-view="risk">
-                    <span>Risk</span>
+                    <span class="nav-icon">🛡️</span>
+                    <span>Risk Gate</span>
                 </a>
                 <a href="#analytics" class="nav-item" data-view="analytics">
+                    <span class="nav-icon">📈</span>
                     <span>Analytics</span>
                 </a>
                 <a href="#settings" class="nav-item" data-view="settings">
+                    <span class="nav-icon">⚙️</span>
                     <span>Settings</span>
                 </a>
             </nav>
 
+            <!-- SYSTEM SUBSYSTEM HEALTH -->
             <div class="sidebar-system-health">
-                <div class="health-row"><span>Binance</span><span class="dot dot-green" id="h-bn"></span></div>
-                <div class="health-row"><span>WebSocket</span><span class="dot dot-green" id="h-ws"></span></div>
-                <div class="health-row"><span>Market Data</span><span class="dot dot-green" id="h-md"></span></div>
-                <div class="health-row"><span>Execution</span><span class="dot dot-green" id="h-ex"></span></div>
-                <div class="health-row"><span>Strategy Engine</span><span class="dot dot-green" id="h-st"></span></div>
-                <div class="health-row"><span>Portfolio</span><span class="dot dot-green" id="h-pt"></span></div>
-                <div class="health-row"><span>Risk</span><span class="dot dot-green" id="h-rs"></span></div>
-                <div class="health-row"><span>Persistence</span><span class="dot dot-green" id="h-pe"></span></div>
+                <div class="sidebar-system-health-title">Subsystem Health</div>
+                <div class="health-row">
+                    <span class="health-label-wrap">Binance REST</span>
+                    <span class="dot dot-green" id="h-bn" title="Connected"></span>
+                </div>
+                <div class="health-row">
+                    <span class="health-label-wrap">WebSocket Stream</span>
+                    <span class="dot dot-green" id="h-ws" title="Active"></span>
+                </div>
+                <div class="health-row">
+                    <span class="health-label-wrap">Market Scanner</span>
+                    <span class="dot dot-green" id="h-md" title="Scanning"></span>
+                </div>
+                <div class="health-row">
+                    <span class="health-label-wrap">Execution Gateway</span>
+                    <span class="dot dot-green" id="h-ex" title="Ready"></span>
+                </div>
+                <div class="health-row">
+                    <span class="health-label-wrap">Strategy Engine</span>
+                    <span class="dot dot-green" id="h-st" title="Active"></span>
+                </div>
+                <div class="health-row">
+                    <span class="health-label-wrap">Portfolio Manager</span>
+                    <span class="dot dot-green" id="h-pt" title="Synchronized"></span>
+                </div>
+                <div class="health-row">
+                    <span class="health-label-wrap">Risk Engine</span>
+                    <span class="dot dot-green" id="h-rs" title="Guarded"></span>
+                </div>
+                <div class="health-row">
+                    <span class="health-label-wrap">Audit Persistence</span>
+                    <span class="dot dot-green" id="h-pe" title="Flushed"></span>
+                </div>
                 
-                <div style="margin-top: 16px; font-size: 9px; color: var(--text-muted);">
-                    Version 2.0.0 • TESTNET<br>
-                    Frankfurt (DE)
+                <div class="sidebar-footer-meta">
+                    Quant Core v2.4.0<br>
+                    Frankfurt (DE) • 0.05% Max Risk
                 </div>
             </div>
         </aside>
 
-        <!-- MAIN CONTENT -->
+        <!-- ─── MAIN TRADING TERMINAL ─── -->
         <main class="main-content">
-            <!-- TOP HEADER -->
+            <!-- TOP COMPACT HEADER -->
             <header class="top-header">
                 <div class="header-left">
                     <div class="breadcrumb">
                         <span id="page-title" class="breadcrumb-active">Overview</span>
-                        <span>Dashboard</span>
+                        <span class="breadcrumb-sep">/</span>
+                        <span class="breadcrumb-sub">Live Quant Operations</span>
                     </div>
                 </div>
                 <div class="header-right">
@@ -86,7 +137,7 @@
                     </div>
                     <div class="divider"></div>
                     <div class="header-stat">
-                        <span class="stat-label">Engine Status</span>
+                        <span class="stat-label">Engine Core</span>
                         <div class="engine-status-inner">
                             <span class="dot dot-green" id="hdr-engine-dot"></span>
                             <span id="hdr-engine-text" class="status-online">ONLINE</span>
@@ -95,16 +146,21 @@
                     <div class="divider"></div>
                     <div class="header-stat">
                         <span class="stat-label">Environment</span>
-                        <span class="stat-value">TESTNET</span>
+                        <span class="stat-value"><span class="badge badge-amber">SPOT TESTNET</span></span>
                     </div>
                     <div class="divider"></div>
                     <div class="header-stat">
-                        <span class="stat-label">Time (IST)</span>
+                        <span class="stat-label">Local Clock (IST)</span>
                         <span class="stat-value" id="nav-clock">--:--:--</span>
                     </div>
+                    <div class="divider"></div>
                     <div class="header-actions">
-                        <button id="audio-toggle-btn" class="header-toggle-btn active" onclick="toggleAudioAlerts()" title="Toggle Trade Sound Alerts">🔔 <span id="audio-status-txt">Audio ON</span></button>
-                        <button class="btn-action" onclick="fetchStatus();fetchTrades();fetchScanner();" title="Refresh Live State">↻ Refresh</button>
+                        <button id="audio-toggle-btn" class="header-toggle-btn active" onclick="toggleAudioAlerts()" title="Toggle Execution Sound Alerts">
+                            🔔 <span id="audio-status-txt">Audio ON</span>
+                        </button>
+                        <button class="btn-action" onclick="fetchStatus();fetchTrades();fetchScanner();" title="Refresh Live State">
+                            ↻ Refresh
+                        </button>
                     </div>
                 </div>
             </header>
@@ -114,48 +170,54 @@
             <!-- ========================================== -->
             <div id="view-dashboard" class="view-container active">
                 
-                <!-- ROW 1: KPI CARDS -->
+                <!-- ROW 1: INSTITUTIONAL KPI CARDS -->
                 <div class="metrics-row">
-                    <div class="metric-card">
+                    <div class="metric-card accent-blue">
                         <div class="metric-icon-wrap bg-blue">💼</div>
                         <div class="metric-content">
-                            <span class="metric-label">Total Equity</span>
+                            <span class="metric-label">Total Account Equity</span>
                             <span class="metric-value" id="pb-balance">--</span>
+                            <span class="metric-sub">USDT Cash + Holdings</span>
                         </div>
                     </div>
-                    <div class="metric-card">
+                    <div class="metric-card accent-green">
                         <div class="metric-icon-wrap bg-green">📈</div>
                         <div class="metric-content">
                             <span class="metric-label">Today's PnL</span>
                             <span class="metric-value val-green" id="pb-today">--</span>
+                            <span class="metric-sub">Realized Day Net</span>
                         </div>
                     </div>
-                    <div class="metric-card">
+                    <div class="metric-card accent-blue">
                         <div class="metric-icon-wrap bg-blue">💵</div>
                         <div class="metric-content">
-                            <span class="metric-label">Realized PnL</span>
+                            <span class="metric-label">Total Realized PnL</span>
                             <span class="metric-value val-green" id="pb-realized">--</span>
+                            <span class="metric-sub">Closed Trades</span>
                         </div>
                     </div>
-                    <div class="metric-card">
+                    <div class="metric-card accent-amber">
                         <div class="metric-icon-wrap bg-amber">⏱</div>
                         <div class="metric-content">
                             <span class="metric-label">Unrealized PnL</span>
                             <span class="metric-value" id="pb-unrealized">--</span>
+                            <span class="metric-sub">Active Positions</span>
                         </div>
                     </div>
-                    <div class="metric-card">
-                        <div class="metric-icon-wrap bg-purple">%</div>
+                    <div class="metric-card accent-purple">
+                        <div class="metric-icon-wrap bg-purple">¢</div>
                         <div class="metric-content">
-                            <span class="metric-label">Fees Paid</span>
+                            <span class="metric-label">Cumulative Fees</span>
                             <span class="metric-value" id="pb-fees">--</span>
+                            <span class="metric-sub">0.1% Spot / OCO</span>
                         </div>
                     </div>
-                    <div class="metric-card">
+                    <div class="metric-card accent-red">
                         <div class="metric-icon-wrap bg-red">🛡</div>
                         <div class="metric-content">
                             <span class="metric-label">Max Drawdown</span>
                             <span class="metric-value val-red" id="pb-mdd">--</span>
+                            <span class="metric-sub">5.0% Safety Ceiling</span>
                         </div>
                     </div>
                 </div>
@@ -163,7 +225,7 @@
                 <!-- CAPITAL DEPLOYMENT & CASH TRANSPARENCY BAR -->
                 <div class="allocation-banner-wrap">
                     <div class="allocation-header-row">
-                        <span>⚡ <strong>CAPITAL ALLOCATION:</strong> <span id="alloc-cash-txt">Liquid USDT: $8,762.05 (74%)</span> • <span id="alloc-crypto-txt">Active Spot Trades (PORTAL, LINK): $3,112.57 (26%)</span></span>
+                        <span>⚡ <strong class="allocation-title-highlight">CAPITAL ALLOCATION:</strong> <span id="alloc-cash-txt">Liquid USDT: $8,762.05 (74%)</span> • <span id="alloc-crypto-txt">Active Spot Trades (PORTAL, LINK): $3,112.57 (26%)</span></span>
                         <span class="alloc-note">Spot Mode: Opening trades exchanges USDT for target crypto with automated OCO exit orders</span>
                     </div>
                     <div class="allocation-track">
@@ -172,12 +234,14 @@
                     </div>
                 </div>
 
-                <!-- ROW 2: CURVE & ENGINES -->
-                <div class="dashboard-grid-2">
-                    <!-- EQUITY CURVE -->
-                    <div class="panel">
+                <!-- ROW 2: EQUITY CURVE & MULTI-STRATEGY ENGINES -->
+                <div class="grid-12">
+                    <!-- EQUITY CURVE (COL 6) -->
+                    <div class="panel col-6">
                         <div class="panel-header">
-                            <h3 class="panel-title">EQUITY CURVE</h3>
+                            <div class="panel-title-wrap">
+                                <h3 class="panel-title"><span>📈</span> REAL-TIME EQUITY CURVE</h3>
+                            </div>
                             <div class="chart-tf-group">
                                 <button class="btn-tf" id="tf-1d" onclick="setEquityTimeframe('1D')">1D</button>
                                 <button class="btn-tf" id="tf-7d" onclick="setEquityTimeframe('7D')">7D</button>
@@ -191,10 +255,10 @@
                         </div>
                     </div>
 
-                    <!-- MARKET ENGINE -->
-                    <div class="panel">
+                    <!-- TIMEFRAME SCANNER ENGINE (COL 3) -->
+                    <div class="panel col-3">
                         <div class="panel-header">
-                            <h3 class="panel-title">MARKET ENGINE (TIMEFRAMES)</h3>
+                            <h3 class="panel-title"><span>⏱</span> MARKET TIMEFRAMES</h3>
                             <span class="panel-action" id="sc-eval-ratio">14 Symbols</span>
                         </div>
                         <div class="panel-content no-pad">
@@ -202,31 +266,27 @@
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>TIMEFRAME</th>
+                                            <th>TF</th>
                                             <th>CANDLES</th>
-                                            <th>EVALUATIONS</th>
+                                            <th>EVALS</th>
                                             <th>BUY</th>
-                                            <th>SELL</th>
-                                            <th>SIGNALS</th>
-                                            <th>QUALIFIED</th>
-                                            <th>REJECTED</th>
                                             <th>ORDERS</th>
                                             <th>FILLS</th>
                                         </tr>
                                     </thead>
                                     <tbody id="timeframe-metrics-body">
-                                        <tr><td colspan="6" class="empty-state">AWAITING DATA</td></tr>
+                                        <tr><td colspan="6" class="empty-state">Awaiting Data...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
                     </div>
 
-                    <!-- STRATEGY ENGINE -->
-                    <div class="panel">
+                    <!-- STRATEGY ENGINE BREAKDOWN (COL 3) -->
+                    <div class="panel col-3">
                         <div class="panel-header">
-                            <h3 class="panel-title">STRATEGY ENGINE</h3>
-                            <span class="panel-action">6 Active Strategies</span>
+                            <h3 class="panel-title"><span>⚡</span> STRATEGY ENGINE</h3>
+                            <span class="panel-action">6 Active</span>
                         </div>
                         <div class="panel-content no-pad">
                             <div class="table-container">
@@ -234,20 +294,15 @@
                                     <thead>
                                         <tr>
                                             <th>STRATEGY</th>
-                                            <th>EVALUATIONS</th>
+                                            <th>EVALS</th>
                                             <th>BUY</th>
-                                            <th>SELL</th>
-                                            <th>HOLD</th>
-                                            <th>QUALIFIED</th>
-                                            <th>REJECTED</th>
-                                            <th>ORDERS</th>
                                             <th>FILLS</th>
-                                            <th>WIN RATE</th>
+                                            <th>WIN %</th>
                                             <th>PNL</th>
                                         </tr>
                                     </thead>
                                     <tbody id="strategy-metrics-body">
-                                        <tr><td colspan="6" class="empty-state">AWAITING DATA</td></tr>
+                                        <tr><td colspan="6" class="empty-state">Awaiting Data...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -255,13 +310,13 @@
                     </div>
                 </div>
 
-                <!-- ROW 3: OPPORTUNITIES, FUNNEL, RISK -->
-                <div class="dashboard-grid-3">
-                    <!-- OPPORTUNITY CENTER -->
-                    <div class="panel">
+                <!-- ROW 3: BEST OPPORTUNITIES, 5-STAGE PIPELINE, RISK GUARDS -->
+                <div class="grid-12">
+                    <!-- BEST CURRENT OPPORTUNITIES (COL 6) -->
+                    <div class="panel col-6">
                         <div class="panel-header">
-                            <h3 class="panel-title">BEST CURRENT OPPORTUNITIES</h3>
-                            <span class="panel-action">View All Opportunities &rarr;</span>
+                            <h3 class="panel-title"><span>🎯</span> BEST CURRENT OPPORTUNITIES</h3>
+                            <span class="panel-action" onclick="document.querySelector('[data-view=\'signals\']').click()">View All Signals &rarr;</span>
                         </div>
                         <div class="panel-content no-pad">
                             <div class="table-container">
@@ -278,53 +333,52 @@
                                             <th>TARGET</th>
                                             <th>CONF.</th>
                                             <th>NET EDGE</th>
-                                            <th>RISK</th>
                                             <th>DECISION</th>
                                         </tr>
                                     </thead>
                                     <tbody id="opp-short-body">
-                                        <tr><td colspan="12" class="empty-state">NO QUALIFYING OPPORTUNITIES</td></tr>
+                                        <tr><td colspan="11" class="empty-state">No Qualifying Signals Yet</td></tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
                     </div>
 
-                    <!-- SIGNAL PIPELINE -->
-                    <div class="panel">
+                    <!-- 5-STAGE SIGNAL PIPELINE (COL 3) -->
+                    <div class="panel col-3">
                         <div class="panel-header">
-                            <h3 class="panel-title">SIGNAL FLOW PIPELINE (24H)</h3>
+                            <h3 class="panel-title"><span>🔄</span> SIGNAL PIPELINE (24H)</h3>
                         </div>
-                        <div class="panel-content">
+                        <div class="panel-content no-pad">
                             <div class="funnel-pipeline">
                                 <div class="funnel-node">
-                                    <div class="funnel-icon blue">🌐</div>
+                                    <div class="funnel-icon">🌐</div>
                                     <div class="funnel-val" id="fn-mrk">0</div>
-                                    <div class="funnel-lbl">Receiving Data</div>
+                                    <div class="funnel-lbl">Data In</div>
                                 </div>
                                 <div class="funnel-line"></div>
                                 <div class="funnel-node">
-                                    <div class="funnel-icon purple">📈</div>
+                                    <div class="funnel-icon">📈</div>
                                     <div class="funnel-val" id="fn-signals">0</div>
-                                    <div class="funnel-lbl">Total Signals</div>
+                                    <div class="funnel-lbl">Signals</div>
                                 </div>
                                 <div class="funnel-line"></div>
                                 <div class="funnel-node">
-                                    <div class="funnel-icon amber">💵</div>
+                                    <div class="funnel-icon">💵</div>
                                     <div class="funnel-val val-green" id="fn-prof-acc">0</div>
-                                    <div class="funnel-sub val-red"><span id="fn-prof-rej">0</span> Rejected</div>
-                                    <div class="funnel-lbl">Profitability Gate</div>
+                                    <div class="funnel-sub val-red"><span id="fn-prof-rej">0</span> Rej</div>
+                                    <div class="funnel-lbl">Profit Gate</div>
                                 </div>
                                 <div class="funnel-line"></div>
                                 <div class="funnel-node">
-                                    <div class="funnel-icon amber">🛡</div>
+                                    <div class="funnel-icon">🛡️</div>
                                     <div class="funnel-val val-green" id="fn-risk-acc">0</div>
-                                    <div class="funnel-sub val-red"><span id="fn-risk-rej">0</span> Rejected</div>
+                                    <div class="funnel-sub val-red"><span id="fn-risk-rej">0</span> Rej</div>
                                     <div class="funnel-lbl">Risk Gate</div>
                                 </div>
                                 <div class="funnel-line"></div>
                                 <div class="funnel-node">
-                                    <div class="funnel-icon cyan">🚀</div>
+                                    <div class="funnel-icon">🚀</div>
                                     <div class="funnel-val val-green" id="fn-filled">0</div>
                                     <div class="funnel-lbl">Filled</div>
                                 </div>
@@ -332,45 +386,47 @@
                         </div>
                     </div>
 
-                    <!-- RISK OVERVIEW -->
-                    <div class="panel">
+                    <!-- RISK GUARDS (COL 3) -->
+                    <div class="panel col-3">
                         <div class="panel-header">
-                            <h3 class="panel-title">RISK OVERVIEW</h3>
+                            <h3 class="panel-title"><span>🛡️</span> RISK GUARDS</h3>
                         </div>
                         <div class="panel-content">
                             <div class="risk-grid">
                                 <div class="risk-item">
-                                    <div class="risk-lbl">Portfolio Exposure</div>
+                                    <div class="risk-lbl">Exposure</div>
                                     <div class="risk-circle">
                                         <div class="r-val" id="rk-exp-val">0.00%</div>
-                                        <div class="r-sub">of Equity</div>
+                                        <div class="r-sub">of Total Equity</div>
                                     </div>
                                 </div>
                                 <div class="risk-item">
                                     <div class="risk-lbl">Risk Used</div>
-                                    <div class="r-val val-green" style="margin-bottom: 4px;" id="rk-used">0.00%</div>
-                                    <div class="risk-lbl" style="margin-top: 8px;">Available Risk</div>
-                                    <div class="r-val val-green" id="rk-avail">2.00%</div>
+                                    <div class="r-val val-green" id="rk-used">0.00%</div>
+                                    <div class="r-sub">Max: 0.50% / Trade</div>
                                 </div>
                                 <div class="risk-item">
-                                    <div class="risk-lbl">Open Positions</div>
-                                    <div class="r-val" style="margin-top: 4px;" id="rk-pos">0</div>
-                                    <div class="r-sub" style="font-size: 8px; color: var(--text-muted);">of Max 10</div>
+                                    <div class="risk-lbl">Positions</div>
+                                    <div class="r-val" id="rk-pos">0</div>
+                                    <div class="r-sub">Max: 5 Open</div>
                                 </div>
                                 <div class="risk-item">
-                                    <div class="risk-lbl">Daily PNL</div>
-                                    <div class="r-val val-green" style="margin-top: 4px;" id="rk-daily">$0.00</div>
+                                    <div class="risk-lbl">Daily Return</div>
+                                    <div class="r-val val-green" id="rk-daily">$0.00</div>
+                                    <div class="r-sub">Safety Limit: -2%</div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- ROW 4: BOTTOM TABLES -->
-                <div class="dashboard-grid-4">
-                    <div class="panel">
+                <!-- ROW 4: ACTIVE POSITIONS & RECENT TRADES -->
+                <div class="grid-12">
+                    <!-- ACTIVE POSITIONS (COL 6) -->
+                    <div class="panel col-6">
                         <div class="panel-header">
-                            <h3 class="panel-title">ACTIVE POSITIONS</h3>
+                            <h3 class="panel-title"><span>💼</span> ACTIVE POSITIONS & WORKING EXITS</h3>
+                            <span class="panel-action" onclick="document.querySelector('[data-view=\'positions\']').click()">Positions &rarr;</span>
                         </div>
                         <div class="panel-content no-pad">
                             <div class="table-container">
@@ -379,71 +435,46 @@
                                         <tr>
                                             <th>SYMBOL</th>
                                             <th>SIDE</th>
-                                            <th>ENTRY</th>
+                                            <th>ENTRY PRICE</th>
                                             <th>CURRENT</th>
-                                            <th>QTY</th>
+                                            <th>QUANTITY</th>
                                             <th>U.PNL</th>
-                                            <th>SL</th>
-                                            <th>TP</th>
+                                            <th>STOP LOSS</th>
+                                            <th>TAKE PROFIT</th>
                                         </tr>
                                     </thead>
                                     <tbody id="active-pos-body">
-                                        <tr><td colspan="8" class="empty-state">NO OPEN POSITIONS<br>Qualifying positions will appear here</td></tr>
+                                        <tr><td colspan="8" class="empty-state">No Open Positions Currently Active</td></tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
                     </div>
 
-                    <div class="panel">
+                    <!-- RECENT TRADES (COL 6) -->
+                    <div class="panel col-6">
                         <div class="panel-header">
-                            <h3 class="panel-title">RECENT TRADES</h3>
-                            <span class="panel-action">View All &rarr;</span>
+                            <h3 class="panel-title"><span>📑</span> RECENT EXECUTED TRADES</h3>
+                            <span class="panel-action" onclick="document.querySelector('[data-view=\'trades\']').click()">Full Ledger &rarr;</span>
                         </div>
                         <div class="panel-content no-pad">
                             <div class="table-container">
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>TIME</th>
+                                            <th>TIMESTAMP</th>
                                             <th>SYMBOL</th>
                                             <th>TF</th>
                                             <th>STRATEGY</th>
                                             <th>SIDE</th>
                                             <th>ENTRY</th>
                                             <th>EXIT</th>
-                                            <th>QTY</th>
-                                            <th>PNL</th>
+                                            <th>REALIZED PNL</th>
                                             <th>STATUS</th>
                                         </tr>
                                     </thead>
                                     <tbody id="recent-trades-body">
-                                        <tr><td colspan="10" class="empty-state">NO TRADES YET</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="panel">
-                        <div class="panel-header">
-                            <h3 class="panel-title">TOP MOVERS (24H)</h3>
-                            <span class="panel-action">View Market &rarr;</span>
-                        </div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>SYMBOL</th>
-                                            <th>PRICE</th>
-                                            <th>24H CHANGE</th>
-                                            <th>VOLUME</th>
-                                            <th>TREND</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="top-movers-body">
-                                        <tr><td colspan="5" class="empty-state">AWAITING MARKET DATA</td></tr>
+                                        <tr><td colspan="9" class="empty-state">No Trade History Logged</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -459,7 +490,8 @@
             <div id="view-market" class="view-container">
                 <div class="panel" style="flex:1;">
                     <div class="panel-header">
-                        <h3 class="panel-title">MARKET OVERVIEW</h3>
+                        <h3 class="panel-title"><span>🌐</span> MARKET SCANNER OVERVIEW</h3>
+                        <span class="panel-action">14 Monitored Pairs</span>
                     </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
@@ -469,16 +501,16 @@
                                         <th>SYMBOL</th>
                                         <th>PRICE</th>
                                         <th>24H CHANGE</th>
-                                        <th>VOLUME</th>
+                                        <th>24H VOLUME</th>
                                         <th>TF STATUS</th>
                                         <th>LAST UPDATE</th>
                                         <th>TREND</th>
-                                        <th>SIGNAL</th>
+                                        <th>CURRENT SIGNAL</th>
                                         <th>VOLATILITY</th>
                                     </tr>
                                 </thead>
                                 <tbody id="market-full-body">
-                                    <tr><td colspan="9" class="empty-state">AWAITING MARKET DATA</td></tr>
+                                    <tr><td colspan="9" class="empty-state">Awaiting Market Data Stream...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -492,11 +524,11 @@
             <div id="view-signals" class="view-container">
                 <div class="panel" style="flex:1;">
                     <div class="panel-header">
-                        <h3 class="panel-title">LIVE SIGNALS TERMINAL</h3>
+                        <h3 class="panel-title"><span>📡</span> QUANT SIGNALS AUDIT LOG</h3>
                         <div class="filter-group">
-                            <button class="btn-filter active" id="sig-btn-all" onclick="setSignalFilter('ALL')">ALL</button>
-                            <button class="btn-filter" id="sig-btn-acc" onclick="setSignalFilter('ACCEPTED')">✅ ACCEPTED</button>
-                            <button class="btn-filter" id="sig-btn-rej" onclick="setSignalFilter('REJECTED')">❌ REJECTED</button>
+                            <button class="btn-filter active" id="sig-btn-all" onclick="setSignalFilter('ALL')">ALL SIGNALS</button>
+                            <button class="btn-filter" id="sig-btn-acc" onclick="setSignalFilter('ACCEPTED')">✅ ACCEPTED ONLY</button>
+                            <button class="btn-filter" id="sig-btn-rej" onclick="setSignalFilter('REJECTED')">❌ REJECTED ONLY</button>
                         </div>
                     </div>
                     <div class="panel-content no-pad">
@@ -504,7 +536,7 @@
                             <table>
                                 <thead>
                                     <tr>
-                                        <th>TIME</th>
+                                        <th>TIMESTAMP</th>
                                         <th>SYMBOL</th>
                                         <th>TF</th>
                                         <th>STRATEGY</th>
@@ -513,13 +545,13 @@
                                         <th>CONFIDENCE</th>
                                         <th>EXPECTED EDGE</th>
                                         <th>PROFITABILITY</th>
-                                        <th>RISK</th>
+                                        <th>RISK GATE</th>
                                         <th>DECISION</th>
-                                        <th>REASON</th>
+                                        <th>REASON / METRICS</th>
                                     </tr>
                                 </thead>
                                 <tbody id="signals-full-body">
-                                    <tr><td colspan="12" class="empty-state">NO SIGNALS LOGGED YET</td></tr>
+                                    <tr><td colspan="12" class="empty-state">No Signals Emitted in Current Session</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -532,13 +564,38 @@
             <!-- ========================================== -->
             <div id="view-positions" class="view-container">
                 <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr);">
-                    <div class="metric-card"><div class="metric-icon-wrap bg-blue">#</div><div class="metric-content"><span class="metric-label">OPEN POSITIONS</span><span class="metric-value" id="pos-count">0</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-cyan">$</div><div class="metric-content"><span class="metric-label">TOTAL EXPOSURE</span><span class="metric-value" id="pos-exposure">$0.00</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-amber">±</div><div class="metric-content"><span class="metric-label">UNREALIZED PNL</span><span class="metric-value" id="pos-upnl">$0.00</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-green">▤</div><div class="metric-content"><span class="metric-label">AVAILABLE EQUITY</span><span class="metric-value" id="pos-avail">$0.00</span></div></div>
+                    <div class="metric-card accent-blue">
+                        <div class="metric-icon-wrap bg-blue">#</div>
+                        <div class="metric-content">
+                            <span class="metric-label">OPEN POSITIONS</span>
+                            <span class="metric-value" id="pos-count">0</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-cyan">
+                        <div class="metric-icon-wrap bg-cyan">$</div>
+                        <div class="metric-content">
+                            <span class="metric-label">TOTAL EXPOSURE</span>
+                            <span class="metric-value" id="pos-exposure">$0.00</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-amber">
+                        <div class="metric-icon-wrap bg-amber">±</div>
+                        <div class="metric-content">
+                            <span class="metric-label">UNREALIZED PNL</span>
+                            <span class="metric-value" id="pos-upnl">$0.00</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-green">
+                        <div class="metric-icon-wrap bg-green">▤</div>
+                        <div class="metric-content">
+                            <span class="metric-label">AVAILABLE EQUITY</span>
+                            <span class="metric-value" id="pos-avail">$0.00</span>
+                        </div>
+                    </div>
                 </div>
+                
                 <div class="panel" style="flex:1;">
-                    <div class="panel-header"><h3 class="panel-title">ACTIVE POSITIONS</h3></div>
+                    <div class="panel-header"><h3 class="panel-title"><span>💼</span> ACTIVE SPOT POSITIONS</h3></div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
                             <table>
@@ -546,26 +603,26 @@
                                     <tr>
                                         <th>SYMBOL</th>
                                         <th>SIDE</th>
-                                        <th>ENTRY</th>
-                                        <th>CURRENT</th>
-                                        <th>QTY</th>
-                                        <th>U.PNL</th>
-                                        <th>SL</th>
-                                        <th>TP</th>
+                                        <th>ENTRY PRICE</th>
+                                        <th>CURRENT PRICE</th>
+                                        <th>QUANTITY</th>
+                                        <th>UNREALIZED PNL</th>
+                                        <th>STOP LOSS</th>
+                                        <th>TAKE PROFIT</th>
                                     </tr>
                                 </thead>
                                 <tbody id="pos-full-body">
-                                    <tr><td colspan="8" class="empty-state">No open positions</td></tr>
+                                    <tr><td colspan="8" class="empty-state">No Active Positions</td></tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 </div>
 
-                <div class="panel" style="flex:1; margin-top: 14px;">
+                <div class="panel" style="flex:1; margin-top: 10px;">
                     <div class="panel-header">
-                        <h3 class="panel-title">🛡️ LIVE BINANCE OCO ORDERS (STOP-LOSS & TAKE-PROFIT)</h3>
-                        <span class="panel-action">On-Exchange Working Orders</span>
+                        <h3 class="panel-title"><span>🛡️</span> LIVE BINANCE OCO WORKING ORDERS</h3>
+                        <span class="panel-action">On-Exchange Stop-Loss & Take-Profit</span>
                     </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
@@ -578,7 +635,7 @@
                                         <th>TYPE</th>
                                         <th>LIMIT PRICE</th>
                                         <th>STOP TRIGGER</th>
-                                        <th>QTY</th>
+                                        <th>QUANTITY</th>
                                         <th>STATUS</th>
                                     </tr>
                                 </thead>
@@ -596,15 +653,45 @@
             <!-- ========================================== -->
             <div id="view-trades" class="view-container">
                 <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr);">
-                    <div class="metric-card"><div class="metric-icon-wrap bg-blue">#</div><div class="metric-content"><span class="metric-label">TOTAL TRADES</span><span class="metric-value" id="tr-total">0</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-cyan">%</div><div class="metric-content"><span class="metric-label">WIN RATE</span><span class="metric-value val-green" id="tr-rate">0.00%</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-green">±</div><div class="metric-content"><span class="metric-label">WINS / LOSSES</span><span class="metric-value"><span id="tr-wins" class="val-green">0</span> / <span id="tr-loss" class="val-red">0</span></span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-purple">$</div><div class="metric-content"><span class="metric-label">TOTAL REALIZED</span><span class="metric-value" id="tr-net">$0.00</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-amber">¢</div><div class="metric-content"><span class="metric-label">TOTAL FEES</span><span class="metric-value" id="tr-fees">$0.00</span></div></div>
+                    <div class="metric-card accent-blue">
+                        <div class="metric-icon-wrap bg-blue">#</div>
+                        <div class="metric-content">
+                            <span class="metric-label">TOTAL TRADES</span>
+                            <span class="metric-value" id="tr-total">0</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-cyan">
+                        <div class="metric-icon-wrap bg-cyan">%</div>
+                        <div class="metric-content">
+                            <span class="metric-label">WIN RATE</span>
+                            <span class="metric-value val-green" id="tr-rate">0.00%</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-green">
+                        <div class="metric-icon-wrap bg-green">±</div>
+                        <div class="metric-content">
+                            <span class="metric-label">WINS / LOSSES</span>
+                            <span class="metric-value"><span id="tr-wins" class="val-green">0</span> / <span id="tr-loss" class="val-red">0</span></span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-purple">
+                        <div class="metric-icon-wrap bg-purple">$</div>
+                        <div class="metric-content">
+                            <span class="metric-label">TOTAL REALIZED</span>
+                            <span class="metric-value" id="tr-net">$0.00</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-amber">
+                        <div class="metric-icon-wrap bg-amber">¢</div>
+                        <div class="metric-content">
+                            <span class="metric-label">TOTAL FEES</span>
+                            <span class="metric-value" id="tr-fees">$0.00</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="panel" style="flex:1;">
                     <div class="panel-header">
-                        <h3 class="panel-title">TRADE HISTORY</h3>
+                        <h3 class="panel-title"><span>📑</span> HISTORICAL TRADE LEDGER</h3>
                         <div class="chart-tf-group">
                             <a href="/api/export-trades" class="btn-action" download="binance_trade_ledger.csv">📥 Export CSV</a>
                             <button class="btn-action" onclick="exportTradesJSON()">📥 Export JSON</button>
@@ -615,13 +702,13 @@
                             <table>
                                 <thead>
                                     <tr>
-                                        <th>TIME</th>
+                                        <th>TIMESTAMP</th>
                                         <th>TF</th>
                                         <th>SYMBOL</th>
                                         <th>SIDE</th>
                                         <th>ENTRY</th>
                                         <th>EXIT</th>
-                                        <th>QTY</th>
+                                        <th>QUANTITY</th>
                                         <th>GROSS PNL</th>
                                         <th>FEES</th>
                                         <th>NET RETURN</th>
@@ -630,7 +717,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="trades-full-body">
-                                    <tr><td colspan="12" class="empty-state">NO HISTORICAL TRADES</td></tr>
+                                    <tr><td colspan="12" class="empty-state">No Historical Trades Recorded</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -643,7 +730,9 @@
             <!-- ========================================== -->
             <div id="view-strategies" class="view-container">
                 <div class="panel" style="flex:1;">
-                    <div class="panel-header"><h3 class="panel-title">STRATEGY PERFORMANCE</h3></div>
+                    <div class="panel-header">
+                        <h3 class="panel-title"><span>⚡</span> MULTI-STRATEGY PERFORMANCE ATTRIBUTION</h3>
+                    </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
                             <table>
@@ -651,19 +740,19 @@
                                     <tr>
                                         <th>STRATEGY</th>
                                         <th>EVALUATIONS</th>
-                                        <th>BUY</th>
-                                        <th>SELL</th>
+                                        <th>BUY SIGNALS</th>
+                                        <th>SELL SIGNALS</th>
                                         <th>HOLD</th>
                                         <th>QUALIFIED</th>
                                         <th>REJECTED</th>
-                                        <th>ORDERS</th>
+                                        <th>ORDERS SUBMITTED</th>
                                         <th>FILLS</th>
                                         <th>WIN RATE</th>
-                                        <th>PNL</th>
+                                        <th>REALIZED PNL</th>
                                     </tr>
                                 </thead>
                                 <tbody id="strat-full-body">
-                                    <tr><td colspan="10" class="empty-state">AWAITING DATA</td></tr>
+                                    <tr><td colspan="11" class="empty-state">Awaiting Strategy Engine Attribution Data</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -676,21 +765,23 @@
             <!-- ========================================== -->
             <div id="view-risk" class="view-container">
                 <div class="panel" style="flex:1;">
-                    <div class="panel-header"><h3 class="panel-title">RISK GATE LOGS</h3></div>
+                    <div class="panel-header">
+                        <h3 class="panel-title"><span>🛡️</span> RISK GATE AUDIT TRAIL</h3>
+                    </div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
                             <table>
                                 <thead>
                                     <tr>
-                                        <th>TIME</th>
+                                        <th>TIMESTAMP</th>
                                         <th>SYMBOL</th>
                                         <th>DECISION</th>
-                                        <th>GATE</th>
-                                        <th>REASON / METRIC</th>
+                                        <th>EVALUATION GATE</th>
+                                        <th>REASON / METRIC TRIGGER</th>
                                     </tr>
                                 </thead>
                                 <tbody id="risk-logs-body">
-                                    <tr><td colspan="5" class="empty-state">NO RISK EVENTS</td></tr>
+                                    <tr><td colspan="5" class="empty-state">No Risk Breaches or Gate Rejections Logged</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -703,21 +794,51 @@
             <!-- ========================================== -->
             <div id="view-analytics" class="view-container">
                 <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr);">
-                    <div class="metric-card"><div class="metric-icon-wrap bg-cyan">%</div><div class="metric-content"><span class="metric-label">WIN RATE</span><span class="metric-value" id="an-winrate">0.00%</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-blue">#</div><div class="metric-content"><span class="metric-label">TRADE COUNT</span><span class="metric-value" id="an-total">0</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-green">×</div><div class="metric-content"><span class="metric-label">PROFIT FACTOR</span><span class="metric-value" id="an-pf">0.00</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-amber">+</div><div class="metric-content"><span class="metric-label">AVERAGE WIN</span><span class="metric-value val-green" id="an-avg-win">$0.00</span></div></div>
-                    <div class="metric-card"><div class="metric-icon-wrap bg-red">-</div><div class="metric-content"><span class="metric-label">AVERAGE LOSS</span><span class="metric-value val-red" id="an-avg-loss">$0.00</span></div></div>
+                    <div class="metric-card accent-cyan">
+                        <div class="metric-icon-wrap bg-cyan">%</div>
+                        <div class="metric-content">
+                            <span class="metric-label">WIN RATE</span>
+                            <span class="metric-value" id="an-winrate">0.00%</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-blue">
+                        <div class="metric-icon-wrap bg-blue">#</div>
+                        <div class="metric-content">
+                            <span class="metric-label">TRADE COUNT</span>
+                            <span class="metric-value" id="an-total">0</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-green">
+                        <div class="metric-icon-wrap bg-green">×</div>
+                        <div class="metric-content">
+                            <span class="metric-label">PROFIT FACTOR</span>
+                            <span class="metric-value" id="an-pf">0.00</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-amber">
+                        <div class="metric-icon-wrap bg-amber">+</div>
+                        <div class="metric-content">
+                            <span class="metric-label">AVERAGE WIN</span>
+                            <span class="metric-value val-green" id="an-avg-win">$0.00</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-red">
+                        <div class="metric-icon-wrap bg-red">-</div>
+                        <div class="metric-content">
+                            <span class="metric-label">AVERAGE LOSS</span>
+                            <span class="metric-value val-red" id="an-avg-loss">$0.00</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="dashboard-grid-2">
-                    <div class="panel" style="grid-column: span 2;">
-                        <div class="panel-header"><h3 class="panel-title">DAILY PNL HISTOGRAM</h3></div>
+                <div class="grid-12">
+                    <div class="panel col-8">
+                        <div class="panel-header"><h3 class="panel-title"><span>📊</span> DAILY PNL DISTRIBUTION</h3></div>
                         <div class="panel-content">
                             <div class="chart-container"><canvas id="pnlHistChart"></canvas></div>
                         </div>
                     </div>
-                    <div class="panel">
-                        <div class="panel-header"><h3 class="panel-title">REJECTION ANALYSIS</h3></div>
+                    <div class="panel col-4">
+                        <div class="panel-header"><h3 class="panel-title"><span>🛡️</span> GATE REJECTION ATTRIBUTION</h3></div>
                         <div class="panel-content">
                             <div class="chart-container"><canvas id="rejPieChart"></canvas></div>
                         </div>
@@ -726,20 +847,56 @@
             </div>
 
             <!-- ========================================== -->
-            <!-- 9. SETTINGS & 10. SYSTEM STATUS -->
+            <!-- 9. SETTINGS -->
             <!-- ========================================== -->
             <div id="view-settings" class="view-container">
                 <div class="panel">
-                    <div class="panel-header"><h3 class="panel-title">SYSTEM CONFIGURATION</h3></div>
-                    <div class="panel-content empty-state">Configuration Loaded</div>
+                    <div class="panel-header"><h3 class="panel-title"><span>⚙️</span> QUANT CORE & RISK CONFIGURATION</h3></div>
+                    <div class="panel-content">
+                        <div class="json-viewer" id="settings-viewer">
+{
+  "ENVIRONMENT": "BINANCE_TESTNET",
+  "TRADING_MODE": "SPOT",
+  "RISK_PARAMS": {
+    "MAX_RISK_PER_TRADE": "0.50%",
+    "MAX_PORTFOLIO_EXPOSURE": "5.00%",
+    "MAX_SINGLE_ASSET_EXPOSURE": "2.00%",
+    "MAX_OPEN_POSITIONS": 5,
+    "MAX_DAILY_LOSS_LIMIT": "2.00%",
+    "MAX_PORTFOLIO_DRAWDOWN": "5.00%",
+    "MIN_EXPECTED_EDGE": "0.01%"
+  },
+  "OCO_PROTECTION": {
+    "STOP_LOSS": "ATR Multiplier / Dynamic Swing",
+    "TAKE_PROFIT": "Risk:Reward 1:2.0+",
+    "FAILSAFE_EXECUTION": "Immediate Market Exit on OCO Rejection"
+  },
+  "ACTIVE_STRATEGIES": [
+    "ADX_EMA_MOMENTUM",
+    "AGGRESSOR_ORDERFLOW",
+    "SUPERTREND_VOLATILITY",
+    "SCALPER_MICRO",
+    "SWING_STRUCTURE",
+    "FAST_MOMENTUM_1M"
+  ]
+}
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- BOTTOM TICKER -->
+            <!-- ─── BOTTOM MARKET TICKER BAR ─── -->
             <div class="bottom-ticker">
                 <div class="ticker-label">MARKET TICKER &bull;</div>
-                <div class="ticker-content" id="bottom-ticker-content">
-                    <div class="ticker-item"><span class="ticker-sym">AWAITING MARKET DATA</span></div>
+                <div class="ticker-track">
+                    <div class="ticker-content" id="bottom-ticker-content">
+                        <div class="ticker-item"><span class="ticker-sym">BTCUSDT</span> <span class="ticker-val">$96,420.50</span> <span class="badge badge-green">+2.45%</span></div>
+                        <div class="ticker-item"><span class="ticker-sym">ETHUSDT</span> <span class="ticker-val">$2,680.10</span> <span class="badge badge-green">+1.82%</span></div>
+                        <div class="ticker-item"><span class="ticker-sym">SOLUSDT</span> <span class="ticker-val">$184.20</span> <span class="badge badge-green">+4.15%</span></div>
+                        <div class="ticker-item"><span class="ticker-sym">BNBUSDT</span> <span class="ticker-val">$645.80</span> <span class="badge badge-red">-0.35%</span></div>
+                        <div class="ticker-item"><span class="ticker-sym">LINKUSDT</span> <span class="ticker-val">$18.92</span> <span class="badge badge-green">+3.20%</span></div>
+                        <div class="ticker-item"><span class="ticker-sym">AVAXUSDT</span> <span class="ticker-val">$32.40</span> <span class="badge badge-red">-1.10%</span></div>
+                    </div>
                 </div>
             </div>
 
