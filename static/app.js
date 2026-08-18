@@ -1329,7 +1329,7 @@ async function loadMarketCandles() {
 }
 
 function renderMarketChart(candles) {
-    const ctx = document.getElementById('marketChart');
+    const ctx = document.getElementById('marketCandleChart') || document.getElementById('marketChart');
     if (!ctx || !candles || candles.length === 0) return;
 
     const labels = candles.map(c => {
@@ -1357,8 +1357,8 @@ function renderMarketChart(candles) {
     const firstPx = closes[0] || 1;
     const lastPx = closes[closes.length - 1] || 1;
     const isBull = lastPx >= firstPx;
-    const lineColor = isBull ? '#10b981' : '#f43f5e';
-    const fillColor = isBull ? 'rgba(16, 185, 129, 0.08)' : 'rgba(244, 63, 94, 0.08)';
+    const lineColor = isBull ? '#00FF88' : '#FF2A55';
+    const fillColor = isBull ? 'rgba(0, 255, 136, 0.08)' : 'rgba(255, 42, 85, 0.08)';
 
     if (marketChartInst) {
         marketChartInst.data.labels = labels;
@@ -1389,7 +1389,7 @@ function renderMarketChart(candles) {
                 {
                     label: 'EMA (20)',
                     data: ema20,
-                    borderColor: '#f59e0b',
+                    borderColor: '#FFB800',
                     borderWidth: 1.5,
                     borderDash: [4, 4],
                     fill: false,
@@ -1404,15 +1404,15 @@ function renderMarketChart(candles) {
                 legend: {
                     display: true,
                     position: 'top',
-                    labels: { color: '#94a3b8', boxWidth: 12, font: { family: "'JetBrains Mono', monospace", size: 10 } }
+                    labels: { color: '#94a3b8', boxWidth: 10, font: { family: "'JetBrains Mono', monospace", size: 8.5 } }
                 },
                 tooltip: {
                     mode: 'index',
                     intersect: false,
-                    backgroundColor: '#0f172a',
-                    titleColor: '#f8fafc',
-                    bodyColor: '#94a3b8',
-                    borderColor: '#334155',
+                    backgroundColor: '#090e17',
+                    titleColor: '#00f0ff',
+                    bodyColor: '#f8fafc',
+                    borderColor: 'rgba(0, 240, 255, 0.3)',
                     borderWidth: 1,
                     callbacks: {
                         label: function(ctx) {
@@ -1423,16 +1423,16 @@ function renderMarketChart(candles) {
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
-                    ticks: { color: '#64748b', font: { family: "'JetBrains Mono', monospace", size: 9 }, maxTicksLimit: 8 }
+                    grid: { display: false },
+                    ticks: { color: '#52637a', font: { family: "'JetBrains Mono', monospace", size: 8 } }
                 },
                 y: {
                     position: 'right',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    grid: { color: 'rgba(0, 240, 255, 0.04)' },
                     ticks: {
-                        color: '#94a3b8',
-                        font: { family: "'JetBrains Mono', monospace", size: 9 },
-                        callback: function(v) { return '$' + Number(v).toLocaleString(); }
+                        color: '#67e8f9',
+                        font: { family: "'JetBrains Mono', monospace", size: 8 },
+                        callback: function(v) { return '$' + Number(v).toFixed(2); }
                     }
                 }
             }
@@ -1891,7 +1891,7 @@ async function initChart() {
 }
 
 function renderEquityChart() {
-    const ctx = document.getElementById('equityChart');
+    const ctx = document.getElementById('equityTimelineChart') || document.getElementById('equityChart');
     if (!ctx || !rawEquityPoints || rawEquityPoints.length === 0) return;
 
     const points = rawEquityPoints;
@@ -1918,24 +1918,24 @@ function renderEquityChart() {
             labels: labels,
             datasets: [
                 {
-                    label: 'Total Equity',
+                    label: 'Managed Equity',
                     data: eqData,
-                    borderColor: '#2563eb',
-                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                    borderColor: '#00F0FF',
+                    backgroundColor: 'rgba(0, 240, 255, 0.08)',
                     borderWidth: 2,
                     fill: true,
-                    tension: 0.15,
+                    tension: 0.2,
                     pointRadius: 0,
                     pointHitRadius: 10
                 },
                 {
-                    label: 'Liquid Cash',
+                    label: 'Liquid USDT',
                     data: cashData,
-                    borderColor: 'rgba(16, 185, 129, 0.6)',
+                    borderColor: 'rgba(0, 255, 136, 0.7)',
                     borderWidth: 1.5,
-                    borderDash: [4, 4],
+                    borderDash: [3, 3],
                     fill: false,
-                    tension: 0.15,
+                    tension: 0.2,
                     pointRadius: 0,
                     pointHitRadius: 10
                 }
@@ -1947,56 +1947,36 @@ function renderEquityChart() {
             plugins: {
                 legend: {
                     display: true,
-                    labels: { color: '#94a3b8', font: { family: "'JetBrains Mono', monospace", size: 9 }, boxWidth: 12 }
+                    position: 'top',
+                    labels: { color: '#94a3b8', font: { family: "'JetBrains Mono', monospace", size: 8.5 }, boxWidth: 10 }
                 },
                 tooltip: {
-                    mode: 'index',
-                    intersect: false,
-                    backgroundColor: '#0f172a',
-                    titleColor: '#f8fafc',
-                    bodyColor: '#94a3b8',
-                    borderColor: '#334155',
+                    backgroundColor: '#090e17',
+                    titleColor: '#00f0ff',
+                    bodyColor: '#f8fafc',
+                    borderColor: 'rgba(0, 240, 255, 0.3)',
                     borderWidth: 1,
                     callbacks: {
-                        title: function(items) {
-                            if (items.length > 0 && points[items[0].dataIndex]) {
-                                const p = points[items[0].dataIndex];
-                                return formatDateTime(p.timestamp || p.time);
-                            }
-                            return '';
-                        },
-                        afterBody: function(items) {
-                            if (items.length > 0 && points[items[0].dataIndex]) {
-                                const p = points[items[0].dataIndex];
-                                return [
-                                    `Cash: ${formatCurrency(p.cash || 0)}`,
-                                    `Managed Assets: ${formatCurrency(p.managed_assets || 0)}`,
-                                    `Realized PnL: ${formatCurrency(p.realized_pnl || 0)}`,
-                                    `Unrealized PnL: ${formatCurrency(p.unrealized_pnl || 0)}`
-                                ];
-                            }
-                            return [];
+                        label: function(ctx) {
+                            return `${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`;
                         }
                     }
                 }
             },
             scales: {
-                x: { display: false },
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#52637a', font: { family: "'JetBrains Mono', monospace", size: 8 } }
+                },
                 y: {
-                    display: true,
                     position: 'right',
-                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                    grid: { color: 'rgba(0, 240, 255, 0.04)' },
                     ticks: {
-                        color: '#64748b',
-                        font: { family: "'JetBrains Mono', monospace", size: 9 },
+                        color: '#67e8f9',
+                        font: { family: "'JetBrains Mono', monospace", size: 8 },
                         callback: function(v) { return '$' + Number(v).toLocaleString(); }
                     }
                 }
-            },
-            interaction: {
-                mode: 'nearest',
-                axis: 'x',
-                intersect: false
             }
         }
     });
