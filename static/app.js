@@ -576,10 +576,13 @@ function updateDecisionTicker(signals) {
         const sym = s.symbol || 'PAIR';
         const strat = s.strategy || 'ADX_EMA';
         const tf = s.timeframe || '5m';
-        const dec = (s.final_decision || s.decision || (s.profitability_decision === 'ACCEPTED' ? 'PASS' : 'REJECT')).toUpperCase();
-        const isPass = dec === 'ACCEPTED' || dec === 'PASS' || dec === 'EXECUTED';
+        const netVal = Number(s.expected_net || s.expected_net_return || 0);
+        const pDec = (s.profitability_decision || '').toUpperCase();
+        const fDec = (s.final_decision || '').toUpperCase();
+        const rDec = (s.risk_decision || '').toUpperCase();
+        const isPass = fDec === 'ACCEPTED' || pDec === 'ACCEPTED' || fDec === 'PASS' || (rDec === 'ACCEPTED' && netVal > 0) || netVal > 0.0001;
         const tagClass = isPass ? 'tag-pass' : 'tag-rej';
-        const reason = s.profitability_reason || s.reason || (isPass ? 'Net Alpha > Friction' : 'Threshold Filtered');
+        const reason = s.profitability_reason || s.reason || (isPass ? 'Net Alpha > Friction Hurdle' : 'Threshold Filtered');
         const shortReason = reason.length > 32 ? reason.substring(0, 32) + '...' : reason;
 
         return `<span class="ticker-item"><strong class="ticker-sym">${sym}</strong> <span class="ticker-strat">${strat}</span> <span class="ticker-tf">${tf}</span> <span class="${tagClass}">${isPass ? 'PASS' : 'REJECT'}: ${shortReason}</span></span>`;
@@ -605,8 +608,10 @@ function renderOpportunityScanner(signals) {
         const strat = s.strategy || 'ADX_EMA';
         const netVal = Number(s.expected_net || s.expected_net_return || 0);
         const netStr = netVal !== 0 ? `<span class="${netVal > 0 ? 'profit' : 'loss'}">${netVal > 0 ? '+' : ''}${(netVal * 100).toFixed(2)}%</span>` : '-';
-        const dec = (s.final_decision || s.decision || (s.profitability_decision === 'ACCEPTED' ? 'PASS' : 'REJECT')).toUpperCase();
-        const isPass = dec === 'ACCEPTED' || dec === 'PASS' || dec === 'EXECUTED';
+        const pDec = (s.profitability_decision || '').toUpperCase();
+        const fDec = (s.final_decision || '').toUpperCase();
+        const rDec = (s.risk_decision || '').toUpperCase();
+        const isPass = fDec === 'ACCEPTED' || pDec === 'ACCEPTED' || fDec === 'PASS' || (rDec === 'ACCEPTED' && netVal > 0) || netVal > 0.0001;
         const tagClass = isPass ? 'tag-pass' : 'tag-rej';
 
         return `<tr onclick="inspectSignalByIndex(${idx})" style="cursor: pointer;">
@@ -2433,10 +2438,17 @@ function renderAnnotatedChart(canvasId, timeframe, isCompact) {
             scales: {
                 x: {
                     grid: { display: false },
-                    ticks: { color: '#7C8AAD', font: { family: "'JetBrains Mono', monospace", size: 8.5 } }
+                    ticks: {
+                        color: '#7C8AAD',
+                        font: { family: "'JetBrains Mono', monospace", size: 8.5 },
+                        maxRotation: 0,
+                        autoSkip: true,
+                        maxTicksLimit: 10
+                    }
                 },
                 y: {
                     position: 'right',
+                    grace: '10%',
                     grid: { color: 'rgba(255, 255, 255, 0.04)' },
                     ticks: {
                         color: '#5B7FFF',
