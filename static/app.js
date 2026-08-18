@@ -1,6 +1,8 @@
 // ==========================================
 // SPA ROUTING & NAVIGATION
 // ==========================================
+let activeViewName = "dashboard";
+
 document.addEventListener("DOMContentLoaded", () => {
     const navItems = document.querySelectorAll(".nav-item");
     const views = document.querySelectorAll(".view-container");
@@ -10,6 +12,7 @@ document.addEventListener("DOMContentLoaded", () => {
         item.addEventListener("click", (e) => {
             e.preventDefault();
             const targetView = item.getAttribute("data-view");
+            activeViewName = targetView;
 
             // Update Nav
             navItems.forEach(nav => nav.classList.remove("active"));
@@ -28,6 +31,27 @@ document.addEventListener("DOMContentLoaded", () => {
             const textSpan = item.querySelector("span:not(.nav-icon)");
             if (pageTitle && textSpan) {
                 pageTitle.innerText = textSpan.innerText;
+            }
+
+            // Immediately load data for selected view smoothly
+            if (targetView === 'dashboard') {
+                fetchDashboardData();
+            } else if (targetView === 'trades') {
+                fetchTrades();
+            } else if (targetView === 'signals') {
+                fetchSignals();
+            } else if (targetView === 'market') {
+                fetchMarketsData();
+            } else if (targetView === 'strategies') {
+                fetchStrategies();
+            } else if (targetView === 'risk') {
+                fetchRiskData();
+            } else if (targetView === 'analytics') {
+                fetchAnalyticsData();
+            } else if (targetView === 'activity') {
+                fetchActivity();
+            } else if (targetView === 'settings') {
+                fetchOpenOrders();
             }
         });
     });
@@ -2426,14 +2450,32 @@ function renderAnnotatedChart(canvasId, timeframe, isCompact) {
 
     if (canvasId === 'equityTimelineChart') {
         if (equityChartInst) {
-            equityChartInst.destroy();
+            equityChartInst.data.labels = labels;
+            equityChartInst.data.datasets[0].data = timelineData;
+            equityChartInst.data.datasets[0].pointRadius = pointRadii;
+            equityChartInst.data.datasets[0].pointHoverRadius = pointHoverRadii;
+            equityChartInst.data.datasets[0].pointBackgroundColor = pointBgColors;
+            equityChartInst.data.datasets[0].pointBorderColor = pointBorderColors;
+            equityChartInst.data.datasets[0].pointBorderWidth = pointBorderWidths;
+            equityChartInst.data.datasets[1].data = cashData;
+            equityChartInst.update('none');
+        } else {
+            equityChartInst = new Chart(ctx, chartConfig);
         }
-        equityChartInst = new Chart(ctx, chartConfig);
     } else {
         if (pnlHistChartInst) {
-            pnlHistChartInst.destroy();
+            pnlHistChartInst.data.labels = labels;
+            pnlHistChartInst.data.datasets[0].data = timelineData;
+            pnlHistChartInst.data.datasets[0].pointRadius = pointRadii;
+            pnlHistChartInst.data.datasets[0].pointHoverRadius = pointHoverRadii;
+            pnlHistChartInst.data.datasets[0].pointBackgroundColor = pointBgColors;
+            pnlHistChartInst.data.datasets[0].pointBorderColor = pointBorderColors;
+            pnlHistChartInst.data.datasets[0].pointBorderWidth = pointBorderWidths;
+            pnlHistChartInst.data.datasets[1].data = cashData;
+            pnlHistChartInst.update('none');
+        } else {
+            pnlHistChartInst = new Chart(ctx, chartConfig);
         }
-        pnlHistChartInst = new Chart(ctx, chartConfig);
         updateBalanceHistoryStatCards(points, msRange);
     }
 }
@@ -3390,22 +3432,54 @@ function renderComparisonTable(tbodyId, dataMap) {
 // ==========================================
 // 13. GLOBAL POLLING & DRAWER CONTROLS
 // ==========================================
+let isFastPolling = false;
+
+// Fast poller for top-bar status KPIs and open positions (every 3 seconds)
+async function fastPoll() {
+    if (isFastPolling) return;
+    isFastPolling = true;
+    try {
+        await Promise.all([
+            fetchDashboardData(),
+            fetchPositions()
+        ]);
+    } catch (e) {
+        console.error("Fast poll error:", e);
+    } finally {
+        isFastPolling = false;
+    }
+}
+
+// Background poller for data tables relevant to the current active tab (every 12 seconds)
+async function backgroundPoll() {
+    try {
+        if (activeViewName === 'trades') {
+            await fetchTrades();
+        } else if (activeViewName === 'signals') {
+            await fetchSignals();
+        } else if (activeViewName === 'market') {
+            await fetchMarketsData();
+        } else if (activeViewName === 'strategies') {
+            await fetchStrategies();
+        } else if (activeViewName === 'risk') {
+            await fetchRiskData();
+        } else if (activeViewName === 'analytics') {
+            await fetchAnalyticsData();
+        } else if (activeViewName === 'activity') {
+            await fetchActivity();
+        } else if (activeViewName === 'dashboard') {
+            await Promise.all([
+                fetchSignals(),
+                fetchMarketsData()
+            ]);
+        }
+    } catch (e) {
+        console.error("Background poll error:", e);
+    }
+}
+
 function updateDashboard() {
-    Promise.all([
-        fetchDashboardData(),
-        fetchSignals(),
-        fetchPositions(),
-        fetchTrades(),
-        fetchMarketsData(),
-        fetchStrategies(),
-        fetchRiskData(),
-        fetchAnalyticsData(),
-        fetchActivity(),
-        fetchOpenOrders(),
-        initChart()
-    ]).finally(() => {
-        // finished iteration
-    });
+    fastPoll();
 }
 
 function openInspectorDrawer(title, payload) {
@@ -3463,8 +3537,16 @@ function exportTradesJSON() {
 startClockLoop(); 
 updateAudioUI();
 initChart();
-updateDashboard(); 
-setInterval(updateDashboard, 2500);
+fastPoll();
+fetchTrades();
+fetchSignals();
+fetchMarketsData();
+fetchStrategies();
+fetchRiskData();
+fetchAnalyticsData();
+
+setInterval(fastPoll, 3000);
+setInterval(backgroundPoll, 12000);
 
 
 

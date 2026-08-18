@@ -94,24 +94,12 @@ html, body {
 
 .live-dot-indigo {
     background-color: var(--accent-primary);
-    box-shadow: 0 0 8px var(--accent-primary);
-    animation: indigoPulse 2s infinite ease-in-out;
+    box-shadow: 0 0 6px var(--accent-primary);
 }
 
 .live-dot-green {
     background-color: var(--profit-green);
-    box-shadow: 0 0 8px var(--profit-green);
-    animation: greenPulse 2s infinite ease-in-out;
-}
-
-@keyframes indigoPulse {
-    0%, 100% { opacity: 0.9; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(1.25); }
-}
-
-@keyframes greenPulse {
-    0%, 100% { opacity: 0.9; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(1.25); }
+    box-shadow: 0 0 6px var(--profit-green);
 }
 
 /* ─── APP SHELL ─── */
@@ -1264,8 +1252,7 @@ html, body {
     height: 8px;
     border-radius: 50%;
     background-color: var(--accent-primary);
-    box-shadow: 0 0 8px var(--accent-primary);
-    animation: indigoPulse 1.5s infinite;
+    box-shadow: 0 0 6px var(--accent-primary);
 }
 
 /* ─── DIAGNOSTIC FUNNEL ─── */
@@ -1646,14 +1633,9 @@ html, body {
 .lifecycle-lbl { color: var(--text-muted); }
 .lifecycle-val { font-family: var(--font-mono); font-weight: 600; color: #fff; }
 
-/* ─── ANIMATIONS & ACCESSIBILITY ─── */
-@keyframes rowFadeIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
+/* ─── ACCESSIBILITY ─── */
 .terminal-table tbody tr {
-    animation: rowFadeIn 0.2s ease-out;
+    /* Stable rows without layout thrashing or fade flicker */
 }
 
 @media (prefers-reduced-motion: reduce) {
