@@ -29,6 +29,7 @@ TESTNET_PORTFOLIO_FILE = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.
 TESTNET_HEARTBEAT_FILE = os.getenv("TESTNET_HEARTBEAT_FILE", "testnet_heartbeat.json")
 
 class TestnetService:
+    __test__ = False
     def __init__(self):
         # 1. TRADING_MODE strictly validated
         if TRADING_MODE != "TESTNET":
