@@ -3,22 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS • QUANTUM ALGORITHMIC TRADING TERMINAL</title>
-    <!-- Futuristic Google Fonts: Orbitron & Rajdhani (Cyber HUD) + Inter & JetBrains Mono (Quant Data) -->
+    <title>NEXUS • QUANTUM ALGORITHMIC TERMINAL</title>
+    <!-- Quant Typography: Space Grotesk (Headers), IBM Plex Mono (Financial Data), IBM Plex Sans (Body) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Orbitron:wght@500;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=3.1.0">
-    <link rel="stylesheet" href="style.css?v=3.1.0">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=4.0.0">
+    <link rel="stylesheet" href="style.css?v=4.0.0">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body class="futuristic-theme">
-    <!-- BACKGROUND CYBER GRID & AMBIENT GLOW -->
-    <div class="cyber-grid-overlay"></div>
-    <div class="cyber-ambient-glow glow-1"></div>
-    <div class="cyber-ambient-glow glow-2"></div>
-
-    <!-- REAL-TIME TRADE EXECUTION NOTIFICATION CONTAINER -->
+<body>
+    <!-- REAL-TIME TOAST NOTIFICATION CONTAINER -->
     <div id="trade-toast-container" class="toast-container"></div>
 
     <!-- INSPECTOR DRAWER & BACKDROP -->
@@ -26,42 +21,37 @@
     <aside id="inspector-drawer" class="inspector-drawer">
         <div class="drawer-header">
             <div class="drawer-title-wrap">
-                <span class="cyber-tag-neon">TELEMETRY</span>
+                <span class="badge-amber">TELEMETRY</span>
                 <span class="drawer-title" id="drawer-title">QUANT TELEMETRY INSPECTOR</span>
             </div>
             <button class="drawer-close" onclick="closeInspectorDrawer()" title="Close Inspector">&times;</button>
         </div>
         <div class="drawer-body" id="drawer-body">
-            <div class="empty-state-compact">Select an item to inspect raw quant telemetry stream.</div>
+            <div class="empty-state">Select an item to inspect raw quant telemetry stream.</div>
         </div>
     </aside>
 
     <div class="app-container">
-        <!-- ─── 1. FUTURISTIC SIDEBAR NAVIGATION ─── -->
+        <!-- ─── 1. TERMINAL SIDEBAR NAVIGATION ─── -->
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="brand">
                     <div class="brand-title">
-                        <div class="brand-hex-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>
-                                <polyline points="12 6 12 12 16 14"></polyline>
-                            </svg>
-                        </div>
+                        <span class="brand-dot"></span>
                         <div class="brand-text">
                             <span class="brand-main">NEXUS</span>
                             <span class="brand-sub">QUANT BOT</span>
                         </div>
                     </div>
                     <div class="brand-badge-row">
-                        <span class="badge-testnet"><span class="pulse-dot"></span>TESTNET</span>
-                        <span class="badge-ver">v3.0 PRO</span>
+                        <span class="badge-amber"><span class="pulse-dot"></span>BINANCE TESTNET</span>
+                        <span class="badge-mono">v4.0</span>
                     </div>
                 </div>
             </div>
             
             <nav class="sidebar-nav">
-                <div class="nav-section-label">CORE SYSTEMS</div>
+                <div class="nav-section-label">MONITORING</div>
                 <a href="#dashboard" class="nav-item active" data-view="dashboard" id="nav-dashboard">
                     <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="7" height="7" rx="1"></rect>
@@ -70,31 +60,31 @@
                         <rect x="3" y="14" width="7" height="7" rx="1"></rect>
                     </svg>
                     <span>Overview</span>
-                    <span class="nav-glow-bar"></span>
+                    <span class="nav-indicator"></span>
                 </a>
                 <a href="#market" class="nav-item" data-view="market" id="nav-market">
                     <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                     </svg>
                     <span>Markets</span>
-                    <span class="nav-glow-bar"></span>
+                    <span class="nav-indicator"></span>
                 </a>
                 <a href="#signals" class="nav-item" data-view="signals" id="nav-signals">
                     <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                     </svg>
                     <span>Signals</span>
-                    <span class="nav-glow-bar"></span>
+                    <span class="nav-indicator"></span>
                 </a>
 
-                <div class="nav-section-label">EXECUTION & ORDER BOOK</div>
+                <div class="nav-section-label">EXECUTION</div>
                 <a href="#positions" class="nav-item" data-view="positions" id="nav-positions">
                     <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path>
                         <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
                     </svg>
                     <span>Positions</span>
-                    <span class="nav-glow-bar"></span>
+                    <span class="nav-indicator"></span>
                 </a>
                 <a href="#trades" class="nav-item" data-view="trades" id="nav-trades">
                     <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -102,7 +92,7 @@
                         <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
                     </svg>
                     <span>Trades</span>
-                    <span class="nav-glow-bar"></span>
+                    <span class="nav-indicator"></span>
                 </a>
                 <a href="#activity" class="nav-item" data-view="activity" id="nav-activity">
                     <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -114,24 +104,24 @@
                         <line x1="3" y1="18" x2="3.01" y2="18"></line>
                     </svg>
                     <span>Activity</span>
-                    <span class="nav-glow-bar"></span>
+                    <span class="nav-indicator"></span>
                 </a>
 
-                <div class="nav-section-label">QUANT INTELLIGENCE</div>
+                <div class="nav-section-label">QUANT ANALYTICS</div>
                 <a href="#strategies" class="nav-item" data-view="strategies" id="nav-strategies">
                     <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"></circle>
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                     </svg>
                     <span>Strategies</span>
-                    <span class="nav-glow-bar"></span>
+                    <span class="nav-indicator"></span>
                 </a>
                 <a href="#risk" class="nav-item" data-view="risk" id="nav-risk">
                     <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                     </svg>
                     <span>Risk Control</span>
-                    <span class="nav-glow-bar"></span>
+                    <span class="nav-indicator"></span>
                 </a>
                 <a href="#analytics" class="nav-item" data-view="analytics" id="nav-analytics">
                     <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -139,7 +129,7 @@
                         <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
                     </svg>
                     <span>Analytics</span>
-                    <span class="nav-glow-bar"></span>
+                    <span class="nav-indicator"></span>
                 </a>
                 <a href="#settings" class="nav-item" data-view="settings" id="nav-settings">
                     <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -147,14 +137,14 @@
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                     </svg>
                     <span>System</span>
-                    <span class="nav-glow-bar"></span>
+                    <span class="nav-indicator"></span>
                 </a>
             </nav>
 
             <div class="sidebar-system-health">
                 <div class="sidebar-health-title">
-                    <span>TELEMETRY MATRIX</span>
-                    <span class="hud-ping-indicator">24ms</span>
+                    <span>MICROSERVICES MATRIX</span>
+                    <span class="live-ping" id="ws-latency-pill">18ms</span>
                 </div>
                 <div class="health-grid">
                     <div class="health-item"><span class="dot dot-green" id="h-bn"></span><span class="health-name">BINANCE</span></div>
@@ -164,177 +154,201 @@
                     <div class="health-item"><span class="dot dot-green" id="h-pe"></span><span class="health-name">PORTFOLIO</span></div>
                     <div class="health-item"><span class="dot dot-green" id="h-rk"></span><span class="health-name">RISK</span></div>
                 </div>
-                <div class="sidebar-meta-text" id="engine-uptime">NODE: LIVE • 99.98% UP</div>
+                <div class="sidebar-meta-text">6 STRATEGIES • 13 PAIRS</div>
             </div>
         </aside>
 
         <!-- ─── 2. MAIN WORKSPACE CONTENT ─── -->
         <main class="main-content">
-            <!-- TOP FUTURISTIC HUD HEADER -->
-            <header class="top-header">
-                <div class="header-left">
-                    <span class="cyber-bracket">[</span>
-                    <h1 class="header-page-title" id="page-title">QUANT TERMINAL OVERVIEW</h1>
-                    <span class="cyber-bracket">]</span>
-                    <span class="header-sub" id="page-desc">REAL-TIME HFT EXECUTION MATRIX</span>
+            <!-- 1. PERSISTENT STATUS BAR -->
+            <header class="top-status-bar">
+                <div class="status-left">
+                    <div class="engine-state-badge">
+                        <span class="dot dot-green" id="status-indicator"></span>
+                        <span class="engine-state-label">ENGINE:</span>
+                        <strong id="engine-status" class="engine-state-val">ACTIVE</strong>
+                    </div>
+
+                    <div class="status-sep">/</div>
+
+                    <div class="status-item">
+                        <span class="status-lbl">FEED:</span>
+                        <span class="status-val mono" id="feed-latency">18ms</span>
+                    </div>
+
+                    <div class="status-sep">/</div>
+
+                    <div class="status-item">
+                        <span class="status-lbl">PAIRS:</span>
+                        <span class="status-val mono">13 SPOT</span>
+                    </div>
+
+                    <div class="status-sep">/</div>
+
+                    <div class="status-item">
+                        <span class="status-lbl">STRATEGIES:</span>
+                        <span class="status-val mono">6 ACTIVE</span>
+                    </div>
                 </div>
                 
-                <div class="header-right">
-                    <div class="header-stat hud-glass">
-                        <span class="stat-lbl">ENGINE</span>
-                        <div class="engine-badge-wrap">
-                            <span class="dot dot-green" id="status-indicator"></span>
-                            <span id="engine-status" class="status-online">ACTIVE</span>
-                        </div>
-                    </div>
-                    
-                    <div class="header-stat hud-glass">
-                        <span class="stat-lbl">LIVE CLOCK</span>
-                        <span id="live-clock" class="stat-mono stat-glow">--:--:-- IST</span>
+                <div class="status-right">
+                    <div class="clock-display">
+                        <span class="clock-icon">🕒</span>
+                        <span id="live-clock" class="mono clock-val">--:--:-- IST</span>
                     </div>
 
-                    <div class="header-divider"></div>
+                    <div class="status-sep">|</div>
 
-                    <div class="header-actions">
-                        <div class="notif-bell-container">
-                            <button class="btn-hdr-icon hud-glow-hover" id="btn-notif" onclick="toggleNotificationDropdown()" title="System Alerts">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                                </svg>
-                                <span class="badge-count" id="notif-badge" style="display: none;">0</span>
-                            </button>
-                            <!-- Notification Center Dropdown -->
-                            <div class="notif-dropdown" id="notification-dropdown">
-                                <div class="notif-dropdown-header">
-                                    <span>SYSTEM TELEMETRY ALERTS</span>
-                                    <span class="panel-action" onclick="clearNotifications()">CLEAR</span>
-                                </div>
-                                <div class="notif-dropdown-body" id="notif-dropdown-body">
-                                    <div class="notif-empty">No unread system events</div>
-                                </div>
+                    <div class="notif-bell-container">
+                        <button class="btn-terminal-icon" id="btn-notif" onclick="toggleNotificationDropdown()" title="System Alerts">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                            </svg>
+                            <span class="badge-count" id="notif-badge" style="display: none;">0</span>
+                        </button>
+                        <div class="notif-dropdown" id="notification-dropdown">
+                            <div class="notif-dropdown-header">
+                                <span>SYSTEM NOTIFICATION LEDGER</span>
+                                <span class="action-link" onclick="clearNotifications()">CLEAR</span>
+                            </div>
+                            <div class="notif-dropdown-body" id="notif-dropdown-body">
+                                <div class="notif-empty">No unread system events</div>
                             </div>
                         </div>
-
-                        <button class="btn-hdr-pill" id="btn-sound-toggle" onclick="toggleSoundAlerts()" title="Toggle HFT Audio">
-                            <span id="sound-status-text">🔊 AUDIO ON</span>
-                        </button>
-
-                        <button class="btn-hdr-action" onclick="refreshDashboardNow()" title="Force Sync">
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                <polyline points="23 4 23 10 17 10"></polyline>
-                                <polyline points="1 20 1 14 7 14"></polyline>
-                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                            </svg>
-                            <span>SYNC</span>
-                        </button>
                     </div>
+
+                    <button class="btn-terminal-pill" id="btn-sound-toggle" onclick="toggleSoundAlerts()" title="Toggle Terminal Audio">
+                        <span id="sound-status-text">🔊 AUDIO ON</span>
+                    </button>
+
+                    <button class="btn-terminal-action" onclick="refreshDashboardNow()" title="Force Sync">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <polyline points="1 20 1 14 7 14"></polyline>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                        <span>SYNC</span>
+                    </button>
                 </div>
             </header>
 
+            <!-- 2. SIGNATURE ELEMENT: LIVE HORIZONTAL DECISION TICKER -->
+            <div class="decision-ticker-tape">
+                <div class="ticker-label">
+                    <span class="ticker-led"></span>
+                    <span>LIVE DECISION TICKER</span>
+                </div>
+                <div class="ticker-track-wrap">
+                    <div class="ticker-track" id="decision-ticker-track">
+                        <span class="ticker-item"><strong class="ticker-sym">BTCUSDT</strong> <span class="ticker-strat">ADX_EMA</span> <span class="ticker-tf">5m</span> <span class="tag-rej">REJECT: Low Volatility (ADX &lt; 20)</span></span>
+                        <span class="ticker-sep">•</span>
+                        <span class="ticker-item"><strong class="ticker-sym">ETHUSDT</strong> <span class="ticker-strat">SCALPER</span> <span class="ticker-tf">15m</span> <span class="tag-pass">PASS: Net Alpha &gt; Friction</span></span>
+                        <span class="ticker-sep">•</span>
+                        <span class="ticker-item"><strong class="ticker-sym">SOLUSDT</strong> <span class="ticker-strat">SUPERTREND</span> <span class="ticker-tf">5m</span> <span class="tag-rej">REJECT: Trend Invalidation</span></span>
+                        <span class="ticker-sep">•</span>
+                        <span class="ticker-item"><strong class="ticker-sym">BNBUSDT</strong> <span class="ticker-strat">ML_SIGNAL</span> <span class="ticker-tf">1h</span> <span class="tag-pass">PASS: High Probability Edge</span></span>
+                    </div>
+                </div>
+            </div>
+
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 1: OVERVIEW (SPACIOUS & STRUCTURED QUANT TRADING FLOOR)
+                 VIEW 1: OVERVIEW DASHBOARD
             ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container active view-dashboard-spacious" id="view-dashboard">
-                <!-- SECTION 1: TOP EXECUTIVE METRICS (Spacious 4 Key Cards) -->
-                <section class="dash-section dash-kpi-grid">
-                    <!-- Card 1: Total Equity -->
-                    <div class="hud-card hud-kpi-card cyber-hud-card">
-                        <div class="hud-corner tl"></div><div class="hud-corner tr"></div>
-                        <div class="hud-kpi-header">
-                            <span class="hud-kpi-title">TOTAL MANAGED EQUITY</span>
-                            <span class="cyber-tag-pill cyan">LIVE BOT</span>
+            <div class="view-container active" id="view-dashboard">
+                <!-- HERO ZONE: 4 EXECUTIVE CARDS -->
+                <section class="dashboard-hero-kpi-grid">
+                    <!-- Hero 1: Total Equity -->
+                    <div class="panel-card kpi-card">
+                        <div class="kpi-head">
+                            <span class="kpi-label">TOTAL MANAGED EQUITY</span>
+                            <span class="live-dot-amber" title="Live streaming balance"></span>
                         </div>
-                        <div class="hud-kpi-main-val cyan-glow" id="db-equity">--</div>
-                        <div class="hud-kpi-meta">
-                            <span>Wallet Total: <strong id="snap-wallet">--</strong></span>
-                            <span class="hud-dot-sep">•</span>
-                            <span>Cash: <strong id="snap-cash" class="val-cyan">--</strong></span>
-                        </div>
-                    </div>
-
-                    <!-- Card 2: Today's PnL & Realized -->
-                    <div class="hud-card hud-kpi-card cyber-hud-card">
-                        <div class="hud-corner tl"></div><div class="hud-corner tr"></div>
-                        <div class="hud-kpi-header">
-                            <span class="hud-kpi-title">TODAY'S NET PNL</span>
-                            <span class="cyber-tag-pill green" id="db-today-pnl-tag">24H LIVE</span>
-                        </div>
-                        <div class="hud-kpi-main-val" id="db-today-pnl">--</div>
-                        <div class="hud-kpi-meta">
-                            <span>Realized: <strong id="db-realized-pnl" class="val-green">--</strong></span>
-                            <span class="hud-dot-sep">•</span>
-                            <span>Unrealized: <strong id="db-unrealized-pnl">--</strong></span>
+                        <div class="kpi-val amber" id="db-equity">$0.00</div>
+                        <div class="kpi-sub">
+                            <span>Binance Wallet: <strong id="snap-wallet">$0.00</strong></span>
+                            <span class="sep">•</span>
+                            <span>Cash: <strong id="snap-cash" class="cyan">$0.00</strong></span>
                         </div>
                     </div>
 
-                    <!-- Card 3: Capital Deployment -->
-                    <div class="hud-card hud-kpi-card cyber-hud-card">
-                        <div class="hud-corner tl"></div><div class="hud-corner tr"></div>
-                        <div class="hud-kpi-header">
-                            <span class="hud-kpi-title">ACTIVE POSITIONS</span>
-                            <span class="cyber-tag-pill purple" id="snap-pos">0 / 5</span>
+                    <!-- Hero 2: Today's PnL -->
+                    <div class="panel-card kpi-card">
+                        <div class="kpi-head">
+                            <span class="kpi-label">TODAY'S NET PNL</span>
+                            <span class="live-dot-green"></span>
                         </div>
-                        <div class="hud-kpi-main-val" id="snap-managed">--</div>
-                        <div class="hud-kpi-meta">
-                            <span>Deployed Capital</span>
-                            <span class="hud-dot-sep">•</span>
-                            <span>Exposure: <strong id="snap-exposure" class="val-green">0.0%</strong></span>
+                        <div class="kpi-val" id="db-today-pnl">$0.00</div>
+                        <div class="kpi-sub">
+                            <span>Realized: <strong id="db-realized-pnl" class="profit">$0.00</strong></span>
+                            <span class="sep">•</span>
+                            <span>Unrealized: <strong id="db-unrealized-pnl">$0.00</strong></span>
                         </div>
                     </div>
 
-                    <!-- Card 4: Risk & Protection -->
-                    <div class="hud-card hud-kpi-card cyber-hud-card">
-                        <div class="hud-corner tl"></div><div class="hud-corner tr"></div>
-                        <div class="hud-kpi-header">
-                            <span class="hud-kpi-title">RISK BUDGET & DRAWDOWN</span>
-                            <span class="cyber-tag-pill red">GUARD</span>
+                    <!-- Hero 3: Active Position Exposure -->
+                    <div class="panel-card kpi-card">
+                        <div class="kpi-head">
+                            <span class="kpi-label">ACTIVE POSITIONS</span>
+                            <span class="kpi-badge mono" id="snap-pos">0 / 5</span>
                         </div>
-                        <div class="hud-kpi-main-val" id="db-drawdown">0.00%</div>
-                        <div class="hud-kpi-meta">
-                            <span>Available Risk: <strong id="snap-avail-risk" class="val-green">20.0%</strong></span>
-                            <span class="hud-dot-sep">•</span>
-                            <span>Fees: <strong id="db-fees" class="val-amber">--</strong></span>
+                        <div class="kpi-val" id="snap-managed">$0.00</div>
+                        <div class="kpi-sub">
+                            <span>Exposure: <strong id="snap-exposure" class="profit">0.0%</strong></span>
+                            <span class="sep">•</span>
+                            <span>Slots Idle: <strong>5 Available</strong></span>
+                        </div>
+                    </div>
+
+                    <!-- Hero 4: Risk Budget & Guard -->
+                    <div class="panel-card kpi-card">
+                        <div class="kpi-head">
+                            <span class="kpi-label">RISK CAPACITY & DRAWDOWN</span>
+                            <span class="kpi-badge badge-guard">GUARD ON</span>
+                        </div>
+                        <div class="kpi-val" id="db-drawdown">0.00%</div>
+                        <div class="kpi-sub">
+                            <span>Available Risk: <strong id="snap-avail-risk" class="profit">20.0%</strong></span>
+                            <span class="sep">•</span>
+                            <span>Fees Paid: <strong id="db-fees" class="amber">$0.00</strong></span>
                         </div>
                     </div>
                 </section>
 
-                <!-- SECTION 2: MAIN TRADING FLOOR (Spacious 2-Column Split: 66% / 34%) -->
-                <section class="dash-main-grid">
-                    <!-- LEFT COLUMN: Chart + Active Positions Table -->
-                    <div class="dash-col-left">
-                        <!-- Subsection A: Equity Curve -->
-                        <div class="hud-card dash-chart-card cyber-hud-card">
-                            <div class="hud-corner tl"></div><div class="hud-corner tr"></div>
-                            <div class="hud-card-header">
-                                <div class="hud-card-title-wrap">
-                                    <span class="panel-dot-indicator cyan"></span>
-                                    <span class="hud-card-title">EQUITY ACCUMULATION & CASH CURVE</span>
+                <!-- MAIN WORKSPACE: 2 COLS (65% / 35%) -->
+                <section class="dashboard-main-grid">
+                    <!-- LEFT COLUMN: Equity Chart + Active Positions -->
+                    <div class="grid-col-left">
+                        <!-- Card A: Equity & Cash Accumulation Curve (Thesis Anchor) -->
+                        <div class="panel-card chart-card">
+                            <div class="panel-card-header">
+                                <div class="panel-card-title">
+                                    <span class="amber-indicator"></span>
+                                    <span>EQUITY & CASH ACCUMULATION TIMELINE</span>
                                 </div>
-                                <div class="chart-tf-group">
+                                <div class="chart-controls">
                                     <button class="btn-tf active" onclick="setEquityChartTf('1D')">1D</button>
                                     <button class="btn-tf" onclick="setEquityChartTf('7D')">7D</button>
                                     <button class="btn-tf" onclick="setEquityChartTf('30D')">30D</button>
                                     <button class="btn-tf" onclick="setEquityChartTf('ALL')">ALL</button>
                                 </div>
                             </div>
-                            <div class="dash-chart-body">
+                            <div class="chart-body">
                                 <canvas id="equityTimelineChart"></canvas>
                             </div>
                         </div>
 
-                        <!-- Subsection B: Active Positions -->
-                        <div class="hud-card dash-table-card cyber-hud-card">
-                            <div class="hud-corner tl"></div><div class="hud-corner tr"></div>
-                            <div class="hud-card-header">
-                                <div class="hud-card-title-wrap">
-                                    <span class="panel-dot-indicator green"></span>
-                                    <span class="hud-card-title">ACTIVE SPOT POSITIONS</span>
+                        <!-- Card B: Active Positions Table -->
+                        <div class="panel-card table-card">
+                            <div class="panel-card-header">
+                                <div class="panel-card-title">
+                                    <span class="green-indicator"></span>
+                                    <span>ACTIVE SPOT POSITIONS</span>
                                 </div>
-                                <a href="#positions" class="hud-link" onclick="showView('positions')">EXPAND ALL POSITIONS &rarr;</a>
+                                <a href="#positions" class="panel-action-link" onclick="showView('positions')">EXPAND POSITIONS &rarr;</a>
                             </div>
-                            <div class="dash-table-wrap">
-                                <table class="table-compact table-spacious">
+                            <div class="panel-table-wrap">
+                                <table class="terminal-table">
                                     <thead>
                                         <tr>
                                             <th>SYMBOL</th>
@@ -346,105 +360,111 @@
                                         </tr>
                                     </thead>
                                     <tbody id="active-pos-body">
-                                        <tr><td colspan="6" class="empty-state-spacious">NO ACTIVE POSITIONS • SCANNING 13 CRYPTO ASSETS</td></tr>
+                                        <tr>
+                                            <td colspan="6" class="idle-state-row">
+                                                <div class="idle-state-content">
+                                                    <span class="radar-pulse"></span>
+                                                    <span>All 5 execution slots available • Continuous scanning active across 13 spot pairs</span>
+                                                </div>
+                                            </td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
                     </div>
 
-                    <!-- RIGHT COLUMN: Allocation Matrix + Top Opportunities & Signal Funnel -->
-                    <div class="dash-col-right">
-                        <!-- Subsection C: Capital Distribution -->
-                        <div class="hud-card dash-alloc-card cyber-hud-card">
-                            <div class="hud-corner tl"></div><div class="hud-corner tr"></div>
-                            <div class="hud-card-header">
-                                <div class="hud-card-title-wrap">
-                                    <span class="panel-dot-indicator amber"></span>
-                                    <span class="hud-card-title">CAPITAL ALLOCATION MATRIX</span>
+                    <!-- RIGHT COLUMN: Allocation Matrix + Opportunity Scanner + Signal Funnel -->
+                    <div class="grid-col-right">
+                        <!-- Card C: Capital Allocation Gauge -->
+                        <div class="panel-card alloc-card">
+                            <div class="panel-card-header">
+                                <div class="panel-card-title">
+                                    <span class="amber-indicator"></span>
+                                    <span>CAPITAL ALLOCATION GAUGE</span>
                                 </div>
-                                <span class="badge-mini badge-green" id="snap-exposure-badge">0.0% EXPOSURE</span>
+                                <span class="badge-mono" id="snap-exposure-badge">0.0% EXPOSURE</span>
                             </div>
-                            <div class="dash-alloc-body">
-                                <div class="alloc-bar-container">
-                                    <div class="alloc-bar-track" style="height: 6px; border-radius: 3px; overflow: hidden; display: flex;">
-                                        <div class="alloc-bar-cash" id="alloc-bar-cash" style="width: 100%;"></div>
-                                        <div class="alloc-bar-crypto" id="alloc-bar-crypto" style="width: 0%;"></div>
-                                    </div>
+                            <div class="alloc-card-body">
+                                <div class="alloc-gauge-track">
+                                    <div class="alloc-gauge-fill-cash" id="alloc-bar-cash" style="width: 100%;"></div>
+                                    <div class="alloc-gauge-fill-crypto" id="alloc-bar-crypto" style="width: 0%;"></div>
                                 </div>
-                                <div class="alloc-labels-row">
-                                    <div class="alloc-stat-box">
-                                        <span class="alloc-stat-lbl">LIQUID USDT</span>
-                                        <span class="alloc-stat-val cyan-glow" id="alloc-cash-txt">--</span>
+                                <div class="alloc-meta-grid">
+                                    <div class="alloc-meta-item">
+                                        <span class="alloc-meta-lbl">LIQUID USDT</span>
+                                        <span class="alloc-meta-val cyan mono" id="alloc-cash-txt">$0.00</span>
                                     </div>
-                                    <div class="alloc-stat-box" style="text-align: right;">
-                                        <span class="alloc-stat-lbl">ACTIVE SPOT HOLDINGS</span>
-                                        <span class="alloc-stat-val green-glow" id="alloc-crypto-txt">--</span>
+                                    <div class="alloc-meta-item" style="text-align: right;">
+                                        <span class="alloc-meta-lbl">DEPLOYED CRYPTO</span>
+                                        <span class="alloc-meta-val profit mono" id="alloc-crypto-txt">$0.00</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Subsection D: Live Opportunity Radar -->
-                        <div class="hud-card dash-opp-card cyber-hud-card">
-                            <div class="hud-corner tl"></div><div class="hud-corner tr"></div>
-                            <div class="hud-card-header">
-                                <div class="hud-card-title-wrap">
-                                    <span class="panel-dot-indicator purple"></span>
-                                    <span class="hud-card-title">OPPORTUNITY SCANNER</span>
+                        <!-- Card D: Opportunity Scanner Radar -->
+                        <div class="panel-card opp-radar-card">
+                            <div class="panel-card-header">
+                                <div class="panel-card-title">
+                                    <span class="cyan-indicator"></span>
+                                    <span>LIVE OPPORTUNITY RADAR</span>
                                 </div>
-                                <a href="#signals" class="hud-link" onclick="showView('signals')">PIPELINE &rarr;</a>
+                                <a href="#signals" class="panel-action-link" onclick="showView('signals')">PIPELINE &rarr;</a>
                             </div>
-                            <div class="dash-opp-body">
-                                <div class="opp-table-scroll">
-                                    <table class="table-compact">
-                                        <thead>
-                                            <tr>
-                                                <th>PAIR</th>
-                                                <th>TF</th>
-                                                <th>STRATEGY</th>
-                                                <th>EDGE</th>
-                                                <th>DECISION</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="opp-short-body">
-                                            <tr><td colspan="5" class="empty-state-compact">SCANNING 13 PAIRS • AWAITING TRIGGER</td></tr>
-                                        </tbody>
-                                    </table>
-                                </div>
+                            <div class="opp-radar-body">
+                                <table class="terminal-table table-dense">
+                                    <thead>
+                                        <tr>
+                                            <th>PAIR</th>
+                                            <th>TF</th>
+                                            <th>STRATEGY</th>
+                                            <th>EDGE</th>
+                                            <th>DECISION</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="opp-short-body">
+                                        <tr>
+                                            <td colspan="5" class="idle-state-row">
+                                                <div class="idle-state-content">
+                                                    <span>Market in consolidation • Waiting for net alpha &gt; friction hurdle</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 
-                        <!-- Subsection E: Compact Signal Funnel Pipeline -->
-                        <div class="hud-card dash-funnel-card cyber-hud-card">
-                            <div class="hud-corner tl"></div><div class="hud-corner tr"></div>
-                            <div class="hud-card-header">
-                                <div class="hud-card-title-wrap">
-                                    <span class="panel-dot-indicator cyan"></span>
-                                    <span class="hud-card-title">EXECUTION PIPELINE</span>
+                        <!-- Card E: Diagnostic Funnel Flow -->
+                        <div class="panel-card funnel-card">
+                            <div class="panel-card-header">
+                                <div class="panel-card-title">
+                                    <span class="green-indicator"></span>
+                                    <span>EXECUTION FUNNEL FLOW</span>
                                 </div>
-                                <span class="badge-mini badge-cyan">HFT GATE</span>
+                                <span class="badge-mono">HFT GATE</span>
                             </div>
-                            <div class="dash-funnel-body">
-                                <div class="funnel-pipeline-grid">
-                                    <div class="funnel-node">
-                                        <span class="fn-val" id="fn-signals">0</span>
-                                        <span class="fn-lbl">SIGNALS</span>
+                            <div class="funnel-body">
+                                <div class="funnel-flow-container">
+                                    <div class="funnel-step">
+                                        <span class="step-num mono" id="fn-signals">0</span>
+                                        <span class="step-lbl">SIGNALS</span>
                                     </div>
-                                    <span class="fn-sep">&rsaquo;</span>
-                                    <div class="funnel-node">
-                                        <span class="fn-val val-green" id="fn-prof-acc">0</span>
-                                        <span class="fn-lbl">PROFIT PASS</span>
+                                    <span class="flow-arrow">&rsaquo;</span>
+                                    <div class="funnel-step">
+                                        <span class="step-num profit mono" id="fn-prof-acc">0</span>
+                                        <span class="step-lbl">PROFIT PASS</span>
                                     </div>
-                                    <span class="fn-sep">&rsaquo;</span>
-                                    <div class="funnel-node">
-                                        <span class="fn-val val-green" id="fn-risk-acc">0</span>
-                                        <span class="fn-lbl">RISK PASS</span>
+                                    <span class="flow-arrow">&rsaquo;</span>
+                                    <div class="funnel-step">
+                                        <span class="step-num profit mono" id="fn-risk-acc">0</span>
+                                        <span class="step-lbl">RISK PASS</span>
                                     </div>
-                                    <span class="fn-sep">&rsaquo;</span>
-                                    <div class="funnel-node highlight">
-                                        <span class="fn-val green-glow" id="fn-filled">0</span>
-                                        <span class="fn-lbl">FILLED</span>
+                                    <span class="flow-arrow">&rsaquo;</span>
+                                    <div class="funnel-step highlight-fill">
+                                        <span class="step-num profit mono" id="fn-filled">0</span>
+                                        <span class="step-lbl">FILLED</span>
                                     </div>
                                 </div>
                             </div>
@@ -454,19 +474,18 @@
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 2: MARKETS (3-COLUMN QUANT TERMINAL)
+                 VIEW 2: MARKETS
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-market">
-                <div class="market-terminal-grid">
+                <div class="market-terminal-layout">
                     <!-- LEFT: WATCHLIST -->
-                    <div class="panel cyber-hud-card">
-                        <div class="hud-corner tl"></div><div class="hud-corner tr"></div>
-                        <div class="panel-header">
-                            <div class="panel-title"><span>📡 LIVE PAIRS WATCHLIST</span></div>
-                            <span class="badge badge-mono">13 PAIRS</span>
+                    <div class="panel-card market-watch-panel">
+                        <div class="panel-card-header">
+                            <div class="panel-card-title"><span>📡 LIVE PAIRS WATCHLIST</span></div>
+                            <span class="badge-mono">13 PAIRS</span>
                         </div>
-                        <div class="panel-content no-pad table-container">
-                            <table class="table-compact">
+                        <div class="panel-table-wrap">
+                            <table class="terminal-table">
                                 <thead>
                                     <tr>
                                         <th>SYMBOL</th>
@@ -475,23 +494,20 @@
                                         <th>SIGNAL</th>
                                     </tr>
                                 </thead>
-                                <tbody id="market-watchlist-body">
-                                    <!-- Injected by JS -->
-                                </tbody>
+                                <tbody id="market-watchlist-body"></tbody>
                             </table>
                         </div>
                     </div>
 
-                    <!-- CENTER: LARGE CHART -->
-                    <div class="panel cyber-hud-card" style="display: flex; flex-direction: column;">
-                        <div class="hud-corner tl"></div><div class="hud-corner tr"></div>
-                        <div class="panel-header">
-                            <div class="market-chart-header-left">
-                                <span class="market-chart-symbol" id="market-chart-symbol">BTCUSDT</span>
-                                <span class="market-chart-price" id="market-chart-price">--</span>
-                                <span class="market-chart-chg" id="market-chart-chg">--</span>
+                    <!-- CENTER: CANDLESTICK / LINE CHART -->
+                    <div class="panel-card market-chart-panel">
+                        <div class="panel-card-header">
+                            <div class="market-chart-meta">
+                                <span class="market-sym-badge" id="market-chart-symbol">BTCUSDT</span>
+                                <span class="market-price-val mono" id="market-chart-price">--</span>
+                                <span class="market-chg-val mono" id="market-chart-chg">--</span>
                             </div>
-                            <div class="chart-tf-group">
+                            <div class="chart-controls">
                                 <button class="btn-tf" onclick="setMarketChartTf('1m')">1m</button>
                                 <button class="btn-tf" onclick="setMarketChartTf('3m')">3m</button>
                                 <button class="btn-tf active" onclick="setMarketChartTf('5m')">5m</button>
@@ -502,48 +518,44 @@
                                 <button class="btn-tf" onclick="setMarketChartTf('4h')">4h</button>
                             </div>
                         </div>
-                        <div class="panel-content" style="flex: 1; position: relative;">
-                            <div class="chart-container-compact" style="height: 100%;">
-                                <canvas id="marketCandleChart"></canvas>
-                            </div>
+                        <div class="chart-body" style="flex: 1; position: relative;">
+                            <canvas id="marketCandleChart"></canvas>
                         </div>
                     </div>
 
                     <!-- RIGHT: MARKET DETAILS -->
-                    <div class="panel cyber-hud-card">
-                        <div class="hud-corner tl"></div><div class="hud-corner tr"></div>
-                        <div class="panel-header">
-                            <div class="panel-title"><span id="market-details-title">BTCUSDT TELEMETRY</span></div>
-                            <span class="tag tag-qualified" id="market-details-status">LIVE</span>
+                    <div class="panel-card market-details-panel">
+                        <div class="panel-card-header">
+                            <div class="panel-card-title"><span id="market-details-title">BTCUSDT TELEMETRY</span></div>
+                            <span class="tag-pass" id="market-details-status">LIVE</span>
                         </div>
-                        <div class="panel-content" id="market-details-content">
-                            <!-- Injected by JS -->
-                            <div class="empty-state-compact">Select a symbol to view live quant indicators</div>
+                        <div class="panel-card-body" id="market-details-content">
+                            <div class="idle-state-row">Select a symbol to view live quant indicators</div>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 3: SIGNALS (PRO TERMINAL + FILTERS)
+                 VIEW 3: SIGNALS (PRO LOG & FUNNEL)
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-signals">
-                <!-- TOP 8 KPIS -->
-                <div class="metrics-row" style="grid-template-columns: repeat(8, 1fr);">
-                    <div class="metric-card accent-cyan cyber-hud-card"><div class="metric-label">TOTAL SIGNALS</div><div class="metric-value" id="sig-kpi-total">0</div></div>
-                    <div class="metric-card accent-green cyber-hud-card"><div class="metric-label">BUY</div><div class="metric-value val-green" id="sig-kpi-buy">0</div></div>
-                    <div class="metric-card accent-red cyber-hud-card"><div class="metric-label">SELL</div><div class="metric-value val-red" id="sig-kpi-sell">0</div></div>
-                    <div class="metric-card accent-amber cyber-hud-card"><div class="metric-label">HOLD</div><div class="metric-value val-amber" id="sig-kpi-hold">0</div></div>
-                    <div class="metric-card accent-green cyber-hud-card"><div class="metric-label">PROFIT PASS</div><div class="metric-value val-green" id="sig-kpi-prof-acc">0</div></div>
-                    <div class="metric-card accent-red cyber-hud-card"><div class="metric-label">PROFIT REJ</div><div class="metric-value val-red" id="sig-kpi-prof-rej">0</div></div>
-                    <div class="metric-card accent-green cyber-hud-card"><div class="metric-label">RISK PASS</div><div class="metric-value val-green" id="sig-kpi-risk-acc">0</div></div>
-                    <div class="metric-card accent-red cyber-hud-card"><div class="metric-label">RISK REJ</div><div class="metric-value val-red" id="sig-kpi-risk-rej">0</div></div>
+                <!-- TOP SUMMARY METRICS -->
+                <div class="kpi-grid-8">
+                    <div class="panel-card kpi-card-mini"><div class="kpi-label">TOTAL SIGNALS</div><div class="kpi-val mono" id="sig-kpi-total">0</div></div>
+                    <div class="panel-card kpi-card-mini"><div class="kpi-label">BUY</div><div class="kpi-val profit mono" id="sig-kpi-buy">0</div></div>
+                    <div class="panel-card kpi-card-mini"><div class="kpi-label">SELL</div><div class="kpi-val loss mono" id="sig-kpi-sell">0</div></div>
+                    <div class="panel-card kpi-card-mini"><div class="kpi-label">HOLD</div><div class="kpi-val amber mono" id="sig-kpi-hold">0</div></div>
+                    <div class="panel-card kpi-card-mini"><div class="kpi-label">PROFIT PASS</div><div class="kpi-val profit mono" id="sig-kpi-prof-acc">0</div></div>
+                    <div class="panel-card kpi-card-mini"><div class="kpi-label">PROFIT REJ</div><div class="kpi-val loss mono" id="sig-kpi-prof-rej">0</div></div>
+                    <div class="panel-card kpi-card-mini"><div class="kpi-label">RISK PASS</div><div class="kpi-val profit mono" id="sig-kpi-risk-acc">0</div></div>
+                    <div class="panel-card kpi-card-mini"><div class="kpi-label">RISK REJ</div><div class="kpi-val loss mono" id="sig-kpi-risk-rej">0</div></div>
                 </div>
 
                 <!-- FILTERS TOOLBAR -->
-                <div class="filter-toolbar cyber-hud-card">
+                <div class="filter-toolbar">
                     <div class="filter-group">
-                        <span class="filter-label">DIRECTION:</span>
+                        <span class="filter-lbl">DIRECTION:</span>
                         <button class="btn-filter active" id="sig-btn-all" onclick="setSignalQuickFilter('ALL')">ALL</button>
                         <button class="btn-filter" id="sig-btn-buy" onclick="setSignalQuickFilter('BUY')">BUY</button>
                         <button class="btn-filter" id="sig-btn-sell" onclick="setSignalQuickFilter('SELL')">SELL</button>
@@ -553,8 +565,8 @@
                     </div>
 
                     <div class="filter-group">
-                        <span class="filter-label">STRATEGY:</span>
-                        <select class="select-filter" id="sig-filter-strat" onchange="applySignalFilters()">
+                        <span class="filter-lbl">STRATEGY:</span>
+                        <select class="select-terminal" id="sig-filter-strat" onchange="applySignalFilters()">
                             <option value="ALL">ALL STRATEGIES</option>
                             <option value="AGGRESSOR">AGGRESSOR</option>
                             <option value="SCALPER">SCALPER</option>
@@ -566,8 +578,8 @@
                     </div>
 
                     <div class="filter-group">
-                        <span class="filter-label">TIMEFRAME:</span>
-                        <select class="select-filter" id="sig-filter-tf" onchange="applySignalFilters()">
+                        <span class="filter-lbl">TIMEFRAME:</span>
+                        <select class="select-terminal" id="sig-filter-tf" onchange="applySignalFilters()">
                             <option value="ALL">ALL TF</option>
                             <option value="5m">5m</option>
                             <option value="15m">15m</option>
@@ -579,15 +591,15 @@
                     </div>
 
                     <div class="filter-group">
-                        <span class="filter-label">SEARCH:</span>
-                        <input type="text" class="input-search" id="sig-filter-sym" placeholder="SYMBOL (e.g. BTC)" oninput="applySignalFilters()">
+                        <span class="filter-lbl">SEARCH:</span>
+                        <input type="text" class="input-terminal" id="sig-filter-sym" placeholder="SYMBOL (e.g. BTC)" oninput="applySignalFilters()">
                     </div>
                 </div>
 
-                <!-- MAIN SIGNALS TABLE -->
-                <div class="panel cyber-hud-card" style="flex: 1;">
-                    <div class="panel-content no-pad table-container">
-                        <table class="table-compact">
+                <!-- SIGNALS TABLE -->
+                <div class="panel-card" style="flex: 1;">
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table">
                             <thead>
                                 <tr>
                                     <th>TIME</th>
@@ -608,7 +620,7 @@
                                 </tr>
                             </thead>
                             <tbody id="signals-full-body">
-                                <tr><td colspan="15" class="empty-state-compact">NO SIGNALS LOGGED YET</td></tr>
+                                <tr><td colspan="15" class="idle-state-row">No signals evaluated in current session</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -619,21 +631,19 @@
                  VIEW 4: POSITIONS
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-positions">
-                <div class="metrics-row">
-                    <div class="metric-card accent-cyan cyber-hud-card"><div class="metric-label">OPEN POSITIONS</div><div class="metric-value" id="pos-count">0 / 5</div></div>
-                    <div class="metric-card accent-green cyber-hud-card"><div class="metric-label">TOTAL NOTIONAL VALUE</div><div class="metric-value" id="pos-notional">$0.00</div></div>
-                    <div class="metric-card accent-purple cyber-hud-card"><div class="metric-label">TOTAL UNREALIZED PNL</div><div class="metric-value" id="pos-unrealized">$0.00</div></div>
-                    <div class="metric-card accent-amber cyber-hud-card"><div class="metric-label">PORTFOLIO EXPOSURE</div><div class="metric-value" id="pos-exposure">0.00%</div></div>
-                    <div class="metric-card accent-blue cyber-hud-card"><div class="metric-label">AVAILABLE CASH</div><div class="metric-value" id="pos-avail">$0.00</div></div>
-                    <div class="metric-card accent-red cyber-hud-card"><div class="metric-label">MAX DRAWDOWN</div><div class="metric-value" id="pos-mdd">0.00%</div></div>
+                <div class="dashboard-hero-kpi-grid">
+                    <div class="panel-card kpi-card"><div class="kpi-label">OPEN POSITIONS</div><div class="kpi-val mono" id="pos-count">0 / 5</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">TOTAL NOTIONAL</div><div class="kpi-val mono" id="pos-notional">$0.00</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">UNREALIZED PNL</div><div class="kpi-val mono" id="pos-unrealized">$0.00</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">AVAILABLE CASH</div><div class="kpi-val cyan mono" id="pos-avail">$0.00</div></div>
                 </div>
 
-                <div class="panel cyber-hud-card" style="flex: 1;">
-                    <div class="panel-header">
-                        <div class="panel-title"><span>ACTIVE MANAGED POSITIONS</span></div>
+                <div class="panel-card" style="flex: 1;">
+                    <div class="panel-card-header">
+                        <div class="panel-card-title"><span>ACTIVE MANAGED POSITIONS LEDGER</span></div>
                     </div>
-                    <div class="panel-content no-pad table-container">
-                        <table class="table-compact">
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table">
                             <thead>
                                 <tr>
                                     <th>OPEN TIME</th>
@@ -652,7 +662,7 @@
                                 </tr>
                             </thead>
                             <tbody id="pos-full-body">
-                                <tr><td colspan="13" class="empty-state-compact">NO ACTIVE POSITIONS</td></tr>
+                                <tr><td colspan="13" class="idle-state-row">No active positions on Binance Testnet</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -660,25 +670,23 @@
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 5: TRADES (LEDGER + LIFECYCLE)
+                 VIEW 5: TRADES
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-trades">
-                <div class="metrics-row">
-                    <div class="metric-card accent-cyan cyber-hud-card"><div class="metric-label">TOTAL TRADES</div><div class="metric-value" id="trd-total">--</div></div>
-                    <div class="metric-card accent-green cyber-hud-card"><div class="metric-label">WIN RATE</div><div class="metric-value" id="trd-winrate">--</div></div>
-                    <div class="metric-card accent-green cyber-hud-card"><div class="metric-label">NET REALIZED PNL</div><div class="metric-value" id="trd-net-pnl">--</div></div>
-                    <div class="metric-card accent-cyan cyber-hud-card"><div class="metric-label">PROFIT FACTOR</div><div class="metric-value" id="trd-pf">--</div></div>
-                    <div class="metric-card accent-amber cyber-hud-card"><div class="metric-label">TOTAL FEES</div><div class="metric-value" id="trd-fees">--</div></div>
-                    <div class="metric-card accent-purple cyber-hud-card"><div class="metric-label">AVG DURATION</div><div class="metric-value" id="trd-avg-dur">--</div></div>
+                <div class="dashboard-hero-kpi-grid">
+                    <div class="panel-card kpi-card"><div class="kpi-label">TOTAL TRADES</div><div class="kpi-val mono" id="trd-total">--</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">WIN RATE</div><div class="kpi-val profit mono" id="trd-winrate">--</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">NET REALIZED PNL</div><div class="kpi-val profit mono" id="trd-net-pnl">--</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">PROFIT FACTOR</div><div class="kpi-val cyan mono" id="trd-pf">--</div></div>
                 </div>
 
-                <div class="panel cyber-hud-card" style="flex: 1;">
-                    <div class="panel-header">
-                        <div class="panel-title"><span>HISTORICAL TRADE EXECUTION LEDGER</span></div>
-                        <span class="badge badge-mono">CLICK ROW TO INSPECT LIFECYCLE</span>
+                <div class="panel-card" style="flex: 1;">
+                    <div class="panel-card-header">
+                        <div class="panel-card-title"><span>HISTORICAL TRADE EXECUTION LEDGER</span></div>
+                        <span class="badge-mono">CLICK ROW TO INSPECT TELEMETRY</span>
                     </div>
-                    <div class="panel-content no-pad table-container">
-                        <table class="table-compact">
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table">
                             <thead>
                                 <tr>
                                     <th>OPEN TIME</th>
@@ -699,7 +707,7 @@
                                 </tr>
                             </thead>
                             <tbody id="trades-full-body">
-                                <tr><td colspan="15" class="empty-state-compact">NO HISTORICAL TRADES RECORDED</td></tr>
+                                <tr><td colspan="15" class="idle-state-row">No historical trades logged yet</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -707,26 +715,26 @@
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 6: ACTIVITY (TIMELINE OF EVENTS)
+                 VIEW 6: ACTIVITY
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-activity">
-                <div class="filter-toolbar cyber-hud-card">
+                <div class="filter-toolbar">
                     <div class="filter-group">
-                        <span class="filter-label">EVENT TYPE:</span>
-                        <button class="btn-filter active" id="btn-act-all" onclick="setActivityFilter('ALL')">ALL</button>
-                        <button class="btn-filter" id="btn-act-trades" onclick="setActivityFilter('TRADES')">TRADES</button>
-                        <button class="btn-filter" id="btn-act-balance" onclick="setActivityFilter('BALANCE')">BALANCE & FEES</button>
-                        <button class="btn-filter" id="btn-act-system" onclick="setActivityFilter('SYSTEM')">SYSTEM & SAFETY</button>
-                        <button class="btn-filter" id="btn-act-signals" onclick="setActivityFilter('SIGNALS')">SIGNALS</button>
+                        <span class="filter-lbl">EVENT TYPE:</span>
+                        <button class="btn-filter active" id="btn-act-all" onclick="filterActivity('ALL')">ALL</button>
+                        <button class="btn-filter" id="btn-act-trades" onclick="filterActivity('TRADES')">TRADES</button>
+                        <button class="btn-filter" id="btn-act-balance" onclick="filterActivity('BALANCE')">BALANCE &amp; FEES</button>
+                        <button class="btn-filter" id="btn-act-system" onclick="filterActivity('SYSTEM')">SYSTEM &amp; SAFETY</button>
+                        <button class="btn-filter" id="btn-act-signals" onclick="filterActivity('SIGNALS')">SIGNALS</button>
                     </div>
                     <div class="filter-group" style="margin-left: auto;">
-                        <span class="badge badge-mono" id="activity-count">0 Events Logged</span>
+                        <span class="badge-mono" id="activity-count">0 Events Logged</span>
                     </div>
                 </div>
 
-                <div class="panel cyber-hud-card" style="flex: 1;">
-                    <div class="panel-content no-pad table-container">
-                        <table class="table-compact">
+                <div class="panel-card" style="flex: 1;">
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table">
                             <thead>
                                 <tr>
                                     <th>TIMESTAMP</th>
@@ -741,7 +749,7 @@
                                 </tr>
                             </thead>
                             <tbody id="activity-logs-body">
-                                <tr><td colspan="9" class="empty-state-compact">NO AUDIT LOGS RECORDED</td></tr>
+                                <tr><td colspan="9" class="idle-state-row">No audit logs recorded</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -749,15 +757,15 @@
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 7: STRATEGIES
+                 VIEW 7: STRATEGIES (ATTRIBUTION MATRIX)
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-strategies">
-                <div class="panel cyber-hud-card">
-                    <div class="panel-header">
-                        <div class="panel-title"><span>QUANT STRATEGY ATTRIBUTION MATRIX</span></div>
+                <div class="panel-card">
+                    <div class="panel-card-header">
+                        <div class="panel-card-title"><span>QUANT STRATEGY ATTRIBUTION MATRIX</span></div>
                     </div>
-                    <div class="panel-content no-pad table-container">
-                        <table class="table-compact">
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table">
                             <thead>
                                 <tr>
                                     <th>STRATEGY</th>
@@ -776,19 +784,17 @@
                                     <th>NET PNL</th>
                                 </tr>
                             </thead>
-                            <tbody id="strat-summary-body">
-                                <!-- Injected by JS -->
-                            </tbody>
+                            <tbody id="strat-summary-body"></tbody>
                         </table>
                     </div>
                 </div>
 
-                <div class="panel cyber-hud-card" style="margin-top: 10px;">
-                    <div class="panel-header">
-                        <div class="panel-title"><span>STRATEGY &times; TIMEFRAME EXECUTION GRID</span></div>
+                <div class="panel-card" style="margin-top: 10px;">
+                    <div class="panel-card-header">
+                        <div class="panel-card-title"><span>STRATEGY &times; TIMEFRAME EXECUTION MATRIX</span></div>
                     </div>
-                    <div class="panel-content no-pad table-container">
-                        <table class="table-compact">
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table">
                             <thead>
                                 <tr>
                                     <th>STRATEGY</th>
@@ -800,9 +806,7 @@
                                     <th>4h</th>
                                 </tr>
                             </thead>
-                            <tbody id="strat-matrix-body">
-                                <!-- Injected by JS -->
-                            </tbody>
+                            <tbody id="strat-matrix-body"></tbody>
                         </table>
                     </div>
                 </div>
@@ -812,21 +816,19 @@
                  VIEW 8: RISK CONTROL
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-risk">
-                <div class="metrics-row">
-                    <div class="metric-card accent-cyan cyber-hud-card"><div class="metric-label">TOTAL EQUITY</div><div class="metric-value" id="rk-top-equity">--</div></div>
-                    <div class="metric-card accent-blue cyber-hud-card"><div class="metric-label">LIQUID CASH</div><div class="metric-value" id="rk-top-cash">--</div></div>
-                    <div class="metric-card accent-purple cyber-hud-card"><div class="metric-label">MANAGED ASSET VAL</div><div class="metric-value" id="rk-top-managed">--</div></div>
-                    <div class="metric-card accent-amber cyber-hud-card"><div class="metric-label">EXPOSURE</div><div class="metric-value" id="rk-top-exposure">--</div></div>
-                    <div class="metric-card accent-green cyber-hud-card"><div class="metric-label">RISK USED / AVAIL</div><div class="metric-value" id="rk-top-used">--</div></div>
-                    <div class="metric-card accent-red cyber-hud-card"><div class="metric-label">MAX DRAWDOWN</div><div class="metric-value" id="rk-top-mdd">--</div></div>
+                <div class="dashboard-hero-kpi-grid">
+                    <div class="panel-card kpi-card"><div class="kpi-label">TOTAL EQUITY</div><div class="kpi-val mono" id="rk-top-equity">--</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">LIQUID CASH</div><div class="kpi-val cyan mono" id="rk-top-cash">--</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">EXPOSURE</div><div class="kpi-val mono" id="rk-top-exposure">--</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">MAX DRAWDOWN</div><div class="kpi-val loss mono" id="rk-top-mdd">--</div></div>
                 </div>
 
-                <div class="panel cyber-hud-card" style="flex: 1; margin-top: 10px;">
-                    <div class="panel-header">
-                        <div class="panel-title"><span>REAL-TIME RISK DECISION & GATE BREACH AUDIT</span></div>
+                <div class="panel-card" style="flex: 1; margin-top: 10px;">
+                    <div class="panel-card-header">
+                        <div class="panel-card-title"><span>REAL-TIME RISK DECISION &amp; GATE AUDIT</span></div>
                     </div>
-                    <div class="panel-content no-pad table-container">
-                        <table class="table-compact">
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table">
                             <thead>
                                 <tr>
                                     <th>TIME</th>
@@ -841,7 +843,7 @@
                                 </tr>
                             </thead>
                             <tbody id="risk-logs-body">
-                                <tr><td colspan="9" class="empty-state-compact">NO RISK GATE BREACHES LOGGED</td></tr>
+                                <tr><td colspan="9" class="idle-state-row">No risk gate breaches recorded</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -849,12 +851,12 @@
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 9: ANALYTICS (DEEP METRICS + WHY DIDN'T IT TRADE FUNNEL)
+                 VIEW 9: ANALYTICS (DIAGNOSTIC FUNNEL & DISTRIBUTIONS)
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-analytics">
-                <div class="filter-toolbar cyber-hud-card">
+                <div class="filter-toolbar">
                     <div class="filter-group">
-                        <span class="filter-label">TIMEFRAME WINDOW:</span>
+                        <span class="filter-lbl">TIMEFRAME WINDOW:</span>
                         <button class="btn-filter active" id="btn-an-1d" onclick="setAnalyticsTf('1D')">1D</button>
                         <button class="btn-filter" id="btn-an-7d" onclick="setAnalyticsTf('7D')">7D</button>
                         <button class="btn-filter" id="btn-an-30d" onclick="setAnalyticsTf('30D')">30D</button>
@@ -862,80 +864,81 @@
                     </div>
                 </div>
 
-                <div class="metrics-row" style="grid-template-columns: repeat(6, 1fr);">
-                    <div class="metric-card accent-cyan cyber-hud-card"><div class="metric-label">TOTAL TRADES</div><div class="metric-value" id="an-total">--</div></div>
-                    <div class="metric-card accent-green cyber-hud-card"><div class="metric-label">WIN RATE</div><div class="metric-value" id="an-winrate">--</div></div>
-                    <div class="metric-card accent-green cyber-hud-card"><div class="metric-label">NET REALIZED PNL</div><div class="metric-value" id="an-net-pnl">--</div></div>
-                    <div class="metric-card accent-cyan cyber-hud-card"><div class="metric-label">PROFIT FACTOR</div><div class="metric-value" id="an-pf">--</div></div>
-                    <div class="metric-card accent-amber cyber-hud-card"><div class="metric-label">TOTAL FEES PAID</div><div class="metric-value" id="an-fees">--</div></div>
-                    <div class="metric-card accent-red cyber-hud-card"><div class="metric-label">MAX DRAWDOWN</div><div class="metric-value" id="an-mdd">--</div></div>
+                <div class="dashboard-hero-kpi-grid">
+                    <div class="panel-card kpi-card"><div class="kpi-label">TOTAL TRADES</div><div class="kpi-val mono" id="an-total">--</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">WIN RATE</div><div class="kpi-val profit mono" id="an-winrate">--</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">NET REALIZED PNL</div><div class="kpi-val profit mono" id="an-net-pnl">--</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">PROFIT FACTOR</div><div class="kpi-val cyan mono" id="an-pf">--</div></div>
+                </div>
+
+                <!-- DIAGNOSTIC FUNNEL: "WHY DIDN'T IT TRADE?" -->
+                <div class="panel-card" style="margin-top: 10px;">
+                    <div class="panel-card-header">
+                        <div class="panel-card-title"><span>🔍 DIAGNOSTIC FUNNEL: "WHY DIDN'T IT TRADE?"</span></div>
+                        <span class="badge-mono" id="diag-dominant-reason">DOMINANT REASON: SCANNING</span>
+                    </div>
+                    <div class="panel-card-body">
+                        <div class="funnel-diag-grid">
+                            <div class="funnel-diag-step">
+                                <span class="diag-num mono" id="an-evals">0</span>
+                                <span class="diag-lbl">EVALUATIONS</span>
+                            </div>
+                            <div class="funnel-diag-sep">&rarr;</div>
+                            <div class="funnel-diag-step">
+                                <span class="diag-num mono" id="an-signals">0</span>
+                                <span class="diag-lbl">SIGNALS</span>
+                            </div>
+                            <div class="funnel-diag-sep">&rarr;</div>
+                            <div class="funnel-diag-step">
+                                <span class="diag-num profit mono" id="an-prof-acc">0</span>
+                                <span class="diag-sub loss mono" id="an-prof-rej">/ 0 Rej</span>
+                                <span class="diag-lbl">PROFIT PASS</span>
+                            </div>
+                            <div class="funnel-diag-sep">&rarr;</div>
+                            <div class="funnel-diag-step">
+                                <span class="diag-num profit mono" id="an-risk-acc">0</span>
+                                <span class="diag-sub loss mono" id="an-risk-rej">/ 0 Rej</span>
+                                <span class="diag-lbl">RISK PASS</span>
+                            </div>
+                            <div class="funnel-diag-sep">&rarr;</div>
+                            <div class="funnel-diag-step">
+                                <span class="diag-num cyan mono" id="an-ord-sub">0</span>
+                                <span class="diag-lbl">SUBMITTED</span>
+                            </div>
+                            <div class="funnel-diag-sep">&rarr;</div>
+                            <div class="funnel-diag-step highlight">
+                                <span class="diag-num profit mono" id="an-ord-fill">0</span>
+                                <span class="diag-lbl">FILLED</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- CHARTS ROW -->
-                <div class="grid-12" style="margin-top: 8px;">
-                    <div class="col-6 panel cyber-hud-card">
-                        <div class="panel-header"><div class="panel-title"><span>DAILY REALIZED PNL DISTRIBUTION</span></div></div>
-                        <div class="panel-content" style="height: 180px;"><canvas id="pnlHistChart"></canvas></div>
+                <div class="analytics-charts-grid" style="margin-top: 10px;">
+                    <div class="panel-card">
+                        <div class="panel-card-header"><div class="panel-card-title"><span>DAILY REALIZED PNL DISTRIBUTION</span></div></div>
+                        <div class="chart-body" style="height: 180px;"><canvas id="pnlHistChart"></canvas></div>
                     </div>
-                    <div class="col-6 panel cyber-hud-card">
-                        <div class="panel-header"><div class="panel-title"><span>TRADE PNL RETURN SPECTRUM</span></div></div>
-                        <div class="panel-content" style="height: 180px;"><canvas id="pnlDistChart"></canvas></div>
-                    </div>
-                </div>
-
-                <!-- "WHY DIDN'T IT TRADE?" DIAGNOSTIC FUNNEL -->
-                <div class="panel cyber-hud-card" style="margin-top: 8px;">
-                    <div class="panel-header">
-                        <div class="panel-title"><span>🔍 DIAGNOSTIC FUNNEL: "WHY DIDN'T IT TRADE?"</span></div>
-                        <span class="badge badge-mono" id="diag-dominant-reason">DOMINANT REASON: NO QUALIFIED SIGNAL</span>
-                    </div>
-                    <div class="panel-content no-pad table-container">
-                        <table class="table-compact">
-                            <thead>
-                                <tr>
-                                    <th>CANDLE EVALUATIONS</th>
-                                    <th>SIGNALS GENERATED</th>
-                                    <th>PROFITABILITY ACCEPTED</th>
-                                    <th>PROFITABILITY REJECTED</th>
-                                    <th>RISK ACCEPTED</th>
-                                    <th>RISK REJECTED</th>
-                                    <th>EXECUTION ELIGIBLE</th>
-                                    <th>ORDERS SUBMITTED</th>
-                                    <th>ORDERS FAILED</th>
-                                    <th>ORDERS FILLED</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td id="an-evals">0</td>
-                                    <td id="an-signals">0</td>
-                                    <td class="val-green" id="an-prof-acc">0</td>
-                                    <td class="val-red" id="an-prof-rej">0</td>
-                                    <td class="val-green" id="an-risk-acc">0</td>
-                                    <td class="val-red" id="an-risk-rej">0</td>
-                                    <td id="an-exec-elig">0</td>
-                                    <td id="an-ord-sub">0</td>
-                                    <td class="val-red" id="an-ord-fail">0</td>
-                                    <td class="val-green" id="an-ord-fill">0</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div class="panel-card">
+                        <div class="panel-card-header"><div class="panel-card-title"><span>TRADE RETURN SPECTRUM</span></div></div>
+                        <div class="chart-body" style="height: 180px;"><canvas id="pnlDistChart"></canvas></div>
                     </div>
                 </div>
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 10: SETTINGS / SYSTEM HEALTH
+                 VIEW 10: SETTINGS / HEALTH
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-settings">
-                <div class="grid-12">
-                    <div class="col-6 panel cyber-hud-card">
-                        <div class="panel-header"><div class="panel-title"><span>ENGINE CONFIGURATION</span></div></div>
-                        <div class="panel-content no-pad table-container">
-                            <table class="table-compact">
+                <div class="settings-grid">
+                    <div class="panel-card">
+                        <div class="panel-card-header"><div class="panel-card-title"><span>ENGINE CONFIGURATION</span></div></div>
+                        <div class="panel-table-wrap">
+                            <table class="terminal-table">
                                 <tbody id="set-strat-body">
-                                    <tr><td>Trading Mode</td><td><span class="tag tag-qualified" id="set-mode">BINANCE TESTNET</span></td></tr>
-                                    <tr><td>Execution Route</td><td>Spot OCO Protected</td></tr>
+                                    <tr><td>Trading Mode</td><td><span class="tag-pass" id="set-mode">BINANCE TESTNET</span></td></tr>
+                                    <tr><td>Execution Route</td><td>Spot OCO Protection</td></tr>
                                     <tr><td>Max Leverage</td><td>1.0x (Spot Only)</td></tr>
                                     <tr><td>Max Open Positions</td><td>5</td></tr>
                                     <tr><td>Max Risk Per Trade</td><td>1.0%</td></tr>
@@ -947,18 +950,18 @@
                         </div>
                     </div>
 
-                    <div class="col-6 panel cyber-hud-card">
-                        <div class="panel-header"><div class="panel-title"><span>MICROSERVICES HEALTH MATRIX</span></div></div>
-                        <div class="panel-content no-pad table-container">
-                            <table class="table-compact">
+                    <div class="panel-card">
+                        <div class="panel-card-header"><div class="panel-card-title"><span>MICROSERVICES HEALTH</span></div></div>
+                        <div class="panel-table-wrap">
+                            <table class="terminal-table">
                                 <thead><tr><th>SUBSYSTEM</th><th>STATUS</th><th>TELEMETRY</th></tr></thead>
                                 <tbody id="sys-health-body">
-                                    <tr><td>Binance REST Gateway</td><td><span class="tag tag-qualified">ONLINE</span></td><td>Ping: 22ms</td></tr>
-                                    <tr><td>Binance WebSocket Feed</td><td><span class="tag tag-qualified">ONLINE</span></td><td>Latency: 18ms</td></tr>
-                                    <tr><td>Candle Ingestion Buffer</td><td><span class="tag tag-qualified">ONLINE</span></td><td>13 pairs active</td></tr>
-                                    <tr><td>Strategy Matrix Engine</td><td><span class="tag tag-qualified">ONLINE</span></td><td>6 multi-TF strategies</td></tr>
-                                    <tr><td>Execution Gateway</td><td><span class="tag tag-qualified">ONLINE</span></td><td>SPOT OCO automated</td></tr>
-                                    <tr><td>Render Host / Region</td><td><span class="tag tag-qualified">ONLINE</span></td><td>Frankfurt (eu-central)</td></tr>
+                                    <tr><td>Binance REST Gateway</td><td><span class="tag-pass">ONLINE</span></td><td>Ping: 18ms</td></tr>
+                                    <tr><td>Binance WebSocket Feed</td><td><span class="tag-pass">ONLINE</span></td><td>Stream active</td></tr>
+                                    <tr><td>Candle Ingestion Buffer</td><td><span class="tag-pass">ONLINE</span></td><td>13 pairs active</td></tr>
+                                    <tr><td>Strategy Matrix Engine</td><td><span class="tag-pass">ONLINE</span></td><td>6 multi-TF strategies</td></tr>
+                                    <tr><td>Execution Gateway</td><td><span class="tag-pass">ONLINE</span></td><td>SPOT OCO active</td></tr>
+                                    <tr><td>Render Host / Region</td><td><span class="tag-pass">ONLINE</span></td><td>Frankfurt (eu-central)</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -966,34 +969,32 @@
                 </div>
             </div>
 
-            <!-- ─── 3. BOTTOM CYBER STATUS STRIP ─── -->
-            <footer class="bottom-status-strip">
-                <div class="strip-left">
-                    <span class="strip-item"><span class="dot dot-green" id="btm-bn"></span> BINANCE</span>
-                    <span class="strip-sep">/</span>
-                    <span class="strip-item"><span class="dot dot-green" id="btm-ws"></span> WS</span>
-                    <span class="strip-sep">/</span>
-                    <span class="strip-item"><span class="dot dot-green" id="btm-md"></span> MARKET</span>
-                    <span class="strip-sep">/</span>
-                    <span class="strip-item"><span class="dot dot-green" id="btm-ex"></span> EXECUTION</span>
-                    <span class="strip-sep">/</span>
-                    <span class="strip-item"><span class="dot dot-green" id="btm-st"></span> STRATEGY</span>
-                    <span class="strip-sep">/</span>
-                    <span class="strip-item"><span class="dot dot-green" id="btm-pt"></span> PORTFOLIO</span>
-                    <span class="strip-sep">/</span>
-                    <span class="strip-item"><span class="dot dot-green" id="btm-rs"></span> RISK</span>
+            <!-- ─── 3. PERSISTENT DIAGNOSTIC FOOTER ─── -->
+            <footer class="bottom-diagnostic-footer">
+                <div class="footer-left">
+                    <span class="footer-item"><span class="dot dot-green" id="btm-bn"></span> BINANCE REST</span>
+                    <span class="footer-sep">/</span>
+                    <span class="footer-item"><span class="dot dot-green" id="btm-ws"></span> WS FEED</span>
+                    <span class="footer-sep">/</span>
+                    <span class="footer-item"><span class="dot dot-green" id="btm-md"></span> MARKET</span>
+                    <span class="footer-sep">/</span>
+                    <span class="footer-item"><span class="dot dot-green" id="btm-ex"></span> EXECUTION</span>
+                    <span class="footer-sep">/</span>
+                    <span class="footer-item"><span class="dot dot-green" id="btm-st"></span> STRATEGY</span>
+                    <span class="footer-sep">/</span>
+                    <span class="footer-item"><span class="dot dot-green" id="btm-rs"></span> RISK</span>
                 </div>
-                <div class="strip-right">
-                    <span class="strip-meta">FEED: <strong id="btm-last-mkt">--:--:--</strong></span>
-                    <span class="strip-sep">•</span>
-                    <span class="strip-meta">EVAL: <strong id="btm-last-strat">--:--:--</strong></span>
+                <div class="footer-right">
+                    <span class="footer-meta">FEED TIME: <strong id="btm-last-mkt" class="mono">--:--:--</strong></span>
+                    <span class="footer-sep">•</span>
+                    <span class="footer-meta">LAST EVAL: <strong id="btm-last-strat" class="mono">--:--:--</strong></span>
                 </div>
             </footer>
 
         </main>
     </div>
 
-    <script src="/static/app.js?v=3.1.0"></script>
-    <script src="app.js?v=3.1.0"></script>
+    <script src="/static/app.js?v=4.0.0"></script>
+    <script src="app.js?v=4.0.0"></script>
 </body>
 </html>

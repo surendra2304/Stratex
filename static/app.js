@@ -493,9 +493,64 @@ async function fetchSignals() {
         allRawSignals = signals;
         updateSignalSummaryKPIs(allRawSignals);
         renderSignalsTable();
+        updateDecisionTicker(allRawSignals);
+        renderOpportunityScanner(allRawSignals);
     } catch (e) {
         console.error("Failed to fetch signals:", e);
     }
+}
+
+function updateDecisionTicker(signals) {
+    const track = document.getElementById('decision-ticker-track');
+    if (!track) return;
+
+    if (!signals || signals.length === 0) return;
+
+    const items = signals.slice(0, 10).map(s => {
+        const sym = s.symbol || 'PAIR';
+        const strat = s.strategy || 'ADX_EMA';
+        const tf = s.timeframe || '5m';
+        const dec = (s.final_decision || s.decision || (s.profitability_decision === 'ACCEPTED' ? 'PASS' : 'REJECT')).toUpperCase();
+        const isPass = dec === 'ACCEPTED' || dec === 'PASS' || dec === 'EXECUTED';
+        const tagClass = isPass ? 'tag-pass' : 'tag-rej';
+        const reason = s.profitability_reason || s.reason || (isPass ? 'Net Alpha > Friction' : 'Threshold Filtered');
+        const shortReason = reason.length > 32 ? reason.substring(0, 32) + '...' : reason;
+
+        return `<span class="ticker-item"><strong class="ticker-sym">${sym}</strong> <span class="ticker-strat">${strat}</span> <span class="ticker-tf">${tf}</span> <span class="${tagClass}">${isPass ? 'PASS' : 'REJECT'}: ${shortReason}</span></span>`;
+    });
+
+    if (items.length > 0) {
+        track.innerHTML = items.join('<span class="ticker-sep">•</span>') + '<span class="ticker-sep">•</span>' + items.join('<span class="ticker-sep">•</span>');
+    }
+}
+
+function renderOpportunityScanner(signals) {
+    const oppBody = document.getElementById('opp-short-body');
+    if (!oppBody) return;
+
+    if (!signals || signals.length === 0) {
+        oppBody.innerHTML = `<tr><td colspan="5" class="idle-state-row"><div class="idle-state-content"><span>Market in consolidation • Waiting for net alpha &gt; friction hurdle</span></div></td></tr>`;
+        return;
+    }
+
+    oppBody.innerHTML = signals.slice(0, 5).map((s, idx) => {
+        const sym = s.symbol || '-';
+        const tf = s.timeframe || '5m';
+        const strat = s.strategy || 'ADX_EMA';
+        const netVal = Number(s.expected_net || s.expected_net_return || 0);
+        const netStr = netVal !== 0 ? `<span class="${netVal > 0 ? 'profit' : 'loss'}">${netVal > 0 ? '+' : ''}${(netVal * 100).toFixed(2)}%</span>` : '-';
+        const dec = (s.final_decision || s.decision || (s.profitability_decision === 'ACCEPTED' ? 'PASS' : 'REJECT')).toUpperCase();
+        const isPass = dec === 'ACCEPTED' || dec === 'PASS' || dec === 'EXECUTED';
+        const tagClass = isPass ? 'tag-pass' : 'tag-rej';
+
+        return `<tr onclick="inspectSignalByIndex(${idx})" style="cursor: pointer;">
+            <td class="td-strong">${sym}</td>
+            <td>${tf}</td>
+            <td class="cyan">${strat}</td>
+            <td>${netStr}</td>
+            <td><span class="${tagClass}">${isPass ? 'PASS' : 'REJECT'}</span></td>
+        </tr>`;
+    }).join('');
 }
 
 function updateSignalSummaryKPIs(signals) {
@@ -785,12 +840,17 @@ function renderPositionsTable(positions) {
     let totalUnrealized = 0;
 
     if (!positions || positions.length === 0) {
-        if (fullBody) fullBody.innerHTML = '<tr><td colspan="13" class="empty-state">NO OPEN POSITIONS</td></tr>';
-        if (dashBody) dashBody.innerHTML = '<tr><td colspan="8" class="empty-state">NO OPEN POSITIONS</td></tr>';
-        document.getElementById('pos-count').innerText = '0';
-        document.getElementById('pos-exposure').innerText = '$0.00';
-        document.getElementById('pos-upnl').innerText = '$0.00';
-        document.getElementById('pos-upnl').className = 'metric-value val-neutral';
+        if (fullBody) fullBody.innerHTML = '<tr><td colspan="13" class="idle-state-row">No active positions on Binance Testnet</td></tr>';
+        if (dashBody) dashBody.innerHTML = '<tr><td colspan="6" class="idle-state-row"><div class="idle-state-content"><span class="radar-pulse"></span><span>All 5 execution slots available • Continuous scanning active across 13 spot pairs</span></div></td></tr>';
+        const posCountEl = document.getElementById('pos-count');
+        if (posCountEl) posCountEl.innerText = '0 / 5';
+        const posNotionalEl = document.getElementById('pos-notional');
+        if (posNotionalEl) posNotionalEl.innerText = '$0.00';
+        const posUpnlEl = document.getElementById('pos-unrealized');
+        if (posUpnlEl) {
+            posUpnlEl.innerText = '$0.00';
+            posUpnlEl.className = 'kpi-val mono';
+        }
         return;
     }
 
@@ -809,7 +869,7 @@ function renderPositionsTable(positions) {
 
         const uPnl = Number(p.current_unrealized_pnl || p.pnl || 0);
         totalUnrealized += uPnl;
-        const uPnlClass = uPnl > 0 ? 'val-green' : (uPnl < 0 ? 'val-red' : '');
+        const uPnlClass = uPnl > 0 ? 'profit' : (uPnl < 0 ? 'loss' : '');
         const uPnlStr = `<span class="${uPnlClass}">${uPnl >= 0 ? '+' : ''}${formatCurrency(uPnl)}</span>`;
 
         const slStr = Number(p.stop_loss || p.sl || 0) > 0 ? Number(p.stop_loss || p.sl).toFixed(4) : '-';
@@ -835,39 +895,46 @@ function renderPositionsTable(positions) {
             <td>${qty}</td>
             <td>${formatCurrency(val)}</td>
             <td>${uPnlStr}</td>
-            <td class="val-red">${slStr}</td>
-            <td class="val-green">${tpStr}</td>
+            <td class="loss">${slStr}</td>
+            <td class="profit">${tpStr}</td>
             <td>${durStr}</td>
-            <td><span class="tag tag-qualified">OPEN</span></td>
+            <td><span class="tag-pass">OPEN</span></td>
         </tr>`;
     }).join('');
 
-    const dashRows = positions.map(p => {
-        const side = (p.side || p.action || 'BUY').toUpperCase();
-        const sideClass = (side === 'BUY' || side === 'LONG') ? 'tag tag-long' : 'tag tag-short';
+    const dashRows = positions.map((p, idx) => {
+        const sym = p.symbol || '-';
+        const strat = p.strategy || 'ADX_EMA';
+        const tf = p.timeframe || '5m';
         const entryPx = Number(p.entry_price || 0);
         const currPx = Number(p.current_price || entryPx);
         const uPnl = Number(p.current_unrealized_pnl || p.pnl || 0);
-        const uPnlStr = `<span class="${uPnl >= 0 ? 'val-green' : 'val-red'}">${uPnl >= 0 ? '+' : ''}${formatCurrency(uPnl)}</span>`;
+        const uPnlStr = `<span class="${uPnl >= 0 ? 'profit' : 'loss'}">${uPnl >= 0 ? '+' : ''}${formatCurrency(uPnl)}</span>`;
+        const sl = Number(p.stop_loss || p.sl || 0) > 0 ? '$' + Number(p.stop_loss || p.sl).toFixed(4) : '-';
+        const tp = Number(p.take_profit || p.tp || 0) > 0 ? '$' + Number(p.take_profit || p.tp).toFixed(4) : '-';
 
-        return `<tr>
-            <td class="td-strong">${p.symbol}</td>
-            <td><span class="${sideClass}">${side}</span></td>
-            <td>${entryPx.toFixed(4)}</td>
-            <td>${currPx.toFixed(4)}</td>
-            <td>${p.quantity}</td>
-            <td>${uPnlStr}</td>
-            <td>${p.stop_loss || p.sl || '-'}</td>
-            <td>${p.take_profit || p.tp || '-'}</td>
+        return `<tr onclick="inspectPositionByIndex(${idx})" style="cursor: pointer;">
+            <td class="td-strong">${sym}</td>
+            <td><span class="cyan">${strat}</span> <span style="font-size: 8px; color: var(--text-muted);">(${tf})</span></td>
+            <td>$${entryPx.toFixed(4)}</td>
+            <td>$${currPx.toFixed(4)}</td>
+            <td><span class="loss">${sl}</span> / <span class="profit">${tp}</span></td>
+            <td class="mono">${uPnlStr}</td>
         </tr>`;
     }).join('');
 
     if (fullBody) fullBody.innerHTML = fullRows;
     if (dashBody) dashBody.innerHTML = dashRows;
 
-    document.getElementById('pos-count').innerText = positions.length;
-    document.getElementById('pos-exposure').innerText = formatCurrency(totalExposure);
-    applyColor(document.getElementById('pos-upnl'), totalUnrealized);
+    const posCountEl = document.getElementById('pos-count');
+    if (posCountEl) posCountEl.innerText = `${positions.length} / 5`;
+    const posNotionalEl = document.getElementById('pos-notional');
+    if (posNotionalEl) posNotionalEl.innerText = formatCurrency(totalExposure);
+    const posUpnlEl = document.getElementById('pos-unrealized');
+    if (posUpnlEl) {
+        posUpnlEl.innerText = `${totalUnrealized >= 0 ? '+' : ''}${formatCurrency(totalUnrealized)}`;
+        posUpnlEl.className = `kpi-val mono ${totalUnrealized >= 0 ? 'profit' : 'loss'}`;
+    }
 }
 
 function inspectPositionByIndex(idx) {
@@ -1918,22 +1985,22 @@ function renderEquityChart() {
                 {
                     label: 'Managed Equity',
                     data: eqData,
-                    borderColor: '#00F0FF',
-                    backgroundColor: 'rgba(0, 240, 255, 0.08)',
+                    borderColor: '#FFB300',
+                    backgroundColor: 'rgba(255, 179, 0, 0.08)',
                     borderWidth: 2,
                     fill: true,
-                    tension: 0.2,
+                    tension: 0.15,
                     pointRadius: 0,
                     pointHitRadius: 10
                 },
                 {
-                    label: 'Liquid USDT',
+                    label: 'Liquid USDT Baseline',
                     data: cashData,
-                    borderColor: 'rgba(0, 255, 136, 0.7)',
+                    borderColor: '#4FD1C5',
                     borderWidth: 1.5,
-                    borderDash: [3, 3],
+                    borderDash: [4, 4],
                     fill: false,
-                    tension: 0.2,
+                    tension: 0.15,
                     pointRadius: 0,
                     pointHitRadius: 10
                 }
@@ -1946,13 +2013,13 @@ function renderEquityChart() {
                 legend: {
                     display: true,
                     position: 'top',
-                    labels: { color: '#94a3b8', font: { family: "'JetBrains Mono', monospace", size: 8.5 }, boxWidth: 10 }
+                    labels: { color: '#7C8794', font: { family: "'IBM Plex Mono', monospace", size: 8.5 }, boxWidth: 10 }
                 },
                 tooltip: {
-                    backgroundColor: '#090e17',
-                    titleColor: '#00f0ff',
-                    bodyColor: '#f8fafc',
-                    borderColor: 'rgba(0, 240, 255, 0.3)',
+                    backgroundColor: '#12161C',
+                    titleColor: '#FFB300',
+                    bodyColor: '#F8FAFC',
+                    borderColor: '#232A33',
                     borderWidth: 1,
                     callbacks: {
                         label: function(ctx) {
@@ -1964,14 +2031,14 @@ function renderEquityChart() {
             scales: {
                 x: {
                     grid: { display: false },
-                    ticks: { color: '#52637a', font: { family: "'JetBrains Mono', monospace", size: 8 } }
+                    ticks: { color: '#7C8794', font: { family: "'IBM Plex Mono', monospace", size: 8 } }
                 },
                 y: {
                     position: 'right',
-                    grid: { color: 'rgba(0, 240, 255, 0.04)' },
+                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
                     ticks: {
-                        color: '#67e8f9',
-                        font: { family: "'JetBrains Mono', monospace", size: 8 },
+                        color: '#FFB300',
+                        font: { family: "'IBM Plex Mono', monospace", size: 8 },
                         callback: function(v) { return '$' + Number(v).toLocaleString(); }
                     }
                 }
