@@ -19,6 +19,7 @@ from testnet_engine.discovery import SymbolDiscoveryService
 from testnet_engine.market_scanner import MarketScanner
 from testnet_engine.profitability_gate import ProfitabilityGate
 from testnet_engine.risk_gate import RiskGate
+from testnet_engine.telemetry_manager import get_telemetry_manager
 
 logger = get_logger("service")
 
@@ -123,6 +124,7 @@ class TestnetService:
         self.cost_engine = CostEngine.get_binance_taker_config()
         self.profitability_gate = ProfitabilityGate(cost_engine=self.cost_engine)
         self.risk_gate = RiskGate(starting_balance=self.starting_equity)
+        self.telemetry = get_telemetry_manager()
         
         # State
         self.current_equity = self.starting_equity
@@ -706,6 +708,23 @@ class TestnetService:
                     logger.info(f"[EXECUTION_ATTEMPTED] {strategy_name} {side} {qty_str} {symbol} @ ~{current_price} | SignalID: {signal_id}")
                     self.stats["EXECUTION_ELIGIBLE"] += 1
                     
+                    self.telemetry.record_execution_event({
+                        "event_type": "execution_attempt",
+                        "symbol": symbol,
+                        "strategy": strategy_name,
+                        "timeframe": tf,
+                        "trade_id": signal_id,
+                        "side": side,
+                        "quantity": float(qty_str),
+                        "price": current_price
+                    })
+                    self.telemetry.record_equity_snapshot({
+                        "trigger_event": "ORDER_SUBMISSION",
+                        "total_equity": self.current_equity,
+                        "cash": self.current_equity,
+                        "open_positions": len(self.active_positions)
+                    })
+                    
                     try:
                         order_res = place_market_order(strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp, client_order_id=signal_id)
                         if order_res:
@@ -716,9 +735,12 @@ class TestnetService:
                             if tf in self.stats["timeframe_metrics"]:
                                 self.stats["timeframe_metrics"][tf]["executed"] += 1
                             actual_price = order_res.get("_actual_price", current_price)
-                            executed_qty = order_res.get("_executed_qty", qty)
+                            executed_qty = float(order_res.get("_executed_qty", qty_str))
+                            entry_oid = str(order_res.get("orderId", ""))
+                            notional = actual_price * executed_qty
+                            est_fee = notional * 0.001
                             
-                            logger.info(f"[ORDER_FILLED] {symbol} {side} {executed_qty} @ {actual_price:.4f} | OrderID: {order_res.get('orderId')} | SignalID: {signal_id}")
+                            logger.info(f"[ORDER_FILLED] {symbol} {side} {executed_qty} @ {actual_price:.4f} | OrderID: {entry_oid} | SignalID: {signal_id}")
                             
                             self.active_positions[symbol] = {
                                 "strategy": strategy_name,
@@ -733,28 +755,137 @@ class TestnetService:
                                 "entry_client_id": signal_id
                             }
                             self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
+                            
+                            # Telemetry Recording
+                            self.telemetry.record_execution_event({
+                                "event_type": "order_filled",
+                                "symbol": symbol,
+                                "trade_id": signal_id,
+                                "order_id": entry_oid,
+                                "strategy": strategy_name,
+                                "timeframe": tf,
+                                "side": side,
+                                "quantity": executed_qty,
+                                "price": actual_price
+                            })
+                            self.telemetry.record_trade_event({
+                                "trade_id": signal_id,
+                                "symbol": symbol,
+                                "strategy": strategy_name,
+                                "timeframe": tf,
+                                "side": side,
+                                "status": "OPEN",
+                                "entry_order_id": entry_oid,
+                                "entry_price": actual_price,
+                                "average_entry_price": actual_price,
+                                "quantity": executed_qty,
+                                "notional": notional,
+                                "stop_loss": sl,
+                                "take_profit": tp,
+                                "entry_fee": est_fee,
+                                "risk_amount": notional * 0.005,
+                                "expected_gross_return": fresh_metrics.get("gross_edge", 0.0),
+                                "expected_net_return": fresh_metrics.get("expected_net_return", 0.0),
+                                "profitability_decision": "ACCEPTED",
+                                "risk_decision": "ACCEPTED",
+                                "equity_before_entry": self.current_equity,
+                                "equity_after_entry": self.current_equity,
+                                "cash_before_entry": self.current_equity,
+                                "cash_after_entry": max(0.0, self.current_equity - notional)
+                            })
+                            self.telemetry.record_position_update({
+                                "position_id": symbol,
+                                "trade_id": signal_id,
+                                "symbol": symbol,
+                                "strategy": strategy_name,
+                                "timeframe": tf,
+                                "side": side,
+                                "entry_price": actual_price,
+                                "quantity": executed_qty,
+                                "stop_loss": sl,
+                                "take_profit": tp,
+                                "status": "OPEN"
+                            })
+                            self.telemetry.record_balance_event({
+                                "event_type": "TRADE_OPEN",
+                                "reason": f"BUY {symbol} {strategy_name}",
+                                "balance_before": self.current_equity,
+                                "balance_after": max(0.0, self.current_equity - notional),
+                                "delta": -notional,
+                                "trade_id": signal_id,
+                                "symbol": symbol,
+                                "strategy": strategy_name,
+                                "timeframe": tf
+                            })
+                            self.telemetry.record_equity_snapshot({
+                                "trigger_event": "POSITION_OPEN",
+                                "total_equity": self.current_equity,
+                                "cash": max(0.0, self.current_equity - notional),
+                                "crypto_holdings_value": notional,
+                                "open_positions": len(self.active_positions)
+                            })
                         else:
                             self.stats["EXECUTION_REJECTED"] += 1
                             logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: LOCAL_ORDER_BLOCKED")
                             self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", "LOCAL_ORDER_BLOCKED", current_price=current_price)
+                            self.telemetry.record_execution_event({
+                                "event_type": "order_failed",
+                                "symbol": symbol,
+                                "trade_id": signal_id,
+                                "strategy": strategy_name,
+                                "timeframe": tf,
+                                "status": "FAILED",
+                                "error_code": "LOCAL_ORDER_BLOCKED",
+                                "error_message": "Local order dispatch returned None"
+                            })
                             self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
                     except ZeroFillError as zfe:
                         self.stats["ORDERS_SUBMITTED"] += 1
                         self.stats["ORDERS_FAILED"] += 1
                         logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: ZERO_FILL")
                         self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", "ZERO_FILL", current_price=current_price)
+                        self.telemetry.record_execution_event({
+                            "event_type": "order_failed",
+                            "symbol": symbol,
+                            "trade_id": signal_id,
+                            "strategy": strategy_name,
+                            "timeframe": tf,
+                            "status": "FAILED",
+                            "error_code": "ZERO_FILL",
+                            "error_message": str(zfe)
+                        })
                         self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
                     except BinanceAPIException as e:
                         self.stats["ORDERS_SUBMITTED"] += 1
                         self.stats["ORDERS_FAILED"] += 1
                         logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: BINANCE_API_ERROR_{e.status_code}")
                         self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", f"BINANCE_API_ERROR_{e.status_code}", current_price=current_price)
+                        self.telemetry.record_execution_event({
+                            "event_type": "order_failed",
+                            "symbol": symbol,
+                            "trade_id": signal_id,
+                            "strategy": strategy_name,
+                            "timeframe": tf,
+                            "status": "FAILED",
+                            "error_code": f"BINANCE_API_ERROR_{e.status_code}",
+                            "error_message": str(e)
+                        })
                         self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
                     except Exception as e:
                         # Unhandled execution errors
                         self.stats["ORDERS_SUBMITTED"] += 1
                         self.stats["ORDERS_FAILED"] += 1
                         logger.error(f"[ORDER_FAILED] {symbol} {side} | Reason: UNHANDLED_ERROR: {e}")
+                        self.telemetry.record_execution_event({
+                            "event_type": "order_failed",
+                            "symbol": symbol,
+                            "trade_id": signal_id,
+                            "strategy": strategy_name,
+                            "timeframe": tf,
+                            "status": "FAILED",
+                            "error_code": "UNHANDLED_ERROR",
+                            "error_message": str(e)
+                        })
                         self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
                         
                     self._save_state()
@@ -813,6 +944,27 @@ class TestnetService:
         try:
             with open(TESTNET_OPPORTUNITY_LOG, "a") as f:
                 f.write(json.dumps(log_entry) + "\n")
+        except:
+            pass
+
+        try:
+            if hasattr(self, "telemetry") and self.telemetry:
+                self.telemetry.record_signal_event({
+                    "signal_id": signal_id,
+                    "symbol": symbol,
+                    "decision": side,
+                    "strategy": metrics.get("strategy", ""),
+                    "timeframe": metrics.get("timeframe", "5m"),
+                    "entry": current_price or metrics.get("current_price", 0.0),
+                    "stop": metrics.get("sl", 0.0),
+                    "target": metrics.get("tp", 0.0),
+                    "confidence": metrics.get("confidence", 0.0),
+                    "expected_gross": metrics.get("gross_edge") or metrics.get("expected_gross_return", 0.0),
+                    "expected_net": metrics.get("expected_net_return", 0.0),
+                    "profitability_decision": decision,
+                    "profitability_reason": reason,
+                    "final_decision": decision
+                })
         except:
             pass
 
@@ -1020,6 +1172,45 @@ class TestnetService:
                         if str(ct["exit_order_id"]) not in existing_exit_ids:
                             f.write(json.dumps(ct) + "\n")
                             existing_exit_ids.add(str(ct["exit_order_id"]))
+                            
+                            # Telemetry update
+                            try:
+                                if hasattr(self, "telemetry") and self.telemetry:
+                                    self.telemetry.record_trade_event({
+                                        "trade_id": str(ct.get("entry_order_id", ct.get("exit_order_id", ""))),
+                                        "symbol": ct.get("symbol"),
+                                        "side": ct.get("side", "BUY"),
+                                        "status": "CLOSED",
+                                        "entry_order_id": str(ct.get("entry_order_id", "")),
+                                        "exit_order_id": str(ct.get("exit_order_id", "")),
+                                        "entry_price": ct.get("entry_price"),
+                                        "exit_price": ct.get("exit_price"),
+                                        "quantity": ct.get("quantity"),
+                                        "notional": float(ct.get("quantity", 0)) * float(ct.get("entry_price", 0)),
+                                        "gross_pnl": ct.get("gross_pnl", 0.0),
+                                        "net_pnl": ct.get("net_pnl", 0.0),
+                                        "total_fees": ct.get("total_fees", 0.0),
+                                        "action": ct.get("action", "CLOSED"),
+                                        "entry_timestamp": ct.get("entry_timestamp"),
+                                        "exit_timestamp": ct.get("exit_timestamp")
+                                    })
+                                    self.telemetry.record_position_update({
+                                        "position_id": ct.get("symbol"),
+                                        "symbol": ct.get("symbol"),
+                                        "status": "CLOSED",
+                                        "realized_pnl": ct.get("net_pnl", 0.0)
+                                    })
+                                    self.telemetry.record_balance_event({
+                                        "event_type": "TRADE_CLOSE",
+                                        "reason": f"CLOSE {ct.get('symbol')} {ct.get('action')}",
+                                        "balance_before": self.current_equity,
+                                        "balance_after": self.current_equity + ct.get("net_pnl", 0.0),
+                                        "delta": ct.get("net_pnl", 0.0),
+                                        "trade_id": str(ct.get("entry_order_id", "")),
+                                        "symbol": ct.get("symbol")
+                                    })
+                            except Exception as te_err:
+                                logger.error(f"[TELEMETRY] Failed to record closed trade: {te_err}")
                     
             # 2. Update Risk bounds mathematically
             self.risk_gate.daily_realized_loss = sum(t['net_pnl'] for t in completed_trades)

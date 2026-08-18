@@ -726,33 +726,6 @@ def get_scanner():
 
     return jsonify(stats)
 
-@app.route('/api/strategy-metrics')
-def api_strategy_metrics():
-    """Calculates comprehensive strategy metrics."""
-    trades_info = _get_trades_data()
-    positions = trades_info.get("positions", [])
-    strats = {}
-    for t in positions:
-        st = str(t.get("strategy", "AGGRESSOR")).upper()
-        if st not in strats:
-            strats[st] = {"trades": 0, "wins": 0, "losses": 0, "net_pnl": 0.0, "gross_profit": 0.0, "gross_loss": 0.0}
-        strats[st]["trades"] += 1
-        pnl = float(t.get("pnl", 0.0))
-        strats[st]["net_pnl"] += pnl
-        if pnl > 0:
-            strats[st]["wins"] += 1
-            strats[st]["gross_profit"] += pnl
-        elif pnl < 0:
-            strats[st]["losses"] += 1
-            strats[st]["gross_loss"] += abs(pnl)
-            
-    for st, data in strats.items():
-        data["win_rate"] = round((data["wins"] / data["trades"] * 100), 2) if data["trades"] > 0 else 0.0
-        data["profit_factor"] = round((data["gross_profit"] / data["gross_loss"]), 2) if data["gross_loss"] > 0 else (999.0 if data["gross_profit"] > 0 else 0.0)
-        data["net_pnl"] = round(data["net_pnl"], 4)
-        
-    return jsonify(strats)
-
 @app.route('/api/export-trades')
 def api_export_trades():
     """Generates downloadable CSV export of the verified trade ledger."""
@@ -784,6 +757,304 @@ def api_export_trades():
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment;filename=binance_trade_ledger.csv"}
     )
+
+@app.route('/api/account')
+def api_account():
+    """
+    Returns authoritative Binance Testnet wallet balances, mark-to-market active crypto value,
+    true total equity, and PnL performance with timestamp and metadata.
+    """
+    holdings_data = get_live_account_and_holdings()
+    trades_data = _get_trades_data()
+    port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+    open_positions = {}
+    unrealized_pnl = 0.0
+    if os.path.exists(port_file):
+        try:
+            with open(port_file, "r") as f:
+                p_data = json.load(f)
+                open_positions = {k: v for k, v in p_data.get("positions", {}).items() if isinstance(v, dict) and v.get("status") == "OPEN"}
+                for sym, pos in open_positions.items():
+                    unrealized_pnl += float(pos.get("unrealized_pnl", 0.0))
+        except Exception:
+            pass
+
+    usdt_cash = holdings_data.get("usdt_total_cash", 0.0)
+    crypto_val = holdings_data.get("active_trade_holdings_value", 0.0)
+    total_eq = round(usdt_cash + crypto_val, 2)
+    realized_pnl = round(float(trades_data.get("net_pnl", 0.0)), 4)
+    
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data_age": round(time.time() - _holdings_cache_ts, 2) if _holdings_cache_ts else 0.0,
+        "account": {
+            "usdt_free": holdings_data.get("usdt_free", 0.0),
+            "usdt_locked": holdings_data.get("usdt_locked", 0.0),
+            "usdt_total_cash": usdt_cash,
+            "crypto_holdings_value": crypto_val,
+            "total_crypto_value": holdings_data.get("total_crypto_value", 0.0),
+            "total_equity": total_eq,
+            "realized_pnl": realized_pnl,
+            "unrealized_pnl": round(unrealized_pnl, 4),
+            "total_pnl": round(realized_pnl + unrealized_pnl, 4),
+            "fees_paid": round(float(trades_data.get("total_fees", 0.0)), 4),
+            "open_position_count": len(open_positions),
+            "holdings": holdings_data.get("holdings", [])
+        }
+    })
+
+@app.route('/api/equity-history')
+def api_equity_history():
+    """
+    Returns time series of account-equity snapshots with range filtering:
+    '1h', '6h', '24h', '7d', '30d', 'all'.
+    """
+    from testnet_engine.telemetry_manager import get_telemetry_manager
+    time_range = request.args.get("range", "all").lower()
+    telemetry = get_telemetry_manager()
+    timeline = telemetry.get_equity_timeline(time_range)
+    
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data_age": 0.0,
+        "range": time_range,
+        "count": len(timeline),
+        "snapshots": timeline
+    })
+
+@app.route('/api/trade-history')
+def api_trade_history():
+    """Returns closed trade history from the authoritative ledger."""
+    trades_data = _get_trades_data()
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data_age": 0.0,
+        "total_trades": len(trades_data.get("positions", [])),
+        "realized_pnl": trades_data.get("net_pnl", 0.0),
+        "trades": trades_data.get("positions", [])
+    })
+
+@app.route('/api/trade-events')
+def api_trade_events():
+    """Returns canonical trade events with complete 40+ field lifecycle telemetry."""
+    from testnet_engine.telemetry_manager import get_telemetry_manager
+    symbol = request.args.get("symbol")
+    status = request.args.get("status")
+    limit = int(request.args.get("limit", 100))
+    telemetry = get_telemetry_manager()
+    events = telemetry.get_trade_events(symbol=symbol, status=status, limit=limit)
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data_age": 0.0,
+        "count": len(events),
+        "events": events
+    })
+
+@app.route('/api/positions')
+def api_positions():
+    """
+    Returns active and historical positions.
+    Supports query parameter ?status=OPEN|CLOSED|ALL.
+    """
+    from testnet_engine.telemetry_manager import get_telemetry_manager
+    status_filter = request.args.get("status", "OPEN").upper()
+    telemetry = get_telemetry_manager()
+    positions = telemetry.get_positions(status=status_filter)
+    
+    # If looking for OPEN positions and telemetry store is warming up, sync from testnet_portfolio.json
+    if status_filter in ["OPEN", "ALL"] and not positions:
+        port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+        if os.path.exists(port_file):
+            try:
+                with open(port_file, "r") as f:
+                    p_data = json.load(f)
+                    for sym, p in p_data.get("positions", {}).items():
+                        if isinstance(p, dict) and p.get("status") == "OPEN":
+                            positions.append({
+                                "position_id": sym,
+                                "trade_id": p.get("entry_client_id", sym),
+                                "symbol": sym,
+                                "strategy": p.get("strategy", ""),
+                                "side": p.get("direction", p.get("side", "BUY")),
+                                "entry_timestamp": p.get("timestamp", ""),
+                                "entry_price": float(p.get("entry_price", 0.0)),
+                                "quantity": float(p.get("quantity", 0.0)),
+                                "stop_loss": float(p.get("sl", 0.0)),
+                                "take_profit": float(p.get("tp", 0.0)),
+                                "status": "OPEN"
+                            })
+            except Exception:
+                pass
+
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data_age": 0.0,
+        "filter": status_filter,
+        "count": len(positions),
+        "positions": positions
+    })
+
+@app.route('/api/signals')
+def api_signals():
+    """Returns strategy signal decision logs for terminal telemetry."""
+    from testnet_engine.telemetry_manager import get_telemetry_manager
+    limit = int(request.args.get("limit", 100))
+    symbol = request.args.get("symbol")
+    strategy = request.args.get("strategy")
+    telemetry = get_telemetry_manager()
+    signals = telemetry.get_signals_log(limit=limit, symbol=symbol, strategy=strategy)
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data_age": 0.0,
+        "count": len(signals),
+        "signals": signals
+    })
+
+@app.route('/api/strategy-metrics')
+def api_strategy_metrics():
+    """Returns detailed metrics breakdown per strategy."""
+    trades_info = _get_trades_data()
+    positions = trades_info.get("positions", [])
+    strats = {
+        "aggressor": {"trades": 0, "wins": 0, "losses": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0},
+        "scalper": {"trades": 0, "wins": 0, "losses": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0},
+        "supertrend": {"trades": 0, "wins": 0, "losses": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0},
+        "ml": {"trades": 0, "wins": 0, "losses": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0},
+        "adx_ema": {"trades": 0, "wins": 0, "losses": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0},
+        "swing": {"trades": 0, "wins": 0, "losses": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0},
+        "other": {"trades": 0, "wins": 0, "losses": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0}
+    }
+    for t in positions:
+        st = t.get("strategy", "other").lower()
+        if st not in strats:
+            st = "other"
+        strats[st]["trades"] += 1
+        pnl = float(t.get("pnl", 0.0))
+        strats[st]["net_pnl"] += pnl
+        if pnl > 0:
+            strats[st]["wins"] += 1
+            strats[st]["gross_profit"] += pnl
+        elif pnl < 0:
+            strats[st]["losses"] += 1
+            strats[st]["gross_loss"] += abs(pnl)
+            
+    for st, data in strats.items():
+        data["win_rate"] = round((data["wins"] / data["trades"] * 100), 2) if data["trades"] > 0 else 0.0
+        data["profit_factor"] = round((data["gross_profit"] / data["gross_loss"]), 2) if data["gross_loss"] > 0 else (999.0 if data["gross_profit"] > 0 else 0.0)
+        data["net_pnl"] = round(data["net_pnl"], 4)
+        
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data_age": 0.0,
+        "strategies": strats
+    })
+
+@app.route('/api/timeframe-metrics')
+def api_timeframe_metrics():
+    """Returns performance and signal throughput metrics by timeframe."""
+    engine_data = get_engine_health_data()
+    tf_metrics = engine_data.get("stats", {}).get("timeframe_metrics", {
+        "5m": {"evaluated": 0, "qualified": 0, "executed": 0},
+        "15m": {"evaluated": 0, "qualified": 0, "executed": 0},
+        "30m": {"evaluated": 0, "qualified": 0, "executed": 0},
+        "1h": {"evaluated": 0, "qualified": 0, "executed": 0},
+        "2h": {"evaluated": 0, "qualified": 0, "executed": 0},
+        "4h": {"evaluated": 0, "qualified": 0, "executed": 0}
+    })
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data_age": 0.0,
+        "timeframes": tf_metrics
+    })
+
+@app.route('/api/risk')
+def api_risk():
+    """Returns live risk gate configuration, current exposure %, and limits."""
+    account_holdings = get_live_account_and_holdings()
+    usdt_cash = account_holdings["usdt_total_cash"]
+    crypto_val = account_holdings["active_trade_holdings_value"]
+    total_eq = usdt_cash + crypto_val
+    
+    port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+    open_positions = {}
+    if os.path.exists(port_file):
+        try:
+            with open(port_file, "r") as f:
+                port = json.load(f)
+                open_positions = {k: v for k, v in port.get("positions", {}).items() if isinstance(v, dict) and v.get("status") == "OPEN"}
+        except Exception:
+            pass
+            
+    risk_used_pct = round(((crypto_val) / total_eq) * 100, 2) if total_eq > 0 else 0.0
+    max_exposure_pct = config.MAX_TESTNET_EXPOSURE * 100
+    available_risk_pct = max(0.0, round(max_exposure_pct - risk_used_pct, 2))
+    
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data_age": 0.0,
+        "risk": {
+            "total_equity": round(total_eq, 2),
+            "cash_usdt": round(usdt_cash, 2),
+            "deployed_capital": round(crypto_val, 2),
+            "risk_used_pct": risk_used_pct,
+            "max_exposure_pct": max_exposure_pct,
+            "available_risk_pct": available_risk_pct,
+            "max_single_asset_exposure_pct": getattr(config, "MAX_SINGLE_ASSET_EXPOSURE", 0.02) * 100,
+            "max_net_directional_exposure_pct": getattr(config, "MAX_NET_DIRECTIONAL_EXPOSURE", 0.04) * 100,
+            "max_open_positions": config.MAX_OPEN_POSITIONS,
+            "current_open_positions": len(open_positions),
+            "max_drawdown_pct": config.MAX_TESTNET_DRAWDOWN_PCT * 100,
+            "max_daily_loss_pct": getattr(config, "MAX_DAILY_LOSS_PCT", 0.02) * 100
+        }
+    })
+
+@app.route('/api/system-health')
+def api_system_health():
+    """Returns comprehensive component health metrics."""
+    engine_data = get_engine_health_data()
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data_age": 0.0,
+        "health": {
+            "overall": "HEALTHY" if engine_data["healthy"] else "DEGRADED",
+            "engine": "OK" if engine_data["healthy"] else "ERROR",
+            "binance": "OK" if engine_data.get("binance_connected") else "ERROR",
+            "websocket": "OK" if engine_data.get("websocket_connected") else "ERROR",
+            "execution": "OK" if engine_data["healthy"] else "ERROR",
+            "strategy": "OK" if engine_data["healthy"] else "ERROR",
+            "last_heartbeat": engine_data.get("heartbeat_age_seconds", 0)
+        }
+    })
+
+@app.route('/api/opportunities')
+def api_opportunities():
+    """Returns candidate funnel pipeline opportunities."""
+    return get_funnel()
+
+@app.route('/api/balance-events')
+def api_balance_events():
+    """Returns chronological audit log of balance transitions."""
+    from testnet_engine.telemetry_manager import get_telemetry_manager
+    limit = int(request.args.get("limit", 100))
+    telemetry = get_telemetry_manager()
+    events = telemetry.get_balance_events(limit=limit)
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "data_age": 0.0,
+        "count": len(events),
+        "events": events
+    })
 
 @app.route('/api/diagnostics')
 def api_diagnostics():
@@ -823,6 +1094,113 @@ def api_diagnostics():
         "holdings_breakdown": account_holdings["holdings"][:10],
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
     })
+
+
+@app.route('/api/telemetry/trades')
+def api_telemetry_trades():
+    """Returns canonical trades from the unified telemetry ledger with filtering."""
+    try:
+        from testnet_engine.telemetry import get_telemetry_manager
+        tm = get_telemetry_manager()
+        symbol = request.args.get('symbol')
+        strategy = request.args.get('strategy')
+        timeframe = request.args.get('timeframe')
+        status = request.args.get('status')
+        limit = int(request.args.get('limit', 100))
+        
+        trades = tm.query_trades(status=status, symbol=symbol, strategy=strategy, timeframe=timeframe, limit=limit)
+        return jsonify({
+            "status": "OK",
+            "count": len(trades),
+            "trades": trades,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/telemetry/signals')
+def api_telemetry_signals():
+    """Returns signal funnel and opportunity telemetry."""
+    try:
+        from testnet_engine.telemetry import get_telemetry_manager
+        tm = get_telemetry_manager()
+        symbol = request.args.get('symbol')
+        limit = int(request.args.get('limit', 100))
+        signals = tm.query_signals(symbol=symbol, limit=limit)
+        return jsonify({
+            "status": "OK",
+            "count": len(signals),
+            "signals": signals,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/telemetry/positions')
+def api_telemetry_positions():
+    """Returns active and historical position telemetry."""
+    try:
+        from testnet_engine.telemetry import get_telemetry_manager
+        tm = get_telemetry_manager()
+        status = request.args.get('status')
+        positions = tm.query_positions(status=status)
+        return jsonify({
+            "status": "OK",
+            "count": len(positions),
+            "positions": positions,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/telemetry/equity_curve')
+def api_telemetry_equity_curve():
+    """Returns chronological high-frequency equity curve."""
+    try:
+        from testnet_engine.telemetry import get_telemetry_manager
+        tm = get_telemetry_manager()
+        limit = int(request.args.get('limit', 500))
+        curve = tm.query_equity_curve(limit=limit)
+        return jsonify({
+            "status": "OK",
+            "count": len(curve),
+            "equity_curve": curve,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/telemetry/balance_events')
+def api_telemetry_balance_events():
+    """Returns balance audit trail with non-double-counted deltas."""
+    try:
+        from testnet_engine.telemetry import get_telemetry_manager
+        tm = get_telemetry_manager()
+        limit = int(request.args.get('limit', 100))
+        events = tm.query_balance_events(limit=limit)
+        return jsonify({
+            "status": "OK",
+            "count": len(events),
+            "balance_events": events,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/telemetry/analytics')
+def api_telemetry_analytics():
+    """Returns aggregated performance analytics across strategies, timeframes, and assets."""
+    try:
+        from testnet_engine.telemetry import get_telemetry_manager
+        tm = get_telemetry_manager()
+        analytics = tm.compute_summary_analytics()
+        return jsonify({
+            "status": "OK",
+            "analytics": analytics,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
 
 @app.route('/<path:path>')
 def serve_static(path):
