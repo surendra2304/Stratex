@@ -1274,12 +1274,112 @@ def api_signals():
     strategy = request.args.get("strategy")
     telemetry = get_telemetry_manager()
     signals = telemetry.get_signals_log(limit=limit, symbol=symbol, strategy=strategy)
+    
+    # Fallback to testnet_opportunity_log.jsonl if empty
+    if not signals and os.path.exists("testnet_opportunity_log.jsonl"):
+        try:
+            with open("testnet_opportunity_log.jsonl", "r", encoding="utf-8") as f:
+                for line in f:
+                    if not line.strip(): continue
+                    try:
+                        s = json.loads(line)
+                        if symbol and s.get("symbol") != symbol: continue
+                        if strategy and s.get("strategy") != strategy: continue
+                        signals.append(s)
+                    except: pass
+            signals = sorted(signals, key=lambda x: str(x.get("timestamp", "")), reverse=True)[:limit]
+        except Exception as e:
+            logger.error(f"Error reading signals from opportunity log: {e}")
+
     return jsonify({
         "status": "SUCCESS",
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
         "data_age": 0.0,
         "count": len(signals),
         "signals": signals
+    })
+
+@app.route('/api/diagnostics')
+def api_diagnostics():
+    """
+    Returns complete Global Decision Funnel diagnostics, exact stage counts,
+    rejection reasons breakdown, and zero-trade bottleneck analysis.
+    """
+    from testnet_engine.telemetry_manager import get_telemetry_manager
+    telemetry = get_telemetry_manager()
+    
+    # Load stats from testnet_portfolio.json or in-memory
+    stats = {
+        "candles_evaluated": 0,
+        "strategies_evaluated": 0,
+        "signals_generated": 0,
+        "profitability_accepted": 0,
+        "profitability_rejected": 0,
+        "risk_accepted": 0,
+        "risk_rejected": 0,
+        "execution_eligible": 0,
+        "execution_rejected": 0,
+        "orders_submitted": 0,
+        "orders_filled": 0,
+        "orders_failed": 0
+    }
+    
+    port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+    if os.path.exists(port_file):
+        try:
+            with open(port_file, "r", encoding="utf-8") as f:
+                p_data = json.load(f)
+                funnel_data = p_data.get("funnel", {})
+                scanner_data = p_data.get("scanner_stats", {})
+                for k, v in funnel_data.items():
+                    stats[k] = v
+                for k, v in scanner_data.items():
+                    if k.lower() in stats and stats[k.lower()] == 0:
+                        stats[k.lower()] = v
+        except Exception as e:
+            logger.error(f"Error reading portfolio for diagnostics: {e}")
+
+    # Read recent signals to compile detailed rejection reasons
+    profit_reasons = {}
+    risk_reasons = {}
+    exec_reasons = {}
+    
+    signals = telemetry.get_signals_log(limit=500)
+    for s in signals:
+        p_dec = s.get("profitability_decision", "")
+        p_reas = s.get("profitability_reason", "")
+        r_dec = s.get("risk_decision", "")
+        r_reas = s.get("risk_reason", "")
+        e_dec = s.get("execution_decision", s.get("final_decision", ""))
+        e_reas = s.get("execution_reason", "")
+        
+        if p_dec == "REJECTED" and p_reas:
+            profit_reasons[p_reas] = profit_reasons.get(p_reas, 0) + 1
+        if r_dec == "REJECTED" and r_reas:
+            risk_reasons[r_reas] = risk_reasons.get(r_reas, 0) + 1
+        if e_dec == "REJECTED" and e_reas:
+            exec_reasons[e_reas] = exec_reasons.get(e_reas, 0) + 1
+
+    # Bottleneck diagnosis
+    bottleneck = "PIPELINE ACTIVE — Scanning live market for valid opportunities."
+    if stats["signals_generated"] > 0 and stats["orders_filled"] == 0 and stats["profitability_rejected"] > 0:
+        drop_pct = (stats["profitability_rejected"] / max(1, stats["signals_generated"])) * 100
+        bottleneck = f"{drop_pct:.1f}% of signals stopped at Profitability Gate due to expected net return failing the 0.31% friction hurdle."
+    elif stats["profitability_accepted"] > 0 and stats["risk_rejected"] > 0:
+        drop_pct = (stats["risk_rejected"] / max(1, stats["profitability_accepted"])) * 100
+        bottleneck = f"{drop_pct:.1f}% of qualified signals stopped at Risk Gate due to position sizing or exposure limits."
+
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "funnel": stats,
+        "rejection_breakdown": {
+            "profitability_reasons": profit_reasons,
+            "risk_reasons": risk_reasons,
+            "execution_reasons": exec_reasons
+        },
+        "bottleneck_diagnosis": bottleneck,
+        "pipeline_state": "PIPELINE READY — WAITING FOR REAL SIGNAL" if stats["orders_filled"] == 0 else "ACTIVE_TRADING"
     })
 
 @app.route('/api/strategy-metrics')
@@ -2346,44 +2446,7 @@ def api_system_events():
         "events": system_events[:limit]
     })
 
-@app.route('/api/diagnostics')
-def api_diagnostics():
-    """Returns comprehensive accounting, reconciliation, and engine diagnostics."""
-    account_holdings = get_live_account_and_holdings(force_refresh=True)
-    trades_data = _get_trades_data()
-    engine_data = get_engine_health_data()
-    
-    usdt_cash = account_holdings["usdt_total_cash"]
-    crypto_val = account_holdings["active_trade_holdings_value"]
-    total_eq = usdt_cash + crypto_val
-    realized_pnl = float(trades_data.get("net_pnl", 0.0))
-    
-    port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
-    open_positions = {}
-    if os.path.exists(port_file):
-        try:
-            with open(port_file, "r") as f:
-                port = json.load(f)
-                open_positions = port.get("positions", {})
-        except Exception:
-            pass
-            
-    return jsonify({
-        "status": "OK",
-        "accounting_model": {
-            "formula": "TOTAL_EQUITY = usdt_cash + crypto_holdings_market_value",
-            "usdt_cash": round(usdt_cash, 2),
-            "crypto_holdings_market_value": round(crypto_val, 2),
-            "total_equity": round(total_eq, 2),
-            "realized_pnl": round(realized_pnl, 4),
-            "realized_pnl_double_counted": False,
-            "unrealized_pnl_double_counted": False
-        },
-        "engine_health": engine_data,
-        "active_positions": open_positions,
-        "holdings_breakdown": account_holdings["holdings"][:10],
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-    })
+
 
 
 @app.route('/api/telemetry/trades')

@@ -600,6 +600,8 @@ class TestnetService:
                         "symbol": symbol,
                         "tf": tf,
                         "side": side,
+                        "entry": current_price,
+                        "current_price": current_price,
                         "sl": sl,
                         "tp": tp,
                         "strategy": strat_name,
@@ -609,7 +611,7 @@ class TestnetService:
                     }
                     self.opportunity_pool.put(candidate)
                     self.pool_event.set()
-                    self.log_opportunity(signal_id, symbol, side, p_metrics, "QUALIFIED", "ADDED_TO_POOL")
+                    self.log_opportunity(signal_id, symbol, side, p_metrics, "QUALIFIED", "ADDED_TO_POOL", current_price=current_price, candidate=candidate)
                 
             except Exception as e:
                 logger.error(f"[STRATEGY_EXCEPTION] Error processing signal for {symbol} ({tf}): {e}", exc_info=True)
@@ -635,10 +637,37 @@ class TestnetService:
             if not candidates:
                 continue
                 
-            # Rank candidates by Expected Net Edge (Descending)
-            candidates.sort(key=lambda x: x["metrics"]["expected_net_return"], reverse=True)
+            # Opportunity Ranking:
+            # Deterministic Score Formula: score = round((expected_net_return * confidence) / max(0.001, risk_pct), 6)
+            for c in candidates:
+                p_met = c.get("metrics", {})
+                exp_net = float(p_met.get("expected_net_return", 0.0))
+                conf = float(p_met.get("confidence", p_met.get("prob_win", p_met.get("win_rate_prior", 0.5))))
+                sl_p = float(c.get("sl", 0.0))
+                tp_p = float(c.get("tp", 0.0))
+                fallback_entry = (sl_p + tp_p) / 2 if (sl_p > 0 and tp_p > 0) else 1.0
+                entry_p = float(c.get("entry", c.get("current_price", fallback_entry)))
+                if entry_p <= 1.0 and fallback_entry > 1.0:
+                    entry_p = fallback_entry
+                risk_pct = float(p_met.get("risk_pct", abs(entry_p - sl_p) / max(1e-5, entry_p)))
+                if risk_pct <= 0.0 or risk_pct > 1.0:
+                    risk_pct = 0.01 # normalize to standard 1% risk baseline
+                score = round(exp_net * conf / max(0.001, risk_pct), 6)
+                c["score"] = score
+                c["net_edge"] = exp_net
+                c["risk"] = risk_pct
+                c["confidence"] = conf
+                
+            # Rank candidates by Deterministic Score (Descending), then Net Edge, Confidence, Risk, Symbol
+            candidates.sort(key=lambda x: (x["score"], x["net_edge"], x["confidence"], -x["risk"], x["symbol"]), reverse=True)
             
-            for candidate in candidates:
+            for rank_idx, candidate in enumerate(candidates, 1):
+                candidate["rank"] = rank_idx
+                logger.info(
+                    f"[OPPORTUNITY_RANK] Rank #{rank_idx} | {candidate['symbol']} ({candidate.get('tf','15m')}) | "
+                    f"Strat: {candidate.get('strategy')} | Score: {candidate['score']} | "
+                    f"Net Edge: {candidate['net_edge']*100:.3f}% | Risk: {candidate['risk']*100:.3f}% | Conf: {candidate['confidence']*100:.1f}%"
+                )
                 symbol = candidate["symbol"]
                 side = candidate["side"]
                 signal_id = candidate["signal_id"]
@@ -946,84 +975,128 @@ class TestnetService:
                 logger.warning(f"[TRADE_TARGET] ❌ Window expired. Final: {total}/{target} trades.")
                 break
 
-    def log_opportunity(self, signal_id, symbol, side, metrics, decision, reason, current_price=0.0):
+    def log_opportunity(self, signal_id, symbol, side, metrics, decision, reason, current_price=0.0, rank=None, score=None, candidate=None):
+        tf = metrics.get("timeframe") or (candidate.get("tf") if candidate else None) or "5m"
+        strat = metrics.get("strategy") or (candidate.get("strategy") if candidate else None) or "adx_ema"
+        entry = float(current_price or metrics.get("entry_price") or metrics.get("current_price", 0.0) or (candidate.get("entry") if candidate else 0.0))
+        stop = float(metrics.get("sl_price") or metrics.get("sl") or (candidate.get("sl") if candidate else 0.0))
+        target = float(metrics.get("tp_price") or metrics.get("tp") or (candidate.get("tp") if candidate else 0.0))
+        conf = float(metrics.get("confidence", metrics.get("prob_win", metrics.get("win_rate_prior", 0.5))))
+        gross = float(metrics.get("gross_edge") or metrics.get("expected_gross_return") or metrics.get("expected_gross", 0.0))
+        fees = float(metrics.get("estimated_fees", metrics.get("fees", metrics.get("friction", 0.0031) * entry if entry > 0 else 0.0)))
+        slippage = float(metrics.get("slippage", metrics.get("slippage_pct", 0.0011) * entry if entry > 0 else 0.0))
+        net = float(metrics.get("expected_net_return") or metrics.get("expected_net") or metrics.get("net_edge", 0.0))
+        
+        is_risk_stage = any(k in reason for k in [
+            "RISK", "MIN_NOTIONAL", "EXPOSURE", "DRAWDOWN", "DAILY_LOSS",
+            "SAFETY_HALT", "LOCAL_ORDER_BLOCKED", "ZERO_FILL", "BINANCE_API_ERROR"
+        ])
+        is_profit_stage = any(k in reason for k in [
+            "PROFITABILITY", "REVALIDATION", "EDGE", "NET_RETURN", "FEES", "INSUFFICIENT", "NEGATIVE"
+        ])
+
+        if decision in ["ACCEPTED", "ALL_GATES_PASSED"]:
+            p_dec = "ACCEPTED"
+            r_dec = "ACCEPTED"
+            e_dec = "ELIGIBLE"
+            p_reason_val = "NET_EDGE_POSITIVE"
+            r_reason_val = "WITHIN_LIMITS"
+            e_reason_val = "DISPATCHED"
+        elif is_risk_stage:
+            p_dec = "ACCEPTED"
+            r_dec = "REJECTED"
+            e_dec = "REJECTED"
+            p_reason_val = "NET_EDGE_POSITIVE"
+            r_reason_val = reason
+            e_reason_val = f"BLOCKED_BY_RISK: {reason}"
+        elif is_profit_stage:
+            p_dec = "REJECTED"
+            r_dec = "PENDING"
+            e_dec = "REJECTED"
+            p_reason_val = reason
+            r_reason_val = ""
+            e_reason_val = f"BLOCKED_BY_PROFITABILITY: {reason}"
+        else:
+            p_dec = "REJECTED" if "REJECT" in decision else decision
+            r_dec = "REJECTED" if "REJECT" in decision else "PENDING"
+            e_dec = "REJECTED"
+            p_reason_val = reason
+            r_reason_val = reason
+            e_reason_val = reason
+
         log_entry = {
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
             "signal_id": signal_id,
             "symbol": symbol,
+            "timeframe": tf,
+            "strategy": strat,
             "side": side,
-            "current_price": current_price or metrics.get("current_price", 0.0),
-            "confidence": metrics.get("confidence"),
-            "predicted_move": metrics.get("predicted_move"),
-            "holding_horizon": metrics.get("holding_horizon"),
-            "expected_gross_return": metrics.get("gross_edge") or metrics.get("expected_gross_return"),
-            "expected_net_return": metrics.get("expected_net_return"),
-            "estimated_fees": metrics.get("estimated_fees", 0.0),
+            "entry": entry,
+            "stop": stop,
+            "target": target,
+            "confidence": conf,
+            "expected_gross": gross,
+            "expected_gross_return": gross,
+            "fees": fees,
+            "estimated_fees": fees,
+            "slippage": slippage,
+            "expected_net": net,
+            "expected_net_return": net,
+            "profitability_decision": p_dec,
+            "profitability_reason": p_reason_val,
+            "risk_decision": r_dec,
+            "risk_reason": r_reason_val,
+            "execution_decision": e_dec,
+            "execution_reason": e_reason_val,
+            "rank": rank or (candidate.get("rank") if candidate else None),
+            "score": score or (candidate.get("score") if candidate else None),
             "decision": decision,
             "reason": reason
         }
         try:
-            with open(TESTNET_OPPORTUNITY_LOG, "a") as f:
+            with open(TESTNET_OPPORTUNITY_LOG, "a", encoding="utf-8") as f:
                 f.write(json.dumps(log_entry) + "\n")
         except:
             pass
 
         try:
             if hasattr(self, "telemetry") and self.telemetry:
-                # Map the decision/reason to the correct gate fields for the terminal
-                # 'decision' is the overall outcome at the point this is called:
-                #   REJECTED (profitability), REJECTED (risk), ACCEPTED, FAILED, QUALIFIED
-                # We infer which gate based on context stored in metrics or the reason string
-                is_risk_stage = any(k in reason for k in [
-                    "RISK", "MIN_NOTIONAL", "EXPOSURE", "DRAWDOWN", "DAILY_LOSS",
-                    "SAFETY_HALT", "LOCAL_ORDER_BLOCKED", "ZERO_FILL", "BINANCE_API_ERROR"
-                ])
-                is_profit_stage = any(k in reason for k in [
-                    "PROFITABILITY", "REVALIDATION", "EDGE", "NET_RETURN", "FEES"
-                ])
-
-                # Determine per-gate decision values
-                if decision in ["ACCEPTED", "ALL_GATES_PASSED"]:
-                    p_dec = "ACCEPTED"
-                    r_dec = "ACCEPTED"
-                    r_reason_val = "ALL_GATES_PASSED"
-                    p_reason_val = reason
-                elif is_risk_stage:
-                    p_dec = "ACCEPTED"  # passed profit gate to reach risk stage
-                    r_dec = "REJECTED"
-                    r_reason_val = reason
-                    p_reason_val = ""
-                elif is_profit_stage:
-                    p_dec = "REJECTED"
-                    r_dec = "PENDING"
-                    r_reason_val = ""
-                    p_reason_val = reason
-                else:
-                    p_dec = decision
-                    r_dec = "PENDING"
-                    r_reason_val = ""
-                    p_reason_val = reason
-
-                self.telemetry.record_signal_event({
-                    "signal_id": signal_id,
-                    "symbol": symbol,
-                    "decision": side,
-                    "strategy": metrics.get("strategy", ""),
-                    "timeframe": metrics.get("timeframe", "5m"),
-                    "entry": current_price or metrics.get("current_price", 0.0),
-                    "stop": metrics.get("sl", 0.0),
-                    "target": metrics.get("tp", 0.0),
-                    "confidence": metrics.get("confidence", 0.0),
-                    "expected_gross": metrics.get("gross_edge") or metrics.get("expected_gross_return", 0.0),
-                    "expected_net": metrics.get("expected_net_return", 0.0),
-                    "profitability_decision": p_dec,
-                    "profitability_reason": p_reason_val,
-                    "risk_decision": r_dec,
-                    "risk_reason": r_reason_val,
-                    "final_decision": "EXECUTED" if decision in ["ACCEPTED", "ALL_GATES_PASSED"] else "REJECTED"
-                })
+                self.telemetry.record_signal_event(log_entry)
         except Exception:
             pass
+
+    def _save_state(self):
+        """Persists current engine stats, scanner stats, and active positions to TESTNET_PORTFOLIO_FILE."""
+        try:
+            port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+            data = {
+                "initial_deposit": getattr(self, "initial_deposit", 10000.0),
+                "current_equity": getattr(self, "current_equity", 10000.0),
+                "starting_equity": getattr(self, "starting_equity", 10000.0),
+                "positions": getattr(self, "active_positions", {}),
+                "scanner_stats": getattr(self, "stats", {}),
+                "funnel": {
+                    "candles_evaluated": self.stats.get("CANDLES", self.stats.get("TOTAL_CANDLES", 0)),
+                    "strategies_evaluated": self.stats.get("STRATEGIES_EVALUATED", self.stats.get("strategy_evaluations", 0)),
+                    "signals_generated": self.stats.get("SIGNALS_GENERATED", self.stats.get("TOTAL_SIGNALS", 0)),
+                    "profitability_accepted": self.stats.get("PROFITABILITY_ACCEPTED", 0),
+                    "profitability_rejected": self.stats.get("PROFITABILITY_REJECTED", 0),
+                    "risk_accepted": self.stats.get("RISK_ACCEPTED", 0),
+                    "risk_rejected": self.stats.get("RISK_REJECTED", 0),
+                    "execution_eligible": self.stats.get("EXECUTION_ELIGIBLE", self.stats.get("QUALIFIED", 0)),
+                    "execution_rejected": self.stats.get("EXECUTION_REJECTED", 0),
+                    "orders_submitted": self.stats.get("ORDERS_SUBMITTED", 0),
+                    "orders_filled": self.stats.get("ORDERS_FILLED", 0),
+                    "orders_failed": self.stats.get("ORDERS_FAILED", 0)
+                },
+                "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+            }
+            tmp_file = port_file + ".tmp"
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            os.replace(tmp_file, port_file)
+        except Exception as e:
+            logger.error(f"[SERVICE] Error saving state: {e}")
 
     def position_monitor_loop(self):
         """Continuously reconciles active positions against Binance."""
