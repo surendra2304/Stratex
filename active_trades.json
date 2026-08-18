@@ -1,1 +1,29 @@
-[]
+[
+  {
+    "position_id": "POS_LINKUSDT_436591",
+    "trade_id": "TRD_88557",
+    "symbol": "LINKUSDT",
+    "side": "BUY",
+    "strategy": "SCALPER",
+    "timeframe": "5m",
+    "entry_price": 9.532,
+    "current_price": 9.46,
+    "mark_price": 9.46,
+    "quantity": 23.24,
+    "notional": 218.62,
+    "sl_price": 9.03,
+    "tp_price": 14.104,
+    "oco_id": "OCO_436592_436593",
+    "tp_order_id": 436593,
+    "sl_order_id": 436592,
+    "unrealized_pnl": -1.6733,
+    "status": "OPEN",
+    "state": 1,
+    "entry_timestamp": "2026-08-17T12:30:02.098000Z",
+    "timestamp": "2026-08-17T12:30:02.098000Z",
+    "entry_order_id": 443075,
+    "provenance": "BINANCE_EXECUTION",
+    "source": "BINANCE_EXECUTION",
+    "binance_verified": true
+  }
+]

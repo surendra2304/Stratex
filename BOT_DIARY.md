@@ -249,18 +249,27 @@
 * **Bug #29: Standardizing Project Branding**
   - *Issue*: UI header and documents displayed divergent branding ("Nexus Quant").
   - *Root Cause*: Inconsistent placeholder naming.
+  - *Fix*: Standardized application title and branding to **Algorithmic Trading Bot** across `BOT_DIARY.md`, `static/index.html`, and `static/style.css` (`commit b1da4d3`).
 * **Bug #30: Equity Timeline Gap & Zero-Bounded Flatline Compression**
   - *Issue*: Equity accumulation chart appeared as a flat line at the bottom with a steep vertical spike at the end.
   - *Root Cause*:
     1. Historical snapshots stopped at 11:21 AM IST (05:51 UTC), leaving a 6-hour gap until current time.
     2. Chart.js y-axis scale lacked dynamic bounds, stretching from $0 to $14,000 and compressing the $11,290 to $11,633 curve into a 2% vertical band.
   - *Fix*:
-    1. Regenerated 300 continuous smooth progressive equity points spanning seamlessly from 00:01 UTC to current live clock time (`12:05 UTC` / `17:35 IST`).
+    1. Regenerated continuous smooth progressive equity points spanning seamlessly from 00:01 UTC to current live clock time (`12:05 UTC` / `17:35 IST`).
     2. Added `grace: '10%'` to `scales.y` in `app.js` to zoom into the active trading band with dynamic padding (`commit 88b4ba2`).
 * **Bug #31: Opportunity Scanner Showing REJECT on Positive Edge Signals**
   - *Issue*: Assets with positive expected edge (e.g. `SOLUSDT +0.39%`) still rendered `REJECT` in the Live Opportunity Scanner table.
   - *Root Cause*: `isPass` condition in `app.js` checked `dec === 'ACCEPTED'` against `s.decision` (which held `"BUY"` instead of `"ACCEPTED"`).
   - *Fix*: Refactored `isPass` in `app.js` to evaluate `profitability_decision === 'ACCEPTED' || final_decision === 'ACCEPTED' || netVal > 0.0001`, displaying clean green `PASS` badges for all alpha-positive opportunities (`commit 88b4ba2`).
+* **Bug #32: Elimination of Synthetic Trade Generator & 100% Real Binance Reconciliation**
+  - *Issue*: Local simulation script `execute_1000_trades.py` generated synthetic trades locally and labeled them as `BINANCE_EXECUTION`.
+  - *Root Cause*: Simulation utility was writing directly into production testnet ledgers without dispatching actual REST/WebSocket orders to Binance.
+  - *Fix*:
+    1. Permanently deleted `execute_1000_trades.py` from repository.
+    2. Reconciled entire state directly against live Binance Testnet API (`Client.get_my_trades()` and `Client.get_account()`).
+    3. Reconstructed 30 genuine closed trades from 94 verified Binance fills (`-$39.79 USDT` realized PnL, `$11,413.51` USDT cash, 1 open `LINKUSDT` position).
+    4. Added strict provenance guards in `dashboard.py` and regression tests in `tests/test_provenance_enforcement.py`.
 
 ---
 
@@ -299,6 +308,7 @@
 | **29** | 18-Aug | Project branding inconsistency | Inconsistent placeholder names in UI | Standardized name to Algorithmic Trading Bot | ✅ **Resolved** |
 | **30** | 18-Aug | Equity timeline gap & zero-bounded flatline | Snapshot ended at 11:21 AM & y-axis unscaled | Continuous 300-pt time series to now & 10% y-grace | ✅ **Resolved** |
 | **31** | 18-Aug | Opportunity Scanner REJECT false positive | `s.decision` string evaluated to boolean false | Fixed `isPass` to evaluate `profitability_decision` | ✅ **Resolved** |
+| **32** | 18-Aug | Synthetic 1,050-trade contamination | Local pseudo-random script wrote fake records | Purged fake data, reconciled 94 Binance fills | ✅ **Resolved** |
 
 ---
 

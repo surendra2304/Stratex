@@ -548,9 +548,10 @@ def _get_trades_data():
                     trade = json.loads(line.strip())
                     if not trade: continue
                     
-                    source = trade.get("source", "")
-                    strategy = trade.get("strategy", "")
-                    if source == "TEST" or strategy == "TEST":
+                    prov = str(trade.get("provenance", "")).upper()
+                    source = str(trade.get("source", "")).upper()
+                    strategy = str(trade.get("strategy", "")).upper()
+                    if source in ["TEST", "SYNTHETIC", "SYNTHETIC_GENERATED"] or prov in ["TEST", "SYNTHETIC", "SYNTHETIC_GENERATED"] or strategy == "TEST":
                         continue
                     
                     symbol = trade.get("symbol", "")
