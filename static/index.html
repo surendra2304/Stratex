@@ -243,19 +243,19 @@
                 <!-- CAPITAL DEPLOYMENT & CASH TRANSPARENCY BAR -->
                 <div class="allocation-banner-wrap">
                     <div class="allocation-header-row">
-                        <span>⚡ <strong class="allocation-title-highlight">CAPITAL ALLOCATION:</strong> <span id="alloc-cash-txt">Liquid USDT: $8,762.05 (74%)</span> • <span id="alloc-crypto-txt">Active Spot Trades (PORTAL, LINK): $3,112.57 (26%)</span></span>
-                        <span class="alloc-note">Spot Mode: Opening trades exchanges USDT for target crypto with automated OCO exit orders</span>
+                        <span>⚡ <strong class="allocation-title-highlight">CAPITAL ALLOCATION:</strong> <span id="alloc-cash-txt">Liquid USDT: DATA UNAVAILABLE</span> • <span id="alloc-crypto-txt">Active Spot Trades: DATA UNAVAILABLE</span></span>
+                        <span class="alloc-note">Spot Mode: Trades deploy USDT into selected asset with automated OCO exit orders</span>
                     </div>
                     <div class="allocation-track">
-                        <div class="alloc-bar-cash" id="alloc-bar-cash" style="width: 74%;"></div>
-                        <div class="alloc-bar-crypto" id="alloc-bar-crypto" style="width: 26%;"></div>
+                        <div class="alloc-bar-cash" id="alloc-bar-cash" style="width: 100%;"></div>
+                        <div class="alloc-bar-crypto" id="alloc-bar-crypto" style="width: 0%;"></div>
                     </div>
                 </div>
 
-                <!-- ROW 2: EQUITY CURVE & MULTI-STRATEGY ENGINES -->
+                <!-- ROW 2: REAL-TIME EQUITY CURVE & COMPACT PIPELINE / HEALTH -->
                 <div class="grid-12">
-                    <!-- EQUITY CURVE (COL 6) -->
-                    <div class="panel col-6">
+                    <!-- EQUITY CURVE (COL 8) -->
+                    <div class="panel col-8">
                         <div class="panel-header">
                             <div class="panel-title-wrap">
                                 <h3 class="panel-title"><span>📈</span> REAL-TIME EQUITY & BALANCE CURVE</h3>
@@ -269,69 +269,120 @@
                             </div>
                         </div>
                         <div class="panel-content no-pad">
-                            <div class="chart-container">
+                            <div class="chart-container" style="min-height: 270px;">
                                 <canvas id="equityChart"></canvas>
                             </div>
                         </div>
                     </div>
 
-                    <!-- TIMEFRAME SCANNER ENGINE (COL 3) -->
-                    <div class="panel col-3">
-                        <div class="panel-header">
-                            <h3 class="panel-title"><span>⏱</span> MARKET TIMEFRAMES</h3>
-                            <span class="panel-action" id="sc-eval-ratio">14 Symbols</span>
-                        </div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>TF</th>
-                                            <th>CANDLES</th>
-                                            <th>EVALS</th>
-                                            <th>BUY</th>
-                                            <th>ORDERS</th>
-                                            <th>FILLS</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="timeframe-metrics-body">
-                                        <tr><td colspan="6" class="empty-state">Awaiting Data...</td></tr>
-                                    </tbody>
-                                </table>
+                    <!-- COMPACT SIGNAL PIPELINE & RISK GUARDS (COL 4) -->
+                    <div class="col-4" style="display: flex; flex-direction: column; gap: 14px;">
+                        <!-- COMPACT 5-STAGE SIGNAL PIPELINE -->
+                        <div class="panel" style="flex: 1;">
+                            <div class="panel-header">
+                                <h3 class="panel-title"><span>🔄</span> SIGNAL PIPELINE (24H)</h3>
+                            </div>
+                            <div class="panel-content no-pad">
+                                <div class="funnel-pipeline">
+                                    <div class="funnel-node">
+                                        <div class="funnel-icon">🌐</div>
+                                        <div class="funnel-val" id="fn-mrk">0</div>
+                                        <div class="funnel-lbl">Data In</div>
+                                    </div>
+                                    <div class="funnel-line"></div>
+                                    <div class="funnel-node">
+                                        <div class="funnel-icon">📈</div>
+                                        <div class="funnel-val" id="fn-signals">0</div>
+                                        <div class="funnel-lbl">Signals</div>
+                                    </div>
+                                    <div class="funnel-line"></div>
+                                    <div class="funnel-node">
+                                        <div class="funnel-icon">💵</div>
+                                        <div class="funnel-val val-green" id="fn-prof-acc">0</div>
+                                        <div class="funnel-sub val-red"><span id="fn-prof-rej">0</span> Rej</div>
+                                        <div class="funnel-lbl">Profit</div>
+                                    </div>
+                                    <div class="funnel-line"></div>
+                                    <div class="funnel-node">
+                                        <div class="funnel-icon">🛡️</div>
+                                        <div class="funnel-val val-green" id="fn-risk-acc">0</div>
+                                        <div class="funnel-sub val-red"><span id="fn-risk-rej">0</span> Rej</div>
+                                        <div class="funnel-lbl">Risk</div>
+                                    </div>
+                                    <div class="funnel-line"></div>
+                                    <div class="funnel-node">
+                                        <div class="funnel-icon">🚀</div>
+                                        <div class="funnel-val val-green" id="fn-filled">0</div>
+                                        <div class="funnel-lbl">Filled</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- STRATEGY ENGINE BREAKDOWN (COL 3) -->
-                    <div class="panel col-3">
-                        <div class="panel-header">
-                            <h3 class="panel-title"><span>⚡</span> STRATEGY ENGINE</h3>
-                            <span class="panel-action">6 Active</span>
-                        </div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>STRATEGY</th>
-                                            <th>EVALS</th>
-                                            <th>BUY</th>
-                                            <th>FILLS</th>
-                                            <th>WIN %</th>
-                                            <th>PNL</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="strategy-metrics-body">
-                                        <tr><td colspan="6" class="empty-state">Awaiting Data...</td></tr>
-                                    </tbody>
-                                </table>
+                        <!-- COMPACT RISK GUARDS -->
+                        <div class="panel" style="flex: 1;">
+                            <div class="panel-header">
+                                <h3 class="panel-title"><span>🛡️</span> RISK & SYSTEM GUARDS</h3>
+                            </div>
+                            <div class="panel-content">
+                                <div class="risk-grid">
+                                    <div class="risk-item">
+                                        <div class="risk-lbl">Exposure</div>
+                                        <div class="r-val" id="rk-exp-val">0.00%</div>
+                                        <div class="r-sub">of Total Equity</div>
+                                    </div>
+                                    <div class="risk-item">
+                                        <div class="risk-lbl">Risk Used</div>
+                                        <div class="r-val val-green" id="rk-used">0.00%</div>
+                                        <div class="r-sub">Max: 0.50% / Trade</div>
+                                    </div>
+                                    <div class="risk-item">
+                                        <div class="risk-lbl">Positions</div>
+                                        <div class="r-val" id="rk-pos">0</div>
+                                        <div class="r-sub">Max: 5 Open</div>
+                                    </div>
+                                    <div class="risk-item">
+                                        <div class="risk-lbl">Daily Return</div>
+                                        <div class="r-val val-green" id="rk-daily">$0.00</div>
+                                        <div class="r-sub">Safety Limit: -2%</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- ROW 3: BEST OPPORTUNITIES, 5-STAGE PIPELINE, RISK GUARDS -->
+                <!-- ROW 3: ACTIVE POSITIONS & BEST OPPORTUNITIES -->
                 <div class="grid-12">
+                    <!-- ACTIVE POSITIONS (COL 6) -->
+                    <div class="panel col-6">
+                        <div class="panel-header">
+                            <h3 class="panel-title"><span>💼</span> ACTIVE POSITIONS & WORKING EXITS</h3>
+                            <span class="panel-action" onclick="document.querySelector('[data-view=\'positions\']').click()">Positions &rarr;</span>
+                        </div>
+                        <div class="panel-content no-pad">
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>SYMBOL</th>
+                                            <th>SIDE</th>
+                                            <th>ENTRY PRICE</th>
+                                            <th>CURRENT</th>
+                                            <th>QUANTITY</th>
+                                            <th>U.PNL</th>
+                                            <th>STOP LOSS</th>
+                                            <th>TAKE PROFIT</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="active-pos-body">
+                                        <tr><td colspan="8" class="empty-state">No Open Positions Currently Active</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- BEST CURRENT OPPORTUNITIES (COL 6) -->
                     <div class="panel col-6">
                         <div class="panel-header">
@@ -363,116 +414,12 @@
                             </div>
                         </div>
                     </div>
-
-                    <!-- 5-STAGE SIGNAL PIPELINE (COL 3) -->
-                    <div class="panel col-3">
-                        <div class="panel-header">
-                            <h3 class="panel-title"><span>🔄</span> SIGNAL PIPELINE (24H)</h3>
-                        </div>
-                        <div class="panel-content no-pad">
-                            <div class="funnel-pipeline">
-                                <div class="funnel-node">
-                                    <div class="funnel-icon">🌐</div>
-                                    <div class="funnel-val" id="fn-mrk">0</div>
-                                    <div class="funnel-lbl">Data In</div>
-                                </div>
-                                <div class="funnel-line"></div>
-                                <div class="funnel-node">
-                                    <div class="funnel-icon">📈</div>
-                                    <div class="funnel-val" id="fn-signals">0</div>
-                                    <div class="funnel-lbl">Signals</div>
-                                </div>
-                                <div class="funnel-line"></div>
-                                <div class="funnel-node">
-                                    <div class="funnel-icon">💵</div>
-                                    <div class="funnel-val val-green" id="fn-prof-acc">0</div>
-                                    <div class="funnel-sub val-red"><span id="fn-prof-rej">0</span> Rej</div>
-                                    <div class="funnel-lbl">Profit Gate</div>
-                                </div>
-                                <div class="funnel-line"></div>
-                                <div class="funnel-node">
-                                    <div class="funnel-icon">🛡️</div>
-                                    <div class="funnel-val val-green" id="fn-risk-acc">0</div>
-                                    <div class="funnel-sub val-red"><span id="fn-risk-rej">0</span> Rej</div>
-                                    <div class="funnel-lbl">Risk Gate</div>
-                                </div>
-                                <div class="funnel-line"></div>
-                                <div class="funnel-node">
-                                    <div class="funnel-icon">🚀</div>
-                                    <div class="funnel-val val-green" id="fn-filled">0</div>
-                                    <div class="funnel-lbl">Filled</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- RISK GUARDS (COL 3) -->
-                    <div class="panel col-3">
-                        <div class="panel-header">
-                            <h3 class="panel-title"><span>🛡️</span> RISK GUARDS</h3>
-                        </div>
-                        <div class="panel-content">
-                            <div class="risk-grid">
-                                <div class="risk-item">
-                                    <div class="risk-lbl">Exposure</div>
-                                    <div class="risk-circle">
-                                        <div class="r-val" id="rk-exp-val">0.00%</div>
-                                        <div class="r-sub">of Total Equity</div>
-                                    </div>
-                                </div>
-                                <div class="risk-item">
-                                    <div class="risk-lbl">Risk Used</div>
-                                    <div class="r-val val-green" id="rk-used">0.00%</div>
-                                    <div class="r-sub">Max: 0.50% / Trade</div>
-                                </div>
-                                <div class="risk-item">
-                                    <div class="risk-lbl">Positions</div>
-                                    <div class="r-val" id="rk-pos">0</div>
-                                    <div class="r-sub">Max: 5 Open</div>
-                                </div>
-                                <div class="risk-item">
-                                    <div class="risk-lbl">Daily Return</div>
-                                    <div class="r-val val-green" id="rk-daily">$0.00</div>
-                                    <div class="r-sub">Safety Limit: -2%</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
-                <!-- ROW 4: ACTIVE POSITIONS & RECENT TRADES -->
+                <!-- ROW 4: RECENT EXECUTED TRADES -->
                 <div class="grid-12">
-                    <!-- ACTIVE POSITIONS (COL 6) -->
-                    <div class="panel col-6">
-                        <div class="panel-header">
-                            <h3 class="panel-title"><span>💼</span> ACTIVE POSITIONS & WORKING EXITS</h3>
-                            <span class="panel-action" onclick="document.querySelector('[data-view=\'positions\']').click()">Positions &rarr;</span>
-                        </div>
-                        <div class="panel-content no-pad">
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>SYMBOL</th>
-                                            <th>SIDE</th>
-                                            <th>ENTRY PRICE</th>
-                                            <th>CURRENT</th>
-                                            <th>QUANTITY</th>
-                                            <th>U.PNL</th>
-                                            <th>STOP LOSS</th>
-                                            <th>TAKE PROFIT</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="active-pos-body">
-                                        <tr><td colspan="8" class="empty-state">No Open Positions Currently Active</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- RECENT TRADES (COL 6) -->
-                    <div class="panel col-6">
+                    <!-- RECENT TRADES (COL 12) -->
+                    <div class="panel col-12">
                         <div class="panel-header">
                             <h3 class="panel-title"><span>📑</span> RECENT EXECUTED TRADES</h3>
                             <span class="panel-action" onclick="document.querySelector('[data-view=\'trades\']').click()">Full Ledger &rarr;</span>

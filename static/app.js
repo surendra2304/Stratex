@@ -217,24 +217,34 @@ async function fetchDashboardData() {
         const rviewMdd = document.getElementById('rview-mdd');
         if (rviewMdd) rviewMdd.innerText = (data.max_drawdown || 0).toFixed(2) + '%';
         const rviewPos = document.getElementById('rview-pos');
-        if (rviewPos) rviewPos.innerText = data.open_positions || 0;
-
         // Capital Allocation Transparency Bar
-        const cashVal = data.cash || 0;
-        const cryptoVal = data.crypto_holdings_value || 0;
-        const totalVal = (cashVal + cryptoVal) || data.equity || 1;
-        const cashPct = Math.min(100, Math.max(0, (cashVal / totalVal) * 100));
-        const cryptoPct = Math.min(100, Math.max(0, 100 - cashPct));
+        const cashVal = Number(data.cash !== undefined ? data.cash : 0);
+        const cryptoVal = Number(data.crypto_holdings_value !== undefined ? data.crypto_holdings_value : 0);
+        const totalVal = (cashVal + cryptoVal) || Number(data.equity || 0);
 
         const allocCashTxt = document.getElementById('alloc-cash-txt');
         const allocCryptoTxt = document.getElementById('alloc-crypto-txt');
         const barCash = document.getElementById('alloc-bar-cash');
         const barCrypto = document.getElementById('alloc-bar-crypto');
 
-        if (allocCashTxt) allocCashTxt.innerHTML = `Liquid USDT: <strong>${formatCurrency(cashVal)} (${cashPct.toFixed(1)}%)</strong>`;
-        if (allocCryptoTxt) allocCryptoTxt.innerHTML = `Active Spot Trades: <strong>${formatCurrency(cryptoVal)} (${cryptoPct.toFixed(1)}%)</strong>`;
-        if (barCash) barCash.style.width = `${cashPct.toFixed(1)}%`;
-        if (barCrypto) barCrypto.style.width = `${cryptoPct.toFixed(1)}%`;
+        if (totalVal > 0) {
+            const cashPct = Math.min(100, Math.max(0, (cashVal / totalVal) * 100));
+            const cryptoPct = Math.min(100, Math.max(0, 100 - cashPct));
+            const activeAssets = (data.holdings || [])
+                .filter(h => h.asset !== 'USDT' && Number(h.value_usdt || h.value || 0) > 0.5)
+                .map(h => h.asset);
+            const activeAssetsStr = activeAssets.length > 0 ? ` (${activeAssets.join(', ')})` : '';
+
+            if (allocCashTxt) allocCashTxt.innerHTML = `Liquid USDT: <strong>${formatCurrency(cashVal)} (${cashPct.toFixed(1)}%)</strong>`;
+            if (allocCryptoTxt) allocCryptoTxt.innerHTML = `Active Spot Trades${activeAssetsStr}: <strong>${formatCurrency(cryptoVal)} (${cryptoPct.toFixed(1)}%)</strong>`;
+            if (barCash) barCash.style.width = `${cashPct.toFixed(1)}%`;
+            if (barCrypto) barCrypto.style.width = `${cryptoPct.toFixed(1)}%`;
+        } else {
+            if (allocCashTxt) allocCashTxt.innerHTML = `Liquid USDT: <strong>DATA UNAVAILABLE</strong>`;
+            if (allocCryptoTxt) allocCryptoTxt.innerHTML = `Active Spot Trades: <strong>DATA UNAVAILABLE</strong>`;
+            if (barCash) barCash.style.width = `100%`;
+            if (barCrypto) barCrypto.style.width = `0%`;
+        }
 
         // Positions View
         const posAvail = document.getElementById('pos-avail');

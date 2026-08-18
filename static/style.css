@@ -806,7 +806,7 @@ tbody tr:last-child td {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 10px;
+    padding: 10px 8px;
     gap: 4px;
     width: 100%;
 }
@@ -819,18 +819,18 @@ tbody tr:last-child td {
     background-color: var(--bg-card);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
-    padding: 8px 10px;
-    min-width: 90px;
+    padding: 6px 4px;
+    min-width: 50px;
     flex: 1;
 }
 
 .funnel-icon {
-    font-size: 14px;
+    font-size: 13px;
     margin-bottom: 2px;
 }
 
 .funnel-val {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
     font-family: var(--font-mono);
     color: var(--text-primary);
@@ -853,7 +853,7 @@ tbody tr:last-child td {
 .funnel-line {
     height: 2px;
     background-color: var(--border-medium);
-    flex: 0 0 16px;
+    flex: 0 0 10px;
     position: relative;
 }
 
@@ -872,8 +872,8 @@ tbody tr:last-child td {
 /* ─── COMPONENT: RISK OVERVIEW GRID ─── */
 .risk-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
     height: 100%;
     align-items: stretch;
 }
