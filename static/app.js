@@ -3494,6 +3494,155 @@ function updateDashboard() {
     fastPoll();
 }
 
+function calcDurationBetween(start, end) {
+    try {
+        const s = new Date(start).getTime();
+        const e = new Date(end).getTime();
+        const sec = Math.max(0, Math.floor((e - s) / 1000));
+        const m = Math.floor(sec / 60);
+        const remainderS = sec % 60;
+        return `${m}m ${remainderS}s`;
+    } catch {
+        return '-';
+    }
+}
+
+function inspectTradeLifecycle(t) {
+    if (!t) return;
+    const sym = t.symbol || '-';
+    const strat = t.strategy || 'ADX_EMA';
+    const tf = t.timeframe || '5m';
+    const side = (t.side || t.action || 'BUY').toUpperCase();
+    const sideClass = (side === 'BUY' || side === 'LONG') ? 'tag-buy' : 'tag-sell';
+    const entryPx = Number(t.entry_price || t.price || 0);
+    const exitPx = Number(t.exit_price || 0);
+    const qty = Number(t.entry_executed_quantity || t.quantity || t.origQty || 0);
+    const sl = Number(t.sl_price || t.sl || t.stop_loss || 0) > 0 ? '$' + Number(t.sl_price || t.sl || t.stop_loss).toFixed(4) : '-';
+    const tp = Number(t.tp_price || t.tp || t.take_profit || 0) > 0 ? '$' + Number(t.tp_price || t.tp || t.take_profit).toFixed(4) : '-';
+    const fees = Number(t.total_fees || t.fees || t.entry_fee || 0);
+    const grossPnl = Number(t.gross_pnl !== undefined ? t.gross_pnl : (t.pnl !== undefined ? Number(t.pnl) + fees : 0));
+    const netPnl = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl !== undefined ? t.pnl : 0));
+    const outcome = t.exit_reason || (netPnl >= 0 ? 'WIN' : 'LOSS');
+    const dur = t.duration || (t.entry_timestamp && t.exit_timestamp ? calcDurationBetween(t.entry_timestamp, t.exit_timestamp) : '-');
+    const sigTime = t.signal_time || t.entry_timestamp || t.timestamp || '-';
+    const exitTime = t.exit_timestamp || '-';
+    const balEntry = t.cash_before_entry ? formatCurrency(t.cash_before_entry) : '$10,000.00';
+    const eqEntry = t.equity_before_entry ? formatCurrency(t.equity_before_entry) : '$10,000.00';
+    const balClose = t.cash_after_close ? formatCurrency(t.cash_after_close) : formatCurrency(10000 + netPnl);
+    const eqClose = t.equity_after_close ? formatCurrency(t.equity_after_close) : formatCurrency(10000 + netPnl);
+
+    const html = `
+        <div class="inspector-card">
+            <div class="inspector-card-header">
+                <span>🎯 Trade Specification</span>
+                <span class="${sideClass}">${side}</span>
+            </div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Signal Time</span><span class="inspector-val mono">${formatDateTime(sigTime)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Strategy</span><span class="inspector-val cyan">${strat}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Timeframe</span><span class="inspector-val mono">${tf}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Symbol</span><span class="inspector-val td-strong" style="color:#fff;">${sym}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Execution Quantity</span><span class="inspector-val mono">${qty}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Duration</span><span class="inspector-val mono">${dur}</span></div>
+            </div>
+        </div>
+
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>💵 Execution Pricing & Protection</span></div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Entry Price</span><span class="inspector-val mono">$${entryPx.toFixed(4)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Exit Price</span><span class="inspector-val mono">${exitPx > 0 ? '$' + exitPx.toFixed(4) : 'OPEN POSITION'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Stop Loss (SL)</span><span class="inspector-val val-red mono">${sl}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Take Profit (TP)</span><span class="inspector-val val-green mono">${tp}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Close Reason</span><span class="inspector-val td-strong">${outcome}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Total Trading Fees</span><span class="inspector-val mono">${formatCurrency(fees)}</span></div>
+            </div>
+        </div>
+
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>📊 PnL & Account Balances</span></div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Gross PnL</span><span class="inspector-val mono ${grossPnl >= 0 ? 'profit' : 'loss'}">${grossPnl >= 0 ? '+' : ''}${formatCurrency(grossPnl)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Net Realized PnL</span><span class="inspector-val mono td-strong ${netPnl >= 0 ? 'profit' : 'loss'}">${netPnl >= 0 ? '+' : ''}${formatCurrency(netPnl)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Balance @ Entry</span><span class="inspector-val mono">${balEntry}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Equity @ Entry</span><span class="inspector-val mono">${eqEntry}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Balance @ Close</span><span class="inspector-val mono">${balClose}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Equity @ Close</span><span class="inspector-val mono">${eqClose}</span></div>
+            </div>
+        </div>
+
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>🛡️ Binance Order Identifiers</span></div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Signal ID</span><span class="inspector-val mono" style="font-size:10px;">${t.signal_id || '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Entry Order ID</span><span class="inspector-val mono">${t.entry_order_id || '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Exit Order ID</span><span class="inspector-val mono">${t.exit_order_id || '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">OCO List ID</span><span class="inspector-val mono">${t.oco_id || '-'}</span></div>
+            </div>
+        </div>
+    `;
+
+    openInspectorDrawer(`TRADE AUDIT • ${sym} ${side}`, html);
+}
+
+let seenNotifEventIds = new Set();
+
+function showToastNotification(type, title, message, eventId) {
+    if (!eventId) return; // Never generate notifications in frontend without backend event IDs
+    if (seenNotifEventIds.has(eventId)) return; // Deduplicate
+    seenNotifEventIds.add(eventId);
+
+    const container = document.getElementById('trade-toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    const typeClass = (type === 'WIN' || type === 'OPEN') ? 'toast-success' : ((type === 'LOSS' || type === 'ERROR') ? 'toast-error' : 'toast-info');
+    toast.className = `terminal-toast ${typeClass}`;
+    toast.innerHTML = `
+        <div class="toast-header">
+            <span class="toast-title">${title}</span>
+            <span class="toast-time mono">${formatTime(new Date().toISOString())}</span>
+        </div>
+        <div class="toast-msg">${message}</div>
+    `;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 400);
+    }, 6000);
+}
+
+let prevOpenPositionKeys = new Set();
+let prevClosedTradeKeys = new Set();
+
+function checkLifecycleDeltas(positions, trades) {
+    if (!positions && !trades) return;
+
+    // 1. Check newly opened positions
+    if (Array.isArray(positions)) {
+        positions.forEach(p => {
+            const pKey = `${p.symbol}_${p.entry_order_id || p.signal_id || p.entry_timestamp}`;
+            if (prevOpenPositionKeys.size > 0 && !prevOpenPositionKeys.has(pKey) && (p.entry_order_id || p.signal_id)) {
+                showToastNotification('OPEN', 'TRADE OPENED', `${p.symbol} ${p.side || 'BUY'} filled @ $${Number(p.entry_price || 0).toFixed(4)}`, p.entry_order_id || p.signal_id);
+            }
+        });
+        prevOpenPositionKeys = new Set(positions.map(p => `${p.symbol}_${p.entry_order_id || p.signal_id || p.entry_timestamp}`));
+    }
+
+    // 2. Check newly closed trades
+    if (Array.isArray(trades)) {
+        trades.forEach(t => {
+            const tKey = `${t.symbol}_${t.exit_order_id || t.exit_timestamp || t.timestamp}`;
+            if (prevClosedTradeKeys.size > 0 && !prevClosedTradeKeys.has(tKey) && (t.exit_order_id || t.signal_id)) {
+                const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+                showToastNotification(net >= 0 ? 'WIN' : 'LOSS', 'TRADE CLOSED', `${t.symbol} closed: ${net >= 0 ? '+' : ''}${formatCurrency(net)} (${t.exit_reason || 'OCO'})`, t.exit_order_id || t.signal_id);
+            }
+        });
+        prevClosedTradeKeys = new Set(trades.map(t => `${t.symbol}_${t.exit_order_id || t.exit_timestamp || t.timestamp}`));
+    }
+}
+
 function openInspectorDrawer(title, payload) {
     const drawer = document.getElementById('inspector-drawer');
     const backdrop = document.getElementById('drawer-backdrop');
