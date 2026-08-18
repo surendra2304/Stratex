@@ -437,7 +437,8 @@ html, body {
     display: none;
     flex: 1;
     overflow-y: auto;
-    padding: 14px 16px calc(var(--ticker-height) + 14px) 16px;
+    overflow-x: hidden;
+    padding: 14px 16px 14px 16px;
     gap: 12px;
 }
 
