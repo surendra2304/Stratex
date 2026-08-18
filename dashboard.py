@@ -1041,6 +1041,153 @@ def api_opportunities():
     """Returns candidate funnel pipeline opportunities."""
     return get_funnel()
 
+@app.route('/api/activity')
+@app.route('/api/telemetry/activity')
+def api_activity():
+    """
+    Returns unified chronological event feed containing:
+    SIGNAL, PROFITABILITY ACCEPTED, PROFITABILITY REJECTED,
+    RISK ACCEPTED, RISK REJECTED, ORDER SUBMITTED, ORDER FILLED,
+    POSITION OPENED, POSITION CLOSED, BALANCE CHANGE.
+    """
+    try:
+        from testnet_engine.telemetry_manager import get_telemetry_manager
+        tm = get_telemetry_manager()
+        limit = int(request.args.get('limit', 50))
+        
+        events = []
+        
+        # 1. Signals & Gate Events
+        raw_signals = tm.get_signals_log(limit=100)
+        for s in raw_signals:
+            ts = s.get("timestamp", "")
+            sym = s.get("symbol", "")
+            strat = s.get("strategy", "")
+            tf = s.get("timeframe", "5m")
+            dec = s.get("decision", "HOLD")
+            p_dec = s.get("profitability_decision", "")
+            r_dec = s.get("risk_decision", "")
+            
+            # Base signal
+            events.append({
+                "time": ts,
+                "type": "SIGNAL",
+                "symbol": sym,
+                "strategy": strat,
+                "timeframe": tf,
+                "description": f"Generated {dec} signal (Confidence {int(float(s.get('confidence', 0))*100)}%)",
+                "value_pnl": f"${float(s.get('entry', 0)):,.2f}" if float(s.get('entry', 0)) > 0 else "-",
+                "raw": s
+            })
+            
+            # Profitability gate
+            if p_dec in ["ACCEPTED", "REJECTED"]:
+                events.append({
+                    "time": ts,
+                    "type": f"PROFITABILITY {p_dec}",
+                    "symbol": sym,
+                    "strategy": strat,
+                    "timeframe": tf,
+                    "description": f"Profitability Gate: {s.get('profitability_reason', p_dec)} (Exp. Net: {float(s.get('expected_net', 0))*100:.2f}%)",
+                    "value_pnl": f"{float(s.get('expected_net', 0))*100:+.2f}%",
+                    "raw": s
+                })
+                
+            # Risk gate
+            if r_dec in ["ACCEPTED", "REJECTED"]:
+                events.append({
+                    "time": ts,
+                    "type": f"RISK {r_dec}",
+                    "symbol": sym,
+                    "strategy": strat,
+                    "timeframe": tf,
+                    "description": f"Risk Gate: {s.get('risk_reason', r_dec)}",
+                    "value_pnl": "-",
+                    "raw": s
+                })
+
+        # 2. Execution Events
+        raw_exec = tm.get_execution_events(limit=100)
+        for e in raw_exec:
+            ts = e.get("timestamp", "")
+            sym = e.get("symbol", "")
+            strat = e.get("strategy", "")
+            tf = e.get("timeframe", "5m")
+            ev_type = str(e.get("event_type", "execution_attempt")).upper().replace("_", " ")
+            
+            type_name = "ORDER SUBMITTED" if "SUBMIT" in ev_type else ("ORDER FILLED" if "FILL" in ev_type else ("POSITION OPENED" if "OPEN" in ev_type else ("POSITION CLOSED" if "CLOSE" in ev_type else ev_type)))
+            
+            desc = f"{e.get('side', 'BUY')} {e.get('quantity', '')} {sym} @ ${float(e.get('price', 0)):,.4f}"
+            if e.get("error_message"):
+                desc += f" (Error: {e.get('error_message')})"
+                
+            events.append({
+                "time": ts,
+                "type": type_name,
+                "symbol": sym,
+                "strategy": strat,
+                "timeframe": tf,
+                "description": desc,
+                "value_pnl": f"${float(e.get('price', 0))*float(e.get('quantity', 0)):,.2f}" if float(e.get('price', 0)) > 0 else "-",
+                "raw": e
+            })
+
+        # 3. Trade Events (Fills & Closures)
+        trades_info = _get_trades_data()
+        for t in trades_info.get("positions", [])[:50]:
+            ts = t.get("timestamp", "")
+            sym = t.get("symbol", "")
+            strat = t.get("strategy", "")
+            pnl = float(t.get("pnl", 0.0))
+            side = t.get("action", "BUY")
+            
+            events.append({
+                "time": ts,
+                "type": "POSITION CLOSED",
+                "symbol": sym,
+                "strategy": strat,
+                "timeframe": "15m",
+                "description": f"Closed {side} position via {t.get('exit_reason', 'OCO_TARGET')} @ ${float(t.get('exit_price', 0)):,.4f}",
+                "value_pnl": f"{'+' if pnl >= 0 else ''}${pnl:,.2f}",
+                "pnl": pnl,
+                "raw": t
+            })
+
+        # 4. Balance Changes
+        raw_bal = tm.get_balance_events(limit=50)
+        for b in raw_bal:
+            ts = b.get("timestamp", "")
+            delta = float(b.get("delta", 0.0))
+            events.append({
+                "time": ts,
+                "type": "BALANCE CHANGE",
+                "symbol": b.get("symbol", "USDT"),
+                "strategy": b.get("strategy", "-"),
+                "timeframe": b.get("timeframe", "-"),
+                "description": f"Balance transitioned: ${float(b.get('balance_before', 0)):,.2f} -> ${float(b.get('balance_after', 0)):,.2f} ({b.get('reason', b.get('event_type', ''))})",
+                "value_pnl": f"{'+' if delta >= 0 else ''}${delta:,.2f}",
+                "raw": b
+            })
+
+        # Deduplicate & Sort newest first
+        unique_events = []
+        seen = set()
+        for ev in sorted(events, key=lambda x: str(x.get("time", "")), reverse=True):
+            k = f"{ev.get('time')}_{ev.get('type')}_{ev.get('symbol')}_{ev.get('description')[:20]}"
+            if k not in seen:
+                seen.add(k)
+                unique_events.append(ev)
+
+        return jsonify({
+            "status": "OK",
+            "count": len(unique_events[:limit]),
+            "activity": unique_events[:limit],
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        logger.error(f"Error in api_activity: {e}")
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 @app.route('/api/balance-events')
 def api_balance_events():
     """Returns chronological audit log of balance transitions."""
