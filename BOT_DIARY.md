@@ -1,4 +1,4 @@
-# 📖 NEXUS QUANT TRADING BOT — OFFICIAL SYSTEM DIARY & DEVLOG
+# 📖 ALGORITHMIC TRADING BOT — OFFICIAL SYSTEM DIARY & DEVLOG
 *The living record of architecture, development milestones, bug discoveries, root-cause fixes, live operations, and roadmap.*
 
 ---
@@ -7,7 +7,7 @@
 
 | Attribute | Specification |
 | :--- | :--- |
-| **System Name** | **NEXUS QUANT BOT v5.0** |
+| **System Name** | **Algorithmic Trading Bot** |
 | **Exchange & Environment** | **Binance Testnet (Spot REST + Multiplexed WebSocket)** |
 | **Active Capital Baseline** | **`$11,290.39 USDT`** Initial Deposit Baseline |
 | **Current Live Equity** | **`$11,633.41+ USDT`** (`$11,413.51` Cash + `$219.90` Active Crypto Deployment) |
