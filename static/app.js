@@ -1016,62 +1016,97 @@ async function inspectPosition(pos) {
 
     openInspectorDrawer(`POSITION INSPECTOR • ${sym}`, drawerHtml);
 }
-
-
 // ==========================================
-// 5. HISTORICAL TRADES TERMINAL & LIFECYCLE DRAWER
+// 5. TRADE JOURNAL TERMINAL & DAY-BY-DAY AUDIT
 // ==========================================
 let allRawTrades = [];
+let journalViewMode = 'table'; // 'table' or 'calendar'
+let journalStatusFilter = 'ALL'; // 'ALL', 'OPEN', 'CLOSED'
+let currentCalendarDate = new Date();
+let selectedDayFilter = null;
+
+function setJournalViewMode(mode) {
+    journalViewMode = mode;
+    const btnTable = document.getElementById('btn-journal-view-table');
+    const btnCal = document.getElementById('btn-journal-view-cal');
+    const tableContainer = document.getElementById('journal-table-view-container');
+    const calContainer = document.getElementById('journal-calendar-view-container');
+
+    if (mode === 'table') {
+        if (btnTable) btnTable.classList.add('active');
+        if (btnCal) btnCal.classList.remove('active');
+        if (tableContainer) tableContainer.style.display = 'block';
+        if (calContainer) calContainer.style.display = 'none';
+    } else {
+        if (btnTable) btnTable.classList.remove('active');
+        if (btnCal) btnCal.classList.add('active');
+        if (tableContainer) tableContainer.style.display = 'none';
+        if (calContainer) calContainer.style.display = 'block';
+        renderCalendarHeatmap();
+    }
+}
+
+function setJournalStatusFilter(status) {
+    journalStatusFilter = status;
+    document.querySelectorAll('.journal-filter-toolbar .btn-filter').forEach(b => {
+        if (b.id && b.id.startsWith('btn-jnl-')) b.classList.remove('active');
+    });
+    const btn = document.getElementById(`btn-jnl-${status.toLowerCase()}`);
+    if (btn) btn.classList.add('active');
+    renderTradeJournal();
+}
+
+function applyJournalFilters() {
+    renderTradeJournal();
+}
 
 async function fetchTrades() {
     try {
         let trades = [];
-        // First try the 40-field canonical trade history
         const res = await apiClient.get('/api/trade-history');
         if (res && Array.isArray(res.trades)) {
             trades = res.trades;
         }
 
-        // Fallback to /api/trades
         if (trades.length === 0) {
             const legRes = await apiClient.get('/api/trades');
             if (legRes && Array.isArray(legRes.positions)) {
-                trades = legRes.positions.filter(p => p.status === 'CLOSED');
+                trades = legRes.positions;
             }
         }
 
         allRawTrades = trades;
-        renderTradesTable(trades);
-        updateTradeSummaryKPIs(trades);
-
-        // Fetch analytics endpoint if available for profit factor and average win/loss
-        const analytics = await apiClient.get('/api/telemetry/analytics');
-        if (analytics && analytics.analytics) {
-            const an = analytics.analytics;
-            if (an.profit_factor !== undefined) document.getElementById('tr-pf').innerText = an.profit_factor;
-            if (an.winning_trades !== undefined) document.getElementById('tr-wins').innerText = an.winning_trades;
-            if (an.losing_trades !== undefined) document.getElementById('tr-loss').innerText = an.losing_trades;
-        }
+        renderTradeJournal();
     } catch (e) {
-        console.error("Failed to fetch trades:", e);
+        console.error("Failed to fetch trade journal data:", e);
     }
 }
 
-function updateTradeSummaryKPIs(trades) {
-    const total = trades.length;
+function renderTradeJournal() {
+    // 1. Separate into Active vs Closed
+    const activePositions = allRawPositions || [];
+    const closedTrades = allRawTrades.filter(t => t.status === 'CLOSED' || (t.exit_price && Number(t.exit_price) > 0));
+
+    // Update Header / Nav Counts
+    const openCountEl = document.getElementById('jnl-open-count');
+    if (openCountEl) openCountEl.innerText = activePositions.length;
+    const closedCountEl = document.getElementById('jnl-closed-count');
+    if (closedCountEl) closedCountEl.innerText = closedTrades.length;
+    const navBadge = document.getElementById('nav-open-trades-badge');
+    if (navBadge) navBadge.innerText = `${activePositions.length} OPEN`;
+
+    // 2. Summary Metric Cards
+    let totalClosed = closedTrades.length;
     let wins = 0, losses = 0;
     let grossWin = 0, grossLoss = 0;
     let totalFees = 0;
     let netPnL = 0;
 
-    trades.forEach(t => {
+    closedTrades.forEach(t => {
         const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl !== undefined ? t.pnl : 0));
         const fee = Number(t.fees || t.total_fees || 0);
-        const gross = Number(t.gross_pnl !== undefined ? t.gross_pnl : (net + fee));
-
         netPnL += net;
         totalFees += fee;
-
         if (net > 0) {
             wins++;
             grossWin += net;
@@ -1081,7 +1116,7 @@ function updateTradeSummaryKPIs(trades) {
         }
     });
 
-    const winRate = total > 0 ? (wins / total) * 100 : 0;
+    const winRate = totalClosed > 0 ? (wins / totalClosed) * 100 : 0;
     const avgWin = wins > 0 ? grossWin / wins : 0;
     const avgLoss = losses > 0 ? grossLoss / losses : 0;
     const pf = grossLoss > 0 ? (grossWin / grossLoss) : (grossWin > 0 ? 999.0 : 0);
@@ -1091,245 +1126,383 @@ function updateTradeSummaryKPIs(trades) {
         if (el) el.innerText = v;
     };
 
-    setVal('tr-total', total);
-    setVal('tr-rate', winRate.toFixed(2) + '%');
-    setVal('tr-wins', wins);
-    setVal('tr-loss', losses);
-    setVal('tr-fees', formatCurrency(totalFees));
-    setVal('tr-avg-win', formatCurrency(avgWin));
-    setVal('tr-avg-loss', formatCurrency(avgLoss));
-    setVal('tr-pf', pf.toFixed(2));
-
-    const netEl = document.getElementById('tr-net');
+    setVal('trd-total', totalClosed + activePositions.length);
+    setVal('trd-winrate', winRate.toFixed(1) + '%');
+    const netEl = document.getElementById('trd-net-pnl');
     if (netEl) {
-        netEl.innerText = formatCurrency(netPnL);
-        netEl.className = 'metric-value ' + (netPnL > 0 ? 'val-green' : (netPnL < 0 ? 'val-red' : 'val-neutral'));
+        netEl.innerText = `${netPnL >= 0 ? '+' : ''}${formatCurrency(netPnL)}`;
+        netEl.className = `journal-metric-val mono ${netPnL >= 0 ? 'profit' : 'loss'}`;
+    }
+    setVal('trd-pf', pf.toFixed(2));
+    setVal('trd-fees', formatCurrency(totalFees));
+    const avgWinEl = document.getElementById('trd-avg-win');
+    if (avgWinEl) avgWinEl.innerText = `+${formatCurrency(avgWin)}`;
+    const avgLossEl = document.getElementById('trd-avg-loss');
+    if (avgLossEl) avgLossEl.innerText = `-${formatCurrency(avgLoss)}`;
+
+    // 3. Render Section 1: Active Trades
+    const activeSection = document.getElementById('journal-active-section');
+    const activeBody = document.getElementById('journal-active-tbody');
+    const slotsBadge = document.getElementById('journal-active-slots-badge');
+    if (slotsBadge) slotsBadge.innerText = `${activePositions.length} / 5 SLOTS IN USE`;
+
+    if (journalStatusFilter === 'CLOSED') {
+        if (activeSection) activeSection.style.display = 'none';
+    } else {
+        if (activeSection) activeSection.style.display = 'block';
+        if (activeBody) {
+            if (activePositions.length === 0) {
+                activeBody.innerHTML = `<tr><td colspan="11" class="idle-state-row"><div class="idle-state-content"><span class="radar-pulse"></span><span>All 5 execution slots available • Continuous scanning active across 13 spot pairs</span></div></td></tr>`;
+            } else {
+                activeBody.innerHTML = activePositions.map((p, idx) => {
+                    const sym = p.symbol || '-';
+                    const side = (p.side || p.action || 'BUY').toUpperCase();
+                    const sideClass = side === 'BUY' ? 'tag-buy' : 'tag-sell';
+                    const strat = p.strategy || 'ADX_EMA';
+                    const tf = p.timeframe || '5m';
+                    const entryPx = Number(p.entry_price || p.price || 0);
+                    const markPx = Number(p.current_price || entryPx);
+                    const qty = Number(p.quantity || 0);
+                    const notional = qty * (markPx || entryPx);
+                    const sl = Number(p.stop_loss || p.sl || 0) > 0 ? '$' + Number(p.stop_loss || p.sl).toFixed(4) : '-';
+                    const tp = Number(p.take_profit || p.tp || 0) > 0 ? '$' + Number(p.take_profit || p.tp).toFixed(4) : '-';
+                    const uPnl = Number(p.current_unrealized_pnl || p.pnl || 0);
+                    const uPnlPct = entryPx > 0 ? ((markPx - entryPx) / entryPx) * 100 : 0;
+                    const uPnlStr = `<span class="${uPnl >= 0 ? 'profit' : 'loss'} td-strong">${uPnl >= 0 ? '+' : ''}${formatCurrency(uPnl)} (${uPnlPct >= 0 ? '+' : ''}${uPnlPct.toFixed(2)}%)</span>`;
+                    const openTimeStr = p.entry_timestamp || p.timestamp ? formatTime(p.entry_timestamp || p.timestamp) : '-';
+                    const durStr = p.duration || (p.entry_timestamp ? calcDurationStr(p.entry_timestamp) : '-');
+                    const balEntryStr = p.cash_before_entry ? formatCurrency(p.cash_before_entry) : '-';
+
+                    return `<tr style="cursor: pointer;" onclick="inspectTradeLifecycle(${JSON.stringify(p).replace(/"/g, '&quot;')})">
+                        <td>${openTimeStr}</td>
+                        <td><strong class="td-strong" style="color: #fff;">${sym}</strong> <span class="${sideClass}">${side}</span></td>
+                        <td><span class="cyan">${strat}</span> <span style="color: var(--text-muted); font-size: 10px;">(${tf})</span></td>
+                        <td>$${entryPx.toFixed(4)}</td>
+                        <td>$${markPx.toFixed(4)}</td>
+                        <td>${qty} <span style="color: var(--text-muted); font-size: 10px;">(${formatCurrency(notional)})</span></td>
+                        <td><span class="loss">${sl}</span> / <span class="profit">${tp}</span></td>
+                        <td>${uPnlStr}</td>
+                        <td>${durStr}</td>
+                        <td>${balEntryStr}</td>
+                        <td><button class="btn-terminal-pill" style="height: 24px; padding: 2px 8px; color: var(--accent-primary);" onclick="event.stopPropagation(); inspectTradeLifecycle(${JSON.stringify(p).replace(/"/g, '&quot;')})">VIEW</button></td>
+                    </tr>`;
+                }).join('');
+            }
+        }
     }
 
-    const realEl = document.getElementById('tr-realized');
-    if (realEl) {
-        realEl.innerText = formatCurrency(netPnL + totalFees);
-        realEl.className = 'metric-value ' + ((netPnL + totalFees) > 0 ? 'val-green' : ((netPnL + totalFees) < 0 ? 'val-red' : 'val-neutral'));
+    // 4. Render Section 2: Closed Trades Grouped by Day
+    const closedSection = document.getElementById('journal-closed-section');
+    const daysContainer = document.getElementById('journal-days-container');
+
+    if (journalStatusFilter === 'OPEN') {
+        if (closedSection) closedSection.style.display = 'none';
+        return;
+    } else {
+        if (closedSection) closedSection.style.display = 'block';
     }
-}
 
-function renderTradesTable(trades) {
-    const fullBody = document.getElementById('trades-full-body');
-    const dashBody = document.getElementById('recent-trades-body');
+    if (!daysContainer) return;
 
-    if (!trades || trades.length === 0) {
-        if (fullBody) fullBody.innerHTML = '<tr><td colspan="15" class="idle-state-row">No closed trades in selected window • Historical execution records will stream as OCO orders close</td></tr>';
-        if (dashBody) dashBody.innerHTML = '<tr><td colspan="9" class="idle-state-row">No closed trades in selected window</td></tr>';
+    // Filters
+    const stratFilter = (document.getElementById('journal-filter-strat')?.value || 'ALL').toUpperCase();
+    const tfFilter = (document.getElementById('journal-filter-tf')?.value || 'ALL').toLowerCase();
+    const searchFilter = (document.getElementById('journal-filter-search')?.value || '').trim().toUpperCase();
+
+    let filteredClosed = closedTrades.filter(t => {
+        if (stratFilter !== 'ALL' && (t.strategy || '').toUpperCase() !== stratFilter) return false;
+        if (tfFilter !== 'ALL' && (t.timeframe || '').toLowerCase() !== tfFilter) return false;
+        if (searchFilter) {
+            const matchSym = (t.symbol || '').toUpperCase().includes(searchFilter);
+            const matchStrat = (t.strategy || '').toUpperCase().includes(searchFilter);
+            const matchId = (t.trade_id || t.order_id || '').toUpperCase().includes(searchFilter);
+            if (!matchSym && !matchStrat && !matchId) return false;
+        }
+        if (selectedDayFilter) {
+            const dStr = t.close_time || t.exit_timestamp || t.timestamp;
+            if (!dStr) return false;
+            const tDate = new Date(dStr).toISOString().split('T')[0];
+            if (tDate !== selectedDayFilter) return false;
+        }
+        return true;
+    });
+
+    if (filteredClosed.length === 0) {
+        daysContainer.innerHTML = `<div class="idle-state-row"><div class="idle-state-content"><span>No closed trades matching filter criteria • Adjust search or clear date filters</span></div></div>`;
         return;
     }
 
-    const sorted = [...trades].sort((a, b) => {
-        const tsA = new Date(a.close_time || a.timestamp || 0).getTime();
-        const tsB = new Date(b.close_time || b.timestamp || 0).getTime();
-        return tsB - tsA;
+    // Group by Day (YYYY-MM-DD)
+    const dayGroups = {};
+    filteredClosed.forEach(t => {
+        const rawTs = t.close_time || t.exit_timestamp || t.timestamp || Date.now();
+        const dateObj = new Date(rawTs);
+        const dayKey = dateObj.toISOString().split('T')[0];
+        const dayLabel = dateObj.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+        if (!dayGroups[dayKey]) {
+            dayGroups[dayKey] = {
+                dayKey: dayKey,
+                dayLabel: dayLabel,
+                trades: [],
+                totalNet: 0,
+                totalFees: 0
+            };
+        }
+
+        const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+        dayGroups[dayKey].trades.push(t);
+        dayGroups[dayKey].totalNet += net;
+        dayGroups[dayKey].totalFees += Number(t.fees || t.total_fees || 0);
     });
 
-    const fullRows = sorted.map((t, idx) => {
-        const tradeId = t.trade_id || t.order_id || `TRD-${idx}`;
-        const opened = t.fill_time || t.signal_time || t.entry_timestamp || t.timestamp;
-        const closed = t.close_time || t.exit_timestamp || t.timestamp;
+    // Sort days descending
+    const sortedDays = Object.keys(dayGroups).sort((a, b) => b.localeCompare(a));
 
-        const openStr = opened ? formatTime(opened) : '-';
-        const closeStr = closed ? formatTime(closed) : '-';
+    daysContainer.innerHTML = sortedDays.map(dayKey => {
+        const grp = dayGroups[dayKey];
+        const dayNet = grp.totalNet;
+        const dayNetClass = dayNet >= 0 ? 'profit' : 'loss';
+        const dayNetStr = `${dayNet >= 0 ? '+' : ''}${formatCurrency(dayNet)}`;
 
-        const sym = t.symbol || '-';
-        const tf = t.timeframe || '5m';
-        const strat = t.strategy || 'ADX_EMA';
-        const side = (t.side || t.action || 'BUY').toUpperCase();
-        const sideClass = (side === 'BUY' || side === 'LONG') ? 'tag tag-long' : 'tag tag-short';
+        // Sort trades within day descending
+        const dayTradesSorted = grp.trades.sort((a, b) => {
+            const tsA = new Date(a.close_time || a.exit_timestamp || a.timestamp || 0).getTime();
+            const tsB = new Date(b.close_time || b.exit_timestamp || b.timestamp || 0).getTime();
+            return tsB - tsA;
+        });
 
-        const entryPx = Number(t.entry_price || 0).toFixed(4);
-        const exitPx = Number(t.exit_price || 0).toFixed(4);
-        const qty = t.quantity || '-';
-        const feeStr = formatCurrency(t.fees || t.total_fees || 0);
+        const rowsHtml = dayTradesSorted.map(t => {
+            const sym = t.symbol || '-';
+            const side = (t.side || t.action || 'BUY').toUpperCase();
+            const sideClass = side === 'BUY' ? 'tag-buy' : 'tag-sell';
+            const strat = t.strategy || 'ADX_EMA';
+            const tf = t.timeframe || '5m';
+            const entryPx = Number(t.entry_price || 0);
+            const exitPx = Number(t.exit_price || 0);
+            const qty = t.quantity || '-';
+            const gross = Number(t.gross_pnl !== undefined ? t.gross_pnl : t.net_pnl || 0);
+            const fees = Number(t.fees || t.total_fees || 0);
+            const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+            const netPct = entryPx > 0 ? ((exitPx - entryPx) / entryPx) * 100 : 0;
+            const netStr = `<span class="${net >= 0 ? 'profit' : 'loss'} td-strong">${net >= 0 ? '+' : ''}${formatCurrency(net)} (${netPct >= 0 ? '+' : ''}${netPct.toFixed(2)}%)</span>`;
+            const reason = t.close_reason || t.exit_reason || (net >= 0 ? 'TAKE_PROFIT' : 'STOP_LOSS');
+            const openTime = t.entry_timestamp || t.signal_time ? formatTime(t.entry_timestamp || t.signal_time) : '--:--';
+            const closeTime = t.close_time || t.exit_timestamp || t.timestamp ? formatTime(t.close_time || t.exit_timestamp || t.timestamp) : '--:--';
+            const dur = t.duration || (t.duration_seconds ? `${Math.round(t.duration_seconds)}s` : '-');
 
-        const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
-        const netClass = net > 0 ? 'val-green' : (net < 0 ? 'val-red' : '');
-        const netStr = `<span class="${netClass}">${net >= 0 ? '+' : ''}${formatCurrency(net)}</span>`;
+            return `<tr style="cursor: pointer;" onclick="inspectTradeLifecycle(${JSON.stringify(t).replace(/"/g, '&quot;')})">
+                <td>${openTime} &rarr; ${closeTime}</td>
+                <td><strong class="td-strong" style="color: #fff;">${sym}</strong> <span class="${sideClass}">${side}</span></td>
+                <td><span class="cyan">${strat}</span> <span style="color: var(--text-muted); font-size: 10px;">(${tf})</span></td>
+                <td>$${entryPx.toFixed(4)} &rarr; $${exitPx.toFixed(4)}</td>
+                <td>${qty}</td>
+                <td>${dur}</td>
+                <td>${formatCurrency(gross)}</td>
+                <td>${formatCurrency(fees)}</td>
+                <td>${netStr}</td>
+                <td><span class="tag-reason">${reason}</span></td>
+                <td><button class="btn-terminal-pill" style="height: 24px; padding: 2px 8px; color: var(--accent-primary);" onclick="event.stopPropagation(); inspectTradeLifecycle(${JSON.stringify(t).replace(/"/g, '&quot;')})">LIFECYCLE</button></td>
+            </tr>`;
+        }).join('');
 
-        const isWin = net >= 0;
-        const statusTag = `<span class="tag ${isWin ? 'tag-win' : 'tag-loss'}">${isWin ? 'WIN' : 'LOSS'}</span>`;
-
-        return `<tr style="cursor: pointer;" onclick="inspectTradeByIndex(${idx})" title="Click to view Complete Visual Lifecycle">
-            <td class="td-strong" style="font-family: var(--font-mono);">${tradeId}</td>
-            <td>${openStr}</td>
-            <td>${closeStr}</td>
-            <td class="td-strong">${sym}</td>
-            <td>${tf}</td>
-            <td>${strat}</td>
-            <td><span class="${sideClass}">${side}</span></td>
-            <td>${entryPx}</td>
-            <td>${exitPx}</td>
-            <td>${qty}</td>
-            <td>${feeStr}</td>
-            <td>${netStr}</td>
-            <td>${statusTag}</td>
-        </tr>`;
+        return `
+            <div class="journal-day-group">
+                <div class="journal-day-header">
+                    <div class="day-header-left">
+                        <span class="day-header-date">📅 ${grp.dayLabel}</span>
+                        <span class="day-header-count">${grp.trades.length} Trades Logged</span>
+                    </div>
+                    <div class="day-header-pnl ${dayNetClass}">
+                        <span>Day Net Return: <strong>${dayNetStr}</strong></span>
+                    </div>
+                </div>
+                <div class="panel-table-wrap">
+                    <table class="terminal-table">
+                        <thead>
+                            <tr>
+                                <th>OPEN &rarr; CLOSE</th>
+                                <th>SYMBOL &amp; SIDE</th>
+                                <th>STRATEGY &amp; TF</th>
+                                <th>ENTRY &rarr; EXIT PRICE</th>
+                                <th>QTY</th>
+                                <th>DURATION</th>
+                                <th>GROSS PNL</th>
+                                <th>FEES</th>
+                                <th>NET PNL ($ / %)</th>
+                                <th>CLOSE REASON</th>
+                                <th>AUDIT</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
     }).join('');
-
-    const dashRows = sorted.slice(0, 10).map(t => {
-        const closed = t.close_time || t.exit_timestamp || t.timestamp;
-        const closeStr = closed ? formatTime(closed) : '-';
-        const side = (t.side || t.action || 'BUY').toUpperCase();
-        const sideClass = (side === 'BUY' || side === 'LONG') ? 'tag tag-long' : 'tag tag-short';
-        const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
-        const netStr = `<span class="${net >= 0 ? 'val-green' : 'val-red'}">${net >= 0 ? '+' : ''}${formatCurrency(net)}</span>`;
-
-        return `<tr>
-            <td>${closeStr}</td>
-            <td class="td-strong">${t.symbol}</td>
-            <td>${t.timeframe || '5m'}</td>
-            <td>${t.strategy || 'ADX_EMA'}</td>
-            <td><span class="${sideClass}">${side}</span></td>
-            <td>${Number(t.entry_price || 0).toFixed(4)}</td>
-            <td>${Number(t.exit_price || 0).toFixed(4)}</td>
-            <td>${netStr}</td>
-            <td><span class="tag ${net >= 0 ? 'tag-win' : 'tag-loss'}">${net >= 0 ? 'WIN' : 'LOSS'}</span></td>
-        </tr>`;
-    }).join('');
-
-    if (fullBody) fullBody.innerHTML = fullRows;
-    if (dashBody) dashBody.innerHTML = dashRows;
 }
 
-function inspectTradeByIndex(idx) {
-    if (allRawTrades && allRawTrades[idx]) {
-        inspectTrade(allRawTrades[idx]);
+function calcDurationStr(openTs) {
+    const diffSec = Math.max(0, Math.floor((Date.now() - new Date(openTs).getTime()) / 1000));
+    const m = Math.floor(diffSec / 60);
+    const s = diffSec % 60;
+    return `${m}m ${s}s`;
+}
+
+// ─── CALENDAR HEATMAP LOGIC ───
+function navCalendarMonth(dir) {
+    currentCalendarDate.setMonth(currentCalendarDate.getMonth() + dir);
+    renderCalendarHeatmap();
+}
+
+function renderCalendarHeatmap() {
+    const titleEl = document.getElementById('calendar-month-title');
+    const gridEl = document.getElementById('calendar-days-grid');
+    if (!gridEl) return;
+
+    const year = currentCalendarDate.getFullYear();
+    const month = currentCalendarDate.getMonth();
+    if (titleEl) {
+        titleEl.innerText = new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase();
     }
+
+    // Build map of daily PnL & trade counts
+    const dayStats = {};
+    (allRawTrades || []).forEach(t => {
+        const rawTs = t.close_time || t.exit_timestamp || t.timestamp;
+        if (!rawTs) return;
+        const d = new Date(rawTs);
+        if (d.getFullYear() === year && d.getMonth() === month) {
+            const dayNum = d.getDate();
+            if (!dayStats[dayNum]) dayStats[dayNum] = { count: 0, netPnl: 0, dateKey: d.toISOString().split('T')[0] };
+            dayStats[dayNum].count++;
+            dayStats[dayNum].netPnl += Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+        }
+    });
+
+    const firstDayIndex = (new Date(year, month, 1).getDay() + 6) % 7; // Monday = 0
+    const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+
+    let cellsHtml = '';
+
+    // Empty lead cells
+    for (let i = 0; i < firstDayIndex; i++) {
+        cellsHtml += `<div class="calendar-day-cell" style="opacity: 0.2; pointer-events: none;"><span class="cal-day-num">-</span></div>`;
+    }
+
+    // Active day cells
+    for (let day = 1; day <= totalDaysInMonth; day++) {
+        const stat = dayStats[day];
+        const hasTrades = stat && stat.count > 0;
+        const net = hasTrades ? stat.netPnl : 0;
+        const isProfit = net > 0;
+        const isLoss = net < 0;
+        const cellClass = hasTrades ? (isProfit ? 'profit-day' : (isLoss ? 'loss-day' : '')) : '';
+        const pnlStr = hasTrades ? `<span class="${isProfit ? 'profit' : 'loss'} cal-day-pnl">${isProfit ? '+' : ''}${formatCurrency(net)}</span>` : '<span class="cal-day-pnl" style="color: var(--text-dim);">$0.00</span>';
+        const countStr = hasTrades ? `<span class="cal-day-count">${stat.count} trade${stat.count > 1 ? 's' : ''}</span>` : '<span class="cal-day-count" style="color: var(--text-dim);">0 trades</span>';
+        const dateKey = stat ? stat.dateKey : `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+        cellsHtml += `
+            <div class="calendar-day-cell ${cellClass}" onclick="filterTradesByDay('${dateKey}')">
+                <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                    <span class="cal-day-num">${day}</span>
+                    ${countStr}
+                </div>
+                ${pnlStr}
+            </div>
+        `;
+    }
+
+    gridEl.innerHTML = cellsHtml;
 }
 
-function inspectTrade(trade) {
-    const sym = trade.symbol || '-';
-    const tradeId = trade.trade_id || trade.order_id || 'TRD';
+function filterTradesByDay(dateKey) {
+    selectedDayFilter = dateKey;
+    setJournalViewMode('table');
+}
+
+// ─── FULL TRADE LIFECYCLE DRAWER ───
+function inspectTradeLifecycle(trade) {
+    const sym = trade.symbol || 'PAIR';
+    const tradeId = trade.trade_id || trade.order_id || 'TRD-LIFECYCLE';
     const strat = trade.strategy || 'ADX_EMA';
     const tf = trade.timeframe || '5m';
     const side = (trade.side || trade.action || 'BUY').toUpperCase();
+    const isClosed = trade.status === 'CLOSED' || (trade.exit_price && Number(trade.exit_price) > 0);
 
     const net = Number(trade.net_pnl !== undefined ? trade.net_pnl : (trade.pnl || 0));
     const gross = Number(trade.gross_pnl !== undefined ? trade.gross_pnl : (net + Number(trade.fees || 0)));
     const fees = Number(trade.fees || trade.total_fees || 0);
 
-    const entryPx = Number(trade.entry_price || 0);
-    const exitPx = Number(trade.exit_price || 0);
+    const entryPx = Number(trade.entry_price || trade.price || 0);
+    const exitPx = Number(trade.exit_price || entryPx);
     const slPx = Number(trade.stop_loss || trade.sl || 0);
     const tpPx = Number(trade.take_profit || trade.tp || 0);
+    const qty = trade.quantity || trade.orig_qty || '-';
 
-    const balOpen = Number(trade.balance_before_entry || 0);
-    const eqOpen = Number(trade.equity_before_entry || balOpen || 0);
-    const balClose = Number(trade.balance_after_exit || (balOpen + net) || 0);
-    const eqClose = Number(trade.equity_after_exit || balClose || 0);
+    const balOpen = Number(trade.cash_before_entry || trade.balance_before_entry || 10000);
+    const eqOpen = Number(trade.equity_before_entry || balOpen);
+    const balClose = Number(trade.cash_after_exit || trade.balance_after_exit || (balOpen + net));
+    const eqClose = Number(trade.equity_after_exit || balClose);
 
-    const closeReason = trade.close_reason || trade.exit_reason || (net >= 0 ? 'TAKE_PROFIT_HIT' : 'STOP_LOSS_HIT');
-    const durStr = trade.duration || (trade.duration_seconds ? `${Math.round(trade.duration_seconds)}s` : '-');
+    const closeReason = trade.close_reason || trade.exit_reason || (isClosed ? (net >= 0 ? 'TAKE_PROFIT_OCO' : 'STOP_LOSS_OCO') : 'STILL_OPEN');
+    const openTimeStr = trade.entry_timestamp || trade.signal_time ? formatDateTime(trade.entry_timestamp || trade.signal_time) : '-';
+    const closeTimeStr = isClosed ? (trade.close_time || trade.exit_timestamp ? formatDateTime(trade.close_time || trade.exit_timestamp) : '-') : 'ACTIVE POSITION';
+    const durStr = trade.duration || (trade.duration_seconds ? `${Math.round(trade.duration_seconds)}s` : (trade.entry_timestamp ? calcDurationStr(trade.entry_timestamp) : '-'));
 
     const drawerHtml = `
-        <!-- VISUAL TRADE LIFECYCLE STEPPER -->
-        <div class="inspector-card">
-            <div class="inspector-card-header">
-                <span>🔄 Visual Lifecycle Flow</span>
-                <span class="tag ${net >= 0 ? 'tag-win' : 'tag-loss'}">${net >= 0 ? 'WIN' : 'LOSS'}</span>
+        <div class="lifecycle-card">
+            <div class="lifecycle-card-title">
+                <span class="td-strong" style="font-size: 14px; color: #fff;">${sym} • ${side}</span>
+                <span class="tag ${isClosed ? (net >= 0 ? 'tag-buy' : 'tag-sell') : 'tag-buy'}">${isClosed ? (net >= 0 ? '🏆 WIN' : '🔻 LOSS') : '⚡ ACTIVE'}</span>
             </div>
-            <div class="lifecycle-stepper">
-                <div class="lifecycle-node completed">
-                    <div class="lifecycle-icon-wrap">1</div>
-                    <div class="lifecycle-content">
-                        <div class="lifecycle-step-title"><span>SIGNAL GENERATED</span><span class="badge badge-mono">${trade.signal_time ? formatTime(trade.signal_time) : '-'}</span></div>
-                        <div class="lifecycle-step-desc">Strategy: ${strat} • ${tf} • Side: ${side}</div>
-                    </div>
-                </div>
-
-                <div class="lifecycle-node completed">
-                    <div class="lifecycle-icon-wrap">2</div>
-                    <div class="lifecycle-content">
-                        <div class="lifecycle-step-title"><span>PROFITABILITY GATE</span><span class="tag tag-qualified">ACCEPTED</span></div>
-                        <div class="lifecycle-step-desc">Expected net edge evaluated above fees & slippage hurdle</div>
-                    </div>
-                </div>
-
-                <div class="lifecycle-node completed">
-                    <div class="lifecycle-icon-wrap">3</div>
-                    <div class="lifecycle-content">
-                        <div class="lifecycle-step-title"><span>RISK ENGINE GATE</span><span class="tag tag-qualified">ACCEPTED</span></div>
-                        <div class="lifecycle-step-desc">Exposure and max drawdown limits verified</div>
-                    </div>
-                </div>
-
-                <div class="lifecycle-node completed">
-                    <div class="lifecycle-icon-wrap">4</div>
-                    <div class="lifecycle-content">
-                        <div class="lifecycle-step-title"><span>ORDER SUBMITTED</span><span class="badge badge-mono">${trade.order_submit_time ? formatTime(trade.order_submit_time) : '-'}</span></div>
-                        <div class="lifecycle-step-desc">Entry Order: ${trade.entry_order_id || tradeId}</div>
-                    </div>
-                </div>
-
-                <div class="lifecycle-node completed">
-                    <div class="lifecycle-icon-wrap">5</div>
-                    <div class="lifecycle-content">
-                        <div class="lifecycle-step-title"><span>ORDER FILLED</span><span class="badge badge-mono">${trade.fill_time ? formatTime(trade.fill_time) : '-'}</span></div>
-                        <div class="lifecycle-step-desc">Price: ${entryPx.toFixed(4)} • Qty: ${trade.quantity}</div>
-                    </div>
-                </div>
-
-                <div class="lifecycle-node completed">
-                    <div class="lifecycle-icon-wrap">6</div>
-                    <div class="lifecycle-content">
-                        <div class="lifecycle-step-title"><span>POSITION OPENED</span><span class="tag tag-qualified">SPOT HELD</span></div>
-                        <div class="lifecycle-step-desc">Notional: ${formatCurrency(entryPx * Number(trade.quantity || 0))}</div>
-                    </div>
-                </div>
-
-                <div class="lifecycle-node completed">
-                    <div class="lifecycle-icon-wrap">7</div>
-                    <div class="lifecycle-content">
-                        <div class="lifecycle-step-title"><span>PROTECTION ACTIVE</span><span class="tag tag-qualified">OCO PLACED</span></div>
-                        <div class="lifecycle-step-desc">SL: ${slPx > 0 ? slPx.toFixed(4) : '-'} | TP: ${tpPx > 0 ? tpPx.toFixed(4) : '-'}</div>
-                    </div>
-                </div>
-
-                <div class="lifecycle-node completed">
-                    <div class="lifecycle-icon-wrap">8</div>
-                    <div class="lifecycle-content">
-                        <div class="lifecycle-step-title"><span>POSITION CLOSED</span><span class="badge badge-mono">${trade.close_time ? formatTime(trade.close_time) : '-'}</span></div>
-                        <div class="lifecycle-step-desc">Exit Price: ${exitPx.toFixed(4)} • Reason: ${closeReason}</div>
-                    </div>
-                </div>
+            <div class="lifecycle-grid">
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Trade ID</span><span class="lifecycle-val td-strong">${tradeId}</span></div>
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Strategy</span><span class="lifecycle-val cyan">${strat} (${tf})</span></div>
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Quantity</span><span class="lifecycle-val">${qty}</span></div>
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Duration</span><span class="lifecycle-val">${durStr}</span></div>
             </div>
         </div>
 
-        <!-- BALANCE & EQUITY AT ENTRY & EXIT -->
-        <div class="inspector-card">
-            <div class="inspector-card-header"><span>💼 Balance & Equity Milestones</span></div>
-            <div class="inspector-grid-2">
-                <div class="inspector-row"><span class="inspector-lbl">Balance at Open</span><span class="inspector-val">${balOpen > 0 ? formatCurrency(balOpen) : '-'}</span></div>
-                <div class="inspector-row"><span class="inspector-lbl">Equity at Open</span><span class="inspector-val">${eqOpen > 0 ? formatCurrency(eqOpen) : '-'}</span></div>
-                <div class="inspector-row"><span class="inspector-lbl">Balance at Close</span><span class="inspector-val">${balClose > 0 ? formatCurrency(balClose) : '-'}</span></div>
-                <div class="inspector-row"><span class="inspector-lbl">Equity at Close</span><span class="inspector-val">${eqClose > 0 ? formatCurrency(eqClose) : '-'}</span></div>
+        <div class="lifecycle-card">
+            <div class="lifecycle-card-title"><span>⏳ Execution Progression & Balance Impact</span></div>
+            <div class="lifecycle-grid">
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Entry Timestamp</span><span class="lifecycle-val">${openTimeStr}</span></div>
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Entry Fill Price</span><span class="lifecycle-val td-strong">$${entryPx.toFixed(4)}</span></div>
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Cash @ Entry</span><span class="lifecycle-val cyan">${formatCurrency(balOpen)}</span></div>
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Equity @ Entry</span><span class="lifecycle-val">${formatCurrency(eqOpen)}</span></div>
+            </div>
+            <div style="border-top: 1px solid var(--border-medium); margin: 8px 0;"></div>
+            <div class="lifecycle-grid">
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Exit Timestamp</span><span class="lifecycle-val">${closeTimeStr}</span></div>
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Exit Fill Price</span><span class="lifecycle-val td-strong">$${exitPx.toFixed(4)}</span></div>
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Cash @ Exit</span><span class="lifecycle-val cyan">${formatCurrency(balClose)}</span></div>
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Equity @ Exit</span><span class="lifecycle-val">${formatCurrency(eqClose)}</span></div>
             </div>
         </div>
 
-        <!-- EXECUTION SPECS & PERFORMANCE -->
-        <div class="inspector-card">
-            <div class="inspector-card-header"><span>📊 Execution & Returns</span></div>
-            <div class="inspector-grid-2">
-                <div class="inspector-row"><span class="inspector-lbl">Entry Price</span><span class="inspector-val">${entryPx.toFixed(4)}</span></div>
-                <div class="inspector-row"><span class="inspector-lbl">Exit Price</span><span class="inspector-val">${exitPx.toFixed(4)}</span></div>
-                <div class="inspector-row"><span class="inspector-lbl">Stop Loss</span><span class="inspector-val val-red">${slPx > 0 ? slPx.toFixed(4) : '-'}</span></div>
-                <div class="inspector-row"><span class="inspector-lbl">Take Profit</span><span class="inspector-val val-green">${tpPx > 0 ? tpPx.toFixed(4) : '-'}</span></div>
-                <div class="inspector-row"><span class="inspector-lbl">Gross PnL</span><span class="inspector-val ${gross >= 0 ? 'val-green' : 'val-red'}">${gross >= 0 ? '+' : ''}${formatCurrency(gross)}</span></div>
-                <div class="inspector-row"><span class="inspector-lbl">Total Fees</span><span class="inspector-val val-amber">${formatCurrency(fees)}</span></div>
-                <div class="inspector-row"><span class="inspector-lbl">Net Return</span><span class="inspector-val ${net >= 0 ? 'val-green' : 'val-red'} td-strong">${net >= 0 ? '+' : ''}${formatCurrency(net)}</span></div>
-                <div class="inspector-row"><span class="inspector-lbl">Trade Duration</span><span class="inspector-val">${durStr}</span></div>
-                <div class="inspector-row"><span class="inspector-lbl">Close Reason</span><span class="inspector-val td-strong">${closeReason}</span></div>
+        <div class="lifecycle-card">
+            <div class="lifecycle-card-title"><span>💵 Accounting &amp; Return Breakdown</span></div>
+            <div class="lifecycle-grid">
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Gross Return</span><span class="lifecycle-val">${formatCurrency(gross)}</span></div>
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Exchange Fees</span><span class="lifecycle-val loss">-${formatCurrency(fees)}</span></div>
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Net Realized PnL</span><span class="lifecycle-val ${net >= 0 ? 'profit' : 'loss'} td-strong">${net >= 0 ? '+' : ''}${formatCurrency(net)}</span></div>
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Close Trigger Reason</span><span class="lifecycle-val tag-reason">${closeReason}</span></div>
+            </div>
+        </div>
+
+        <div class="lifecycle-card">
+            <div class="lifecycle-card-title"><span>🛡️ Protection Bracket Levels</span></div>
+            <div class="lifecycle-grid">
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Stop Loss Level</span><span class="lifecycle-val loss">${slPx > 0 ? '$' + slPx.toFixed(4) : '-'}</span></div>
+                <div class="lifecycle-row"><span class="lifecycle-lbl">Take Profit Level</span><span class="lifecycle-val profit">${tpPx > 0 ? '$' + tpPx.toFixed(4) : '-'}</span></div>
             </div>
         </div>
     `;
 
-    openInspectorDrawer(`TRADE DETAIL • ${sym} (${tradeId})`, drawerHtml);
+    openInspectorDrawer(`TRADE LIFECYCLE • ${sym}`, drawerHtml);
 }
 
 
@@ -1985,8 +2158,8 @@ function renderEquityChart() {
                 {
                     label: 'Managed Equity',
                     data: eqData,
-                    borderColor: '#FFB300',
-                    backgroundColor: 'rgba(255, 179, 0, 0.08)',
+                    borderColor: '#5B7FFF',
+                    backgroundColor: 'rgba(91, 127, 255, 0.10)',
                     borderWidth: 2,
                     fill: true,
                     tension: 0.15,
@@ -1996,7 +2169,7 @@ function renderEquityChart() {
                 {
                     label: 'Liquid USDT Baseline',
                     data: cashData,
-                    borderColor: '#4FD1C5',
+                    borderColor: '#22D3EE',
                     borderWidth: 1.5,
                     borderDash: [4, 4],
                     fill: false,
@@ -2013,13 +2186,13 @@ function renderEquityChart() {
                 legend: {
                     display: true,
                     position: 'top',
-                    labels: { color: '#7C8794', font: { family: "'IBM Plex Mono', monospace", size: 8.5 }, boxWidth: 10 }
+                    labels: { color: '#7C8AAD', font: { family: "'JetBrains Mono', monospace", size: 9 }, boxWidth: 10 }
                 },
                 tooltip: {
-                    backgroundColor: '#12161C',
-                    titleColor: '#FFB300',
-                    bodyColor: '#F8FAFC',
-                    borderColor: '#232A33',
+                    backgroundColor: '#111A2E',
+                    titleColor: '#5B7FFF',
+                    bodyColor: '#EAF0FF',
+                    borderColor: '#223050',
                     borderWidth: 1,
                     callbacks: {
                         label: function(ctx) {
@@ -2031,15 +2204,15 @@ function renderEquityChart() {
             scales: {
                 x: {
                     grid: { display: false },
-                    ticks: { color: '#7C8794', font: { family: "'IBM Plex Mono', monospace", size: 8 } }
+                    ticks: { color: '#7C8AAD', font: { family: "'JetBrains Mono', monospace", size: 8.5 } }
                 },
                 y: {
                     position: 'right',
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
                     ticks: {
-                        color: '#FFB300',
-                        font: { family: "'IBM Plex Mono', monospace", size: 8 },
-                        callback: function(v) { return '$' + Number(v).toLocaleString(); }
+                        color: '#5B7FFF',
+                        font: { family: "'JetBrains Mono', monospace", size: 8.5 },
+                        callback: function(v) { return '$' + Number(v).toFixed(0); }
                     }
                 }
             }

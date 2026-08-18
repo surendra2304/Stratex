@@ -3,31 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS • QUANTUM ALGORITHMIC TERMINAL</title>
-    <!-- Quant Typography: Space Grotesk (Headers), IBM Plex Mono (Financial Data), IBM Plex Sans (Body) -->
+    <title>NEXUS • QUANTUM TRADING TERMINAL</title>
+    <!-- Modern Calm Typography: Sora (Headings), Inter (Body), JetBrains Mono (Financial Tabular Data) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=4.0.0">
-    <link rel="stylesheet" href="style.css?v=4.0.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=5.0.0">
+    <link rel="stylesheet" href="style.css?v=5.0.0">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <!-- REAL-TIME TOAST NOTIFICATION CONTAINER -->
     <div id="trade-toast-container" class="toast-container"></div>
 
-    <!-- INSPECTOR DRAWER & BACKDROP -->
+    <!-- TRADE LIFECYCLE INSPECTOR DRAWER & BACKDROP -->
     <div id="drawer-backdrop" class="drawer-backdrop" onclick="closeInspectorDrawer()"></div>
     <aside id="inspector-drawer" class="inspector-drawer">
         <div class="drawer-header">
             <div class="drawer-title-wrap">
-                <span class="badge-amber">TELEMETRY</span>
-                <span class="drawer-title" id="drawer-title">QUANT TELEMETRY INSPECTOR</span>
+                <span class="badge-indigo">AUDIT</span>
+                <span class="drawer-title" id="drawer-title">TRADE LIFECYCLE INSPECTOR</span>
             </div>
             <button class="drawer-close" onclick="closeInspectorDrawer()" title="Close Inspector">&times;</button>
         </div>
         <div class="drawer-body" id="drawer-body">
-            <div class="empty-state">Select an item to inspect raw quant telemetry stream.</div>
+            <div class="empty-state">Select a trade row to inspect complete execution lifecycle telemetry.</div>
         </div>
     </aside>
 
@@ -44,14 +44,14 @@
                         </div>
                     </div>
                     <div class="brand-badge-row">
-                        <span class="badge-amber"><span class="pulse-dot"></span>BINANCE TESTNET</span>
-                        <span class="badge-mono">v4.0</span>
+                        <span class="badge-indigo"><span class="pulse-dot"></span>BINANCE TESTNET</span>
+                        <span class="badge-mono">v5.0</span>
                     </div>
                 </div>
             </div>
             
             <nav class="sidebar-nav">
-                <div class="nav-section-label">MONITORING</div>
+                <div class="nav-section-label">PORTFOLIO &amp; TRADES</div>
                 <a href="#dashboard" class="nav-item active" data-view="dashboard" id="nav-dashboard">
                     <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="7" height="7" rx="1"></rect>
@@ -62,6 +62,32 @@
                     <span>Overview</span>
                     <span class="nav-indicator"></span>
                 </a>
+                <a href="#trades" class="nav-item" data-view="trades" id="nav-trades">
+                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg>
+                    <span>Trade Journal</span>
+                    <span class="nav-badge-pill" id="nav-open-trades-badge">0 OPEN</span>
+                    <span class="nav-indicator"></span>
+                </a>
+                <a href="#analytics" class="nav-item" data-view="analytics" id="nav-analytics">
+                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path>
+                        <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
+                    </svg>
+                    <span>Balance History</span>
+                    <span class="nav-indicator"></span>
+                </a>
+
+                <div class="nav-section-label">INTELLIGENCE</div>
+                <a href="#signals" class="nav-item" data-view="signals" id="nav-signals">
+                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                    <span>Signals &amp; Scanner</span>
+                    <span class="nav-indicator"></span>
+                </a>
                 <a href="#market" class="nav-item" data-view="market" id="nav-market">
                     <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
@@ -69,29 +95,21 @@
                     <span>Markets</span>
                     <span class="nav-indicator"></span>
                 </a>
-                <a href="#signals" class="nav-item" data-view="signals" id="nav-signals">
+                <a href="#strategies" class="nav-item" data-view="strategies" id="nav-strategies">
                     <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                     </svg>
-                    <span>Signals</span>
+                    <span>Strategies</span>
                     <span class="nav-indicator"></span>
                 </a>
 
-                <div class="nav-section-label">EXECUTION</div>
-                <a href="#positions" class="nav-item" data-view="positions" id="nav-positions">
+                <div class="nav-section-label">GOVERNANCE &amp; SYSTEM</div>
+                <a href="#risk" class="nav-item" data-view="risk" id="nav-risk">
                     <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path>
-                        <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                     </svg>
-                    <span>Positions</span>
-                    <span class="nav-indicator"></span>
-                </a>
-                <a href="#trades" class="nav-item" data-view="trades" id="nav-trades">
-                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="1" x2="12" y2="23"></line>
-                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                    </svg>
-                    <span>Trades</span>
+                    <span>Risk Control</span>
                     <span class="nav-indicator"></span>
                 </a>
                 <a href="#activity" class="nav-item" data-view="activity" id="nav-activity">
@@ -103,32 +121,7 @@
                         <line x1="3" y1="12" x2="3.01" y2="12"></line>
                         <line x1="3" y1="18" x2="3.01" y2="18"></line>
                     </svg>
-                    <span>Activity</span>
-                    <span class="nav-indicator"></span>
-                </a>
-
-                <div class="nav-section-label">QUANT ANALYTICS</div>
-                <a href="#strategies" class="nav-item" data-view="strategies" id="nav-strategies">
-                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                    </svg>
-                    <span>Strategies</span>
-                    <span class="nav-indicator"></span>
-                </a>
-                <a href="#risk" class="nav-item" data-view="risk" id="nav-risk">
-                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                    </svg>
-                    <span>Risk Control</span>
-                    <span class="nav-indicator"></span>
-                </a>
-                <a href="#analytics" class="nav-item" data-view="analytics" id="nav-analytics">
-                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path>
-                        <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
-                    </svg>
-                    <span>Analytics</span>
+                    <span>Activity Audit</span>
                     <span class="nav-indicator"></span>
                 </a>
                 <a href="#settings" class="nav-item" data-view="settings" id="nav-settings">
@@ -143,15 +136,13 @@
 
             <div class="sidebar-system-health">
                 <div class="sidebar-health-title">
-                    <span>MICROSERVICES MATRIX</span>
+                    <span>MICROSERVICES</span>
                     <span class="live-ping" id="ws-latency-pill">18ms</span>
                 </div>
                 <div class="health-grid">
                     <div class="health-item"><span class="dot dot-green" id="h-bn"></span><span class="health-name">BINANCE</span></div>
-                    <div class="health-item"><span class="dot dot-green" id="h-ws"></span><span class="health-name">WEBSOCKET</span></div>
-                    <div class="health-item"><span class="dot dot-green" id="h-md"></span><span class="health-name">FEED</span></div>
+                    <div class="health-item"><span class="dot dot-green" id="h-ws"></span><span class="health-name">STREAM</span></div>
                     <div class="health-item"><span class="dot dot-green" id="h-se"></span><span class="health-name">STRATEGY</span></div>
-                    <div class="health-item"><span class="dot dot-green" id="h-pe"></span><span class="health-name">PORTFOLIO</span></div>
                     <div class="health-item"><span class="dot dot-green" id="h-rk"></span><span class="health-name">RISK</span></div>
                 </div>
                 <div class="sidebar-meta-text">6 STRATEGIES • 13 PAIRS</div>
@@ -160,7 +151,7 @@
 
         <!-- ─── 2. MAIN WORKSPACE CONTENT ─── -->
         <main class="main-content">
-            <!-- 1. PERSISTENT STATUS BAR -->
+            <!-- PERSISTENT TOP STATUS BAR -->
             <header class="top-status-bar">
                 <div class="status-left">
                     <div class="engine-state-badge">
@@ -201,7 +192,7 @@
 
                     <div class="notif-bell-container">
                         <button class="btn-terminal-icon" id="btn-notif" onclick="toggleNotificationDropdown()" title="System Alerts">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                                 <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                             </svg>
@@ -209,7 +200,7 @@
                         </button>
                         <div class="notif-dropdown" id="notification-dropdown">
                             <div class="notif-dropdown-header">
-                                <span>SYSTEM NOTIFICATION LEDGER</span>
+                                <span>NOTIFICATION LEDGER</span>
                                 <span class="action-link" onclick="clearNotifications()">CLEAR</span>
                             </div>
                             <div class="notif-dropdown-body" id="notif-dropdown-body">
@@ -223,7 +214,7 @@
                     </button>
 
                     <button class="btn-terminal-action" onclick="refreshDashboardNow()" title="Force Sync">
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                             <polyline points="23 4 23 10 17 10"></polyline>
                             <polyline points="1 20 1 14 7 14"></polyline>
                             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
@@ -233,38 +224,25 @@
                 </div>
             </header>
 
-            <!-- 2. SIGNATURE ELEMENT: LIVE HORIZONTAL DECISION TICKER -->
-            <div class="decision-ticker-tape">
-                <div class="ticker-label">
-                    <span class="ticker-led"></span>
-                    <span>LIVE DECISION TICKER</span>
-                </div>
-                <div class="ticker-track-wrap">
-                    <div class="ticker-track" id="decision-ticker-track">
-                        <span class="ticker-item"><strong class="ticker-sym">BTCUSDT</strong> <span class="ticker-strat">ADX_EMA</span> <span class="ticker-tf">5m</span> <span class="tag-rej">REJECT: Low Volatility (ADX &lt; 20)</span></span>
-                        <span class="ticker-sep">•</span>
-                        <span class="ticker-item"><strong class="ticker-sym">ETHUSDT</strong> <span class="ticker-strat">SCALPER</span> <span class="ticker-tf">15m</span> <span class="tag-pass">PASS: Net Alpha &gt; Friction</span></span>
-                        <span class="ticker-sep">•</span>
-                        <span class="ticker-item"><strong class="ticker-sym">SOLUSDT</strong> <span class="ticker-strat">SUPERTREND</span> <span class="ticker-tf">5m</span> <span class="tag-rej">REJECT: Trend Invalidation</span></span>
-                        <span class="ticker-sep">•</span>
-                        <span class="ticker-item"><strong class="ticker-sym">BNBUSDT</strong> <span class="ticker-strat">ML_SIGNAL</span> <span class="ticker-tf">1h</span> <span class="tag-pass">PASS: High Probability Edge</span></span>
-                    </div>
-                </div>
-            </div>
-
             <!-- ═══════════════════════════════════════════════════════════════
                  VIEW 1: OVERVIEW DASHBOARD
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container active" id="view-dashboard">
-                <!-- HERO ZONE: 4 EXECUTIVE CARDS -->
+                <div class="page-header">
+                    <div class="page-title-wrap">
+                        <h1 class="page-title">Portfolio Overview</h1>
+                        <p class="page-subtitle">Real-time executive summary of capital, today's trading performance, and spot deployment.</p>
+                    </div>
+                </div>
+
+                <!-- 4 EXECUTIVE KPI CARDS -->
                 <section class="dashboard-hero-kpi-grid">
-                    <!-- Hero 1: Total Equity -->
                     <div class="panel-card kpi-card">
                         <div class="kpi-head">
                             <span class="kpi-label">TOTAL MANAGED EQUITY</span>
-                            <span class="live-dot-amber" title="Live streaming balance"></span>
+                            <span class="live-dot-indigo" title="Live streaming balance"></span>
                         </div>
-                        <div class="kpi-val amber" id="db-equity">$0.00</div>
+                        <div class="kpi-val" id="db-equity">$0.00</div>
                         <div class="kpi-sub">
                             <span>Binance Wallet: <strong id="snap-wallet">$0.00</strong></span>
                             <span class="sep">•</span>
@@ -272,59 +250,55 @@
                         </div>
                     </div>
 
-                    <!-- Hero 2: Today's PnL -->
                     <div class="panel-card kpi-card">
                         <div class="kpi-head">
-                            <span class="kpi-label">TODAY'S NET PNL</span>
+                            <span class="kpi-label">TODAY'S NET RETURN</span>
                             <span class="live-dot-green"></span>
                         </div>
                         <div class="kpi-val" id="db-today-pnl">$0.00</div>
                         <div class="kpi-sub">
                             <span>Realized: <strong id="db-realized-pnl" class="profit">$0.00</strong></span>
                             <span class="sep">•</span>
-                            <span>Unrealized: <strong id="db-unrealized-pnl">$0.00</strong></span>
+                            <span>Float: <strong id="db-unrealized-pnl">$0.00</strong></span>
                         </div>
                     </div>
 
-                    <!-- Hero 3: Active Position Exposure -->
                     <div class="panel-card kpi-card">
                         <div class="kpi-head">
-                            <span class="kpi-label">ACTIVE POSITIONS</span>
+                            <span class="kpi-label">SPOT ASSET DEPLOYMENT</span>
                             <span class="kpi-badge mono" id="snap-pos">0 / 5</span>
                         </div>
                         <div class="kpi-val" id="snap-managed">$0.00</div>
                         <div class="kpi-sub">
                             <span>Exposure: <strong id="snap-exposure" class="profit">0.0%</strong></span>
                             <span class="sep">•</span>
-                            <span>Slots Idle: <strong>5 Available</strong></span>
+                            <span>5 Slots Idle</span>
                         </div>
                     </div>
 
-                    <!-- Hero 4: Risk Budget & Guard -->
                     <div class="panel-card kpi-card">
                         <div class="kpi-head">
-                            <span class="kpi-label">RISK CAPACITY & DRAWDOWN</span>
+                            <span class="kpi-label">RISK CAPACITY &amp; DRAWDOWN</span>
                             <span class="kpi-badge badge-guard">GUARD ON</span>
                         </div>
                         <div class="kpi-val" id="db-drawdown">0.00%</div>
                         <div class="kpi-sub">
-                            <span>Available Risk: <strong id="snap-avail-risk" class="profit">20.0%</strong></span>
+                            <span>Available: <strong id="snap-avail-risk" class="profit">20.0%</strong></span>
                             <span class="sep">•</span>
-                            <span>Fees Paid: <strong id="db-fees" class="amber">$0.00</strong></span>
+                            <span>Fees: <strong id="db-fees">$0.00</strong></span>
                         </div>
                     </div>
                 </section>
 
-                <!-- MAIN WORKSPACE: 2 COLS (65% / 35%) -->
+                <!-- MAIN WORKSPACE GRID -->
                 <section class="dashboard-main-grid">
-                    <!-- LEFT COLUMN: Equity Chart + Active Positions -->
+                    <!-- LEFT COLUMN: Equity Curve + Active Spot Positions -->
                     <div class="grid-col-left">
-                        <!-- Card A: Equity & Cash Accumulation Curve (Thesis Anchor) -->
                         <div class="panel-card chart-card">
                             <div class="panel-card-header">
                                 <div class="panel-card-title">
-                                    <span class="amber-indicator"></span>
-                                    <span>EQUITY & CASH ACCUMULATION TIMELINE</span>
+                                    <span class="indigo-indicator"></span>
+                                    <span>EQUITY &amp; CASH ACCUMULATION TIMELINE</span>
                                 </div>
                                 <div class="chart-controls">
                                     <button class="btn-tf active" onclick="setEquityChartTf('1D')">1D</button>
@@ -338,14 +312,13 @@
                             </div>
                         </div>
 
-                        <!-- Card B: Active Positions Table -->
                         <div class="panel-card table-card">
                             <div class="panel-card-header">
                                 <div class="panel-card-title">
                                     <span class="green-indicator"></span>
                                     <span>ACTIVE SPOT POSITIONS</span>
                                 </div>
-                                <a href="#positions" class="panel-action-link" onclick="showView('positions')">EXPAND POSITIONS &rarr;</a>
+                                <a href="#trades" class="panel-action-link" onclick="showView('trades')">OPEN TRADE JOURNAL &rarr;</a>
                             </div>
                             <div class="panel-table-wrap">
                                 <table class="terminal-table">
@@ -374,14 +347,13 @@
                         </div>
                     </div>
 
-                    <!-- RIGHT COLUMN: Allocation Matrix + Opportunity Scanner + Signal Funnel -->
+                    <!-- RIGHT COLUMN: Allocation Matrix + Opportunity Scanner -->
                     <div class="grid-col-right">
-                        <!-- Card C: Capital Allocation Gauge -->
                         <div class="panel-card alloc-card">
                             <div class="panel-card-header">
                                 <div class="panel-card-title">
-                                    <span class="amber-indicator"></span>
-                                    <span>CAPITAL ALLOCATION GAUGE</span>
+                                    <span class="indigo-indicator"></span>
+                                    <span>CAPITAL ALLOCATION MATRIX</span>
                                 </div>
                                 <span class="badge-mono" id="snap-exposure-badge">0.0% EXPOSURE</span>
                             </div>
@@ -403,14 +375,13 @@
                             </div>
                         </div>
 
-                        <!-- Card D: Opportunity Scanner Radar -->
                         <div class="panel-card opp-radar-card">
                             <div class="panel-card-header">
                                 <div class="panel-card-title">
                                     <span class="cyan-indicator"></span>
-                                    <span>LIVE OPPORTUNITY RADAR</span>
+                                    <span>LIVE OPPORTUNITY SCANNER</span>
                                 </div>
-                                <a href="#signals" class="panel-action-link" onclick="showView('signals')">PIPELINE &rarr;</a>
+                                <a href="#signals" class="panel-action-link" onclick="showView('signals')">FULL PIPELINE &rarr;</a>
                             </div>
                             <div class="opp-radar-body">
                                 <table class="terminal-table table-dense">
@@ -436,7 +407,6 @@
                             </div>
                         </div>
 
-                        <!-- Card E: Diagnostic Funnel Flow -->
                         <div class="panel-card funnel-card">
                             <div class="panel-card-header">
                                 <div class="panel-card-title">
@@ -474,99 +444,66 @@
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 2: MARKETS
+                 VIEW 2: TRADE JOURNAL (THE CORE FEATURE)
             ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container" id="view-market">
-                <div class="market-terminal-layout">
-                    <!-- LEFT: WATCHLIST -->
-                    <div class="panel-card market-watch-panel">
-                        <div class="panel-card-header">
-                            <div class="panel-card-title"><span>📡 LIVE PAIRS WATCHLIST</span></div>
-                            <span class="badge-mono">13 PAIRS</span>
-                        </div>
-                        <div class="panel-table-wrap">
-                            <table class="terminal-table">
-                                <thead>
-                                    <tr>
-                                        <th>SYMBOL</th>
-                                        <th>PRICE</th>
-                                        <th>24H CHG</th>
-                                        <th>SIGNAL</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="market-watchlist-body"></tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- CENTER: CANDLESTICK / LINE CHART -->
-                    <div class="panel-card market-chart-panel">
-                        <div class="panel-card-header">
-                            <div class="market-chart-meta">
-                                <span class="market-sym-badge" id="market-chart-symbol">BTCUSDT</span>
-                                <span class="market-price-val mono" id="market-chart-price">--</span>
-                                <span class="market-chg-val mono" id="market-chart-chg">--</span>
-                            </div>
-                            <div class="chart-controls">
-                                <button class="btn-tf" onclick="setMarketChartTf('1m')">1m</button>
-                                <button class="btn-tf" onclick="setMarketChartTf('3m')">3m</button>
-                                <button class="btn-tf active" onclick="setMarketChartTf('5m')">5m</button>
-                                <button class="btn-tf" onclick="setMarketChartTf('15m')">15m</button>
-                                <button class="btn-tf" onclick="setMarketChartTf('30m')">30m</button>
-                                <button class="btn-tf" onclick="setMarketChartTf('1h')">1h</button>
-                                <button class="btn-tf" onclick="setMarketChartTf('2h')">2h</button>
-                                <button class="btn-tf" onclick="setMarketChartTf('4h')">4h</button>
-                            </div>
-                        </div>
-                        <div class="chart-body" style="flex: 1; position: relative;">
-                            <canvas id="marketCandleChart"></canvas>
-                        </div>
-                    </div>
-
-                    <!-- RIGHT: MARKET DETAILS -->
-                    <div class="panel-card market-details-panel">
-                        <div class="panel-card-header">
-                            <div class="panel-card-title"><span id="market-details-title">BTCUSDT TELEMETRY</span></div>
-                            <span class="tag-pass" id="market-details-status">LIVE</span>
-                        </div>
-                        <div class="panel-card-body" id="market-details-content">
-                            <div class="idle-state-row">Select a symbol to view live quant indicators</div>
-                        </div>
+            <div class="view-container" id="view-trades">
+                <div class="page-header">
+                    <div class="page-title-wrap">
+                        <h1 class="page-title">Trade Journal &amp; Execution Audit</h1>
+                        <p class="page-subtitle">Detailed trade lifecycle tracking, entry/exit balance impacts, and calendar-day performance grouping.</p>
                     </div>
                 </div>
-            </div>
 
-            <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 3: SIGNALS (PRO LOG & FUNNEL)
-            ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container" id="view-signals">
-                <!-- TOP SUMMARY METRICS -->
-                <div class="kpi-grid-8">
-                    <div class="panel-card kpi-card-mini"><div class="kpi-label">TOTAL SIGNALS</div><div class="kpi-val mono" id="sig-kpi-total">0</div></div>
-                    <div class="panel-card kpi-card-mini"><div class="kpi-label">BUY</div><div class="kpi-val profit mono" id="sig-kpi-buy">0</div></div>
-                    <div class="panel-card kpi-card-mini"><div class="kpi-label">SELL</div><div class="kpi-val loss mono" id="sig-kpi-sell">0</div></div>
-                    <div class="panel-card kpi-card-mini"><div class="kpi-label">HOLD</div><div class="kpi-val amber mono" id="sig-kpi-hold">0</div></div>
-                    <div class="panel-card kpi-card-mini"><div class="kpi-label">PROFIT PASS</div><div class="kpi-val profit mono" id="sig-kpi-prof-acc">0</div></div>
-                    <div class="panel-card kpi-card-mini"><div class="kpi-label">PROFIT REJ</div><div class="kpi-val loss mono" id="sig-kpi-prof-rej">0</div></div>
-                    <div class="panel-card kpi-card-mini"><div class="kpi-label">RISK PASS</div><div class="kpi-val profit mono" id="sig-kpi-risk-acc">0</div></div>
-                    <div class="panel-card kpi-card-mini"><div class="kpi-label">RISK REJ</div><div class="kpi-val loss mono" id="sig-kpi-risk-rej">0</div></div>
+                <!-- JOURNAL SUMMARY KPI STRIP -->
+                <div class="journal-metrics-strip">
+                    <div class="panel-card journal-metric-card">
+                        <span class="journal-metric-lbl">TOTAL TRADES</span>
+                        <div class="journal-metric-val mono" id="trd-total">0</div>
+                    </div>
+                    <div class="panel-card journal-metric-card">
+                        <span class="journal-metric-lbl">WIN RATE</span>
+                        <div class="journal-metric-val profit mono" id="trd-winrate">0.0%</div>
+                    </div>
+                    <div class="panel-card journal-metric-card">
+                        <span class="journal-metric-lbl">NET REALIZED PNL</span>
+                        <div class="journal-metric-val profit mono" id="trd-net-pnl">$0.00</div>
+                    </div>
+                    <div class="panel-card journal-metric-card">
+                        <span class="journal-metric-lbl">PROFIT FACTOR</span>
+                        <div class="journal-metric-val cyan mono" id="trd-pf">0.00</div>
+                    </div>
+                    <div class="panel-card journal-metric-card">
+                        <span class="journal-metric-lbl">TOTAL FEES PAID</span>
+                        <div class="journal-metric-val mono" id="trd-fees">$0.00</div>
+                    </div>
+                    <div class="panel-card journal-metric-card">
+                        <span class="journal-metric-lbl">AVG WIN / LOSS</span>
+                        <div class="journal-metric-sub mono"><span class="profit" id="trd-avg-win">+$0.00</span> / <span class="loss" id="trd-avg-loss">-$0.00</span></div>
+                    </div>
                 </div>
 
-                <!-- FILTERS TOOLBAR -->
-                <div class="filter-toolbar">
+                <!-- UNIFIED FILTER TOOLBAR -->
+                <div class="journal-filter-toolbar">
                     <div class="filter-group">
-                        <span class="filter-lbl">DIRECTION:</span>
-                        <button class="btn-filter active" id="sig-btn-all" onclick="setSignalQuickFilter('ALL')">ALL</button>
-                        <button class="btn-filter" id="sig-btn-buy" onclick="setSignalQuickFilter('BUY')">BUY</button>
-                        <button class="btn-filter" id="sig-btn-sell" onclick="setSignalQuickFilter('SELL')">SELL</button>
-                        <button class="btn-filter" id="sig-btn-hold" onclick="setSignalQuickFilter('HOLD')">HOLD</button>
-                        <button class="btn-filter" id="sig-btn-acc" onclick="setSignalQuickFilter('ACCEPTED')">ACCEPTED</button>
-                        <button class="btn-filter" id="sig-btn-rej" onclick="setSignalQuickFilter('REJECTED')">REJECTED</button>
+                        <span class="filter-lbl">VIEW MODE:</span>
+                        <button class="btn-filter active" id="btn-journal-view-table" onclick="setJournalViewMode('table')">
+                            <span>📋 LEDGER VIEW</span>
+                        </button>
+                        <button class="btn-filter" id="btn-journal-view-cal" onclick="setJournalViewMode('calendar')">
+                            <span>📅 CALENDAR VIEW</span>
+                        </button>
+                    </div>
+
+                    <div class="filter-group">
+                        <span class="filter-lbl">STATUS:</span>
+                        <button class="btn-filter active" id="btn-jnl-all" onclick="setJournalStatusFilter('ALL')">ALL</button>
+                        <button class="btn-filter" id="btn-jnl-open" onclick="setJournalStatusFilter('OPEN')">ACTIVE (<span id="jnl-open-count">0</span>)</button>
+                        <button class="btn-filter" id="btn-jnl-closed" onclick="setJournalStatusFilter('CLOSED')">CLOSED (<span id="jnl-closed-count">0</span>)</button>
                     </div>
 
                     <div class="filter-group">
                         <span class="filter-lbl">STRATEGY:</span>
-                        <select class="select-terminal" id="sig-filter-strat" onchange="applySignalFilters()">
+                        <select class="select-terminal" id="journal-filter-strat" onchange="applyJournalFilters()">
                             <option value="ALL">ALL STRATEGIES</option>
                             <option value="AGGRESSOR">AGGRESSOR</option>
                             <option value="SCALPER">SCALPER</option>
@@ -579,7 +516,7 @@
 
                     <div class="filter-group">
                         <span class="filter-lbl">TIMEFRAME:</span>
-                        <select class="select-terminal" id="sig-filter-tf" onchange="applySignalFilters()">
+                        <select class="select-terminal" id="journal-filter-tf" onchange="applyJournalFilters()">
                             <option value="ALL">ALL TF</option>
                             <option value="5m">5m</option>
                             <option value="15m">15m</option>
@@ -590,289 +527,130 @@
                         </select>
                     </div>
 
-                    <div class="filter-group">
-                        <span class="filter-lbl">SEARCH:</span>
-                        <input type="text" class="input-terminal" id="sig-filter-sym" placeholder="SYMBOL (e.g. BTC)" oninput="applySignalFilters()">
-                    </div>
-                </div>
-
-                <!-- SIGNALS TABLE -->
-                <div class="panel-card" style="flex: 1;">
-                    <div class="panel-table-wrap">
-                        <table class="terminal-table">
-                            <thead>
-                                <tr>
-                                    <th>TIME</th>
-                                    <th>SYMBOL</th>
-                                    <th>TF</th>
-                                    <th>STRATEGY</th>
-                                    <th>SIDE</th>
-                                    <th>ENTRY</th>
-                                    <th>STOP</th>
-                                    <th>TARGET</th>
-                                    <th>CONF</th>
-                                    <th>EXP GROSS</th>
-                                    <th>EXP NET</th>
-                                    <th>PROFIT GATE</th>
-                                    <th>RISK GATE</th>
-                                    <th>FINAL</th>
-                                    <th>REASON</th>
-                                </tr>
-                            </thead>
-                            <tbody id="signals-full-body">
-                                <tr><td colspan="15" class="idle-state-row">No signals evaluated in current session</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 4: POSITIONS
-            ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container" id="view-positions">
-                <div class="dashboard-hero-kpi-grid">
-                    <div class="panel-card kpi-card"><div class="kpi-label">OPEN POSITIONS</div><div class="kpi-val mono" id="pos-count">0 / 5</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">TOTAL NOTIONAL</div><div class="kpi-val mono" id="pos-notional">$0.00</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">UNREALIZED PNL</div><div class="kpi-val mono" id="pos-unrealized">$0.00</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">AVAILABLE CASH</div><div class="kpi-val cyan mono" id="pos-avail">$0.00</div></div>
-                </div>
-
-                <div class="panel-card" style="flex: 1;">
-                    <div class="panel-card-header">
-                        <div class="panel-card-title"><span>ACTIVE MANAGED POSITIONS LEDGER</span></div>
-                    </div>
-                    <div class="panel-table-wrap">
-                        <table class="terminal-table">
-                            <thead>
-                                <tr>
-                                    <th>OPEN TIME</th>
-                                    <th>SYMBOL</th>
-                                    <th>SIDE</th>
-                                    <th>QTY</th>
-                                    <th>ENTRY</th>
-                                    <th>CURRENT</th>
-                                    <th>STOP LOSS</th>
-                                    <th>TAKE PROFIT</th>
-                                    <th>PNL ($)</th>
-                                    <th>PNL (%)</th>
-                                    <th>NOTIONAL</th>
-                                    <th>DURATION</th>
-                                    <th>ACTION</th>
-                                </tr>
-                            </thead>
-                            <tbody id="pos-full-body">
-                                <tr><td colspan="13" class="idle-state-row">No active positions on Binance Testnet</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 5: TRADES
-            ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container" id="view-trades">
-                <div class="dashboard-hero-kpi-grid">
-                    <div class="panel-card kpi-card"><div class="kpi-label">TOTAL TRADES</div><div class="kpi-val mono" id="trd-total">--</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">WIN RATE</div><div class="kpi-val profit mono" id="trd-winrate">--</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">NET REALIZED PNL</div><div class="kpi-val profit mono" id="trd-net-pnl">--</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">PROFIT FACTOR</div><div class="kpi-val cyan mono" id="trd-pf">--</div></div>
-                </div>
-
-                <div class="panel-card" style="flex: 1;">
-                    <div class="panel-card-header">
-                        <div class="panel-card-title"><span>HISTORICAL TRADE EXECUTION LEDGER</span></div>
-                        <span class="badge-mono">CLICK ROW TO INSPECT TELEMETRY</span>
-                    </div>
-                    <div class="panel-table-wrap">
-                        <table class="terminal-table">
-                            <thead>
-                                <tr>
-                                    <th>OPEN TIME</th>
-                                    <th>CLOSE TIME</th>
-                                    <th>SYMBOL</th>
-                                    <th>TF</th>
-                                    <th>STRATEGY</th>
-                                    <th>SIDE</th>
-                                    <th>QTY</th>
-                                    <th>ENTRY</th>
-                                    <th>EXIT</th>
-                                    <th>GROSS PNL</th>
-                                    <th>FEES</th>
-                                    <th>NET PNL</th>
-                                    <th>DURATION</th>
-                                    <th>REASON</th>
-                                    <th>DETAILS</th>
-                                </tr>
-                            </thead>
-                            <tbody id="trades-full-body">
-                                <tr><td colspan="15" class="idle-state-row">No historical trades logged yet</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 6: ACTIVITY
-            ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container" id="view-activity">
-                <div class="filter-toolbar">
-                    <div class="filter-group">
-                        <span class="filter-lbl">EVENT TYPE:</span>
-                        <button class="btn-filter active" id="btn-act-all" onclick="filterActivity('ALL')">ALL</button>
-                        <button class="btn-filter" id="btn-act-trades" onclick="filterActivity('TRADES')">TRADES</button>
-                        <button class="btn-filter" id="btn-act-balance" onclick="filterActivity('BALANCE')">BALANCE &amp; FEES</button>
-                        <button class="btn-filter" id="btn-act-system" onclick="filterActivity('SYSTEM')">SYSTEM &amp; SAFETY</button>
-                        <button class="btn-filter" id="btn-act-signals" onclick="filterActivity('SIGNALS')">SIGNALS</button>
-                    </div>
                     <div class="filter-group" style="margin-left: auto;">
-                        <span class="badge-mono" id="activity-count">0 Events Logged</span>
+                        <input type="text" class="input-terminal search-box" id="journal-filter-search" placeholder="Search symbol / ID..." oninput="applyJournalFilters()">
                     </div>
                 </div>
 
-                <div class="panel-card" style="flex: 1;">
-                    <div class="panel-table-wrap">
-                        <table class="terminal-table">
-                            <thead>
-                                <tr>
-                                    <th>TIMESTAMP</th>
-                                    <th>EVENT TYPE</th>
-                                    <th>SYMBOL</th>
-                                    <th>STRATEGY</th>
-                                    <th>BALANCE</th>
-                                    <th>EQUITY</th>
-                                    <th>PNL / VALUE</th>
-                                    <th>TRADE / ORDER ID</th>
-                                    <th>DESCRIPTION</th>
-                                </tr>
-                            </thead>
-                            <tbody id="activity-logs-body">
-                                <tr><td colspan="9" class="idle-state-row">No audit logs recorded</td></tr>
-                            </tbody>
-                        </table>
+                <!-- ════ JOURNAL CONTENT VIEW A: LEDGER TABLES (ACTIVE & DAY-GROUPED CLOSED) ════ -->
+                <div id="journal-table-view-container">
+                    <!-- 1. ACTIVE TRADES SECTION -->
+                    <div class="journal-section-card" id="journal-active-section">
+                        <div class="journal-section-header">
+                            <div class="journal-section-title">
+                                <span class="live-dot-indigo"></span>
+                                <span>ACTIVE SPOT TRADES</span>
+                                <span class="badge-indigo" id="journal-active-slots-badge">0 / 5 SLOTS IN USE</span>
+                            </div>
+                            <span class="badge-mono">LIVE POSITION TELEMETRY</span>
+                        </div>
+                        <div class="panel-table-wrap">
+                            <table class="terminal-table">
+                                <thead>
+                                    <tr>
+                                        <th>OPEN TIME</th>
+                                        <th>SYMBOL &amp; SIDE</th>
+                                        <th>STRATEGY &amp; TF</th>
+                                        <th>ENTRY PRICE</th>
+                                        <th>MARK PRICE</th>
+                                        <th>POSITION QTY</th>
+                                        <th>PROTECTION (SL / TP)</th>
+                                        <th>UNREALIZED PNL</th>
+                                        <th>DURATION</th>
+                                        <th>BALANCE @ ENTRY</th>
+                                        <th>ACTION</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="journal-active-tbody">
+                                    <tr>
+                                        <td colspan="11" class="idle-state-row">
+                                            <div class="idle-state-content">
+                                                <span class="radar-pulse"></span>
+                                                <span>All 5 execution slots available • Continuous scanning active across 13 spot pairs</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 2. CLOSED TRADES SECTION (GROUPED BY DAY) -->
+                    <div class="journal-section-card" id="journal-closed-section" style="margin-top: 24px;">
+                        <div class="journal-section-header">
+                            <div class="journal-section-title">
+                                <span class="green-indicator"></span>
+                                <span>CLOSED TRADES &amp; DAY-BY-DAY AUDIT</span>
+                            </div>
+                            <span class="badge-mono">CLICK ROW TO INSPECT FULL LIFECYCLE</span>
+                        </div>
+                        
+                        <!-- DYNAMIC DAY-GROUPED LIST CONTAINER -->
+                        <div id="journal-days-container" class="journal-days-container">
+                            <div class="idle-state-row">
+                                <div class="idle-state-content">
+                                    <span>No closed trades in selected window • Historical execution records will stream as OCO orders close</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 7: STRATEGIES (ATTRIBUTION MATRIX)
-            ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container" id="view-strategies">
-                <div class="panel-card">
-                    <div class="panel-card-header">
-                        <div class="panel-card-title"><span>QUANT STRATEGY ATTRIBUTION MATRIX</span></div>
-                    </div>
-                    <div class="panel-table-wrap">
-                        <table class="terminal-table">
-                            <thead>
-                                <tr>
-                                    <th>STRATEGY</th>
-                                    <th>STATUS</th>
-                                    <th>TIMEFRAMES</th>
-                                    <th>EVALUATIONS</th>
-                                    <th>BUY</th>
-                                    <th>SELL</th>
-                                    <th>HOLD</th>
-                                    <th>QUALIFIED</th>
-                                    <th>PROFIT REJ</th>
-                                    <th>RISK REJ</th>
-                                    <th>ORDERS</th>
-                                    <th>FILLS</th>
-                                    <th>WIN RATE</th>
-                                    <th>NET PNL</th>
-                                </tr>
-                            </thead>
-                            <tbody id="strat-summary-body"></tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div class="panel-card" style="margin-top: 10px;">
-                    <div class="panel-card-header">
-                        <div class="panel-card-title"><span>STRATEGY &times; TIMEFRAME EXECUTION MATRIX</span></div>
-                    </div>
-                    <div class="panel-table-wrap">
-                        <table class="terminal-table">
-                            <thead>
-                                <tr>
-                                    <th>STRATEGY</th>
-                                    <th>5m</th>
-                                    <th>15m</th>
-                                    <th>30m</th>
-                                    <th>1h</th>
-                                    <th>2h</th>
-                                    <th>4h</th>
-                                </tr>
-                            </thead>
-                            <tbody id="strat-matrix-body"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 8: RISK CONTROL
-            ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container" id="view-risk">
-                <div class="dashboard-hero-kpi-grid">
-                    <div class="panel-card kpi-card"><div class="kpi-label">TOTAL EQUITY</div><div class="kpi-val mono" id="rk-top-equity">--</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">LIQUID CASH</div><div class="kpi-val cyan mono" id="rk-top-cash">--</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">EXPOSURE</div><div class="kpi-val mono" id="rk-top-exposure">--</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">MAX DRAWDOWN</div><div class="kpi-val loss mono" id="rk-top-mdd">--</div></div>
-                </div>
-
-                <div class="panel-card" style="flex: 1; margin-top: 10px;">
-                    <div class="panel-card-header">
-                        <div class="panel-card-title"><span>REAL-TIME RISK DECISION &amp; GATE AUDIT</span></div>
-                    </div>
-                    <div class="panel-table-wrap">
-                        <table class="terminal-table">
-                            <thead>
-                                <tr>
-                                    <th>TIME</th>
-                                    <th>SYMBOL</th>
-                                    <th>TF</th>
-                                    <th>STRATEGY</th>
-                                    <th>REQ RISK</th>
-                                    <th>AVAIL RISK</th>
-                                    <th>EXPOSURE</th>
-                                    <th>DECISION</th>
-                                    <th>REASON</th>
-                                </tr>
-                            </thead>
-                            <tbody id="risk-logs-body">
-                                <tr><td colspan="9" class="idle-state-row">No risk gate breaches recorded</td></tr>
-                            </tbody>
-                        </table>
+                <!-- ════ JOURNAL CONTENT VIEW B: CALENDAR HEATMAP VIEW ════ -->
+                <div id="journal-calendar-view-container" style="display: none;">
+                    <div class="panel-card calendar-panel-card">
+                        <div class="calendar-header-nav">
+                            <button class="btn-filter" onclick="navCalendarMonth(-1)">&larr; PREV MONTH</button>
+                            <h2 class="calendar-month-title" id="calendar-month-title">AUGUST 2026</h2>
+                            <button class="btn-filter" onclick="navCalendarMonth(1)">NEXT MONTH &rarr;</button>
+                        </div>
+                        <div class="calendar-grid-container">
+                            <div class="calendar-weekdays-row">
+                                <div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div><div>SUN</div>
+                            </div>
+                            <div class="calendar-days-grid" id="calendar-days-grid">
+                                <!-- Dynamically generated month day cells -->
+                            </div>
+                        </div>
+                        <div class="calendar-legend">
+                            <span class="legend-item"><span class="legend-box profit-high"></span> Highly Profitable</span>
+                            <span class="legend-item"><span class="legend-box profit-low"></span> Profitable</span>
+                            <span class="legend-item"><span class="legend-box neutral"></span> No Trades</span>
+                            <span class="legend-item"><span class="legend-box loss-low"></span> Loss</span>
+                            <span class="legend-item"><span class="legend-box loss-high"></span> Significant Loss</span>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 9: ANALYTICS (DIAGNOSTIC FUNNEL & DISTRIBUTIONS)
+                 VIEW 3: BALANCE HISTORY & ANALYTICS
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-analytics">
-                <div class="filter-toolbar">
+                <div class="page-header">
+                    <div class="page-title-wrap">
+                        <h1 class="page-title">Balance History &amp; Equity Curve</h1>
+                        <p class="page-subtitle">Track equity accumulation with trade execution markers and drawdown distribution.</p>
+                    </div>
                     <div class="filter-group">
-                        <span class="filter-lbl">TIMEFRAME WINDOW:</span>
-                        <button class="btn-filter active" id="btn-an-1d" onclick="setAnalyticsTf('1D')">1D</button>
-                        <button class="btn-filter" id="btn-an-7d" onclick="setAnalyticsTf('7D')">7D</button>
-                        <button class="btn-filter" id="btn-an-30d" onclick="setAnalyticsTf('30D')">30D</button>
-                        <button class="btn-filter" id="btn-an-all" onclick="setAnalyticsTf('ALL')">ALL TIME</button>
+                        <button class="btn-filter active" onclick="setAnalyticsTf('1D')">1D</button>
+                        <button class="btn-filter" onclick="setAnalyticsTf('7D')">7D</button>
+                        <button class="btn-filter" onclick="setAnalyticsTf('30D')">30D</button>
+                        <button class="btn-filter" onclick="setAnalyticsTf('ALL')">ALL TIME</button>
                     </div>
                 </div>
 
-                <div class="dashboard-hero-kpi-grid">
-                    <div class="panel-card kpi-card"><div class="kpi-label">TOTAL TRADES</div><div class="kpi-val mono" id="an-total">--</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">WIN RATE</div><div class="kpi-val profit mono" id="an-winrate">--</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">NET REALIZED PNL</div><div class="kpi-val profit mono" id="an-net-pnl">--</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">PROFIT FACTOR</div><div class="kpi-val cyan mono" id="an-pf">--</div></div>
+                <div class="panel-card chart-card" style="height: 320px;">
+                    <div class="panel-card-header">
+                        <div class="panel-card-title"><span>PORTFOLIO BALANCE &amp; TRADE EXECUTION TIMELINE</span></div>
+                    </div>
+                    <div class="chart-body">
+                        <canvas id="pnlHistChart"></canvas>
+                    </div>
                 </div>
 
                 <!-- DIAGNOSTIC FUNNEL: "WHY DIDN'T IT TRADE?" -->
-                <div class="panel-card" style="margin-top: 10px;">
+                <div class="panel-card" style="margin-top: 24px;">
                     <div class="panel-card-header">
                         <div class="panel-card-title"><span>🔍 DIAGNOSTIC FUNNEL: "WHY DIDN'T IT TRADE?"</span></div>
                         <span class="badge-mono" id="diag-dominant-reason">DOMINANT REASON: SCANNING</span>
@@ -913,22 +691,250 @@
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- CHARTS ROW -->
-                <div class="analytics-charts-grid" style="margin-top: 10px;">
-                    <div class="panel-card">
-                        <div class="panel-card-header"><div class="panel-card-title"><span>DAILY REALIZED PNL DISTRIBUTION</span></div></div>
-                        <div class="chart-body" style="height: 180px;"><canvas id="pnlHistChart"></canvas></div>
+            <!-- ═══════════════════════════════════════════════════════════════
+                 VIEW 4: SIGNALS & SCANNER
+            ═══════════════════════════════════════════════════════════════ -->
+            <div class="view-container" id="view-signals">
+                <div class="page-header">
+                    <div class="page-title-wrap">
+                        <h1 class="page-title">Live Signal Pipeline &amp; Strategy Evaluation</h1>
+                        <p class="page-subtitle">Real-time radar of incoming setups evaluated against profit and risk hurdles.</p>
                     </div>
-                    <div class="panel-card">
-                        <div class="panel-card-header"><div class="panel-card-title"><span>TRADE RETURN SPECTRUM</span></div></div>
-                        <div class="chart-body" style="height: 180px;"><canvas id="pnlDistChart"></canvas></div>
+                </div>
+
+                <div class="filter-toolbar">
+                    <div class="filter-group">
+                        <span class="filter-lbl">DIRECTION:</span>
+                        <button class="btn-filter active" id="sig-btn-all" onclick="setSignalQuickFilter('ALL')">ALL</button>
+                        <button class="btn-filter" id="sig-btn-buy" onclick="setSignalQuickFilter('BUY')">BUY</button>
+                        <button class="btn-filter" id="sig-btn-sell" onclick="setSignalQuickFilter('SELL')">SELL</button>
+                        <button class="btn-filter" id="sig-btn-hold" onclick="setSignalQuickFilter('HOLD')">HOLD</button>
+                        <button class="btn-filter" id="sig-btn-acc" onclick="setSignalQuickFilter('ACCEPTED')">ACCEPTED</button>
+                        <button class="btn-filter" id="sig-btn-rej" onclick="setSignalQuickFilter('REJECTED')">REJECTED</button>
+                    </div>
+
+                    <div class="filter-group">
+                        <span class="filter-lbl">STRATEGY:</span>
+                        <select class="select-terminal" id="sig-filter-strat" onchange="applySignalFilters()">
+                            <option value="ALL">ALL STRATEGIES</option>
+                            <option value="AGGRESSOR">AGGRESSOR</option>
+                            <option value="SCALPER">SCALPER</option>
+                            <option value="SUPERTREND">SUPERTREND</option>
+                            <option value="ML">ML</option>
+                            <option value="SWING">SWING</option>
+                            <option value="ADX_EMA">ADX_EMA</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group" style="margin-left: auto;">
+                        <input type="text" class="input-terminal search-box" id="sig-filter-sym" placeholder="Search symbol..." oninput="applySignalFilters()">
+                    </div>
+                </div>
+
+                <div class="panel-card" style="flex: 1;">
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table">
+                            <thead>
+                                <tr>
+                                    <th>TIME</th>
+                                    <th>SYMBOL</th>
+                                    <th>TF</th>
+                                    <th>STRATEGY</th>
+                                    <th>SIDE</th>
+                                    <th>ENTRY</th>
+                                    <th>STOP</th>
+                                    <th>TARGET</th>
+                                    <th>CONF</th>
+                                    <th>EXP GROSS</th>
+                                    <th>EXP NET</th>
+                                    <th>PROFIT GATE</th>
+                                    <th>RISK GATE</th>
+                                    <th>FINAL</th>
+                                    <th>REASON</th>
+                                </tr>
+                            </thead>
+                            <tbody id="signals-full-body">
+                                <tr><td colspan="15" class="idle-state-row">Evaluating 13 pairs across 6 multi-timeframe strategies • Awaiting setups exceeding minimum edge threshold</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 10: SETTINGS / HEALTH
+                 VIEW 5: MARKETS
+            ═══════════════════════════════════════════════════════════════ -->
+            <div class="view-container" id="view-market">
+                <div class="market-terminal-layout">
+                    <div class="panel-card market-watch-panel">
+                        <div class="panel-card-header">
+                            <div class="panel-card-title"><span>📡 LIVE SPOT WATCHLIST</span></div>
+                            <span class="badge-mono">13 PAIRS</span>
+                        </div>
+                        <div class="panel-table-wrap">
+                            <table class="terminal-table">
+                                <thead>
+                                    <tr>
+                                        <th>SYMBOL</th>
+                                        <th>PRICE</th>
+                                        <th>24H CHG</th>
+                                        <th>SIGNAL</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="market-watchlist-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="panel-card market-chart-panel">
+                        <div class="panel-card-header">
+                            <div class="market-chart-meta">
+                                <span class="market-sym-badge" id="market-chart-symbol">BTCUSDT</span>
+                                <span class="market-price-val mono" id="market-chart-price">--</span>
+                                <span class="market-chg-val mono" id="market-chart-chg">--</span>
+                            </div>
+                            <div class="chart-controls">
+                                <button class="btn-tf active" onclick="setMarketChartTf('5m')">5m</button>
+                                <button class="btn-tf" onclick="setMarketChartTf('15m')">15m</button>
+                                <button class="btn-tf" onclick="setMarketChartTf('1h')">1h</button>
+                                <button class="btn-tf" onclick="setMarketChartTf('4h')">4h</button>
+                            </div>
+                        </div>
+                        <div class="chart-body" style="flex: 1; position: relative;">
+                            <canvas id="marketCandleChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="panel-card market-details-panel">
+                        <div class="panel-card-header">
+                            <div class="panel-card-title"><span id="market-details-title">BTCUSDT TELEMETRY</span></div>
+                            <span class="tag-pass" id="market-details-status">LIVE</span>
+                        </div>
+                        <div class="panel-card-body" id="market-details-content">
+                            <div class="idle-state-row">Select a symbol to view live quant indicators</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════════════════════
+                 VIEW 6: STRATEGIES
+            ═══════════════════════════════════════════════════════════════ -->
+            <div class="view-container" id="view-strategies">
+                <div class="panel-card">
+                    <div class="panel-card-header">
+                        <div class="panel-card-title"><span>QUANT STRATEGY ATTRIBUTION MATRIX</span></div>
+                    </div>
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table">
+                            <thead>
+                                <tr>
+                                    <th>STRATEGY</th>
+                                    <th>STATUS</th>
+                                    <th>TIMEFRAMES</th>
+                                    <th>EVALUATIONS</th>
+                                    <th>BUY</th>
+                                    <th>SELL</th>
+                                    <th>HOLD</th>
+                                    <th>QUALIFIED</th>
+                                    <th>PROFIT REJ</th>
+                                    <th>RISK REJ</th>
+                                    <th>ORDERS</th>
+                                    <th>FILLS</th>
+                                    <th>WIN RATE</th>
+                                    <th>NET PNL</th>
+                                </tr>
+                            </thead>
+                            <tbody id="strat-summary-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════════════════════
+                 VIEW 7: RISK CONTROL
+            ═══════════════════════════════════════════════════════════════ -->
+            <div class="view-container" id="view-risk">
+                <div class="dashboard-hero-kpi-grid">
+                    <div class="panel-card kpi-card"><div class="kpi-label">TOTAL EQUITY</div><div class="kpi-val mono" id="rk-top-equity">--</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">LIQUID CASH</div><div class="kpi-val cyan mono" id="rk-top-cash">--</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">EXPOSURE</div><div class="kpi-val mono" id="rk-top-exposure">--</div></div>
+                    <div class="panel-card kpi-card"><div class="kpi-label">MAX DRAWDOWN</div><div class="kpi-val loss mono" id="rk-top-mdd">--</div></div>
+                </div>
+
+                <div class="panel-card" style="flex: 1; margin-top: 24px;">
+                    <div class="panel-card-header">
+                        <div class="panel-card-title"><span>REAL-TIME RISK DECISION &amp; GATE AUDIT</span></div>
+                    </div>
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table">
+                            <thead>
+                                <tr>
+                                    <th>TIME</th>
+                                    <th>SYMBOL</th>
+                                    <th>TF</th>
+                                    <th>STRATEGY</th>
+                                    <th>REQ RISK</th>
+                                    <th>AVAIL RISK</th>
+                                    <th>EXPOSURE</th>
+                                    <th>DECISION</th>
+                                    <th>REASON</th>
+                                </tr>
+                            </thead>
+                            <tbody id="risk-logs-body">
+                                <tr><td colspan="9" class="idle-state-row">All portfolio safety constraints intact • Zero risk gate breaches recorded</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════════════════════
+                 VIEW 8: ACTIVITY
+            ═══════════════════════════════════════════════════════════════ -->
+            <div class="view-container" id="view-activity">
+                <div class="filter-toolbar">
+                    <div class="filter-group">
+                        <span class="filter-lbl">EVENT TYPE:</span>
+                        <button class="btn-filter active" id="btn-act-all" onclick="filterActivity('ALL')">ALL</button>
+                        <button class="btn-filter" id="btn-act-trades" onclick="filterActivity('TRADES')">TRADES</button>
+                        <button class="btn-filter" id="btn-act-balance" onclick="filterActivity('BALANCE')">BALANCE &amp; FEES</button>
+                        <button class="btn-filter" id="btn-act-system" onclick="filterActivity('SYSTEM')">SYSTEM &amp; SAFETY</button>
+                        <button class="btn-filter" id="btn-act-signals" onclick="filterActivity('SIGNALS')">SIGNALS</button>
+                    </div>
+                    <div class="filter-group" style="margin-left: auto;">
+                        <span class="badge-mono" id="activity-count">0 Events Logged</span>
+                    </div>
+                </div>
+
+                <div class="panel-card" style="flex: 1;">
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table">
+                            <thead>
+                                <tr>
+                                    <th>TIMESTAMP</th>
+                                    <th>EVENT TYPE</th>
+                                    <th>SYMBOL</th>
+                                    <th>STRATEGY</th>
+                                    <th>BALANCE</th>
+                                    <th>EQUITY</th>
+                                    <th>PNL / VALUE</th>
+                                    <th>TRADE / ORDER ID</th>
+                                    <th>DESCRIPTION</th>
+                                </tr>
+                            </thead>
+                            <tbody id="activity-logs-body">
+                                <tr><td colspan="9" class="idle-state-row">Audit ledger initialized • Live trade executions and system events will stream here</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════════════════════
+                 VIEW 9: SETTINGS / HEALTH
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-settings">
                 <div class="settings-grid">
@@ -969,7 +975,7 @@
                 </div>
             </div>
 
-            <!-- ─── 3. PERSISTENT DIAGNOSTIC FOOTER ─── -->
+            <!-- PERSISTENT DIAGNOSTIC FOOTER -->
             <footer class="bottom-diagnostic-footer">
                 <div class="footer-left">
                     <span class="footer-item"><span class="dot dot-green" id="btm-bn"></span> BINANCE REST</span>
@@ -994,7 +1000,7 @@
         </main>
     </div>
 
-    <script src="/static/app.js?v=4.0.0"></script>
-    <script src="app.js?v=4.0.0"></script>
+    <script src="/static/app.js?v=5.0.0"></script>
+    <script src="app.js?v=5.0.0"></script>
 </body>
 </html>
