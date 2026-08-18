@@ -522,36 +522,156 @@
             <!-- 3. SIGNALS -->
             <!-- ========================================== -->
             <div id="view-signals" class="view-container">
-                <div class="panel" style="flex:1;">
-                    <div class="panel-header">
-                        <h3 class="panel-title"><span>📡</span> QUANT SIGNALS AUDIT LOG</h3>
-                        <div class="filter-group">
-                            <button class="btn-filter active" id="sig-btn-all" onclick="setSignalFilter('ALL')">ALL SIGNALS</button>
-                            <button class="btn-filter" id="sig-btn-acc" onclick="setSignalFilter('ACCEPTED')">✅ ACCEPTED ONLY</button>
-                            <button class="btn-filter" id="sig-btn-rej" onclick="setSignalFilter('REJECTED')">❌ REJECTED ONLY</button>
+                <!-- TOP SUMMARY METRICS (8 CARDS) -->
+                <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 10px;">
+                    <div class="metric-card accent-blue">
+                        <div class="metric-icon-wrap bg-blue">📡</div>
+                        <div class="metric-content">
+                            <span class="metric-label">TOTAL SIGNALS</span>
+                            <span class="metric-value" id="sig-kpi-total">0</span>
+                            <span class="metric-sub">Session Evaluations</span>
                         </div>
                     </div>
+                    <div class="metric-card accent-green">
+                        <div class="metric-icon-wrap bg-green">🟢</div>
+                        <div class="metric-content">
+                            <span class="metric-label">BUY SIGNALS</span>
+                            <span class="metric-value val-green" id="sig-kpi-buy">0</span>
+                            <span class="metric-sub">Long Intentions</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-red">
+                        <div class="metric-icon-wrap bg-red">🔴</div>
+                        <div class="metric-content">
+                            <span class="metric-label">SELL SIGNALS</span>
+                            <span class="metric-value val-red" id="sig-kpi-sell">0</span>
+                            <span class="metric-sub">Short Intentions</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-amber">
+                        <div class="metric-icon-wrap bg-amber">⏸</div>
+                        <div class="metric-content">
+                            <span class="metric-label">HOLD / PASS</span>
+                            <span class="metric-value" id="sig-kpi-hold">0</span>
+                            <span class="metric-sub">No Setup Active</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 10px;">
+                    <div class="metric-card accent-green">
+                        <div class="metric-icon-wrap bg-green">✓</div>
+                        <div class="metric-content">
+                            <span class="metric-label">PROFITABILITY ACCEPTED</span>
+                            <span class="metric-value val-green" id="sig-kpi-prof-acc">0</span>
+                            <span class="metric-sub">Net Edge > Costs</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-red">
+                        <div class="metric-icon-wrap bg-red">✕</div>
+                        <div class="metric-content">
+                            <span class="metric-label">PROFITABILITY REJECTED</span>
+                            <span class="metric-value val-red" id="sig-kpi-prof-rej">0</span>
+                            <span class="metric-sub">Negative / Insufficient Edge</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-green">
+                        <div class="metric-icon-wrap bg-green">🛡</div>
+                        <div class="metric-content">
+                            <span class="metric-label">RISK ACCEPTED</span>
+                            <span class="metric-value val-green" id="sig-kpi-risk-acc">0</span>
+                            <span class="metric-sub">Within Portfolio Limits</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-red">
+                        <div class="metric-icon-wrap bg-red">🚫</div>
+                        <div class="metric-content">
+                            <span class="metric-label">RISK REJECTED</span>
+                            <span class="metric-value val-red" id="sig-kpi-risk-rej">0</span>
+                            <span class="metric-sub">Exposures / Max Drawdown</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel" style="flex:1;">
+                    <div class="panel-header">
+                        <h3 class="panel-title"><span>📡</span> QUANT SIGNAL TERMINAL</h3>
+                        <div class="filter-group">
+                            <button class="btn-filter active" id="sig-btn-all" onclick="setSignalQuickFilter('ALL')">ALL</button>
+                            <button class="btn-filter" id="sig-btn-buy" onclick="setSignalQuickFilter('BUY')">BUY</button>
+                            <button class="btn-filter" id="sig-btn-sell" onclick="setSignalQuickFilter('SELL')">SELL</button>
+                            <button class="btn-filter" id="sig-btn-hold" onclick="setSignalQuickFilter('HOLD')">HOLD</button>
+                            <button class="btn-filter" id="sig-btn-acc" onclick="setSignalQuickFilter('ACCEPTED')">ACCEPTED</button>
+                            <button class="btn-filter" id="sig-btn-rej" onclick="setSignalQuickFilter('REJECTED')">REJECTED</button>
+                        </div>
+                    </div>
+
+                    <!-- ADDITIONAL FILTERS TOOLBAR -->
+                    <div class="filter-toolbar">
+                        <div class="filter-label-group">
+                            <span>Strategy:</span>
+                            <select id="sig-filter-strat" class="filter-select" onchange="applySignalFilters()">
+                                <option value="ALL">ALL STRATEGIES</option>
+                                <option value="ADX_EMA">ADX_EMA</option>
+                                <option value="AGGRESSOR">AGGRESSOR</option>
+                                <option value="SCALPER">SCALPER</option>
+                                <option value="SUPERTREND">SUPERTREND</option>
+                                <option value="SWING">SWING</option>
+                                <option value="FAST1M">FAST1M</option>
+                            </select>
+                        </div>
+                        <div class="filter-label-group">
+                            <span>Timeframe:</span>
+                            <select id="sig-filter-tf" class="filter-select" onchange="applySignalFilters()">
+                                <option value="ALL">ALL TIMEFRAMES</option>
+                                <option value="1m">1m</option>
+                                <option value="5m">5m</option>
+                                <option value="15m">15m</option>
+                                <option value="1h">1h</option>
+                                <option value="4h">4h</option>
+                                <option value="1d">1d</option>
+                            </select>
+                        </div>
+                        <div class="filter-label-group">
+                            <span>Symbol:</span>
+                            <input type="text" id="sig-filter-sym" class="filter-input" placeholder="e.g. BTCUSDT" oninput="applySignalFilters()">
+                        </div>
+                        <div class="filter-label-group">
+                            <span>Time Range:</span>
+                            <select id="sig-filter-range" class="filter-select" onchange="applySignalFilters()">
+                                <option value="ALL">ALL TIME</option>
+                                <option value="1h">LAST 1 HOUR</option>
+                                <option value="6h">LAST 6 HOURS</option>
+                                <option value="24h">LAST 24 HOURS</option>
+                                <option value="7d">LAST 7 DAYS</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div class="panel-content no-pad">
                         <div class="table-container">
                             <table>
                                 <thead>
                                     <tr>
-                                        <th>TIMESTAMP</th>
+                                        <th>TIME</th>
                                         <th>SYMBOL</th>
-                                        <th>TF</th>
+                                        <th>TIMEFRAME</th>
                                         <th>STRATEGY</th>
                                         <th>SIDE</th>
-                                        <th>PRICE</th>
+                                        <th>ENTRY</th>
+                                        <th>STOP</th>
+                                        <th>TARGET</th>
                                         <th>CONFIDENCE</th>
-                                        <th>EXPECTED EDGE</th>
+                                        <th>EXPECTED GROSS</th>
+                                        <th>EXPECTED NET</th>
                                         <th>PROFITABILITY</th>
-                                        <th>RISK GATE</th>
-                                        <th>DECISION</th>
-                                        <th>REASON / METRICS</th>
+                                        <th>RISK</th>
+                                        <th>FINAL DECISION</th>
+                                        <th>REASON</th>
                                     </tr>
                                 </thead>
                                 <tbody id="signals-full-body">
-                                    <tr><td colspan="12" class="empty-state">No Signals Emitted in Current Session</td></tr>
+                                    <tr><td colspan="15" class="empty-state">NO SIGNAL EVENTS YET</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -563,12 +683,13 @@
             <!-- 4. POSITIONS -->
             <!-- ========================================== -->
             <div id="view-positions" class="view-container">
-                <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr);">
+                <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 10px;">
                     <div class="metric-card accent-blue">
-                        <div class="metric-icon-wrap bg-blue">#</div>
+                        <div class="metric-icon-wrap bg-blue">💼</div>
                         <div class="metric-content">
                             <span class="metric-label">OPEN POSITIONS</span>
                             <span class="metric-value" id="pos-count">0</span>
+                            <span class="metric-sub">Active in Portfolio</span>
                         </div>
                     </div>
                     <div class="metric-card accent-cyan">
@@ -576,6 +697,7 @@
                         <div class="metric-content">
                             <span class="metric-label">TOTAL EXPOSURE</span>
                             <span class="metric-value" id="pos-exposure">$0.00</span>
+                            <span class="metric-sub">Capital Deployed</span>
                         </div>
                     </div>
                     <div class="metric-card accent-amber">
@@ -583,36 +705,43 @@
                         <div class="metric-content">
                             <span class="metric-label">UNREALIZED PNL</span>
                             <span class="metric-value" id="pos-upnl">$0.00</span>
+                            <span class="metric-sub">Mark-to-Market</span>
                         </div>
                     </div>
                     <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">▤</div>
+                        <div class="metric-icon-wrap bg-green">🛡</div>
                         <div class="metric-content">
-                            <span class="metric-label">AVAILABLE EQUITY</span>
-                            <span class="metric-value" id="pos-avail">$0.00</span>
+                            <span class="metric-label">AVAILABLE RISK</span>
+                            <span class="metric-value val-green" id="pos-avail-risk">0.50%</span>
+                            <span class="metric-sub">Risk Headroom</span>
                         </div>
                     </div>
                 </div>
                 
                 <div class="panel" style="flex:1;">
-                    <div class="panel-header"><h3 class="panel-title"><span>💼</span> ACTIVE SPOT POSITIONS</h3></div>
+                    <div class="panel-header"><h3 class="panel-title"><span>💼</span> REAL OPEN POSITIONS</h3></div>
                     <div class="panel-content no-pad">
                         <div class="table-container">
                             <table>
                                 <thead>
                                     <tr>
                                         <th>SYMBOL</th>
+                                        <th>TIMEFRAME</th>
+                                        <th>STRATEGY</th>
                                         <th>SIDE</th>
-                                        <th>ENTRY PRICE</th>
-                                        <th>CURRENT PRICE</th>
-                                        <th>QUANTITY</th>
-                                        <th>UNREALIZED PNL</th>
-                                        <th>STOP LOSS</th>
-                                        <th>TAKE PROFIT</th>
+                                        <th>ENTRY</th>
+                                        <th>CURRENT</th>
+                                        <th>QTY</th>
+                                        <th>VALUE</th>
+                                        <th>U.PNL</th>
+                                        <th>SL</th>
+                                        <th>TP</th>
+                                        <th>DURATION</th>
+                                        <th>STATUS</th>
                                     </tr>
                                 </thead>
                                 <tbody id="pos-full-body">
-                                    <tr><td colspan="8" class="empty-state">No Active Positions</td></tr>
+                                    <tr><td colspan="13" class="empty-state">NO OPEN POSITIONS</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -652,12 +781,13 @@
             <!-- 5. TRADES -->
             <!-- ========================================== -->
             <div id="view-trades" class="view-container">
-                <div class="metrics-row" style="grid-template-columns: repeat(5, 1fr);">
+                <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 10px;">
                     <div class="metric-card accent-blue">
                         <div class="metric-icon-wrap bg-blue">#</div>
                         <div class="metric-content">
                             <span class="metric-label">TOTAL TRADES</span>
                             <span class="metric-value" id="tr-total">0</span>
+                            <span class="metric-sub">Executed Lifecycle</span>
                         </div>
                     </div>
                     <div class="metric-card accent-cyan">
@@ -665,30 +795,62 @@
                         <div class="metric-content">
                             <span class="metric-label">WIN RATE</span>
                             <span class="metric-value val-green" id="tr-rate">0.00%</span>
+                            <span class="metric-sub"><span id="tr-wins" class="val-green">0</span> W / <span id="tr-loss" class="val-red">0</span> L</span>
                         </div>
                     </div>
                     <div class="metric-card accent-green">
-                        <div class="metric-icon-wrap bg-green">±</div>
+                        <div class="metric-icon-wrap bg-green">💵</div>
                         <div class="metric-content">
-                            <span class="metric-label">WINS / LOSSES</span>
-                            <span class="metric-value"><span id="tr-wins" class="val-green">0</span> / <span id="tr-loss" class="val-red">0</span></span>
+                            <span class="metric-label">NET PNL</span>
+                            <span class="metric-value" id="tr-net">$0.00</span>
+                            <span class="metric-sub">After Commissions</span>
                         </div>
                     </div>
                     <div class="metric-card accent-purple">
-                        <div class="metric-icon-wrap bg-purple">$</div>
+                        <div class="metric-icon-wrap bg-purple">📈</div>
                         <div class="metric-content">
-                            <span class="metric-label">TOTAL REALIZED</span>
-                            <span class="metric-value" id="tr-net">$0.00</span>
-                        </div>
-                    </div>
-                    <div class="metric-card accent-amber">
-                        <div class="metric-icon-wrap bg-amber">¢</div>
-                        <div class="metric-content">
-                            <span class="metric-label">TOTAL FEES</span>
-                            <span class="metric-value" id="tr-fees">$0.00</span>
+                            <span class="metric-label">REALIZED PNL</span>
+                            <span class="metric-value" id="tr-realized">$0.00</span>
+                            <span class="metric-sub">Gross Trading Edge</span>
                         </div>
                     </div>
                 </div>
+
+                <div class="metrics-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 10px;">
+                    <div class="metric-card accent-amber">
+                        <div class="metric-icon-wrap bg-amber">¢</div>
+                        <div class="metric-content">
+                            <span class="metric-label">FEES</span>
+                            <span class="metric-value" id="tr-fees">$0.00</span>
+                            <span class="metric-sub">Taker / Maker Friction</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-green">
+                        <div class="metric-icon-wrap bg-green">▲</div>
+                        <div class="metric-content">
+                            <span class="metric-label">AVG WIN</span>
+                            <span class="metric-value val-green" id="tr-avg-win">$0.00</span>
+                            <span class="metric-sub">Average Winning Exit</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-red">
+                        <div class="metric-icon-wrap bg-red">▼</div>
+                        <div class="metric-content">
+                            <span class="metric-label">AVG LOSS</span>
+                            <span class="metric-value val-red" id="tr-avg-loss">$0.00</span>
+                            <span class="metric-sub">Average Losing Exit</span>
+                        </div>
+                    </div>
+                    <div class="metric-card accent-cyan">
+                        <div class="metric-icon-wrap bg-cyan">×</div>
+                        <div class="metric-content">
+                            <span class="metric-label">PROFIT FACTOR</span>
+                            <span class="metric-value" id="tr-pf">0.00</span>
+                            <span class="metric-sub">Gross Win / Gross Loss</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="panel" style="flex:1;">
                     <div class="panel-header">
                         <h3 class="panel-title"><span>📑</span> HISTORICAL TRADE LEDGER</h3>
@@ -702,22 +864,23 @@
                             <table>
                                 <thead>
                                     <tr>
-                                        <th>TIMESTAMP</th>
-                                        <th>TF</th>
+                                        <th>TRADE ID</th>
+                                        <th>OPENED</th>
+                                        <th>CLOSED</th>
                                         <th>SYMBOL</th>
+                                        <th>TIMEFRAME</th>
+                                        <th>STRATEGY</th>
                                         <th>SIDE</th>
                                         <th>ENTRY</th>
                                         <th>EXIT</th>
-                                        <th>QUANTITY</th>
-                                        <th>GROSS PNL</th>
+                                        <th>QTY</th>
                                         <th>FEES</th>
-                                        <th>NET RETURN</th>
+                                        <th>NET PNL</th>
                                         <th>STATUS</th>
-                                        <th>ORDER ID</th>
                                     </tr>
                                 </thead>
                                 <tbody id="trades-full-body">
-                                    <tr><td colspan="12" class="empty-state">No Historical Trades Recorded</td></tr>
+                                    <tr><td colspan="13" class="empty-state">NO CLOSED TRADES YET</td></tr>
                                 </tbody>
                             </table>
                         </div>

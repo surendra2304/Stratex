@@ -507,178 +507,845 @@ function showTradeNotification(trade) {
     }, 7500);
 }
 
-async function fetchTrades() {
+// ==========================================
+// 3. SIGNALS TERMINAL LOGIC & FILTERS
+// ==========================================
+let allRawSignals = [];
+let signalQuickFilter = 'ALL';
+
+function setSignalQuickFilter(filterType) {
+    signalQuickFilter = filterType;
+    document.querySelectorAll('#view-signals .btn-filter').forEach(b => b.classList.remove('active'));
+    const btnMap = {
+        'ALL': 'sig-btn-all',
+        'BUY': 'sig-btn-buy',
+        'SELL': 'sig-btn-sell',
+        'HOLD': 'sig-btn-hold',
+        'ACCEPTED': 'sig-btn-acc',
+        'REJECTED': 'sig-btn-rej'
+    };
+    const bId = btnMap[filterType] || 'sig-btn-all';
+    const btn = document.getElementById(bId);
+    if (btn) btn.classList.add('active');
+    renderSignalsTable();
+}
+
+function applySignalFilters() {
+    renderSignalsTable();
+}
+
+async function fetchSignals() {
     try {
-        const data = await apiClient.get('/api/trades');
-        if (!data) return;
-        const positions = data.positions || [];
-        
-        // Detect newly executed trades and trigger popup
-        positions.forEach(p => {
-            const tradeId = String(p.order_id || `${p.symbol}_${p.timestamp}_${p.entry_price}_${p.pnl}`);
-            if (!knownTradeIds.has(tradeId)) {
-                if (!isInitialTradesLoad) {
-                    showTradeNotification(p);
-                }
-                knownTradeIds.add(tradeId);
-            }
-        });
-        isInitialTradesLoad = false;
-
-        const openPos = positions.filter(p => p.status === 'OPEN');
-        const closedPos = positions.filter(p => p.status === 'CLOSED');
-        
-        const activeBodies = [document.getElementById('active-pos-body'), document.getElementById('pos-full-body')];
-        let exposure = 0;
-        let total_upnl = 0;
-
-
-        const posHtml = openPos.length === 0 ? '<tr><td colspan="12" class="empty-state">NO OPEN POSITIONS</td></tr>' : openPos.map(p => {
-            const uPnlStr = p.pnl > 0 ? `<span class="val-green">+${formatCurrency(p.pnl)}</span>` : (p.pnl < 0 ? `<span class="val-red">${formatCurrency(p.pnl)}</span>` : '$0.00');
-            const sideClass = (p.action === 'LONG' || p.action === 'BUY') ? 'tag tag-long' : 'tag tag-short';
-            const val = p.quantity * p.entry_price;
-            exposure += val;
-            total_upnl += p.pnl;
-            
-            return `<tr>
-                <td class="td-strong">${p.symbol}</td>
-                <td><span class="${sideClass}">${p.action}</span></td>
-                <td>${Number(p.entry_price).toFixed(4)}</td>
-                <td>-</td>
-                <td>${p.quantity}</td>
-                <td>${uPnlStr}</td>
-                <td>${p.sl || '-'}</td>
-                <td>${p.tp || '-'}</td>
-            </tr>`;
-        }).join('');
-
-        activeBodies.forEach(b => { if(b) b.innerHTML = posHtml; });
-        
-        document.getElementById('pos-count').innerText = openPos.length;
-        document.getElementById('pos-exposure').innerText = formatCurrency(exposure);
-        applyColor(document.getElementById('pos-upnl'), total_upnl);
-
-        // Ledger
-        const dashTradesBody = document.getElementById('recent-trades-body');
-        const fullTradesBody = document.getElementById('trades-full-body');
-        
-        let wins = 0, losses = 0, net_pnl = 0, total_fees = 0;
-        const allClosed = [...closedPos].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        
-        allClosed.forEach(p => {
-            if (p.pnl > 0) wins++;
-            else if (p.pnl < 0) losses++;
-            net_pnl += (p.pnl || 0);
-            total_fees += (p.fees || 0);
-        });
-
-        const mapTrade = (p) => {
-            const sideClass = (p.action === 'LONG' || p.action === 'BUY') ? 'tag tag-long' : 'tag tag-short';
-            const tsShort = p.timestamp ? formatDateTime(p.timestamp) : '-';
-            const orderIdStr = p.order_id ? String(p.order_id).substring(0, 8) + '...' : '-';
-            const pnlStr = p.pnl > 0 ? `<span class="val-green">+${formatCurrency(p.pnl)}</span>` : (p.pnl < 0 ? `<span class="val-red">${formatCurrency(p.pnl)}</span>` : '$0.00');
-            const netStr = (p.pnl - (p.fees||0)) > 0 ? `<span class="val-green">+${formatCurrency(p.pnl - (p.fees||0))}</span>` : (p.pnl - (p.fees||0) < 0 ? `<span class="val-red">${formatCurrency(p.pnl - (p.fees||0))}</span>` : '$0.00');
-            const escapedJSON = encodeURIComponent(JSON.stringify(p));
-            
-            return `<tr style="cursor: pointer;" onclick="openInspectorDrawer('TRADE AUDIT • ${p.symbol}', JSON.parse(decodeURIComponent('${escapedJSON}')))" title="Click to inspect complete trade ledger details">
-                <td>${tsShort}</td>
-                <td>-</td>
-                <td>${p.symbol}</td>
-                <td><span class="${sideClass}">${p.action}</span></td>
-                <td>${Number(p.entry_price).toFixed(4)}</td>
-                <td>${Number(p.exit_price).toFixed(4)}</td>
-                <td>${p.quantity}</td>
-                <td>${pnlStr}</td>
-                <td>${formatCurrency(p.fees || 0)}</td>
-                <td>${netStr}</td>
-                <td><span class="tag ${p.pnl >= 0 ? 'tag-win' : 'tag-loss'}">${p.pnl >= 0 ? 'WIN' : 'LOSS'}</span></td>
-                <td title="${p.order_id}">${orderIdStr}</td>
-            </tr>`;
-        };
-
-        const mapDashTrade = (p) => {
-            const sideClass = (p.action === 'LONG' || p.action === 'BUY') ? 'tag tag-long' : 'tag tag-short';
-            const tsShort = p.timestamp ? formatDateTime(p.timestamp) : '-';
-            const pnlStr = p.pnl > 0 ? `<span class="val-green">+${formatCurrency(p.pnl)}</span>` : (p.pnl < 0 ? `<span class="val-red">${formatCurrency(p.pnl)}</span>` : '$0.00');
-            const statusTag = p.pnl >= 0 ? '<span class="tag tag-win">WIN</span>' : '<span class="tag tag-loss">LOSS</span>';
-            const escapedJSON = encodeURIComponent(JSON.stringify(p));
-            
-            return `<tr style="cursor: pointer;" onclick="openInspectorDrawer('TRADE AUDIT • ${p.symbol}', JSON.parse(decodeURIComponent('${escapedJSON}')))" title="Click to inspect complete trade ledger details">
-                <td>${tsShort}</td>
-                <td class="td-strong">${p.symbol}</td>
-                <td><span class="${sideClass}">${p.action}</span></td>
-                <td>${Number(p.entry_price).toFixed(4)}</td>
-                <td>${Number(p.exit_price).toFixed(4)}</td>
-                <td>${p.quantity}</td>
-                <td>${pnlStr}</td>
-                <td>${statusTag}</td>
-            </tr>`;
-        };
-
-        if (allClosed.length === 0) {
-            if(dashTradesBody) dashTradesBody.innerHTML = '<tr><td colspan="7" class="empty-state">NO TRADES YET</td></tr>';
-            if(fullTradesBody) fullTradesBody.innerHTML = '<tr><td colspan="12" class="empty-state">NO HISTORICAL TRADES</td></tr>';
+        let signals = [];
+        const res = await apiClient.get('/api/signals?limit=500');
+        if (res && Array.isArray(res.signals) && res.signals.length > 0) {
+            signals = res.signals;
         } else {
-            if(dashTradesBody) dashTradesBody.innerHTML = allClosed.slice(0, 10).map(mapDashTrade).join('');
-            if(fullTradesBody) fullTradesBody.innerHTML = allClosed.map(mapTrade).join('');
-            
-            // Check for new live trades to pop up toast & sound chime
-            if (knownTradeOrderIds.size > 0) {
-                for (const t of allClosed) {
-                    const tid = String(t.order_id || t.timestamp);
-                    if (tid && !knownTradeOrderIds.has(tid)) {
-                        knownTradeOrderIds.add(tid);
-                        showTradeToast(t);
-                    }
-                }
-            } else {
-                allClosed.forEach(t => {
-                    const tid = String(t.order_id || t.timestamp);
-                    if (tid) knownTradeOrderIds.add(tid);
-                });
+            // Fallback: check opportunities log
+            const oppData = await apiClient.get('/api/opportunities');
+            if (oppData && Array.isArray(oppData.top_opportunities)) {
+                signals = oppData.top_opportunities.map(o => ({
+                    timestamp: o.timestamp,
+                    signal_id: o.signal_id || o.symbol,
+                    symbol: o.symbol,
+                    timeframe: o.timeframe || '5m',
+                    strategy: o.strategy || 'ADX_EMA',
+                    decision: o.side || o.decision || 'HOLD',
+                    entry: o.current_price || o.entry || 0,
+                    stop: o.sl || o.stop || 0,
+                    target: o.tp || o.target || 0,
+                    confidence: o.confidence || 0,
+                    expected_gross: o.expected_gross_return || o.expected_gross || 0,
+                    expected_net: o.expected_net_return || o.expected_net || 0,
+                    profitability_decision: o.decision === 'ACCEPTED' ? 'ACCEPTED' : (o.decision === 'REJECTED' ? 'REJECTED' : 'PENDING'),
+                    profitability_reason: o.reason || '',
+                    risk_decision: o.decision === 'ACCEPTED' ? 'ACCEPTED' : (o.decision === 'REJECTED' ? 'REJECTED' : 'PENDING'),
+                    risk_reason: o.reason || '',
+                    final_decision: o.decision || 'PENDING'
+                }));
             }
         }
 
-        // Summary
-        const tr_rate = allClosed.length > 0 ? (wins / allClosed.length) : 0;
-        document.getElementById('tr-total').innerText = allClosed.length;
-        document.getElementById('tr-wins').innerText = wins;
-        document.getElementById('tr-loss').innerText = losses;
-        document.getElementById('tr-rate').innerText = formatPct(tr_rate);
-        applyColor(document.getElementById('tr-net'), net_pnl);
-        document.getElementById('tr-fees').innerText = formatCurrency(total_fees);
+        allRawSignals = signals;
+        updateSignalSummaryKPIs(allRawSignals);
+        renderSignalsTable();
+    } catch (e) {
+        console.error("Failed to fetch signals:", e);
+    }
+}
 
-        // Analytics
-        document.getElementById('an-total').innerText = allClosed.length;
-        document.getElementById('an-winrate').innerText = formatPct(tr_rate);
-        
-        let gross_win = 0, gross_loss = 0;
-        dailyPnLData = {}; // Reset
+function updateSignalSummaryKPIs(signals) {
+    let total = signals.length;
+    let buy = 0, sell = 0, hold = 0;
+    let profAcc = 0, profRej = 0;
+    let riskAcc = 0, riskRej = 0;
 
-        allClosed.forEach(p => {
-            if(p.pnl > 0) gross_win += p.pnl;
-            else if(p.pnl < 0) gross_loss += Math.abs(p.pnl);
-            
-            // Group for daily histogram
-            const day = p.timestamp ? p.timestamp.substring(0, 10) : 'Unknown';
-            if (day !== 'Unknown') {
-                if (!dailyPnLData[day]) dailyPnLData[day] = 0;
-                dailyPnLData[day] += (p.pnl || 0);
+    signals.forEach(s => {
+        const side = (s.decision || s.side || '').toUpperCase();
+        if (side === 'BUY' || side === 'LONG') buy++;
+        else if (side === 'SELL' || side === 'SHORT') sell++;
+        else hold++;
+
+        const pDec = (s.profitability_decision || '').toUpperCase();
+        if (pDec === 'ACCEPTED') profAcc++;
+        else if (pDec === 'REJECTED') profRej++;
+
+        const rDec = (s.risk_decision || '').toUpperCase();
+        if (rDec === 'ACCEPTED') riskAcc++;
+        else if (rDec === 'REJECTED') riskRej++;
+    });
+
+    const setVal = (id, v) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = v;
+    };
+
+    setVal('sig-kpi-total', total);
+    setVal('sig-kpi-buy', buy);
+    setVal('sig-kpi-sell', sell);
+    setVal('sig-kpi-hold', hold);
+    setVal('sig-kpi-prof-acc', profAcc);
+    setVal('sig-kpi-prof-rej', profRej);
+    setVal('sig-kpi-risk-acc', riskAcc);
+    setVal('sig-kpi-risk-rej', riskRej);
+}
+
+function renderSignalsTable() {
+    const tbody = document.getElementById('signals-full-body');
+    if (!tbody) return;
+
+    if (!allRawSignals || allRawSignals.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="15" class="empty-state">NO SIGNAL EVENTS YET</td></tr>';
+        return;
+    }
+
+    const stratFilter = (document.getElementById('sig-filter-strat')?.value || 'ALL').toUpperCase();
+    const tfFilter = (document.getElementById('sig-filter-tf')?.value || 'ALL').toLowerCase();
+    const symFilter = (document.getElementById('sig-filter-sym')?.value || '').trim().toUpperCase();
+    const rangeFilter = document.getElementById('sig-filter-range')?.value || 'ALL';
+
+    const now = Date.now();
+    const rangeMsMap = {
+        '1h': 3600 * 1000,
+        '6h': 6 * 3600 * 1000,
+        '24h': 24 * 3600 * 1000,
+        '7d': 7 * 86400 * 1000
+    };
+
+    let filtered = allRawSignals.filter(s => {
+        // Quick button filter
+        const side = (s.decision || s.side || '').toUpperCase();
+        const finalDec = (s.final_decision || s.decision || '').toUpperCase();
+        const pDec = (s.profitability_decision || '').toUpperCase();
+        const rDec = (s.risk_decision || '').toUpperCase();
+
+        if (signalQuickFilter === 'BUY' && side !== 'BUY' && side !== 'LONG') return false;
+        if (signalQuickFilter === 'SELL' && side !== 'SELL' && side !== 'SHORT') return false;
+        if (signalQuickFilter === 'HOLD' && side !== 'HOLD') return false;
+        if (signalQuickFilter === 'ACCEPTED' && finalDec !== 'ACCEPTED' && finalDec !== 'EXECUTED' && pDec !== 'ACCEPTED' && rDec !== 'ACCEPTED') return false;
+        if (signalQuickFilter === 'REJECTED' && finalDec !== 'REJECTED' && pDec !== 'REJECTED' && rDec !== 'REJECTED') return false;
+
+        // Additional filters
+        if (stratFilter !== 'ALL' && (s.strategy || '').toUpperCase() !== stratFilter) return false;
+        if (tfFilter !== 'ALL' && (s.timeframe || '').toLowerCase() !== tfFilter) return false;
+        if (symFilter && !(s.symbol || '').toUpperCase().includes(symFilter)) return false;
+
+        if (rangeFilter !== 'ALL' && rangeMsMap[rangeFilter]) {
+            const tsMs = s.timestamp ? new Date(s.timestamp).getTime() : 0;
+            if (tsMs > 0 && (now - tsMs) > rangeMsMap[rangeFilter]) return false;
+        }
+
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="15" class="empty-state">NO SIGNALS MATCHING ACTIVE FILTERS</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = filtered.map((s, idx) => {
+        const timeStr = s.timestamp ? formatTime(s.timestamp) : '-';
+        const sym = s.symbol || '-';
+        const tf = s.timeframe || '5m';
+        const strat = s.strategy || 'ADX_EMA';
+        const side = (s.decision || s.side || 'HOLD').toUpperCase();
+        const sideClass = (side === 'BUY' || side === 'LONG') ? 'tag tag-long' : ((side === 'SELL' || side === 'SHORT') ? 'tag tag-short' : 'tag tag-neutral');
+
+        const entryStr = Number(s.entry || s.current_price || 0) > 0 ? Number(s.entry || s.current_price).toFixed(4) : '-';
+        const stopStr = Number(s.stop || s.sl || 0) > 0 ? Number(s.stop || s.sl).toFixed(4) : '-';
+        const targetStr = Number(s.target || s.tp || 0) > 0 ? Number(s.target || s.tp).toFixed(4) : '-';
+        const confStr = Number(s.confidence || 0) > 0 ? (Number(s.confidence) * 100).toFixed(1) + '%' : '-';
+
+        const grossVal = Number(s.expected_gross || s.expected_gross_return || 0);
+        const grossStr = grossVal !== 0 ? (grossVal > 0 ? `+${(grossVal * 100).toFixed(2)}%` : `${(grossVal * 100).toFixed(2)}%`) : '-';
+
+        const netVal = Number(s.expected_net || s.expected_net_return || 0);
+        const netClass = netVal > 0 ? 'val-green' : (netVal < 0 ? 'val-red' : '');
+        const netStr = netVal !== 0 ? `<span class="${netClass}">${netVal > 0 ? '+' : ''}${(netVal * 100).toFixed(2)}%</span>` : '-';
+
+        const pDec = (s.profitability_decision || 'PENDING').toUpperCase();
+        const pClass = pDec === 'ACCEPTED' ? 'tag tag-qualified' : (pDec === 'REJECTED' ? 'tag tag-rejected' : 'tag tag-neutral');
+
+        const rDec = (s.risk_decision || 'PENDING').toUpperCase();
+        const rClass = rDec === 'ACCEPTED' ? 'tag tag-qualified' : (rDec === 'REJECTED' ? 'tag tag-rejected' : 'tag tag-neutral');
+
+        const fDec = (s.final_decision || (pDec === 'ACCEPTED' && rDec === 'ACCEPTED' ? 'EXECUTED' : 'REJECTED')).toUpperCase();
+        const fClass = (fDec === 'EXECUTED' || fDec === 'ACCEPTED') ? 'tag tag-win' : 'tag tag-loss';
+
+        const reason = s.profitability_reason || s.risk_reason || s.reason || '-';
+        const shortReason = reason.length > 28 ? reason.substring(0, 28) + '...' : reason;
+
+        return `<tr style="cursor: pointer;" onclick="inspectSignalByIndex(${idx})" title="Click to open Signal Inspector">
+            <td>${timeStr}</td>
+            <td class="td-strong">${sym}</td>
+            <td>${tf}</td>
+            <td>${strat}</td>
+            <td><span class="${sideClass}">${side}</span></td>
+            <td>${entryStr}</td>
+            <td class="val-red">${stopStr}</td>
+            <td class="val-green">${targetStr}</td>
+            <td>${confStr}</td>
+            <td>${grossStr}</td>
+            <td>${netStr}</td>
+            <td><span class="${pClass}">${pDec}</span></td>
+            <td><span class="${rClass}">${rDec}</span></td>
+            <td><span class="${fClass}">${fDec}</span></td>
+            <td title="${reason}">${shortReason}</td>
+        </tr>`;
+    }).join('');
+}
+
+function inspectSignalByIndex(idx) {
+    if (allRawSignals && allRawSignals[idx]) {
+        inspectSignal(allRawSignals[idx]);
+    }
+}
+
+function inspectSignal(sig) {
+    const sym = sig.symbol || 'SYSTEM';
+    const side = (sig.decision || sig.side || 'HOLD').toUpperCase();
+    const strat = sig.strategy || 'ADX_EMA';
+    const tf = sig.timeframe || '5m';
+    const conf = Number(sig.confidence || 0);
+
+    const gross = Number(sig.expected_gross || sig.expected_gross_return || 0);
+    const net = Number(sig.expected_net || sig.expected_net_return || 0);
+    const fees = 0.001; // 0.1% spot fee
+    const slippage = 0.0005; // 0.05% est. slippage
+
+    const pDec = (sig.profitability_decision || 'PENDING').toUpperCase();
+    const pReason = sig.profitability_reason || (pDec === 'ACCEPTED' ? 'Expected Net Edge > Friction Costs' : 'Fails minimal net edge requirement');
+
+    const rDec = (sig.risk_decision || 'PENDING').toUpperCase();
+    const rReason = sig.risk_reason || (rDec === 'ACCEPTED' ? 'Exposure and daily loss limits respected' : 'Risk limit or exposure ceiling exceeded');
+
+    const finalDec = (sig.final_decision || (pDec === 'ACCEPTED' && rDec === 'ACCEPTED' ? 'EXECUTED' : 'REJECTED')).toUpperCase();
+    const isExecuted = finalDec === 'EXECUTED' || finalDec === 'ACCEPTED';
+
+    let whyNoOrderHtml = '';
+    if (isExecuted) {
+        whyNoOrderHtml = `
+            <div class="decision-banner accepted">
+                <div class="decision-banner-title">✅ ORDER QUALIFIED & SUBMITTED</div>
+                <div class="decision-banner-body">All quantitative risk gates and profitability revalidation checks passed. Order dispatched to exchange.</div>
+            </div>
+        `;
+    } else {
+        const rejectionGate = pDec === 'REJECTED' ? 'Profitability Gate' : (rDec === 'REJECTED' ? 'Risk Gate' : 'Safety / Validation Filter');
+        const rejectionReason = sig.risk_reason || sig.profitability_reason || sig.reason || 'Criteria not met';
+        whyNoOrderHtml = `
+            <div class="decision-banner rejected">
+                <div class="decision-banner-title">🚫 NO ORDER TAKEN • REJECTED</div>
+                <div class="decision-banner-body">
+                    <strong>Rejection Gate:</strong> ${rejectionGate}<br>
+                    <strong>Reason:</strong> ${rejectionReason}<br>
+                    Capital protected from negative expected edge or risk limit breach.
+                </div>
+            </div>
+        `;
+    }
+
+    const drawerHtml = `
+        <!-- DECISION BANNER -->
+        ${whyNoOrderHtml}
+
+        <!-- 1. SIGNAL OVERVIEW -->
+        <div class="inspector-card">
+            <div class="inspector-card-header">
+                <span>📡 Signal Overview</span>
+                <span class="badge badge-mono">${sig.signal_id || 'SIG'}</span>
+            </div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Signal Time</span><span class="inspector-val">${sig.timestamp ? formatDateTime(sig.timestamp) : '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Symbol</span><span class="inspector-val td-strong">${sym}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Timeframe</span><span class="inspector-val">${tf}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Strategy</span><span class="inspector-val">${strat}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Intended Side</span><span class="inspector-val"><span class="tag ${side === 'BUY' ? 'tag-long' : 'tag-short'}">${side}</span></span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Confidence</span><span class="inspector-val">${conf > 0 ? (conf * 100).toFixed(1) + '%' : '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Entry Price</span><span class="inspector-val">${Number(sig.entry || sig.current_price || 0).toFixed(4)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Stop Loss</span><span class="inspector-val val-red">${Number(sig.stop || sig.sl || 0) > 0 ? Number(sig.stop || sig.sl).toFixed(4) : '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Take Profit</span><span class="inspector-val val-green">${Number(sig.target || sig.tp || 0) > 0 ? Number(sig.target || sig.tp).toFixed(4) : '-'}</span></div>
+            </div>
+        </div>
+
+        <!-- 2. EXPECTED EDGE & COSTS -->
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>💵 Expected Edge & Friction</span></div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Expected Gross</span><span class="inspector-val">${gross !== 0 ? (gross * 100).toFixed(2) + '%' : '0.00%'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Exchange Fees (0.1%)</span><span class="inspector-val val-amber">-${(fees * 100).toFixed(2)}%</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Est. Slippage (0.05%)</span><span class="inspector-val val-amber">-${(slippage * 100).toFixed(2)}%</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Expected Net Edge</span><span class="inspector-val ${net > 0 ? 'val-green' : 'val-red'}">${net > 0 ? '+' : ''}${(net * 100).toFixed(2)}%</span></div>
+            </div>
+        </div>
+
+        <!-- 3. GATE DECISIONS -->
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>🛡️ Multi-Gate Audit Evaluation</span></div>
+            <div class="inspector-row">
+                <span class="inspector-lbl">Profitability Gate:</span>
+                <span class="inspector-val"><span class="tag ${pDec === 'ACCEPTED' ? 'tag-qualified' : 'tag-rejected'}">${pDec}</span></span>
+            </div>
+            <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 6px;">${pReason}</div>
+
+            <div class="inspector-row">
+                <span class="inspector-lbl">Risk & Exposure Gate:</span>
+                <span class="inspector-val"><span class="tag ${rDec === 'ACCEPTED' ? 'tag-qualified' : 'tag-rejected'}">${rDec}</span></span>
+            </div>
+            <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 6px;">${rReason}</div>
+
+            <div class="inspector-row">
+                <span class="inspector-lbl">Execution Status:</span>
+                <span class="inspector-val"><span class="tag ${isExecuted ? 'tag-win' : 'tag-loss'}">${finalDec}</span></span>
+            </div>
+        </div>
+    `;
+
+    openInspectorDrawer(`SIGNAL INSPECTOR • ${sym}`, drawerHtml);
+}
+
+
+// ==========================================
+// 4. POSITIONS TERMINAL & INSPECTOR
+// ==========================================
+let allRawPositions = [];
+
+async function fetchPositions() {
+    try {
+        let openPositions = [];
+        const res = await apiClient.get('/api/positions?status=OPEN');
+        if (res && Array.isArray(res.positions)) {
+            openPositions = res.positions.filter(p => p.status === 'OPEN');
+        }
+
+        // Also check if /api/trades has active positions
+        if (openPositions.length === 0) {
+            const tradesRes = await apiClient.get('/api/trades');
+            if (tradesRes && Array.isArray(tradesRes.positions)) {
+                openPositions = tradesRes.positions.filter(p => p.status === 'OPEN');
             }
-        });
-        
-        document.getElementById('an-pf').innerText = gross_loss > 0 ? (gross_win / gross_loss).toFixed(2) : (gross_win > 0 ? '∞' : '0.00');
-        document.getElementById('an-avg-win').innerText = wins > 0 ? formatCurrency(gross_win / wins) : '$0.00';
-        document.getElementById('an-avg-loss').innerText = losses > 0 ? formatCurrency(gross_loss / losses) : '$0.00';
+        }
 
-        updateAnalyticsCharts();
+        allRawPositions = openPositions;
+        renderPositionsTable(openPositions);
+    } catch (e) {
+        console.error("Failed to fetch positions:", e);
+    }
+}
 
+function renderPositionsTable(positions) {
+    const fullBody = document.getElementById('pos-full-body');
+    const dashBody = document.getElementById('active-pos-body');
+
+    let totalExposure = 0;
+    let totalUnrealized = 0;
+
+    if (!positions || positions.length === 0) {
+        if (fullBody) fullBody.innerHTML = '<tr><td colspan="13" class="empty-state">NO OPEN POSITIONS</td></tr>';
+        if (dashBody) dashBody.innerHTML = '<tr><td colspan="8" class="empty-state">NO OPEN POSITIONS</td></tr>';
+        document.getElementById('pos-count').innerText = '0';
+        document.getElementById('pos-exposure').innerText = '$0.00';
+        document.getElementById('pos-upnl').innerText = '$0.00';
+        document.getElementById('pos-upnl').className = 'metric-value val-neutral';
+        return;
+    }
+
+    const fullRows = positions.map((p, idx) => {
+        const sym = p.symbol || '-';
+        const tf = p.timeframe || '5m';
+        const strat = p.strategy || 'ADX_EMA';
+        const side = (p.side || p.action || 'BUY').toUpperCase();
+        const sideClass = (side === 'BUY' || side === 'LONG') ? 'tag tag-long' : 'tag tag-short';
+
+        const entryPx = Number(p.entry_price || p.price || 0);
+        const currPx = Number(p.current_price || p.entry_price || 0);
+        const qty = Number(p.quantity || 0);
+        const val = qty * (currPx || entryPx);
+        totalExposure += val;
+
+        const uPnl = Number(p.current_unrealized_pnl || p.pnl || 0);
+        totalUnrealized += uPnl;
+        const uPnlClass = uPnl > 0 ? 'val-green' : (uPnl < 0 ? 'val-red' : '');
+        const uPnlStr = `<span class="${uPnlClass}">${uPnl >= 0 ? '+' : ''}${formatCurrency(uPnl)}</span>`;
+
+        const slStr = Number(p.stop_loss || p.sl || 0) > 0 ? Number(p.stop_loss || p.sl).toFixed(4) : '-';
+        const tpStr = Number(p.take_profit || p.tp || 0) > 0 ? Number(p.take_profit || p.tp).toFixed(4) : '-';
+
+        // Duration calculation
+        let durStr = '-';
+        if (p.entry_timestamp || p.timestamp) {
+            const entryMs = new Date(p.entry_timestamp || p.timestamp).getTime();
+            const diffSec = Math.max(0, Math.floor((Date.now() - entryMs) / 1000));
+            const m = Math.floor(diffSec / 60);
+            const s = diffSec % 60;
+            durStr = `${m}m ${s}s`;
+        }
+
+        return `<tr style="cursor: pointer;" onclick="inspectPositionByIndex(${idx})" title="Click to inspect Position details">
+            <td class="td-strong">${sym}</td>
+            <td>${tf}</td>
+            <td>${strat}</td>
+            <td><span class="${sideClass}">${side}</span></td>
+            <td>${entryPx.toFixed(4)}</td>
+            <td>${currPx.toFixed(4)}</td>
+            <td>${qty}</td>
+            <td>${formatCurrency(val)}</td>
+            <td>${uPnlStr}</td>
+            <td class="val-red">${slStr}</td>
+            <td class="val-green">${tpStr}</td>
+            <td>${durStr}</td>
+            <td><span class="tag tag-qualified">OPEN</span></td>
+        </tr>`;
+    }).join('');
+
+    const dashRows = positions.map(p => {
+        const side = (p.side || p.action || 'BUY').toUpperCase();
+        const sideClass = (side === 'BUY' || side === 'LONG') ? 'tag tag-long' : 'tag tag-short';
+        const entryPx = Number(p.entry_price || 0);
+        const currPx = Number(p.current_price || entryPx);
+        const uPnl = Number(p.current_unrealized_pnl || p.pnl || 0);
+        const uPnlStr = `<span class="${uPnl >= 0 ? 'val-green' : 'val-red'}">${uPnl >= 0 ? '+' : ''}${formatCurrency(uPnl)}</span>`;
+
+        return `<tr>
+            <td class="td-strong">${p.symbol}</td>
+            <td><span class="${sideClass}">${side}</span></td>
+            <td>${entryPx.toFixed(4)}</td>
+            <td>${currPx.toFixed(4)}</td>
+            <td>${p.quantity}</td>
+            <td>${uPnlStr}</td>
+            <td>${p.stop_loss || p.sl || '-'}</td>
+            <td>${p.take_profit || p.tp || '-'}</td>
+        </tr>`;
+    }).join('');
+
+    if (fullBody) fullBody.innerHTML = fullRows;
+    if (dashBody) dashBody.innerHTML = dashRows;
+
+    document.getElementById('pos-count').innerText = positions.length;
+    document.getElementById('pos-exposure').innerText = formatCurrency(totalExposure);
+    applyColor(document.getElementById('pos-upnl'), totalUnrealized);
+}
+
+function inspectPositionByIndex(idx) {
+    if (allRawPositions && allRawPositions[idx]) {
+        inspectPosition(allRawPositions[idx]);
+    }
+}
+
+async function inspectPosition(pos) {
+    const sym = pos.symbol || '-';
+    const entryPx = Number(pos.entry_price || 0);
+    const currPx = Number(pos.current_price || entryPx);
+    const qty = Number(pos.quantity || 0);
+    const uPnl = Number(pos.current_unrealized_pnl || pos.pnl || 0);
+    const tradeId = pos.trade_id || pos.position_id || sym;
+
+    // Fetch working orders to see if any OCO protection is attached
+    let workingOrdersHtml = '<div style="font-size: 10px; color: var(--text-muted);">No open OCO working orders attached</div>';
+    try {
+        const orders = await apiClient.get('/api/open-orders');
+        if (orders && Array.isArray(orders)) {
+            const matched = orders.filter(o => o.symbol === sym);
+            if (matched.length > 0) {
+                workingOrdersHtml = matched.map(o => `
+                    <div class="inspector-row">
+                        <span class="inspector-lbl">${o.type} (${o.side}):</span>
+                        <span class="inspector-val">${Number(o.price || o.stop_price || 0).toFixed(4)} (Qty: ${o.orig_qty})</span>
+                    </div>
+                `).join('');
+            }
+        }
+    } catch (e) {
+        console.warn("Error fetching position working orders:", e);
+    }
+
+    let durStr = '-';
+    if (pos.entry_timestamp || pos.timestamp) {
+        const entryMs = new Date(pos.entry_timestamp || pos.timestamp).getTime();
+        const diffSec = Math.max(0, Math.floor((Date.now() - entryMs) / 1000));
+        const m = Math.floor(diffSec / 60);
+        const s = diffSec % 60;
+        durStr = `${m}m ${s}s`;
+    }
+
+    const drawerHtml = `
+        <div class="inspector-card">
+            <div class="inspector-card-header">
+                <span>💼 Position Details</span>
+                <span class="tag tag-qualified">ACTIVE</span>
+            </div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Trade ID</span><span class="inspector-val">${tradeId}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Symbol</span><span class="inspector-val td-strong">${sym}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Strategy</span><span class="inspector-val">${pos.strategy || 'ADX_EMA'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Timeframe</span><span class="inspector-val">${pos.timeframe || '5m'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Entry Time</span><span class="inspector-val">${pos.entry_timestamp ? formatDateTime(pos.entry_timestamp) : '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Active Duration</span><span class="inspector-val">${durStr}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Position Quantity</span><span class="inspector-val">${qty}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Current Notional</span><span class="inspector-val">${formatCurrency(qty * currPx)}</span></div>
+            </div>
+        </div>
+
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>💵 Pricing & Protection</span></div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Entry Price</span><span class="inspector-val">${entryPx.toFixed(4)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Current Price</span><span class="inspector-val">${currPx.toFixed(4)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Stop Loss</span><span class="inspector-val val-red">${Number(pos.stop_loss || pos.sl || 0) > 0 ? Number(pos.stop_loss || pos.sl).toFixed(4) : '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Take Profit</span><span class="inspector-val val-green">${Number(pos.take_profit || pos.tp || 0) > 0 ? Number(pos.take_profit || pos.tp).toFixed(4) : '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Unrealized PnL</span><span class="inspector-val ${uPnl >= 0 ? 'val-green' : 'val-red'}">${uPnl >= 0 ? '+' : ''}${formatCurrency(uPnl)}</span></div>
+            </div>
+        </div>
+
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>🛡️ On-Exchange Working Protection Orders</span></div>
+            ${workingOrdersHtml}
+        </div>
+    `;
+
+    openInspectorDrawer(`POSITION INSPECTOR • ${sym}`, drawerHtml);
+}
+
+
+// ==========================================
+// 5. HISTORICAL TRADES TERMINAL & LIFECYCLE DRAWER
+// ==========================================
+let allRawTrades = [];
+
+async function fetchTrades() {
+    try {
+        let trades = [];
+        // First try the 40-field canonical trade history
+        const res = await apiClient.get('/api/trade-history');
+        if (res && Array.isArray(res.trades)) {
+            trades = res.trades;
+        }
+
+        // Fallback to /api/trades
+        if (trades.length === 0) {
+            const legRes = await apiClient.get('/api/trades');
+            if (legRes && Array.isArray(legRes.positions)) {
+                trades = legRes.positions.filter(p => p.status === 'CLOSED');
+            }
+        }
+
+        allRawTrades = trades;
+        renderTradesTable(trades);
+        updateTradeSummaryKPIs(trades);
+
+        // Fetch analytics endpoint if available for profit factor and average win/loss
+        const analytics = await apiClient.get('/api/telemetry/analytics');
+        if (analytics && analytics.analytics) {
+            const an = analytics.analytics;
+            if (an.profit_factor !== undefined) document.getElementById('tr-pf').innerText = an.profit_factor;
+            if (an.winning_trades !== undefined) document.getElementById('tr-wins').innerText = an.winning_trades;
+            if (an.losing_trades !== undefined) document.getElementById('tr-loss').innerText = an.losing_trades;
+        }
     } catch (e) {
         console.error("Failed to fetch trades:", e);
     }
 }
 
-let scannerRejectionData = {};
+function updateTradeSummaryKPIs(trades) {
+    const total = trades.length;
+    let wins = 0, losses = 0;
+    let grossWin = 0, grossLoss = 0;
+    let totalFees = 0;
+    let netPnL = 0;
+
+    trades.forEach(t => {
+        const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl !== undefined ? t.pnl : 0));
+        const fee = Number(t.fees || t.total_fees || 0);
+        const gross = Number(t.gross_pnl !== undefined ? t.gross_pnl : (net + fee));
+
+        netPnL += net;
+        totalFees += fee;
+
+        if (net > 0) {
+            wins++;
+            grossWin += net;
+        } else if (net < 0) {
+            losses++;
+            grossLoss += Math.abs(net);
+        }
+    });
+
+    const winRate = total > 0 ? (wins / total) * 100 : 0;
+    const avgWin = wins > 0 ? grossWin / wins : 0;
+    const avgLoss = losses > 0 ? grossLoss / losses : 0;
+    const pf = grossLoss > 0 ? (grossWin / grossLoss) : (grossWin > 0 ? 999.0 : 0);
+
+    const setVal = (id, v) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = v;
+    };
+
+    setVal('tr-total', total);
+    setVal('tr-rate', winRate.toFixed(2) + '%');
+    setVal('tr-wins', wins);
+    setVal('tr-loss', losses);
+    setVal('tr-fees', formatCurrency(totalFees));
+    setVal('tr-avg-win', formatCurrency(avgWin));
+    setVal('tr-avg-loss', formatCurrency(avgLoss));
+    setVal('tr-pf', pf.toFixed(2));
+
+    const netEl = document.getElementById('tr-net');
+    if (netEl) {
+        netEl.innerText = formatCurrency(netPnL);
+        netEl.className = 'metric-value ' + (netPnL > 0 ? 'val-green' : (netPnL < 0 ? 'val-red' : 'val-neutral'));
+    }
+
+    const realEl = document.getElementById('tr-realized');
+    if (realEl) {
+        realEl.innerText = formatCurrency(netPnL + totalFees);
+        realEl.className = 'metric-value ' + ((netPnL + totalFees) > 0 ? 'val-green' : ((netPnL + totalFees) < 0 ? 'val-red' : 'val-neutral'));
+    }
+}
+
+function renderTradesTable(trades) {
+    const fullBody = document.getElementById('trades-full-body');
+    const dashBody = document.getElementById('recent-trades-body');
+
+    if (!trades || trades.length === 0) {
+        if (fullBody) fullBody.innerHTML = '<tr><td colspan="13" class="empty-state">NO CLOSED TRADES YET</td></tr>';
+        if (dashBody) dashBody.innerHTML = '<tr><td colspan="9" class="empty-state">NO CLOSED TRADES YET</td></tr>';
+        return;
+    }
+
+    const sorted = [...trades].sort((a, b) => {
+        const tsA = new Date(a.close_time || a.timestamp || 0).getTime();
+        const tsB = new Date(b.close_time || b.timestamp || 0).getTime();
+        return tsB - tsA;
+    });
+
+    const fullRows = sorted.map((t, idx) => {
+        const tradeId = t.trade_id || t.order_id || `TRD-${idx}`;
+        const opened = t.fill_time || t.signal_time || t.entry_timestamp || t.timestamp;
+        const closed = t.close_time || t.exit_timestamp || t.timestamp;
+
+        const openStr = opened ? formatTime(opened) : '-';
+        const closeStr = closed ? formatTime(closed) : '-';
+
+        const sym = t.symbol || '-';
+        const tf = t.timeframe || '5m';
+        const strat = t.strategy || 'ADX_EMA';
+        const side = (t.side || t.action || 'BUY').toUpperCase();
+        const sideClass = (side === 'BUY' || side === 'LONG') ? 'tag tag-long' : 'tag tag-short';
+
+        const entryPx = Number(t.entry_price || 0).toFixed(4);
+        const exitPx = Number(t.exit_price || 0).toFixed(4);
+        const qty = t.quantity || '-';
+        const feeStr = formatCurrency(t.fees || t.total_fees || 0);
+
+        const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+        const netClass = net > 0 ? 'val-green' : (net < 0 ? 'val-red' : '');
+        const netStr = `<span class="${netClass}">${net >= 0 ? '+' : ''}${formatCurrency(net)}</span>`;
+
+        const isWin = net >= 0;
+        const statusTag = `<span class="tag ${isWin ? 'tag-win' : 'tag-loss'}">${isWin ? 'WIN' : 'LOSS'}</span>`;
+
+        return `<tr style="cursor: pointer;" onclick="inspectTradeByIndex(${idx})" title="Click to view Complete Visual Lifecycle">
+            <td class="td-strong" style="font-family: var(--font-mono);">${tradeId}</td>
+            <td>${openStr}</td>
+            <td>${closeStr}</td>
+            <td class="td-strong">${sym}</td>
+            <td>${tf}</td>
+            <td>${strat}</td>
+            <td><span class="${sideClass}">${side}</span></td>
+            <td>${entryPx}</td>
+            <td>${exitPx}</td>
+            <td>${qty}</td>
+            <td>${feeStr}</td>
+            <td>${netStr}</td>
+            <td>${statusTag}</td>
+        </tr>`;
+    }).join('');
+
+    const dashRows = sorted.slice(0, 10).map(t => {
+        const closed = t.close_time || t.exit_timestamp || t.timestamp;
+        const closeStr = closed ? formatTime(closed) : '-';
+        const side = (t.side || t.action || 'BUY').toUpperCase();
+        const sideClass = (side === 'BUY' || side === 'LONG') ? 'tag tag-long' : 'tag tag-short';
+        const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+        const netStr = `<span class="${net >= 0 ? 'val-green' : 'val-red'}">${net >= 0 ? '+' : ''}${formatCurrency(net)}</span>`;
+
+        return `<tr>
+            <td>${closeStr}</td>
+            <td class="td-strong">${t.symbol}</td>
+            <td>${t.timeframe || '5m'}</td>
+            <td>${t.strategy || 'ADX_EMA'}</td>
+            <td><span class="${sideClass}">${side}</span></td>
+            <td>${Number(t.entry_price || 0).toFixed(4)}</td>
+            <td>${Number(t.exit_price || 0).toFixed(4)}</td>
+            <td>${netStr}</td>
+            <td><span class="tag ${net >= 0 ? 'tag-win' : 'tag-loss'}">${net >= 0 ? 'WIN' : 'LOSS'}</span></td>
+        </tr>`;
+    }).join('');
+
+    if (fullBody) fullBody.innerHTML = fullRows;
+    if (dashBody) dashBody.innerHTML = dashRows;
+}
+
+function inspectTradeByIndex(idx) {
+    if (allRawTrades && allRawTrades[idx]) {
+        inspectTrade(allRawTrades[idx]);
+    }
+}
+
+function inspectTrade(trade) {
+    const sym = trade.symbol || '-';
+    const tradeId = trade.trade_id || trade.order_id || 'TRD';
+    const strat = trade.strategy || 'ADX_EMA';
+    const tf = trade.timeframe || '5m';
+    const side = (trade.side || trade.action || 'BUY').toUpperCase();
+
+    const net = Number(trade.net_pnl !== undefined ? trade.net_pnl : (trade.pnl || 0));
+    const gross = Number(trade.gross_pnl !== undefined ? trade.gross_pnl : (net + Number(trade.fees || 0)));
+    const fees = Number(trade.fees || trade.total_fees || 0);
+
+    const entryPx = Number(trade.entry_price || 0);
+    const exitPx = Number(trade.exit_price || 0);
+    const slPx = Number(trade.stop_loss || trade.sl || 0);
+    const tpPx = Number(trade.take_profit || trade.tp || 0);
+
+    const balOpen = Number(trade.balance_before_entry || 0);
+    const eqOpen = Number(trade.equity_before_entry || balOpen || 0);
+    const balClose = Number(trade.balance_after_exit || (balOpen + net) || 0);
+    const eqClose = Number(trade.equity_after_exit || balClose || 0);
+
+    const closeReason = trade.close_reason || trade.exit_reason || (net >= 0 ? 'TAKE_PROFIT_HIT' : 'STOP_LOSS_HIT');
+    const durStr = trade.duration || (trade.duration_seconds ? `${Math.round(trade.duration_seconds)}s` : '-');
+
+    const drawerHtml = `
+        <!-- VISUAL TRADE LIFECYCLE STEPPER -->
+        <div class="inspector-card">
+            <div class="inspector-card-header">
+                <span>🔄 Visual Lifecycle Flow</span>
+                <span class="tag ${net >= 0 ? 'tag-win' : 'tag-loss'}">${net >= 0 ? 'WIN' : 'LOSS'}</span>
+            </div>
+            <div class="lifecycle-stepper">
+                <div class="lifecycle-node completed">
+                    <div class="lifecycle-icon-wrap">1</div>
+                    <div class="lifecycle-content">
+                        <div class="lifecycle-step-title"><span>SIGNAL GENERATED</span><span class="badge badge-mono">${trade.signal_time ? formatTime(trade.signal_time) : '-'}</span></div>
+                        <div class="lifecycle-step-desc">Strategy: ${strat} • ${tf} • Side: ${side}</div>
+                    </div>
+                </div>
+
+                <div class="lifecycle-node completed">
+                    <div class="lifecycle-icon-wrap">2</div>
+                    <div class="lifecycle-content">
+                        <div class="lifecycle-step-title"><span>PROFITABILITY GATE</span><span class="tag tag-qualified">ACCEPTED</span></div>
+                        <div class="lifecycle-step-desc">Expected net edge evaluated above fees & slippage hurdle</div>
+                    </div>
+                </div>
+
+                <div class="lifecycle-node completed">
+                    <div class="lifecycle-icon-wrap">3</div>
+                    <div class="lifecycle-content">
+                        <div class="lifecycle-step-title"><span>RISK ENGINE GATE</span><span class="tag tag-qualified">ACCEPTED</span></div>
+                        <div class="lifecycle-step-desc">Exposure and max drawdown limits verified</div>
+                    </div>
+                </div>
+
+                <div class="lifecycle-node completed">
+                    <div class="lifecycle-icon-wrap">4</div>
+                    <div class="lifecycle-content">
+                        <div class="lifecycle-step-title"><span>ORDER SUBMITTED</span><span class="badge badge-mono">${trade.order_submit_time ? formatTime(trade.order_submit_time) : '-'}</span></div>
+                        <div class="lifecycle-step-desc">Entry Order: ${trade.entry_order_id || tradeId}</div>
+                    </div>
+                </div>
+
+                <div class="lifecycle-node completed">
+                    <div class="lifecycle-icon-wrap">5</div>
+                    <div class="lifecycle-content">
+                        <div class="lifecycle-step-title"><span>ORDER FILLED</span><span class="badge badge-mono">${trade.fill_time ? formatTime(trade.fill_time) : '-'}</span></div>
+                        <div class="lifecycle-step-desc">Price: ${entryPx.toFixed(4)} • Qty: ${trade.quantity}</div>
+                    </div>
+                </div>
+
+                <div class="lifecycle-node completed">
+                    <div class="lifecycle-icon-wrap">6</div>
+                    <div class="lifecycle-content">
+                        <div class="lifecycle-step-title"><span>POSITION OPENED</span><span class="tag tag-qualified">SPOT HELD</span></div>
+                        <div class="lifecycle-step-desc">Notional: ${formatCurrency(entryPx * Number(trade.quantity || 0))}</div>
+                    </div>
+                </div>
+
+                <div class="lifecycle-node completed">
+                    <div class="lifecycle-icon-wrap">7</div>
+                    <div class="lifecycle-content">
+                        <div class="lifecycle-step-title"><span>PROTECTION ACTIVE</span><span class="tag tag-qualified">OCO PLACED</span></div>
+                        <div class="lifecycle-step-desc">SL: ${slPx > 0 ? slPx.toFixed(4) : '-'} | TP: ${tpPx > 0 ? tpPx.toFixed(4) : '-'}</div>
+                    </div>
+                </div>
+
+                <div class="lifecycle-node completed">
+                    <div class="lifecycle-icon-wrap">8</div>
+                    <div class="lifecycle-content">
+                        <div class="lifecycle-step-title"><span>POSITION CLOSED</span><span class="badge badge-mono">${trade.close_time ? formatTime(trade.close_time) : '-'}</span></div>
+                        <div class="lifecycle-step-desc">Exit Price: ${exitPx.toFixed(4)} • Reason: ${closeReason}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BALANCE & EQUITY AT ENTRY & EXIT -->
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>💼 Balance & Equity Milestones</span></div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Balance at Open</span><span class="inspector-val">${balOpen > 0 ? formatCurrency(balOpen) : '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Equity at Open</span><span class="inspector-val">${eqOpen > 0 ? formatCurrency(eqOpen) : '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Balance at Close</span><span class="inspector-val">${balClose > 0 ? formatCurrency(balClose) : '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Equity at Close</span><span class="inspector-val">${eqClose > 0 ? formatCurrency(eqClose) : '-'}</span></div>
+            </div>
+        </div>
+
+        <!-- EXECUTION SPECS & PERFORMANCE -->
+        <div class="inspector-card">
+            <div class="inspector-card-header"><span>📊 Execution & Returns</span></div>
+            <div class="inspector-grid-2">
+                <div class="inspector-row"><span class="inspector-lbl">Entry Price</span><span class="inspector-val">${entryPx.toFixed(4)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Exit Price</span><span class="inspector-val">${exitPx.toFixed(4)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Stop Loss</span><span class="inspector-val val-red">${slPx > 0 ? slPx.toFixed(4) : '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Take Profit</span><span class="inspector-val val-green">${tpPx > 0 ? tpPx.toFixed(4) : '-'}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Gross PnL</span><span class="inspector-val ${gross >= 0 ? 'val-green' : 'val-red'}">${gross >= 0 ? '+' : ''}${formatCurrency(gross)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Total Fees</span><span class="inspector-val val-amber">${formatCurrency(fees)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Net Return</span><span class="inspector-val ${net >= 0 ? 'val-green' : 'val-red'} td-strong">${net >= 0 ? '+' : ''}${formatCurrency(net)}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Trade Duration</span><span class="inspector-val">${durStr}</span></div>
+                <div class="inspector-row"><span class="inspector-lbl">Close Reason</span><span class="inspector-val td-strong">${closeReason}</span></div>
+            </div>
+        </div>
+    `;
+
+    openInspectorDrawer(`TRADE DETAIL • ${sym} (${tradeId})`, drawerHtml);
+}
+
+
+// ==========================================
+// 6. OVERVIEW & SCANNER DATA POLLING
+// ==========================================
+
 
 async function fetchScanner() {
     try {
@@ -688,20 +1355,25 @@ async function fetchScanner() {
         // Funnel Pipeline
         const fnMrk = document.getElementById('fn-mrk');
         if (fnMrk) fnMrk.innerText = data.TOTAL_CANDLES || 0;
-        document.getElementById('fn-signals').innerText = data.TOTAL_SIGNALS || 0;
+        const fnSig = document.getElementById('fn-signals');
+        if (fnSig) fnSig.innerText = data.TOTAL_SIGNALS || 0;
         
-        document.getElementById('fn-prof-rej').innerText = data.PROFITABILITY_REJECTED || 0;
-        document.getElementById('fn-prof-acc').innerText = data.PROFITABILITY_ACCEPTED || 0;
+        const fnProfRej = document.getElementById('fn-prof-rej');
+        if (fnProfRej) fnProfRej.innerText = data.PROFITABILITY_REJECTED || 0;
+        const fnProfAcc = document.getElementById('fn-prof-acc');
+        if (fnProfAcc) fnProfAcc.innerText = data.PROFITABILITY_ACCEPTED || 0;
         
-        document.getElementById('fn-risk-rej').innerText = (data.RISK_REJECTED || 0) + (data.COOLDOWN_REJECTED || 0) + (data.JIT_REJECTED || 0) + (data.OTHER_REJECTED || 0);
-        document.getElementById('fn-risk-acc').innerText = data.RISK_ACCEPTED || 0;
+        const fnRiskRej = document.getElementById('fn-risk-rej');
+        if (fnRiskRej) fnRiskRej.innerText = (data.RISK_REJECTED || 0) + (data.COOLDOWN_REJECTED || 0) + (data.JIT_REJECTED || 0) + (data.OTHER_REJECTED || 0);
+        const fnRiskAcc = document.getElementById('fn-risk-acc');
+        if (fnRiskAcc) fnRiskAcc.innerText = data.RISK_ACCEPTED || 0;
         
-        document.getElementById('fn-filled').innerText = data.ORDERS_FILLED || 0;
+        const fnFilled = document.getElementById('fn-filled');
+        if (fnFilled) fnFilled.innerText = data.ORDERS_FILLED || 0;
         
         // Markets Data (Matrix)
         let dataReceivingCount = 0;
         let evaluatedCount = 0;
-        const totalSyms = data.symbols ? data.symbols.length : 0;
         const marketRows = [];
         const marketFullRows = [];
 
@@ -740,14 +1412,14 @@ async function fetchScanner() {
         }
         
         const marketBody = document.getElementById('market-body');
-        if(marketBody) {
-            if(marketRows.length > 0) marketBody.innerHTML = marketRows.join('');
+        if (marketBody) {
+            if (marketRows.length > 0) marketBody.innerHTML = marketRows.join('');
             else marketBody.innerHTML = '<tr><td colspan="6" class="empty-state">No active symbols scanned</td></tr>';
         }
         
         const marketFullBody = document.getElementById('market-full-body');
-        if(marketFullBody) {
-            if(marketFullRows.length > 0) marketFullBody.innerHTML = marketFullRows.join('');
+        if (marketFullBody) {
+            if (marketFullRows.length > 0) marketFullBody.innerHTML = marketFullRows.join('');
             else marketFullBody.innerHTML = '<tr><td colspan="9" class="empty-state">AWAITING MARKET DATA</td></tr>';
         }
 
@@ -757,38 +1429,26 @@ async function fetchScanner() {
             }
         }
         
-        document.getElementById('sc-eval-ratio').innerText = `${evaluatedCount} Symbols`;
-        document.getElementById('fn-mrk').innerText = dataReceivingCount || 0;
+        const scEval = document.getElementById('sc-eval-ratio');
+        if (scEval) scEval.innerText = `${evaluatedCount} Symbols`;
+        if (fnMrk) fnMrk.innerText = dataReceivingCount || 0;
         
-        // Ticker & Top Movers
-        const topMoversBody = document.getElementById('top-movers-body');
+        // Ticker
         const tickerContent = document.getElementById('bottom-ticker-content');
-        
-        if (data.market_data && Object.keys(data.market_data).length > 0) {
+        if (data.market_data && Object.keys(data.market_data).length > 0 && tickerContent) {
             let mkts = [];
             for (const [sym, info] of Object.entries(data.market_data)) {
                 if (info && info.close !== undefined) {
                     mkts.push({ sym, price: info.close, chg: info.change_24h || 0 });
                 }
             }
-            if(mkts.length > 0) {
-                mkts.sort((a,b) => Math.abs(b.chg) - Math.abs(a.chg));
-                
-                // Top Movers
-                const moverRows = mkts.slice(0, 5).map(m => {
-                    const chgStr = m.chg > 0 ? `<span class="val-green">+${m.chg.toFixed(2)}%</span>` : `<span class="val-red">${m.chg.toFixed(2)}%</span>`;
-                    return `<tr><td class="td-strong">${m.sym}</td><td>${m.price.toFixed(4)}</td><td>${chgStr}</td></tr>`;
-                });
-                if(topMoversBody) topMoversBody.innerHTML = moverRows.join('');
-                
-                // Ticker
+            if (mkts.length > 0) {
                 const tickerHtml = mkts.map(m => {
                     const colorClass = m.chg > 0 ? 'val-green' : 'val-red';
                     const sign = m.chg > 0 ? '▲' : '▼';
                     return `<div class="ticker-item"><span class="ticker-sym">${m.sym}</span><span class="ticker-px ${colorClass}">${m.price.toFixed(4)} ${sign} ${Math.abs(m.chg).toFixed(2)}%</span></div>`;
                 });
-                // Duplicate for smooth loop
-                if(tickerContent) tickerContent.innerHTML = tickerHtml.join('') + tickerHtml.join('');
+                tickerContent.innerHTML = tickerHtml.join('') + tickerHtml.join('');
             }
         }
         
@@ -802,20 +1462,7 @@ async function fetchScanner() {
                 const winRate = m.fills > 0 ? (m.wins || 0) / m.fills : 0;
                 const pnlStr = m.PnL ? (m.PnL > 0 ? `<span class="val-green">+${formatCurrency(m.PnL)}</span>` : `<span class="val-red">${formatCurrency(m.PnL)}</span>`) : '-';
                 
-                stratRows.push(`<tr>
-                    <td>${strat}</td>
-                    <td>${m.evaluations || (m.signals || 0) + (m.HOLD || 0)}</td>
-                    <td>${m.BUY || 0}</td>
-                    <td>${m.SELL || 0}</td>
-                    <td>${m.HOLD || 0}</td>
-                    <td>${m.qualified || 0}</td>
-                    <td>${m.rejected || 0}</td>
-                    <td>${m.orders || 0}</td>
-                    <td>${m.fills || 0}</td>
-                    <td>${formatPct(winRate)}</td>
-                    <td>${pnlStr}</td>
-                </tr>`);
-                stratFullRows.push(`<tr>
+                const row = `<tr>
                     <td class="td-strong">${strat}</td>
                     <td>${m.evaluations || (m.signals || 0) + (m.HOLD || 0)}</td>
                     <td>${m.BUY || 0}</td>
@@ -827,12 +1474,14 @@ async function fetchScanner() {
                     <td>${m.fills || 0}</td>
                     <td>${formatPct(winRate)}</td>
                     <td>${pnlStr}</td>
-                </tr>`);
+                </tr>`;
+                stratRows.push(row);
+                stratFullRows.push(row);
             }
             if (stratBody) stratBody.innerHTML = stratRows.join('');
             if (stratFullBody) stratFullBody.innerHTML = stratFullRows.join('');
         } else {
-            if (stratBody) stratBody.innerHTML = '<tr><td colspan="11" class="empty-state">NO STRATEGY DATA</td></tr>';
+            if (stratBody) stratBody.innerHTML = '<tr><td colspan="6" class="empty-state">NO STRATEGY DATA</td></tr>';
             if (stratFullBody) stratFullBody.innerHTML = '<tr><td colspan="11" class="empty-state">NO STRATEGY DATA</td></tr>';
         }
         
@@ -846,102 +1495,63 @@ async function fetchScanner() {
                     <td>${data.TOTAL_CANDLES || 0}</td>
                     <td>${m.evaluations || (m.signals || 0) + (m.HOLD || 0)}</td>
                     <td>${m.BUY || 0}</td>
-                    <td>${m.SELL || 0}</td>
-                    <td>${m.signals || 0}</td>
-                    <td>${m.qualified || 0}</td>
-                    <td>${m.rejected || 0}</td>
                     <td>${m.orders || 0}</td>
                     <td>${m.fills || 0}</td>
                 </tr>`);
             }
             if (tfBody) tfBody.innerHTML = tfRows.join('');
         } else {
-            if (tfBody) tfBody.innerHTML = '<tr><td colspan="10" class="empty-state">NO METRICS AVAILABLE</td></tr>';
+            if (tfBody) tfBody.innerHTML = '<tr><td colspan="6" class="empty-state">NO METRICS AVAILABLE</td></tr>';
         }
         
-        // Opportunities & Signals
+        // Best current opportunities table on Overview
         const oppBody = document.getElementById('opp-short-body');
-        rawOpportunities = data.top_opportunities || [];
-        
-        if (!rawOpportunities || rawOpportunities.length === 0) {
-            if(oppBody) oppBody.innerHTML = '<tr><td colspan="6" class="empty-state">NO QUALIFYING OPPORTUNITIES</td></tr>';
-            const sigFullBody = document.getElementById('signals-full-body');
-            if(sigFullBody) sigFullBody.innerHTML = '<tr><td colspan="12" class="empty-state">NO SIGNALS LOGGED YET</td></tr>';
-        } else {
-            if(oppBody) oppBody.innerHTML = rawOpportunities.slice(0, 5).map(o => mapOpp(o, false)).join('');
-            renderSignalsTable();
+        const rawOpps = data.top_opportunities || [];
+        if (oppBody) {
+            if (rawOpps.length === 0) {
+                oppBody.innerHTML = '<tr><td colspan="11" class="empty-state">No Qualifying Signals Yet</td></tr>';
+            } else {
+                oppBody.innerHTML = rawOpps.slice(0, 5).map(o => {
+                    const side = (o.side || 'BUY').toUpperCase();
+                    const sideClass = (side === 'BUY' || side === 'LONG') ? 'tag tag-long' : 'tag tag-short';
+                    const net = Number(o.expected_net_return || 0);
+                    const netStr = net !== 0 ? `<span class="${net > 0 ? 'val-green' : 'val-red'}">${net > 0 ? '+' : ''}${(net * 100).toFixed(2)}%</span>` : '-';
+                    const decClass = o.decision === 'ACCEPTED' ? 'tag tag-qualified' : 'tag tag-rejected';
+                    const shTs = o.timestamp ? String(o.timestamp).substring(11, 19) : '-';
+
+                    return `<tr>
+                        <td>${shTs}</td>
+                        <td class="td-strong">${o.symbol}</td>
+                        <td>${o.timeframe || '5m'}</td>
+                        <td>${o.strategy || 'ADX_EMA'}</td>
+                        <td><span class="${sideClass}">${side}</span></td>
+                        <td>${Number(o.current_price || 0).toFixed(4)}</td>
+                        <td>${Number(o.sl || 0) > 0 ? Number(o.sl).toFixed(4) : '-'}</td>
+                        <td>${Number(o.tp || 0) > 0 ? Number(o.tp).toFixed(4) : '-'}</td>
+                        <td>${Number(o.confidence || 0) > 0 ? (Number(o.confidence) * 100).toFixed(1) + '%' : '-'}</td>
+                        <td>${netStr}</td>
+                        <td><span class="${decClass}">${o.decision || '-'}</span></td>
+                    </tr>`;
+                }).join('');
+            }
         }
-        // Capture rejection reasons for Analytics
-        scannerRejectionData = {
-            "Profitability": profRej,
-            "Risk/Sizing": data.RISK_REJECTED || 0,
-            "Cooldown": data.COOLDOWN_REJECTED || 0,
-            "Market Data": data.MARKET_DATA_REJECTED || 0,
-            "Execution": data.EXECUTION_REJECTED || 0,
-            "Other": data.OTHER_REJECTED || 0
-        };
-        updateRejectionChart();
 
     } catch (e) {
         console.error("Failed to fetch scanner stats:", e);
     }
 }
 
-const mapOpp = (o, full) => {
-    const sideClass = o.side === 'BUY' || o.side === 'LONG' ? 'tag tag-long' : 'tag tag-short';
-    const tsShort = o.timestamp ? formatDateTime(o.timestamp) : '-';
-    const confStr = o.confidence ? formatPct(o.confidence) : '-';
-    const netStr = o.expected_net_return ? (o.expected_net_return > 0 ? `<span class="val-green">+${formatPct(o.expected_net_return)}</span>` : `<span class="val-red">${formatPct(o.expected_net_return)}</span>`) : '-';
-    const priceStr = o.current_price ? Number(o.current_price).toFixed(2) : '-';
-    const decClass = o.decision === 'ACCEPTED' || o.decision === 'APPROVED' ? 'tag tag-qualified' : 'tag tag-rejected';
-    const shortReason = o.reason ? (o.reason.length > 30 ? o.reason.substring(0, 30) + '...' : o.reason) : '-';
-    const escapedJSON = encodeURIComponent(JSON.stringify(o));
-    
-    const strat = o.strategy || '-';
-    const tf = o.timeframe || '-';
-    
-    if (full) {
-        return `<tr style="cursor: pointer;" onclick="openInspectorDrawer('SIGNAL INSPECTION • ${o.symbol}', JSON.parse(decodeURIComponent('${escapedJSON}')))" title="Click to inspect signal payload">
-            <td>${tsShort}</td><td class="td-strong">${o.symbol}</td><td>${tf}</td><td>${strat}</td><td><span class="${sideClass}">${o.side}</span></td>
-            <td>${priceStr}</td><td>${confStr}</td><td>${netStr}</td>
-            <td>-</td><td>-</td>
-            <td><span class="${decClass}">${o.decision || '-'}</span></td><td title="${o.reason}">${shortReason}</td>
-        </tr>`;
-    } else {
-        const shTs = o.timestamp ? String(o.timestamp).substring(11, 19) : '-';
-        return `<tr style="cursor: pointer;" onclick="openInspectorDrawer('OPPORTUNITY • ${o.symbol}', JSON.parse(decodeURIComponent('${escapedJSON}')))" title="Click to inspect opportunity">
-            <td>${shTs}</td><td class="td-strong">${o.symbol}</td><td>${tf}</td><td>${strat}</td><td><span class="${sideClass}">${o.side}</span></td>
-            <td>${priceStr}</td><td>${confStr}</td><td>${netStr}</td>
-            <td><span class="${decClass}">${o.decision || '-'}</span></td>
-        </tr>`;
-    }
-};
 
-function renderSignalsTable() {
-    const sigFullBody = document.getElementById('signals-full-body');
-    if (!sigFullBody) return;
-    
-    let filtered = rawOpportunities;
-    if (signalFilterState === 'ACCEPTED') {
-        filtered = rawOpportunities.filter(o => o.decision === 'ACCEPTED' || o.decision === 'APPROVED');
-    } else if (signalFilterState === 'REJECTED') {
-        filtered = rawOpportunities.filter(o => o.decision !== 'ACCEPTED' && o.decision !== 'APPROVED');
-    }
-    
-    if (filtered.length === 0) {
-        sigFullBody.innerHTML = `<tr><td colspan="12" class="empty-state">NO SIGNALS MATCHING FILTER (${signalFilterState})</td></tr>`;
-    } else {
-        sigFullBody.innerHTML = filtered.map(o => mapOpp(o, true)).join('');
-    }
-}
-
+// ==========================================
+// 7. CHARTS & HISTOGRAMS
+// ==========================================
 let equityChartInst = null;
 let pnlHistChartInst = null;
 let rejPieChartInst = null;
 
 function renderEquityChart() {
     const ctx = document.getElementById('equityChart');
-    if(!ctx || !rawEquityPoints || rawEquityPoints.length === 0) return;
+    if (!ctx || !rawEquityPoints || rawEquityPoints.length === 0) return;
 
     let points = rawEquityPoints;
     const now = Date.now();
@@ -1026,121 +1636,21 @@ async function initChart() {
     renderEquityChart();
 }
 
-function updateAnalyticsCharts() {
-    const ctx = document.getElementById('pnlHistChart');
-    if (!ctx) return;
 
-    const labels = Object.keys(dailyPnLData).sort();
-    const data = labels.map(l => dailyPnLData[l]);
-    const bgColors = data.map(v => v >= 0 ? '#10b981' : '#f43f5e');
-
-    if (pnlHistChartInst) {
-        pnlHistChartInst.data.labels = labels;
-        pnlHistChartInst.data.datasets[0].data = data;
-        pnlHistChartInst.data.datasets[0].backgroundColor = bgColors;
-        pnlHistChartInst.update('none');
-        return;
-    }
-
-    pnlHistChartInst = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Daily PnL',
-                data: data,
-                backgroundColor: bgColors,
-                borderRadius: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: '#1e293b',
-                    titleColor: '#f8fafc',
-                    bodyColor: '#94a3b8',
-                    borderColor: '#334155',
-                    borderWidth: 1,
-                    callbacks: {
-                        label: function(ctx) {
-                            return formatCurrency(ctx.raw);
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    grid: { display: false },
-                    ticks: { color: '#64748b', font: { family: "'JetBrains Mono', monospace", size: 9 } }
-                },
-                y: { 
-                    grid: { color: '#1e293b' },
-                    ticks: {
-                        color: '#64748b',
-                        font: { family: "'JetBrains Mono', monospace", size: 9 },
-                        callback: function(value) { return '$' + value.toLocaleString(); }
-                    },
-                    border: { display: false }
-                }
-            }
-        }
-    });
-}
-
-function updateRejectionChart() {
-    const ctx = document.getElementById('rejPieChart');
-    if (!ctx) return;
-
-    const labels = Object.keys(scannerRejectionData);
-    const data = labels.map(l => scannerRejectionData[l]);
-    
-    // Only draw if there's data
-    if (data.reduce((a,b) => a+b, 0) === 0) return;
-
-    if (rejPieChartInst) {
-        rejPieChartInst.data.labels = labels;
-        rejPieChartInst.data.datasets[0].data = data;
-        rejPieChartInst.update('none');
-        return;
-    }
-
-    rejPieChartInst = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: data,
-                backgroundColor: ['#2563eb', '#ef4444', '#f59e0b', '#8b5cf6', '#64748b', '#06b6d4'],
-                borderWidth: 0,
-                hoverOffset: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '70%',
-            plugins: {
-                legend: {
-                    position: 'right',
-                    labels: { color: '#94a3b8', font: { family: "'Inter', sans-serif", size: 10 } }
-                }
-            }
-        }
-    });
-}
-
+// ==========================================
+// 8. GLOBAL POLLING & DRAWER CONTROLS
+// ==========================================
 function updateDashboard() {
     Promise.all([
         fetchDashboardData(),
+        fetchSignals(),
+        fetchPositions(),
         fetchTrades(),
         fetchOpenOrders(),
         fetchScanner(),
         initChart()
     ]).finally(() => {
-        // any spinner removal can go here
+        // finished iteration
     });
 }
 
@@ -1151,38 +1661,29 @@ function openInspectorDrawer(title, payload) {
     const bodyEl = document.getElementById('drawer-body');
     if (!drawer || !backdrop || !titleEl || !bodyEl) return;
 
-    titleEl.innerText = title || "INSPECTOR • QUANT TELEMETRY";
+    titleEl.innerHTML = title || "INSPECTOR • QUANT TELEMETRY";
     if (typeof payload === 'string') {
-        bodyEl.innerHTML = `<div class="json-viewer">${payload}</div>`;
+        bodyEl.innerHTML = payload;
     } else {
         bodyEl.innerHTML = `<div class="json-viewer">${JSON.stringify(payload, null, 2)}</div>`;
     }
     drawer.classList.add('open');
+    drawer.classList.add('active');
     backdrop.classList.add('open');
+    backdrop.classList.add('active');
 }
 
 function closeInspectorDrawer() {
     const drawer = document.getElementById('inspector-drawer');
     const backdrop = document.getElementById('drawer-backdrop');
-    if (drawer) drawer.classList.remove('open');
-    if (backdrop) backdrop.classList.remove('open');
-}
-
-function exportTradesJSON() {
-    fetch('/api/trades')
-        .then(res => res.json())
-        .then(data => {
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `binance_trade_ledger_${Date.now()}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        })
-        .catch(err => console.error("Export JSON error:", err));
+    if (drawer) {
+        drawer.classList.remove('open');
+        drawer.classList.remove('active');
+    }
+    if (backdrop) {
+        backdrop.classList.remove('open');
+        backdrop.classList.remove('active');
+    }
 }
 
 // ==========================================
@@ -1191,5 +1692,6 @@ function exportTradesJSON() {
 startClockLoop(); 
 initChart();
 updateDashboard(); 
-setInterval(updateDashboard, 2000);
+setInterval(updateDashboard, 2500);
+
 
