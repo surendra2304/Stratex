@@ -680,9 +680,9 @@
                 </div>
 
                 <!-- CHART CONTAINER -->
-                <div class="panel-card" style="display: flex; flex-direction: column; margin-bottom: 16px; min-height: 500px; height: 60vh;">
+                <div class="panel-card" id="markets-chart-container" style="display: flex; flex-direction: column; margin-bottom: 16px; min-height: 500px; height: 60vh; position: relative;">
                     <!-- CHART TOOLBAR -->
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border-medium);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border-medium); background: var(--bg-panel); position: relative; z-index: 50;">
                         <div style="display: flex; gap: 16px; align-items: center;">
                             <!-- TIMEFRAMES -->
                             <div id="mkt-tf-row" style="display: flex; gap: 12px;">
@@ -696,26 +696,54 @@
                             
                             <div style="width: 1px; height: 16px; background: var(--border-medium);"></div>
                             
-                            <!-- DROPDOWNS -->
-                            <div class="dropdown">
-                                <span class="mono text-muted" style="cursor:pointer; font-size: 12px;">CANDLESTICK ▾</span>
+                            <!-- CANDLESTICK DROPDOWN -->
+                            <div class="dropdown" style="position: relative;">
+                                <span class="mono text-muted" id="btn-mkt-type" style="cursor:pointer; font-size: 12px;" onclick="toggleMarketDropdown('mkt-dd-type')">CANDLESTICK ▾</span>
+                                <div id="mkt-dd-type" class="dropdown-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 8px; background: var(--bg-panel); border: 1px solid var(--border-medium); border-radius: 4px; padding: 8px; width: 140px; box-shadow: 0 8px 16px rgba(0,0,0,0.6);">
+                                    <div class="dd-item" style="padding: 6px 8px; cursor: pointer; color: var(--text-primary); font-size: 11px;" onclick="setChartType('area')">Area Chart</div>
+                                    <div class="dd-item" style="padding: 6px 8px; cursor: pointer; color: var(--text-primary); font-size: 11px;" onclick="setChartType('line')">Line Chart</div>
+                                    <div class="dd-item" style="padding: 6px 8px; cursor: pointer; color: var(--text-primary); font-size: 11px;" onclick="setChartType('stepped')">Stepped Curve</div>
+                                </div>
                             </div>
                             <div style="width: 1px; height: 16px; background: var(--border-medium);"></div>
-                            <div class="dropdown">
-                                <span class="mono text-muted" style="cursor:pointer; font-size: 12px;">INDICATORS ▾</span>
+
+                            <!-- INDICATORS DROPDOWN -->
+                            <div class="dropdown" style="position: relative;">
+                                <span class="mono text-muted" id="btn-mkt-ind" style="cursor:pointer; font-size: 12px;" onclick="toggleMarketDropdown('mkt-dd-ind')">INDICATORS ▾</span>
+                                <div id="mkt-dd-ind" class="dropdown-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 8px; background: var(--bg-panel); border: 1px solid var(--border-medium); border-radius: 4px; padding: 8px; width: 160px; box-shadow: 0 8px 16px rgba(0,0,0,0.6);">
+                                    <label style="display: flex; align-items: center; gap: 8px; padding: 4px 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                                        <input type="checkbox" id="chk-ind-ema20" checked onchange="toggleChartIndicator('ema20')"> EMA (20)
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 8px; padding: 4px 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                                        <input type="checkbox" id="chk-ind-ema50" checked onchange="toggleChartIndicator('ema50')"> EMA (50)
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 8px; padding: 4px 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                                        <input type="checkbox" id="chk-ind-vol" checked onchange="toggleChartIndicator('vol')"> Volume Bars
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 8px; padding: 4px 6px; cursor: pointer; font-size: 11px; color: var(--text-primary);">
+                                        <input type="checkbox" id="chk-ind-markers" checked onchange="toggleChartIndicator('markers')"> Trade / Signal Markers
+                                    </label>
+                                </div>
                             </div>
                             <div style="width: 1px; height: 16px; background: var(--border-medium);"></div>
-                            <div class="dropdown">
-                                <span class="mono text-muted" style="cursor:pointer; font-size: 12px;">DRAW ▾</span>
+
+                            <!-- DRAW DROPDOWN -->
+                            <div class="dropdown" style="position: relative;">
+                                <span class="mono text-muted" id="btn-mkt-draw" style="cursor:pointer; font-size: 12px;" onclick="toggleMarketDropdown('mkt-dd-draw')">DRAW ▾</span>
+                                <div id="mkt-dd-draw" class="dropdown-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 8px; background: var(--bg-panel); border: 1px solid var(--border-medium); border-radius: 4px; padding: 8px; width: 150px; box-shadow: 0 8px 16px rgba(0,0,0,0.6);">
+                                    <div class="dd-item" style="padding: 6px 8px; cursor: pointer; color: var(--text-primary); font-size: 11px;" onclick="applyChartDrawing('horiz')">Horizontal Level</div>
+                                    <div class="dd-item" style="padding: 6px 8px; cursor: pointer; color: var(--text-primary); font-size: 11px;" onclick="applyChartDrawing('channel')">Volatility Channel</div>
+                                    <div class="dd-item" style="padding: 6px 8px; cursor: pointer; color: var(--loss-red); font-size: 11px;" onclick="applyChartDrawing('clear')">Clear Drawings</div>
+                                </div>
                             </div>
                         </div>
                         <div>
-                            <span class="mono text-muted" style="cursor:pointer; font-size: 14px;" title="Fullscreen">⛶</span>
+                            <span class="mono text-muted" style="cursor:pointer; font-size: 14px; padding: 4px;" title="Toggle Fullscreen" onclick="toggleMarketsFullscreen()">⛶</span>
                         </div>
                     </div>
                     
                     <!-- CHART CANVAS -->
-                    <div style="flex: 1; position: relative; width: 100%; padding: 16px;">
+                    <div style="flex: 1; position: relative; width: 100%; padding: 16px; background: var(--bg-base);">
                         <canvas id="markets-main-chart"></canvas>
                     </div>
                 </div>

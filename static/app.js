@@ -4987,13 +4987,105 @@ function inspectTradeLifecycleV2(t) {
 }
 
 // ==========================================
-// MARKETS LOGIC V2
+// MARKETS LOGIC V2 (PRO CHART ENGINE)
 // ==========================================
 
 activeMarketSymbol = 'BTCUSDT';
 let activeMarketTF = '15m';
 let marketsChartInst = null;
 let marketCandles = [];
+let chartTypeMode = 'area'; // 'area', 'line', 'stepped'
+let chartIndicators = {
+    ema20: true,
+    ema50: true,
+    vol: true,
+    markers: true
+};
+let activeDrawingTool = null; // 'horiz', 'channel', null
+let marketPositionsAndTrades = { positions: [], signals: [], trades: [] };
+
+function toggleMarketDropdown(ddId) {
+    const target = document.getElementById(ddId);
+    if (!target) return;
+    const isShowing = target.style.display === 'block';
+    
+    // Close all dropdowns
+    document.querySelectorAll('#markets-chart-container .dropdown-menu').forEach(dd => {
+        dd.style.display = 'none';
+    });
+    
+    if (!isShowing) {
+        target.style.display = 'block';
+    }
+}
+
+function setChartType(type) {
+    chartTypeMode = type;
+    const btn = document.getElementById('btn-mkt-type');
+    if (btn) btn.innerText = (type.toUpperCase()) + ' ▾';
+    
+    document.querySelectorAll('#markets-chart-container .dropdown-menu').forEach(dd => dd.style.display = 'none');
+    renderMarketChart();
+}
+
+function toggleChartIndicator(key) {
+    const chk = document.getElementById(`chk-ind-${key}`);
+    if (chk) {
+        chartIndicators[key] = chk.checked;
+    }
+    renderMarketChart();
+}
+
+function applyChartDrawing(type) {
+    if (type === 'clear') {
+        activeDrawingTool = null;
+    } else {
+        activeDrawingTool = type;
+    }
+    document.querySelectorAll('#markets-chart-container .dropdown-menu').forEach(dd => dd.style.display = 'none');
+    renderMarketChart();
+}
+
+function toggleMarketsFullscreen() {
+    const container = document.getElementById('markets-chart-container');
+    if (!container) return;
+    
+    if (!document.fullscreenElement) {
+        container.requestFullscreen().catch(err => {
+            console.warn(`Fullscreen request failed: ${err.message}`);
+        });
+    } else {
+        document.exitFullscreen();
+    }
+}
+
+// Global click listener to close dropdowns when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown')) {
+        document.querySelectorAll('#markets-chart-container .dropdown-menu').forEach(dd => {
+            dd.style.display = 'none';
+        });
+    }
+});
+
+function calculateEMA(prices, period) {
+    if (prices.length < period) return new Array(prices.length).fill(null);
+    const k = 2 / (period + 1);
+    const emaArray = new Array(prices.length).fill(null);
+    
+    // Calculate initial SMA for starting EMA value
+    let sum = 0;
+    for (let i = 0; i < period; i++) sum += prices[i];
+    let prevEma = sum / period;
+    emaArray[period - 1] = prevEma;
+    
+    for (let i = period; i < prices.length; i++) {
+        const curEma = (prices[i] * k) + (prevEma * (1 - k));
+        emaArray[i] = curEma;
+        prevEma = curEma;
+    }
+    return emaArray;
+}
 
 function changeMarketSymbol(sym, el) {
     activeMarketSymbol = sym;
@@ -5013,7 +5105,7 @@ function changeMarketSymbol(sym, el) {
 
 function changeMarketTimeframe(tf, el) {
     activeMarketTF = tf;
-    document.querySelectorAll('.mkt-tf').forEach(e => {
+    document.querySelectorAll('#mkt-tf-row .mkt-tf').forEach(e => {
         e.classList.remove('active');
         e.style.color = 'var(--text-muted)';
         e.style.fontWeight = 'normal';
@@ -5029,8 +5121,21 @@ function changeMarketTimeframe(tf, el) {
 async function fetchMarketData() {
     try {
         const res = await apiClient.get(`/api/candles?symbol=${activeMarketSymbol}&tf=${activeMarketTF}&limit=100`);
-        if (res && Array.isArray(res)) {
+        if (res && Array.isArray(res) && res.length > 0) {
             marketCandles = res;
+            
+            // Concurrently fetch positions and recent signals for on-chart overlay markers
+            try {
+                const [posRes, scanRes] = await Promise.all([
+                    apiClient.get('/api/positions'),
+                    apiClient.get('/api/scanner')
+                ]);
+                marketPositionsAndTrades.positions = Array.isArray(posRes) ? posRes.filter(p => p.symbol === activeMarketSymbol) : [];
+                marketPositionsAndTrades.signals = (scanRes && Array.isArray(scanRes.recent_signals)) ? scanRes.recent_signals.filter(s => s.symbol === activeMarketSymbol) : [];
+            } catch (e) {
+                console.warn("Overlay telemetry fetch error:", e);
+            }
+
             renderMarketChart();
             updateMarketInfoBar(res);
         }
@@ -5040,7 +5145,7 @@ async function fetchMarketData() {
 }
 
 function updateMarketInfoBar(data) {
-    if (data.length === 0) return;
+    if (!data || data.length === 0) return;
     const last = data[data.length - 1];
     const first = data[0];
     
@@ -5051,7 +5156,7 @@ function updateMarketInfoBar(data) {
     data.forEach(c => {
         if (c.high > high24) high24 = c.high;
         if (c.low < low24) low24 = c.low;
-        vol24 += c.volume;
+        vol24 += (c.volume || 0);
     });
     
     const change = ((last.close - first.open) / first.open) * 100;
@@ -5059,66 +5164,291 @@ function updateMarketInfoBar(data) {
     const cStr = (change >= 0 ? '+' : '') + change.toFixed(2) + '%';
     
     // Ticker bar
-    document.getElementById('mkt-price').innerText = '$' + last.close.toFixed(4);
-    document.getElementById('mkt-change').innerText = cStr;
-    document.getElementById('mkt-change').className = 'mono ' + cClass;
-    document.getElementById('mkt-high').innerText = high24.toFixed(4);
-    document.getElementById('mkt-low').innerText = low24.toFixed(4);
-    document.getElementById('mkt-vol').innerText = vol24.toFixed(2);
+    const pEl = document.getElementById('mkt-price');
+    if (pEl) pEl.innerText = '$' + last.close.toFixed(2);
+    const chEl = document.getElementById('mkt-change');
+    if (chEl) {
+        chEl.innerText = cStr;
+        chEl.className = 'mono ' + cClass;
+    }
+    const hEl = document.getElementById('mkt-high');
+    if (hEl) hEl.innerText = '$' + high24.toFixed(2);
+    const lEl = document.getElementById('mkt-low');
+    if (lEl) lEl.innerText = '$' + low24.toFixed(2);
+    const vEl = document.getElementById('mkt-vol');
+    if (vEl) vEl.innerText = vol24.toFixed(2);
     
     // Info table
-    document.getElementById('mi-price').innerText = last.close.toFixed(4);
-    document.getElementById('mi-open').innerText = last.open.toFixed(4);
-    document.getElementById('mi-high').innerText = last.high.toFixed(4);
-    document.getElementById('mi-low').innerText = last.low.toFixed(4);
-    document.getElementById('mi-vol').innerText = vol24.toFixed(2);
-    document.getElementById('mi-change').innerText = cStr;
-    document.getElementById('mi-change').className = 'mono ' + cClass;
+    const miPrice = document.getElementById('mi-price');
+    if (miPrice) miPrice.innerText = '$' + last.close.toFixed(2);
+    const miOpen = document.getElementById('mi-open');
+    if (miOpen) miOpen.innerText = '$' + first.open.toFixed(2);
+    const miHigh = document.getElementById('mi-high');
+    if (miHigh) miHigh.innerText = '$' + high24.toFixed(2);
+    const miLow = document.getElementById('mi-low');
+    if (miLow) miLow.innerText = '$' + low24.toFixed(2);
+    const miVol = document.getElementById('mi-vol');
+    if (miVol) miVol.innerText = vol24.toFixed(2);
+    const miChange = document.getElementById('mi-change');
+    if (miChange) {
+        miChange.innerText = cStr;
+        miChange.className = 'mono ' + cClass;
+    }
 }
 
 function renderMarketChart() {
-    const ctx = document.getElementById('markets-main-chart');
-    if (!ctx) return;
+    const canvas = document.getElementById('markets-main-chart');
+    if (!canvas || !marketCandles || marketCandles.length === 0) return;
     
-    if (marketsChartInst) marketsChartInst.destroy();
+    // Lifecycle Management: Destroy existing instance before creating a new one
+    if (marketsChartInst) {
+        try {
+            marketsChartInst.destroy();
+        } catch (e) {
+            console.warn("marketsChartInst destroy warning:", e);
+        }
+        marketsChartInst = null;
+    }
     
-    const labels = marketCandles.map(c => new Date(c.time * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
-    const data = marketCandles.map(c => c.close);
+    const labels = marketCandles.map(c => new Date(c.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    const closePrices = marketCandles.map(c => c.close);
+    const volumes = marketCandles.map(c => c.volume || 0);
+    const numPoints = closePrices.length;
+    const currentPrice = closePrices[numPoints - 1];
     
-    const isBullish = marketCandles[marketCandles.length-1].close >= marketCandles[0].open;
+    const isBullish = currentPrice >= marketCandles[0].open;
     const strokeColor = isBullish ? '#10B981' : '#EF4444';
-    const bgColor = isBullish ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+    const bgColor = isBullish ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)';
     
-    marketsChartInst = new Chart(ctx, {
+    const datasets = [];
+    
+    // 1. Primary Price Action
+    datasets.push({
+        label: `${activeMarketSymbol} Price`,
         type: 'line',
+        data: closePrices,
+        borderColor: strokeColor,
+        backgroundColor: chartTypeMode === 'area' ? bgColor : 'transparent',
+        borderWidth: 2,
+        stepped: chartTypeMode === 'stepped',
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        fill: chartTypeMode === 'area',
+        tension: chartTypeMode === 'stepped' ? 0 : 0.15,
+        yAxisID: 'y'
+    });
+    
+    // 2. Volume Bars
+    if (chartIndicators.vol) {
+        datasets.push({
+            label: 'Volume',
+            type: 'bar',
+            data: volumes,
+            backgroundColor: marketCandles.map(c => c.close >= c.open ? 'rgba(16, 185, 129, 0.22)' : 'rgba(239, 68, 68, 0.22)'),
+            yAxisID: 'yVol',
+            barThickness: 4
+        });
+    }
+    
+    // 3. Technical Indicators: EMA 20 & EMA 50
+    if (chartIndicators.ema20) {
+        const ema20 = calculateEMA(closePrices, 20);
+        datasets.push({
+            label: 'EMA 20',
+            type: 'line',
+            data: ema20,
+            borderColor: '#3B82F6',
+            borderWidth: 1.2,
+            pointRadius: 0,
+            fill: false,
+            tension: 0.1,
+            yAxisID: 'y'
+        });
+    }
+    
+    if (chartIndicators.ema50) {
+        const ema50 = calculateEMA(closePrices, 50);
+        datasets.push({
+            label: 'EMA 50',
+            type: 'line',
+            data: ema50,
+            borderColor: '#F59E0B',
+            borderWidth: 1.2,
+            pointRadius: 0,
+            fill: false,
+            tension: 0.1,
+            yAxisID: 'y'
+        });
+    }
+    
+    // 4. Live Current Price Reference Line
+    datasets.push({
+        label: `LIVE ($${currentPrice.toFixed(2)})`,
+        type: 'line',
+        data: new Array(numPoints).fill(currentPrice),
+        borderColor: '#06B6D4',
+        borderWidth: 1,
+        borderDash: [3, 3],
+        pointRadius: 0,
+        fill: false,
+        yAxisID: 'y'
+    });
+    
+    // 5. Active Position & Trade Markers (SL, TP, Entry)
+    if (chartIndicators.markers && marketPositionsAndTrades.positions.length > 0) {
+        const activePos = marketPositionsAndTrades.positions[0];
+        const entryP = Number(activePos.entry_price || activePos.price || 0);
+        const slP = Number(activePos.stop_loss || activePos.sl_price || 0);
+        const tpP = Number(activePos.take_profit || activePos.tp_price || 0);
+        
+        if (entryP > 0) {
+            datasets.push({
+                label: `POSITION ENTRY ($${entryP.toFixed(2)})`,
+                type: 'line',
+                data: new Array(numPoints).fill(entryP),
+                borderColor: '#3B82F6',
+                borderWidth: 1.5,
+                borderDash: [5, 5],
+                pointRadius: 0,
+                fill: false,
+                yAxisID: 'y'
+            });
+        }
+        if (slP > 0) {
+            datasets.push({
+                label: `STOP LOSS ($${slP.toFixed(2)})`,
+                type: 'line',
+                data: new Array(numPoints).fill(slP),
+                borderColor: '#EF4444',
+                borderWidth: 1.5,
+                borderDash: [4, 4],
+                pointRadius: 0,
+                fill: false,
+                yAxisID: 'y'
+            });
+        }
+        if (tpP > 0) {
+            datasets.push({
+                label: `TAKE PROFIT ($${tpP.toFixed(2)})`,
+                type: 'line',
+                data: new Array(numPoints).fill(tpP),
+                borderColor: '#10B981',
+                borderWidth: 1.5,
+                borderDash: [4, 4],
+                pointRadius: 0,
+                fill: false,
+                yAxisID: 'y'
+            });
+        }
+    }
+    
+    // 6. Drawing Overlay Tools
+    if (activeDrawingTool === 'horiz') {
+        const midPrice = (Math.max(...closePrices) + Math.min(...closePrices)) / 2;
+        datasets.push({
+            label: `DRAWING: LEVEL ($${midPrice.toFixed(2)})`,
+            type: 'line',
+            data: new Array(numPoints).fill(midPrice),
+            borderColor: '#EC4899',
+            borderWidth: 1.5,
+            borderDash: [6, 3],
+            pointRadius: 0,
+            fill: false,
+            yAxisID: 'y'
+        });
+    } else if (activeDrawingTool === 'channel') {
+        const maxP = Math.max(...closePrices);
+        const minP = Math.min(...closePrices);
+        datasets.push({
+            label: 'CHANNEL TOP',
+            type: 'line',
+            data: new Array(numPoints).fill(maxP),
+            borderColor: '#8B5CF6',
+            borderWidth: 1,
+            borderDash: [2, 2],
+            pointRadius: 0,
+            fill: false,
+            yAxisID: 'y'
+        });
+        datasets.push({
+            label: 'CHANNEL BOTTOM',
+            type: 'line',
+            data: new Array(numPoints).fill(minP),
+            borderColor: '#8B5CF6',
+            borderWidth: 1,
+            borderDash: [2, 2],
+            pointRadius: 0,
+            fill: false,
+            yAxisID: 'y'
+        });
+    }
+
+    const ctx = canvas.getContext('2d');
+    marketsChartInst = new Chart(ctx, {
         data: {
             labels: labels,
-            datasets: [{
-                label: activeMarketSymbol,
-                data: data,
-                borderColor: strokeColor,
-                backgroundColor: bgColor,
-                borderWidth: 2,
-                pointRadius: 0,
-                fill: true,
-                tension: 0.1
-            }]
+            datasets: datasets
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
             plugins: {
-                legend: { display: false },
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        color: '#7C8AAD',
+                        font: { family: "'JetBrains Mono', monospace", size: 10 },
+                        boxWidth: 12
+                    }
+                },
                 tooltip: {
+                    backgroundColor: '#0A0F16',
+                    titleColor: '#3B82F6',
+                    bodyColor: '#EAF0FF',
+                    borderColor: '#1D2A3A',
+                    borderWidth: 1,
+                    padding: 10,
+                    titleFont: { family: "'JetBrains Mono', monospace", size: 11 },
+                    bodyFont: { family: "'JetBrains Mono', monospace", size: 11 },
                     callbacks: {
-                        label: function(ctx) { return 'Price: ' + ctx.raw; }
+                        label: function(item) {
+                            if (item.dataset.yAxisID === 'yVol') {
+                                return `Volume: ${Number(item.raw).toFixed(2)}`;
+                            }
+                            return `${item.dataset.label}: $${Number(item.raw).toFixed(2)}`;
+                        }
                     }
                 }
             },
             scales: {
-                x: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A', maxTicksLimit: 10 } },
-                y: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } }
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                    ticks: {
+                        color: '#7C8AAD',
+                        font: { family: "'JetBrains Mono', monospace", size: 9 },
+                        maxTicksLimit: 10
+                    }
+                },
+                y: {
+                    position: 'right',
+                    grid: { color: 'rgba(255, 255, 255, 0.06)' },
+                    ticks: {
+                        color: '#3B82F6',
+                        font: { family: "'JetBrains Mono', monospace", size: 9 },
+                        callback: function(v) { return '$' + Number(v).toFixed(2); }
+                    }
+                },
+                yVol: {
+                    position: 'left',
+                    display: false,
+                    max: Math.max(...volumes, 10) * 4,
+                    grid: { display: false }
+                }
             }
         }
     });
