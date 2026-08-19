@@ -15,11 +15,11 @@ def test_safety_matrix():
         ("TESTNET", False, "0", True, False, True, "ALLOWED_TESTNET"),
         ("TESTNET", True, "1", True, False, False, "PAPER_BLOCKED"), # PAPER_SAFE_MODE=True blocks first
         
-        # LIVE tests
+        # LIVE tests (FORBIDDEN BY DESIGN)
         ("LIVE", False, "1", True, True, False, "RESEARCH_BLOCKED"),
         ("LIVE", True, "0", False, True, False, "PAPER_BLOCKED"), 
-        ("LIVE", False, "0", False, False, False, "LIVE_DISABLED"),
-        ("LIVE", False, "0", False, True, True, "ALLOWED_LIVE"),
+        ("LIVE", False, "0", False, False, False, "LIVE_FORBIDDEN_BY_DESIGN"),
+        ("LIVE", False, "0", False, True, False, "LIVE_FORBIDDEN_BY_DESIGN"),
     ]
     
     for mode, safe_mode, res_mode, testnet_en, live_en, exp_allow, exp_reason in cases:
@@ -43,14 +43,14 @@ def test_paper_mode_execution_block():
         with pytest.raises(RuntimeError, match="PAPER mode attempted to place"):
             execution.place_market_order("test", "BUY", "BTCUSDT")
 
-def test_live_requires_explicit_enable():
+def test_live_is_permanently_forbidden():
     with patch("execution.TRADING_MODE", "LIVE"), \
-         patch("execution.LIVE_TRADING_ENABLED", False), \
+         patch("execution.LIVE_TRADING_ENABLED", True), \
          patch("execution.PAPER_SAFE_MODE", False):
         if "RESEARCH_MODE" in os.environ:
             del os.environ["RESEARCH_MODE"]
             
-        with pytest.raises(RuntimeError, match="LIVE execution attempted"):
+        with pytest.raises(RuntimeError, match="LIVE trading is permanently disabled"):
             execution.place_market_order("test", "BUY", "BTCUSDT")
 
 @patch("execution.Client")
@@ -61,9 +61,9 @@ def test_client_constructor_calls(mock_client):
         ("PAPER", False, "0", True, True, 0),
         ("TESTNET", False, "0", False, True, 0), # Testnet disabled
         ("LIVE", False, "0", False, False, 0),   # Live disabled
-        ("LIVE", False, "1", True, True, 0),     # Research mode blocks live
+        ("LIVE", False, "1", True, True, 0),     # Live forbidden
         ("TESTNET", False, "0", True, False, 1), # Testnet enabled
-        ("LIVE", False, "0", False, True, 1),    # Live fully enabled
+        ("LIVE", False, "0", False, True, 0),    # Live forbidden by design (0 calls)
     ]
     
     for mode, safe_mode, res_mode, testnet_en, live_en, expected_calls in cases:
@@ -76,9 +76,6 @@ def test_client_constructor_calls(mock_client):
              
             try:
                 client = execution.get_exchange_client()
-                if client is not None:
-                    # if client was created, it returned the mock instance
-                    pass
             except RuntimeError:
                 pass # expected for disabled modes
                 
@@ -87,5 +84,3 @@ def test_client_constructor_calls(mock_client):
             if expected_calls == 1:
                 if mode == "TESTNET":
                     mock_client.assert_called_with(execution.API_KEY, execution.SECRET_KEY, testnet=True)
-                elif mode == "LIVE":
-                    mock_client.assert_called_with(execution.API_KEY, execution.SECRET_KEY)

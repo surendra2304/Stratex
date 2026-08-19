@@ -34,35 +34,36 @@ class OrderState(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 # ==============================================================================
-# EXECUTION POLICY
+# EXECUTION POLICY (TESTNET ONLY - LIVE TRADING FORBIDDEN BY DESIGN)
 # ==============================================================================
 class ExecutionPolicy:
     @staticmethod
     def can_place_order() -> tuple[bool, str]:
-        """Returns (is_allowed, reason) for placing a real order."""
+        """Returns (is_allowed, reason) for placing a real order. LIVE trading is permanently impossible by design."""
         if TRADING_MODE == "PAPER" or PAPER_SAFE_MODE:
             return False, "PAPER_BLOCKED"
             
         if os.environ.get("RESEARCH_MODE") == "1":
             return False, "RESEARCH_BLOCKED"
-            
+
         if TRADING_MODE == "TESTNET":
             if not TESTNET_ENABLED:
                 return False, "TESTNET_DISABLED"
             return True, "ALLOWED_TESTNET"
-            
-        if TRADING_MODE == "LIVE":
-            if not LIVE_TRADING_ENABLED:
-                return False, "LIVE_DISABLED"
-            return True, "ALLOWED_LIVE"
+
+        if TRADING_MODE == "LIVE" or LIVE_TRADING_ENABLED:
+            return False, "LIVE_FORBIDDEN_BY_DESIGN"
             
         return False, "UNKNOWN_MODE"
 
 # ==============================================================================
-# CLIENT INITIALIZATION
+# CLIENT INITIALIZATION (TESTNET ONLY)
 # ==============================================================================
 def get_exchange_client():
-    """Lazily evaluates ExecutionPolicy to construct and return the Binance Client."""
+    """Lazily evaluates ExecutionPolicy to construct and return the Binance Testnet Client."""
+    if TRADING_MODE == "LIVE" or LIVE_TRADING_ENABLED:
+        raise RuntimeError("SECURITY CRITICAL: LIVE trading is permanently disabled by design in this repository.")
+
     if TRADING_MODE == "PAPER":
         return None
         
@@ -71,8 +72,8 @@ def get_exchange_client():
     if not allowed:
         if "TESTNET_DISABLED" in reason:
             raise RuntimeError("CRITICAL ERROR: TESTNET execution attempted but TESTNET_ENABLED is false.")
-        if "LIVE_DISABLED" in reason:
-            raise RuntimeError("CRITICAL ERROR: LIVE execution attempted but LIVE_TRADING_ENABLED is false.")
+        if "LIVE" in reason or "FORBIDDEN" in reason:
+            raise RuntimeError("SECURITY CRITICAL: LIVE trading is permanently disabled by design in this repository.")
         if "RESEARCH_BLOCKED" in reason:
             return None # Must return None so data.py doesn't crash on import, but client won't be created
         if "PAPER_BLOCKED" in reason:
@@ -84,8 +85,6 @@ def get_exchange_client():
         client = Client(API_KEY, SECRET_KEY, testnet=True)
         client.API_URL = "https://testnet.binance.vision/api"
         return client
-    elif TRADING_MODE == "LIVE":
-        return Client(API_KEY, SECRET_KEY)
         
     return None
 
@@ -200,8 +199,8 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
             raise RuntimeError(f"CRITICAL ERROR: Real execution attempted from a research script. ({reason})")
         if "TESTNET_DISABLED" in reason:
             raise RuntimeError("CRITICAL ERROR: TESTNET execution attempted but TESTNET_ENABLED is false.")
-        if "LIVE_DISABLED" in reason:
-            raise RuntimeError("CRITICAL ERROR: LIVE execution attempted but LIVE_TRADING_ENABLED is false.")
+        if "LIVE" in reason or "FORBIDDEN" in reason:
+            raise RuntimeError("SECURITY CRITICAL: LIVE trading is permanently disabled by design in this repository.")
         raise RuntimeError(f"CRITICAL ERROR: Order blocked. ({reason})")
 
     try:

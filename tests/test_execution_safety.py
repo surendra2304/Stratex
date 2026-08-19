@@ -37,19 +37,11 @@ class TestExecutionSafety:
         # We also verify it doesn't default to the production URL by ensuring testnet is set.
         assert getattr(client, 'testnet', False) is True
         
-    @mock.patch.dict(os.environ, {"TRADING_MODE": "LIVE", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy"})
-    def test_live_mode_fails_if_not_explicitly_enabled(self):
-        """Proof that LIVE mode fails to build client if LIVE_TRADING_ENABLED is False."""
-        config, execution = reload_modules()
-        
-        assert config.TRADING_MODE == "LIVE"
-        
-        allowed, reason = execution.ExecutionPolicy.can_place_order()
-        assert allowed is False
-        assert reason == "LIVE_DISABLED"
-        
-        with pytest.raises(RuntimeError, match="CRITICAL ERROR: LIVE execution attempted but LIVE_TRADING_ENABLED is false."):
-            execution.get_exchange_client()
+    @mock.patch.dict(os.environ, {"TRADING_MODE": "LIVE", "LIVE_TRADING_ENABLED": "True", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy"})
+    def test_live_mode_is_impossible_by_design(self):
+        """Proof that LIVE mode is completely impossible by design even if env vars try to enable it."""
+        with pytest.raises(ValueError, match="Invalid TRADING_MODE 'LIVE'"):
+            reload_modules()
             
     @mock.patch.dict(os.environ, {"TRADING_MODE": "PAPER", "PAPER_SAFE_MODE": "True", "API_KEY": "dummy", "SECRET_KEY": "dummy"})
     def test_paper_mode_makes_zero_exchange_calls(self):

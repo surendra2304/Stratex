@@ -37,12 +37,12 @@ TARGET_TRADE_WINDOW_HOURS = 3  # Hours within which to achieve target
 LONG_ONLY = True            # Binance Spot default
 
 # -------------------------------------------------------------------
-# OPERATIONAL SAFETY GATES
+# OPERATIONAL SAFETY GATES (TESTNET ONLY)
 # -------------------------------------------------------------------
-TRADING_MODE = os.getenv("TRADING_MODE", "PAPER") # "PAPER", "TESTNET", or "LIVE"
-PAPER_SAFE_MODE = os.getenv("PAPER_SAFE_MODE", "False" if TRADING_MODE in ["TESTNET", "LIVE"] else "True").lower() == "true"
+TRADING_MODE = os.getenv("TRADING_MODE", "PAPER").upper()
+PAPER_SAFE_MODE = os.getenv("PAPER_SAFE_MODE", "False" if TRADING_MODE == "TESTNET" else "True").lower() == "true"
 TESTNET_ENABLED = os.getenv("TESTNET_ENABLED", "False").lower() == "true"
-LIVE_TRADING_ENABLED = os.getenv("LIVE_TRADING_ENABLED", "False").lower() == "true"
+LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is impossible by design
 
 # --- Strategies to Run ---
 # Multi-strategy configuration mapping validated strategy -> timeframe(s)
@@ -55,14 +55,13 @@ ACTIVE_STRATEGIES = {
     "adx_ema": ["15m", "30m", "1h", "4h"]
 }
 
-# Backward-compatibility aliases for legacy tests/modules
+# Backward-compatibility alias for legacy tests/modules
 ACTIVE_STRATEGY = list(ACTIVE_STRATEGIES.keys())[0]
 _first_tf = list(ACTIVE_STRATEGIES.values())[0]
 TIMEFRAME = _first_tf[0] if isinstance(_first_tf, list) else _first_tf
 
 # Trading Config
 MAX_POSITION_SIZE = 0.95
-RISK_PER_TRADE = 0.02
 
 # --- Testnet Risk Management ---
 MAX_TESTNET_RISK_PER_TRADE = float(os.getenv("MAX_TESTNET_RISK_PER_TRADE", "0.005")) # 0.5% risk
@@ -83,7 +82,8 @@ MAX_PREDICTION_ERROR = 0.02        # Automatically switch to OBSERVE-ONLY if act
 # --- Backtesting Engine ---
 BACKTEST_FEE_RATE = 0.001          # 0.1% fee per trade
 BACKTEST_SLIPPAGE_RATE = 0.0005    # 0.05% slippage
-RISK_PER_TRADE = 0.01              # 1% risk of equity per trade
+BACKTEST_RISK_PER_TRADE = 0.01     # 1% risk of equity per trade in backtests
+RISK_PER_TRADE = BACKTEST_RISK_PER_TRADE  # Canonical alias for backtest runners
 STARTING_BALANCE = 10000.0         # Initial balance
 OOS_TRAIN_PCT = 0.60               # Walk-forward train %
 OOS_VAL_PCT = 0.20                 # Walk-forward validation %
@@ -91,7 +91,7 @@ INTRABAR_RESOLUTION = "conservative" # "conservative" or "optimistic"
 
 SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema", "fast1m", "fast5m"]
 SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"]
-VALID_MODES = ["PAPER", "TESTNET", "LIVE"]
+VALID_MODES = ["PAPER", "TESTNET"]
 
 def validate_config():
     # If legacy ACTIVE_STRATEGY or TIMEFRAME attributes were set dynamically (e.g. in tests)

@@ -17,7 +17,9 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='repla
 logger = get_logger("dashboard")
 
 app = Flask(__name__, static_folder='static')
-CORS(app)
+# Hardened CORS configuration: Whitelist Render production, local dev servers, and localhost
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "https://algorithmic-trading-bot-fra.onrender.com,http://localhost:5000,http://127.0.0.1:5000,http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()]
+CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}, r"/health": {"origins": "*"}})
 
 LOG_FILE = "trade_log.csv"
 
@@ -2542,16 +2544,40 @@ def api_config():
     """
     Returns or updates runtime configuration.
     Enforces security: LIVE_TRADING_ENABLED cannot be toggled to True via API.
+    Rejects invalid types, negative numbers, NaNs, or values outside safety limits.
     API keys/secrets are never exposed.
     """
     try:
         import config
         if request.method == 'POST':
-            data = request.get_json(silent=True) or {}
+            data = request.get_json(silent=True)
+            if not isinstance(data, dict):
+                return jsonify({"status": "ERROR", "error": "Invalid request payload. Expected JSON object."}), 400
+                
+            # Block any attempt to enable live trading or change trading mode to LIVE
+            if "live_trading_enabled" in data and bool(data["live_trading_enabled"]):
+                return jsonify({"status": "ERROR", "error": "SECURITY FORBIDDEN: Live trading is permanently disabled by design."}), 403
+            if "trading_mode" in data and str(data["trading_mode"]).upper() == "LIVE":
+                return jsonify({"status": "ERROR", "error": "SECURITY FORBIDDEN: Live trading is permanently disabled by design."}), 403
+
             if "max_open_trades" in data:
-                config.MAX_OPEN_TRADES = int(data["max_open_trades"])
+                try:
+                    val = int(data["max_open_trades"])
+                    if val < 1 or val > 20:
+                        return jsonify({"status": "ERROR", "error": "max_open_trades must be between 1 and 20"}), 400
+                    config.MAX_OPEN_TRADES = val
+                except (ValueError, TypeError):
+                    return jsonify({"status": "ERROR", "error": "max_open_trades must be an integer"}), 400
+
             if "max_trades_per_day" in data:
-                config.TARGET_TRADE_COUNT = int(data["max_trades_per_day"])
+                try:
+                    val = int(data["max_trades_per_day"])
+                    if val < 1 or val > 200:
+                        return jsonify({"status": "ERROR", "error": "max_trades_per_day must be between 1 and 200"}), 400
+                    config.TARGET_TRADE_COUNT = val
+                except (ValueError, TypeError):
+                    return jsonify({"status": "ERROR", "error": "max_trades_per_day must be an integer"}), 400
+
             return jsonify({
                 "status": "success",
                 "message": "Configuration updated successfully",
