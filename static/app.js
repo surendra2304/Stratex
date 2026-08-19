@@ -37,22 +37,25 @@ document.addEventListener("DOMContentLoaded", () => {
             // Immediately load data for selected view smoothly
             if (targetView === 'dashboard') {
                 fetchDashboardData();
+                fetchDashboardDataV2();
+            } else if (targetView === 'scanner') {
+                fetchScannerDataV2();
+            } else if (targetView === 'positions') {
+                fetchPositionsV2();
             } else if (targetView === 'trades') {
                 fetchTrades();
-            } else if (targetView === 'signals') {
-                fetchSignals();
-            } else if (targetView === 'market') {
-                fetchMarketsData();
+            } else if (targetView === 'markets') {
+                fetchMarketData();
             } else if (targetView === 'strategies') {
-                fetchStrategies();
+                fetchStrategiesV2();
             } else if (targetView === 'risk') {
                 fetchRiskData();
             } else if (targetView === 'analytics') {
                 fetchAnalyticsData();
-            } else if (targetView === 'activity') {
-                fetchActivity();
+            } else if (targetView === 'system') {
+                fetchSystemData();
             } else if (targetView === 'settings') {
-                fetchOpenOrders();
+                fetchSettings(true);
             }
         });
     });
@@ -196,6 +199,22 @@ const apiClient = {
         } catch (e) {
             console.error(`API Client Error (${url}):`, e);
             return null; // Graceful failure
+        }
+    },
+    async post(url, data) {
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data || {})
+            });
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            return await res.json();
+        } catch (e) {
+            console.error(`API Client POST Error (${url}):`, e);
+            return null;
         }
     }
 };
@@ -3565,10 +3584,27 @@ async function fastPoll() {
     if (isFastPolling) return;
     isFastPolling = true;
     try {
-        await Promise.all([
-            fetchDashboardData(), fetchDashboardDataV2(), fetchScannerDataV2(), fetchPositionsV2(), fetchMarketData(), fetchStrategiesV2(), fetchRiskData(), fetchAnalyticsData(), fetchSystemData(), fetchSettings(),
-            fetchPositions()
-        ]);
+        const tasks = [
+            fetchDashboardData(),
+            fetchDashboardDataV2(),
+            fetchPositionsV2()
+        ];
+        
+        if (activeViewName === 'scanner') {
+            tasks.push(fetchScannerDataV2());
+        } else if (activeViewName === 'markets') {
+            tasks.push(fetchMarketData());
+        } else if (activeViewName === 'strategies') {
+            tasks.push(fetchStrategiesV2());
+        } else if (activeViewName === 'risk') {
+            tasks.push(fetchRiskData());
+        } else if (activeViewName === 'analytics') {
+            tasks.push(fetchAnalyticsData());
+        } else if (activeViewName === 'system') {
+            tasks.push(fetchSystemData());
+        }
+        
+        await Promise.all(tasks);
     } catch (e) {
         console.error("Fast poll error:", e);
     } finally {
@@ -5299,18 +5335,21 @@ async function fetchSystemData() {
 // SETTINGS LOGIC
 // ==========================================
 
-async function fetchSettings() {
+async function fetchSettings(silent = false) {
     try {
         const conf = await apiClient.get('/api/config');
         if (!conf) return;
 
         // Trade Limits
-        document.getElementById('set-max-open').value = conf.max_open_trades || 5;
-        document.getElementById('set-max-day').value = conf.max_trades_per_day || 50;
+        const setMaxOpen = document.getElementById('set-max-open');
+        if (setMaxOpen && conf.max_open_trades !== undefined) setMaxOpen.value = conf.max_open_trades;
+        
+        const setMaxDay = document.getElementById('set-max-day');
+        if (setMaxDay && conf.max_trades_per_day !== undefined) setMaxDay.value = conf.max_trades_per_day;
 
-        // Display toast to confirm reload
-        showToast('Settings reloaded from server', 'info');
-
+        if (!silent) {
+            showToast('Settings reloaded from server', 'info');
+        }
     } catch (e) {
         console.error("fetchSettings error:", e);
     }

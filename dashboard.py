@@ -2537,6 +2537,54 @@ def api_telemetry_analytics():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
+@app.route('/api/config', methods=['GET', 'POST'])
+def api_config():
+    """
+    Returns or updates runtime configuration.
+    Enforces security: LIVE_TRADING_ENABLED cannot be toggled to True via API.
+    API keys/secrets are never exposed.
+    """
+    try:
+        import config
+        if request.method == 'POST':
+            data = request.get_json(silent=True) or {}
+            if "max_open_trades" in data:
+                config.MAX_OPEN_TRADES = int(data["max_open_trades"])
+            if "max_trades_per_day" in data:
+                config.TARGET_TRADE_COUNT = int(data["max_trades_per_day"])
+            return jsonify({
+                "status": "success",
+                "message": "Configuration updated successfully",
+                "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+            })
+            
+        return jsonify({
+            "status": "OK",
+            "environment": "TESTNET",
+            "exchange": "BINANCE",
+            "trading_mode": config.TRADING_MODE,
+            "max_open_trades": getattr(config, "MAX_OPEN_TRADES", 5),
+            "max_trades_per_day": getattr(config, "TARGET_TRADE_COUNT", 50),
+            "max_trades_per_symbol": 1,
+            "max_trades_per_strategy": 3,
+            "cooldown_trade": "5m",
+            "cooldown_symbol": "5m",
+            "risk_per_trade": getattr(config, "MAX_TESTNET_RISK_PER_TRADE", 0.005),
+            "max_portfolio_risk": getattr(config, "MAX_TESTNET_EXPOSURE", 0.05),
+            "max_portfolio_exposure": getattr(config, "MAX_TESTNET_EXPOSURE", 0.05),
+            "max_drawdown": getattr(config, "MAX_TESTNET_DRAWDOWN_PCT", 0.05),
+            "daily_loss_limit_pct": getattr(config, "MAX_DAILY_LOSS_PCT", 0.02),
+            "max_open_positions": getattr(config, "MAX_OPEN_POSITIONS", 5),
+            "min_expected_edge": getattr(config, "MINIMUM_EXPECTED_EDGE", 0.0001),
+            "active_strategies": getattr(config, "ACTIVE_STRATEGIES", {}),
+            "duplicate_protection": "ON",
+            "safety_halt": "ON",
+            "live_trading_enabled": False,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)

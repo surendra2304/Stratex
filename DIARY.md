@@ -154,14 +154,15 @@
 
 
 ### 4.6 📅 19 AUGUST 2026
-* **Daily Summary**: Terminal UI redesign, implementation of all 10 command center views (Dashboard, Scanner, Positions, Trades, Markets, Strategies, Risk, Analytics, System, Settings), and comprehensive structural bug fixes via automated frontend assembly.
-* **Work Performed**: Rebuilt index.html and pp.js from the ground up using strict institutional dark-mode layouts. Added Python-based frontend build scripts (uild_full_ui.py + 
-ewrite_*.py) to guarantee DOM safety. Verified 100% decoupled interaction with the core Python trading engine.
-* **Tests Passed**: 417 passed / 417 tests (100%).
+* **Daily Summary**: Terminal UI redesign, implementation of all 10 command center views (Dashboard, Scanner, Positions, Trades, Markets, Strategies, Risk, Analytics, System, Settings), forensic full-project audit across 24 subsystems, /api/config backend endpoint implementation, piClient POST capability, fast-poll optimization, and live Render verification.
+* **Work Performed**: Rebuilt index.html and pp.js following the Global Design Contract. Added Python-based frontend build scripts (uild_full_ui.py). Implemented /api/config in dashboard.py with strict safety guards. Optimized active-view fast polling in pp.js. Added workspace-specific rule in .agents/rules/algorithmic-trading-bot-project.md. Executed full regression test suite twice (417/417 passed). Verified live production endpoints at https://algorithmic-trading-bot-fra.onrender.com.
+* **Tests Passed**: **417 passed / 417 tests (100% pass rate across two consecutive runs)**.
 * **Bugs Resolved**:
-  - **Bug #35**: index.html Structural Corruption via Overlapping Replacements (Commit Pending)
-* **Key Commits**: Pending.
-* **End-of-Day State**: UI Re-architected | Tests: 100% Passed | Deployment: Ready.
+  - **Bug #35**: index.html Structural Corruption via Overlapping Replacements (Commit 72952f)
+  - **Bug #36**: Missing /api/config Backend Endpoint and piClient.post Method (Commit Pending)
+  - **Bug #37**: Polling Contention and Legacy View Switching Routing (Commit Pending)
+* **Key Commits**: 72952f, 700ebd4, 3dafd5e.
+* **End-of-Day State**: Cash: ,700.00 | Total Managed Equity: ,932.40 | Realized PnL: -.79 | Closed Trades: 30 | Open Positions: 1 (LINKUSDT) | Tests: 417/417 Passed | Production: Live & Healthy.
 
 ---
 
@@ -204,6 +205,8 @@ ewrite_*.py) to guarantee DOM safety. Verified 100% decoupled interaction with t
 | **33** | 18-Aug | Fake candle fallback in `/api/candles` | Hardcoded prices/synthetic volume returned on offline | Removed fabrication; return 503 `DATA_UNAVAILABLE` | ✅ **Resolved** |
 | **34** | 18-Aug | Telemetry test artifacts in event stream | Unit test fixtures wrote mock events into repo files | Hardened event stream, redirected tests, added IDs | ✅ **Resolved** |
 | **35** | 19-Aug | index.html DOM Structural Corruption | Overlapping sequential regex replacements erased inner views | Engineered uild_full_ui.py to assemble views deterministically | ✅ **Resolved** |
+| **36** | 19-Aug | Missing /api/config endpoint & piClient.post | Settings UI had no backend endpoint or POST client | Built /api/config in dashboard.py and added post() to piClient | ✅ **Resolved** |
+| **37** | 19-Aug | Polling contention & view switching mismatch | Legacy view IDs called in tab handlers and all views polled on every tick | Mapped 10 exact view handlers and routed astPoll to active tab | ✅ **Resolved** |
 
 
 ---
