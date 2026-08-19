@@ -263,117 +263,97 @@ async function fetchDashboardData() {
         const expPct = data.exposure_pct !== undefined ? Number(data.exposure_pct) : (equityVal > 0 ? (cryptoVal / equityVal) * 100 : 0);
         const availRiskPct = data.available_risk !== undefined ? Number(data.available_risk) : 20.0;
 
-        // 1. Overview Primary KPI Cards
+        // 1. Account Overview Primary Metrics (TOTAL EQUITY = USDT CASH + ACTIVE MANAGED CRYPTO MARKET VALUE)
         safeSetText('db-equity', formatCurrency(equityVal));
+        safeSetText('db-cash', formatCurrency(cashVal));
+        safeSetText('db-managed', formatCurrency(cryptoVal));
+        safeSetText('db-avail-bal', formatCurrency(cashVal));
+        safeApplyColor('db-realized-pnl', realizedPnl);
+        safeApplyColor('db-unrealized-pnl', unrealizedPnl);
+        safeApplyColor('db-today-pnl', todayPnl);
+
+        // Synchronize Sidebar & Snapshot Metrics
         safeSetText('snap-bot-equity', formatCurrency(equityVal));
         safeSetText('snap-wallet', formatCurrency(totalWallet));
         safeSetText('snap-cash', formatCurrency(cashVal));
-        
-        safeSetText('db-today-pnl', (todayPnl >= 0 ? '+' : '') + formatCurrency(todayPnl));
-        safeApplyColor('db-realized-pnl', realizedPnl);
-        safeApplyColor('db-unrealized-pnl', unrealizedPnl);
-
         safeSetText('snap-managed', formatCurrency(cryptoVal));
         safeSetText('snap-pos', `${openPosCount} / 5`);
         safeSetText('snap-exposure', expPct.toFixed(1) + '%');
-
         safeSetText('db-drawdown', mddVal.toFixed(2) + '%');
         safeSetText('snap-avail-risk', availRiskPct.toFixed(1) + '%');
         safeSetText('db-fees', formatCurrency(feesVal));
 
-        // Legacy / fallback metric bindings if present in other views
-        safeSetText('pb-balance', formatCurrency(equityVal));
-        safeApplyColor('pb-today', todayPnl);
-        safeApplyColor('pb-realized', realizedPnl);
-        safeApplyColor('pb-unrealized', unrealizedPnl);
-        safeSetText('pb-fees', formatCurrency(feesVal));
-        safeSetText('pb-mdd', mddVal.toFixed(2) + '%');
+        // 2. Engine / Market Status Metrics
+        safeSetText('db-stat-conn', isEngineOnline ? 'ONLINE' : 'OFFLINE');
+        safeSetClass('db-stat-conn', isEngineOnline ? 'mono profit' : 'mono loss');
+        safeSetText('db-stat-mkt', (data.websocket_connected || isEngineOnline) ? 'STREAMING' : 'OFFLINE');
+        safeSetClass('db-stat-mkt', (data.websocket_connected || isEngineOnline) ? 'mono profit' : 'mono loss');
+        safeSetText('db-stat-scan', isEngineOnline ? 'ACTIVE' : 'IDLE');
+        safeSetClass('db-stat-scan', isEngineOnline ? 'mono cyan' : 'mono text-muted');
+        
+        const lastCandleTs = data.engine_data && data.engine_data.last_candle_close ? data.engine_data.last_candle_close : (data.server_time || '');
+        safeSetText('db-stat-candle', lastCandleTs ? formatTime(lastCandleTs) : '--:--:--');
+        safeSetText('db-stat-latency', latencyStr);
 
-        // 2. Navigation Sidebar Badge
-        const navOpenBadge = document.getElementById('nav-open-trades-badge');
-        if (navOpenBadge) {
-            navOpenBadge.innerText = `${openPosCount} OPEN`;
-            if (openPosCount > 0) {
-                navOpenBadge.className = 'nav-badge-pill active-badge';
+        // 3. Performance Metrics
+        const tradesData = globalJournalTrades || [];
+        const todayUtcDate = new Date().toISOString().split('T')[0];
+        let todayTradesCount = 0, todayWins = 0, todayGrossProf = 0, todayGrossLoss = 0, todayNet = 0;
+        
+        tradesData.forEach(t => {
+            const tDate = (t.timestamp || t.exit_timestamp || '').split('T')[0];
+            if (tDate === todayUtcDate) {
+                todayTradesCount++;
+                const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+                todayNet += net;
+                if (net > 0) {
+                    todayWins++;
+                    todayGrossProf += net;
+                } else if (net < 0) {
+                    todayGrossLoss += Math.abs(net);
+                }
+            }
+        });
+
+        const totalTradesCount = tradesData.length;
+        const displayTrades = todayTradesCount > 0 ? todayTradesCount : totalTradesCount;
+        const winRate = displayTrades > 0 ? ((todayTradesCount > 0 ? todayWins / todayTradesCount : (tradesData.filter(t => (t.net_pnl || t.pnl || 0) > 0).length / displayTrades)) * 100) : 0.0;
+        const profitFactor = todayGrossLoss > 0 ? (todayGrossProf / todayGrossLoss) : (todayGrossProf > 0 ? 99.9 : 0.0);
+
+        safeSetText('db-perf-trades', displayTrades);
+        safeSetText('db-perf-winrate', `${winRate.toFixed(1)}%`);
+        safeApplyColor('db-perf-netpnl', todayTradesCount > 0 ? todayNet : realizedPnl);
+        safeSetText('db-perf-pf', profitFactor > 0 ? profitFactor.toFixed(2) : '0.00');
+        safeSetText('db-perf-mdd', `${mddVal.toFixed(2)}%`);
+
+        // 4. Active Positions Table Binding
+        const activePosBody = document.getElementById('db-active-positions-body');
+        if (activePosBody) {
+            const positionsList = data.open_positions_data || [];
+            if (positionsList.length === 0) {
+                activePosBody.innerHTML = `<tr><td colspan="7" class="idle-state-row" style="text-align: center; padding: 18px; color: var(--text-muted);">No active positions</td></tr>`;
             } else {
-                navOpenBadge.className = 'nav-badge-pill';
+                activePosBody.innerHTML = positionsList.map(p => {
+                    const uPnl = Number(p.unrealized_pnl || 0);
+                    const pnlClass = uPnl >= 0 ? 'profit' : 'loss';
+                    const pnlSign = uPnl >= 0 ? '+' : '';
+                    return `
+                        <tr>
+                            <td class="td-strong">${p.symbol}</td>
+                            <td><span class="tag ${p.side === 'BUY' || p.side === 'LONG' ? 'tag-buy' : 'tag-sell'}">${p.side}</span></td>
+                            <td class="mono">$${Number(p.entry_price || 0).toFixed(2)}</td>
+                            <td class="mono">$${Number(p.current_price || p.entry_price || 0).toFixed(2)}</td>
+                            <td class="mono ${pnlClass}">${pnlSign}$${uPnl.toFixed(2)}</td>
+                            <td class="mono text-muted">${p.sl ? '$' + Number(p.sl).toFixed(2) : '—'}</td>
+                            <td class="mono text-muted">${p.tp ? '$' + Number(p.tp).toFixed(2) : '—'}</td>
+                        </tr>
+                    `;
+                }).join('');
             }
         }
-        safeSetText('jnl-open-count', openPosCount);
-        
-        // 3. Measured Feed & API Latency
-        const measuredLatencyMs = Math.max(1, Math.round(requestEnd - requestStart));
-        const latencyStr = `${measuredLatencyMs}ms`;
-        safeSetText('feed-latency', latencyStr);
-        safeSetText('ws-latency-pill', latencyStr);
 
-        // 4. Dynamic Symbol and Strategy Counts
-        const engineData = data.engine_data || {};
-        const activeSymbols = data.symbols || engineData.symbols || [];
-        const symbolCount = data.symbol_count || engineData.symbol_count || (activeSymbols.length > 0 ? activeSymbols.length : '--');
-        const activeStrategies = data.strategies || engineData.strategies || [];
-        const stratCount = data.strategy_count || engineData.strategy_count || (activeStrategies.length > 0 ? activeStrategies.length : '--');
-        
-        safeSetText('hdr-pairs-count', symbolCount !== '--' ? `${symbolCount} SPOT` : '-- SPOT');
-        safeSetText('hdr-strat-count', stratCount !== '--' ? `${stratCount} ACTIVE` : '-- ACTIVE');
-        safeSetText('sidebar-meta-text', (stratCount !== '--' && symbolCount !== '--') ? `${stratCount} STRATEGIES • ${symbolCount} PAIRS` : '-- STRATEGIES • -- PAIRS');
-
-        // 5. Header Engine Status Indicator
-        const engineDot = document.getElementById('status-indicator') || document.getElementById('hdr-engine-dot');
-        const engineText = document.getElementById('engine-status') || document.getElementById('hdr-engine-text');
-        const isEngineOnline = (data.engine_status === 'ONLINE' || data.engine_healthy === true);
-
-        if (engineDot && engineText) {
-            if (data.safety_halt) {
-                engineDot.className = 'dot dot-red';
-                engineText.className = 'engine-state-val status-offline';
-                engineText.innerText = 'SAFETY HALT';
-            } else if (isEngineOnline) {
-                engineDot.className = 'dot dot-green';
-                engineText.className = 'engine-state-val';
-                engineText.innerText = 'ACTIVE';
-            } else {
-                engineDot.className = 'dot dot-red';
-                engineText.className = 'engine-state-val status-offline';
-                engineText.innerText = 'OFFLINE';
-            }
-        }
-        
-        // 6. Authoritative Microservice Health Binding (Sidebar + Footer Synchronization)
-        const comp = data.components || {};
-        const calcDotClass = (compKey, directFlag) => {
-            if (!isEngineOnline) return 'dot dot-red';
-            const val = comp[compKey];
-            if (val === 'OK' || directFlag === true) return 'dot dot-green';
-            if (val === 'STALE' || val === 'DEGRADED') return 'dot dot-amber';
-            if (val === 'ERROR' || val === 'OFFLINE' || directFlag === false) return 'dot dot-red';
-            return isEngineOnline ? 'dot dot-green' : 'dot dot-red';
-        };
-
-        const bnClass = calcDotClass('binance', data.binance_connected);
-        const wsClass = calcDotClass('data', data.websocket_connected);
-        const seClass = calcDotClass('strategy', isEngineOnline);
-        const rkClass = isEngineOnline ? 'dot dot-green' : 'dot dot-red';
-        const exClass = calcDotClass('execution', isEngineOnline);
-        const mdClass = wsClass;
-
-        // Apply to Sidebar Health Dots
-        safeSetClass('h-bn', bnClass);
-        safeSetClass('h-ws', wsClass);
-        safeSetClass('h-se', seClass);
-        safeSetClass('h-rk', rkClass);
-        safeSetClass('h-md', mdClass);
-        safeSetClass('h-ex', exClass);
-
-        // Apply to Footer Diagnostic Bar (Identical Health Semantics)
-        safeSetClass('btm-bn', bnClass);
-        safeSetClass('btm-ws', wsClass);
-        safeSetClass('btm-md', mdClass);
-        safeSetClass('btm-ex', exClass);
-        safeSetClass('btm-st', seClass);
-        safeSetClass('btm-rs', rkClass);
-        safeSetText('btm-last-mkt', data.server_time ? formatTime(data.server_time) : '--:--:--');
-        safeSetText('btm-last-strat', data.last_evaluation ? formatTime(data.last_evaluation) : (data.server_time ? formatTime(data.server_time) : '--:--:--'));
+        // 5. Recent Activity: Latest Signals & Events
+        populateDashboardRecentActivity();
 
         // 7. Overview Compact Funnel
         safeSetText('fn-mrk', symbolCount !== '--' ? symbolCount : '--');
@@ -5719,4 +5699,67 @@ async function requestAiTradeAnalysis(tradePayload) {
     }
     return null;
 }
+
+// ==========================================
+// DASHBOARD RECENT ACTIVITY POPULATION
+// ==========================================
+
+async function populateDashboardRecentActivity() {
+    try {
+        // A. Recent Signals Table
+        const signalsBody = document.getElementById('db-recent-signals-body');
+        if (signalsBody) {
+            const scannerData = await apiClient.get('/api/scanner');
+            const signals = (scannerData && scannerData.recent_signals) ? scannerData.recent_signals.slice(0, 5) : [];
+            if (signals.length === 0) {
+                signalsBody.innerHTML = `<tr><td colspan="5" class="idle-state-row" style="text-align:center; color:var(--text-muted); padding: 12px;">Awaiting scanner signals...</td></tr>`;
+            } else {
+                signalsBody.innerHTML = signals.map(s => {
+                    const timeStr = s.timestamp ? formatTime(s.timestamp) : '--:--:--';
+                    const sideClass = (s.side === 'BUY' || s.side === 'LONG') ? 'tag-buy' : 'tag-sell';
+                    const resClass = s.result === 'QUALIFIED' ? 'profit' : 'text-muted';
+                    return `
+                        <tr>
+                            <td class="mono text-secondary" style="font-size: 11px;">${timeStr}</td>
+                            <td class="td-strong" style="font-size: 11px;">${s.symbol}</td>
+                            <td><span class="tag ${sideClass}" style="font-size: 9px; padding: 1px 4px;">${s.side}</span></td>
+                            <td class="mono" style="font-size: 11px;">${(s.strategy || 'ADX_EMA').toUpperCase()}</td>
+                            <td class="mono ${resClass}" style="font-size: 11px; font-weight: 700;">${s.result || 'QUALIFIED'}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+        // B. Recent Risk & System Events Table
+        const eventsBody = document.getElementById('db-recent-events-body');
+        if (eventsBody) {
+            const sysData = await apiClient.get('/api/system-events?limit=5');
+            const events = (sysData && sysData.events) ? sysData.events.slice(0, 5) : [];
+            if (events.length === 0) {
+                eventsBody.innerHTML = `<tr><td colspan="4" class="idle-state-row" style="text-align:center; color:var(--text-muted); padding: 12px;">Awaiting system events...</td></tr>`;
+            } else {
+                eventsBody.innerHTML = events.map(ev => {
+                    const timeStr = ev.timestamp ? formatTime(ev.timestamp) : '--:--:--';
+                    const statClass = (ev.status === 'ONLINE' || ev.healthy === true) ? 'profit' : (ev.status === 'WARN' ? 'warning' : 'text-secondary');
+                    return `
+                        <tr>
+                            <td class="mono text-secondary" style="font-size: 11px;">${timeStr}</td>
+                            <td class="td-strong" style="font-size: 11px;">${ev.event_type || 'HEARTBEAT'}</td>
+                            <td class="mono text-muted" style="font-size: 11px;">${ev.source || 'engine'}</td>
+                            <td class="mono ${statClass}" style="font-size: 11px; font-weight: 700;">${ev.status || 'ONLINE'}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+    } catch (e) {
+        console.warn("populateDashboardRecentActivity error:", e);
+    }
+}
+
+function fetchDashboardDataV2() {
+    return fetchDashboardData();
+}
+
 

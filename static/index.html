@@ -191,112 +191,188 @@
                 </div>
             </header>
 
-                        <div class="view-container active" id="view-dashboard">
+                     <div class="view-container active" id="view-dashboard">
                 <div class="page-header" style="margin-bottom: 16px;">
                     <div class="page-title-wrap">
-                        <h1 class="page-title">Dashboard</h1>
+                        <h1 class="page-title">DASHBOARD</h1>
                     </div>
                 </div>
 
-                <!-- 4 KPI CARDS -->
-                <section class="dashboard-hero-kpi-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px;">
-                    <div class="panel-card kpi-card" onclick="showView('analytics')" style="cursor: pointer; padding: 16px;">
-                        <div class="kpi-head" style="margin-bottom: 12px;">
-                            <span class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px;">TOTAL ACCOUNT VALUE</span>
-                        </div>
-                        <div class="kpi-val mono" id="db2-total-account" style="font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">$0.00</div>
-                        <div class="kpi-sub" style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-secondary);">
-                            <div style="display: flex; justify-content: space-between;"><span>Cash</span><span id="db2-cash" class="mono">$0.00</span></div>
-                            <div style="display: flex; justify-content: space-between;"><span>Managed</span><span id="db2-managed" class="mono">$0.00</span></div>
-                        </div>
+                <!-- 1. ACCOUNT OVERVIEW (COMPACT INSTITUTIONAL METRICS) -->
+                <section class="panel-card" style="padding: 16px; margin-bottom: 16px;">
+                    <div class="card-title" style="margin-bottom: 12px; font-size: 11px; font-family: var(--font-heading); color: var(--text-muted); letter-spacing: 0.8px;">
+                        ACCOUNT OVERVIEW
                     </div>
-
-                    <div class="panel-card kpi-card" onclick="showView('analytics')" style="cursor: pointer; padding: 16px;">
-                        <div class="kpi-head" style="margin-bottom: 12px;">
-                            <span class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px;">TODAY'S PNL</span>
+                    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px;">
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">TOTAL EQUITY</span>
+                            <span class="mono" id="db-equity" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">$0.00</span>
                         </div>
-                        <div class="kpi-val mono" id="db2-today-net" style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">$0.00</div>
-                        <div class="kpi-sub" style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-secondary);">
-                            <div style="display: flex; justify-content: space-between;"><span>Trades <span id="db2-today-trades">0</span></span><span>Wins <span id="db2-today-wins" class="profit">0</span> / Losses <span id="db2-today-losses" class="loss">0</span></span></div>
-                            <div style="display: flex; justify-content: space-between;"><span>Profit <span id="db2-today-profit" class="profit">+$0.00</span></span><span>Loss <span id="db2-today-loss" class="loss">-$0.00</span></span></div>
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">USDT CASH</span>
+                            <span class="mono" id="db-cash" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">$0.00</span>
                         </div>
-                    </div>
-
-                    <div class="panel-card kpi-card" onclick="showView('trades')" style="cursor: pointer; padding: 16px;">
-                        <div class="kpi-head" style="margin-bottom: 12px;">
-                            <span class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px;">REALIZED PNL</span>
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">ACTIVE MARKET VAL</span>
+                            <span class="mono" id="db-managed" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">$0.00</span>
                         </div>
-                        <div class="kpi-val mono" id="db2-realized-net" style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">$0.00</div>
-                        <div class="kpi-sub" style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-secondary);">
-                            <div style="display: flex; justify-content: space-between;"><span>Closed Trades <span id="db2-realized-trades">0</span></span><span>Wins <span id="db2-realized-wins" class="profit">0</span> / Losses <span id="db2-realized-losses" class="loss">0</span></span></div>
-                            <div style="display: flex; justify-content: space-between;"><span>Profit <span id="db2-realized-profit" class="profit">+$0.00</span></span><span>Loss <span id="db2-realized-loss" class="loss">-$0.00</span></span></div>
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">AVAILABLE BALANCE</span>
+                            <span class="mono" id="db-avail-bal" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">$0.00</span>
                         </div>
-                    </div>
-
-                    <div class="panel-card kpi-card" onclick="showView('positions')" style="cursor: pointer; padding: 16px;">
-                        <div class="kpi-head" style="margin-bottom: 12px;">
-                            <span class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px;">UNREALIZED PNL</span>
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">REALIZED PNL</span>
+                            <span class="mono" id="db-realized-pnl" style="font-size: 18px; font-weight: 700;">+$0.00</span>
                         </div>
-                        <div class="kpi-val mono" id="db2-unrealized-net" style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">$0.00</div>
-                        <div class="kpi-sub" style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-secondary);">
-                            <div style="display: flex; justify-content: space-between;"><span>Open Positions <span id="db2-unrealized-pos">0</span></span><span>Floating PnL <span id="db2-unrealized-floating" class="mono">+$0.00</span></span></div>
-                            <div style="display: flex; justify-content: space-between;"><span>Wins <span id="db2-unrealized-wins" class="profit">0</span></span><span>Losses <span id="db2-unrealized-losses" class="loss">0</span></span></div>
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">UNREALIZED PNL</span>
+                            <span class="mono" id="db-unrealized-pnl" style="font-size: 18px; font-weight: 700;">+$0.00</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">TODAY'S PNL</span>
+                            <span class="mono" id="db-today-pnl" style="font-size: 18px; font-weight: 700;">+$0.00</span>
                         </div>
                     </div>
                 </section>
 
-                <!-- MARKET SCANNER SUMMARY -->
-                <section class="dashboard-scanner-summary" style="margin-bottom: 16px;">
-                    <div class="panel-card" onclick="showView('scanner')" style="cursor: pointer;">
-                        <div class="panel-card-header" style="height: 36px; min-height: 36px; padding: 0 16px;">
-                            <div class="panel-card-title">MARKET SCANNER</div>
+                <!-- 2 & 3. DUAL COLUMN: ENGINE/MARKET STATUS (LEFT) & PERFORMANCE (RIGHT) -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <!-- 2. ENGINE / MARKET STATUS -->
+                    <section class="panel-card" style="padding: 16px;">
+                        <div class="card-title" style="margin-bottom: 12px; font-size: 11px; font-family: var(--font-heading); color: var(--text-muted); letter-spacing: 0.8px;">
+                            ENGINE / MARKET STATUS
                         </div>
-                        <div class="panel-card-body" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 16px;">
+                        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;">
                             <div style="display: flex; flex-direction: column; gap: 4px;">
-                                <span style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted);">EVALUATIONS</span>
-                                <span id="db2-scan-evals" class="mono" style="font-size: 16px; font-weight: 700; color: var(--text-primary);">0</span>
+                                <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">CONNECTION</span>
+                                <span class="mono profit" id="db-stat-conn" style="font-size: 13px; font-weight: 700;">ONLINE</span>
                             </div>
                             <div style="display: flex; flex-direction: column; gap: 4px;">
-                                <span style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted);">SIGNALS</span>
-                                <span id="db2-scan-signals" class="mono" style="font-size: 16px; font-weight: 700; color: var(--accent-primary);">0</span>
+                                <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">MARKET DATA</span>
+                                <span class="mono profit" id="db-stat-mkt" style="font-size: 13px; font-weight: 700;">STREAMING</span>
                             </div>
                             <div style="display: flex; flex-direction: column; gap: 4px;">
-                                <span style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted);">QUALIFIED</span>
-                                <span id="db2-scan-qual" class="mono" style="font-size: 16px; font-weight: 700; color: var(--profit-green);">0</span>
+                                <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">SCANNER</span>
+                                <span class="mono cyan" id="db-stat-scan" style="font-size: 13px; font-weight: 700;">ACTIVE</span>
                             </div>
                             <div style="display: flex; flex-direction: column; gap: 4px;">
-                                <span style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted);">REJECTED</span>
-                                <span id="db2-scan-rej" class="mono" style="font-size: 16px; font-weight: 700; color: var(--loss-red);">0</span>
+                                <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">LAST CANDLE</span>
+                                <span class="mono text-secondary" id="db-stat-candle" style="font-size: 13px;">--:--:--</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">LATENCY</span>
+                                <span class="mono profit" id="db-stat-latency" style="font-size: 13px; font-weight: 700;">-- ms</span>
                             </div>
                         </div>
+                    </section>
+
+                    <!-- 3. PERFORMANCE -->
+                    <section class="panel-card" style="padding: 16px;">
+                        <div class="card-title" style="margin-bottom: 12px; font-size: 11px; font-family: var(--font-heading); color: var(--text-muted); letter-spacing: 0.8px;">
+                            PERFORMANCE
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;">
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">TODAY'S TRADES</span>
+                                <span class="mono" id="db-perf-trades" style="font-size: 13px; font-weight: 700; color: var(--text-primary);">0</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">WIN RATE</span>
+                                <span class="mono" id="db-perf-winrate" style="font-size: 13px; font-weight: 700; color: var(--text-primary);">0.0%</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">NET PNL</span>
+                                <span class="mono" id="db-perf-netpnl" style="font-size: 13px; font-weight: 700;">+$0.00</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">PROFIT FACTOR</span>
+                                <span class="mono" id="db-perf-pf" style="font-size: 13px; font-weight: 700; color: var(--text-primary);">0.00</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-size: 10px; font-family: var(--font-heading); font-weight: 700; color: var(--text-muted);">DRAWDOWN</span>
+                                <span class="mono" id="db-perf-mdd" style="font-size: 13px; font-weight: 700; color: var(--text-primary);">0.00%</span>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- 4. ACTIVE POSITIONS TABLE -->
+                <section class="panel-card table-card" style="margin-bottom: 16px;">
+                    <div class="panel-card-header" style="height: 36px; min-height: 36px; padding: 0 16px; display: flex; justify-content: space-between; align-items: center;">
+                        <div class="panel-card-title" style="font-size: 11px; font-family: var(--font-heading); letter-spacing: 0.8px;">ACTIVE POSITIONS</div>
+                        <button class="btn-terminal" onclick="showView('positions')" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 2px 8px; font-size: 10px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">VIEW ALL →</button>
+                    </div>
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table table-dense">
+                            <thead>
+                                <tr>
+                                    <th>SYMBOL</th>
+                                    <th>SIDE</th>
+                                    <th>ENTRY</th>
+                                    <th>CURRENT</th>
+                                    <th>PNL</th>
+                                    <th>SL</th>
+                                    <th>TP</th>
+                                </tr>
+                            </thead>
+                            <tbody id="db-active-positions-body">
+                                <tr>
+                                    <td colspan="7" class="idle-state-row" style="text-align: center; padding: 18px; color: var(--text-muted);">No active positions</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </section>
 
-                <!-- LATEST OPEN TRADES -->
-                <section class="dashboard-latest-trades">
-                    <div class="panel-card table-card" style="height: auto; max-height: 300px;">
-                        <div class="panel-card-header" style="height: 36px; min-height: 36px; padding: 0 16px;">
-                            <div class="panel-card-title">LATEST OPEN TRADES</div>
+                <!-- 5. RECENT ACTIVITY (SIGNALS, TRADES, RISK, SYSTEM EVENTS) -->
+                <section class="panel-card" style="padding: 16px;">
+                    <div class="card-title" style="margin-bottom: 12px; font-size: 11px; font-family: var(--font-heading); color: var(--text-muted); letter-spacing: 0.8px;">
+                        RECENT ACTIVITY
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <!-- RECENT SIGNALS & TRADES -->
+                        <div class="panel-card table-card" style="margin-bottom: 0;">
+                            <div class="panel-card-header" style="height: 32px; min-height: 32px; padding: 0 12px;">
+                                <div class="panel-card-title" style="font-size: 10px;">LATEST SIGNALS & TRADES</div>
+                            </div>
+                            <div class="panel-table-wrap" style="max-height: 180px;">
+                                <table class="terminal-table table-dense">
+                                    <thead>
+                                        <tr>
+                                            <th>TIME</th>
+                                            <th>SYMBOL</th>
+                                            <th>TYPE</th>
+                                            <th>STRATEGY</th>
+                                            <th>OUTCOME</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="db-recent-signals-body">
+                                        <tr><td colspan="5" class="idle-state-row" style="text-align:center; color:var(--text-muted);">Awaiting signals...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                        <div class="panel-table-wrap">
-                            <table class="terminal-table table-dense">
-                                <thead>
-                                    <tr>
-                                        <th>SYMBOL</th>
-                                        <th>TF</th>
-                                        <th>SIDE</th>
-                                        <th>ENTRY</th>
-                                        <th>CURRENT</th>
-                                        <th>U.PNL</th>
-                                        <th>STATUS</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="db2-open-trades-body">
-                                    <tr>
-                                        <td colspan="7" class="idle-state-row">No open trades</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+
+                        <!-- RECENT RISK & SYSTEM EVENTS -->
+                        <div class="panel-card table-card" style="margin-bottom: 0;">
+                            <div class="panel-card-header" style="height: 32px; min-height: 32px; padding: 0 12px;">
+                                <div class="panel-card-title" style="font-size: 10px;">RISK & SYSTEM EVENTS</div>
+                            </div>
+                            <div class="panel-table-wrap" style="max-height: 180px;">
+                                <table class="terminal-table table-dense">
+                                    <thead>
+                                        <tr>
+                                            <th>TIME</th>
+                                            <th>EVENT</th>
+                                            <th>SOURCE</th>
+                                            <th>STATUS</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="db-recent-events-body">
+                                        <tr><td colspan="4" class="idle-state-row" style="text-align:center; color:var(--text-muted);">Awaiting events...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </section>
