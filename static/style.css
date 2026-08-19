@@ -1729,9 +1729,51 @@ html, body {
     .cal-day-num { font-size: 9.5px; }
     .cal-day-pnl { font-size: 10px; }
     .cal-day-count { display: none; }
+}
 
-    .inspector-drawer {
-        width: 100vw;
-        right: -100vw;
+/* ─── 2-COLUMN POPUP MODAL (LEFT = DETAILS, RIGHT = LARGE CHART) ─── */
+.drawer-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(5, 7, 11, 0.85);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+}
+
+.inspector-drawer {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 92vw;
+    max-width: 1280px;
+    height: 85vh;
+    max-height: 850px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-medium);
+    border-radius: 6px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9);
+    z-index: 1001;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.inspector-drawer.open,
+.inspector-drawer.active {
+    display: flex !important;
+}
+
+.drawer-backdrop.open,
+.drawer-backdrop.active {
+    display: block !important;
+}
+
+@media (max-width: 960px) {
+    .inspector-modal-grid {
+        grid-template-columns: 1fr !important;
+        grid-template-rows: auto 300px;
     }
 }
+

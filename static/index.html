@@ -16,20 +16,60 @@
     <!-- REAL-TIME TOAST NOTIFICATION CONTAINER -->
     <div id="trade-toast-container" class="toast-container"></div>
 
-    <!-- TRADE LIFECYCLE INSPECTOR DRAWER & BACKDROP -->
+    <!-- 2-COLUMN DETAIL POPUP MODAL (LEFT = DETAILS, RIGHT = LARGE CHART) & BACKDROP -->
     <div id="drawer-backdrop" class="drawer-backdrop" onclick="closeInspectorDrawer()"></div>
-    <aside id="inspector-drawer" class="inspector-drawer">
-        <div class="drawer-header">
-            <div class="drawer-title-wrap">
+    <div id="inspector-drawer" class="inspector-drawer">
+        <!-- MODAL HEADER -->
+        <div class="drawer-header" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--border-medium); background: var(--bg-header);">
+            <div class="drawer-title-wrap" style="display: flex; gap: 10px; align-items: center;">
                 <span class="badge-indigo">AUDIT</span>
-                <span class="drawer-title" id="drawer-title">TRADE LIFECYCLE INSPECTOR</span>
+                <span class="drawer-title" id="drawer-title" style="font-family: var(--font-heading); font-size: 13px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.8px;">TRADE LIFECYCLE INSPECTOR</span>
             </div>
-            <button class="drawer-close" onclick="closeInspectorDrawer()" title="Close Inspector">&times;</button>
+            <button class="drawer-close" onclick="closeInspectorDrawer()" title="Close Popup" style="background: transparent; border: none; font-size: 20px; color: var(--text-muted); cursor: pointer;">&times;</button>
         </div>
-        <div class="drawer-body" id="drawer-body">
-            <div class="empty-state">Select a trade row to inspect complete execution lifecycle telemetry.</div>
+        <!-- 2-COLUMN MODAL CONTENT (LEFT = DETAILS, RIGHT = LARGE CHART) -->
+        <div class="inspector-modal-grid" style="display: grid; grid-template-columns: 420px 1fr; flex: 1; overflow: hidden; height: calc(100% - 49px);">
+            <!-- LEFT: DETAILS -->
+            <div class="drawer-body" id="drawer-body" style="padding: 20px; overflow-y: auto; border-right: 1px solid var(--border-medium); display: flex; flex-direction: column; gap: 16px;">
+                <div class="empty-state">Select a trade row to inspect complete execution lifecycle telemetry.</div>
+            </div>
+            <!-- RIGHT: LARGE CHART WITH TOOLBAR ABOVE CHART -->
+            <div id="modal-chart-pane" style="display: flex; flex-direction: column; background: var(--bg-base); overflow: hidden;">
+                <!-- TOOLBAR ABOVE CHART -->
+                <div class="modal-chart-toolbar" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border-medium); background: var(--bg-panel);">
+                    <div style="display: flex; gap: 14px; align-items: center;">
+                        <div id="modal-tf-row" style="display: flex; gap: 8px;">
+                            <span class="mono mkt-tf" style="cursor:pointer; color:var(--text-muted); font-size:11px;" onclick="changeModalTimeframe('5m', this)">5m</span>
+                            <span class="mono mkt-tf active" style="cursor:pointer; color:var(--accent-primary); font-weight:700; font-size:11px;" onclick="changeModalTimeframe('15m', this)">15m</span>
+                            <span class="mono mkt-tf" style="cursor:pointer; color:var(--text-muted); font-size:11px;" onclick="changeModalTimeframe('30m', this)">30m</span>
+                            <span class="mono mkt-tf" style="cursor:pointer; color:var(--text-muted); font-size:11px;" onclick="changeModalTimeframe('1h', this)">1h</span>
+                            <span class="mono mkt-tf" style="cursor:pointer; color:var(--text-muted); font-size:11px;" onclick="changeModalTimeframe('2h', this)">2h</span>
+                            <span class="mono mkt-tf" style="cursor:pointer; color:var(--text-muted); font-size:11px;" onclick="changeModalTimeframe('4h', this)">4h</span>
+                        </div>
+                        <div style="width: 1px; height: 14px; background: var(--border-medium);"></div>
+                        <div class="dropdown">
+                            <span class="mono text-muted" style="cursor:pointer; font-size: 11px;">CANDLESTICK ▾</span>
+                        </div>
+                        <div style="width: 1px; height: 14px; background: var(--border-medium);"></div>
+                        <div class="dropdown">
+                            <span class="mono text-muted" style="cursor:pointer; font-size: 11px;">INDICATORS ▾</span>
+                        </div>
+                        <div style="width: 1px; height: 14px; background: var(--border-medium);"></div>
+                        <div class="dropdown">
+                            <span class="mono text-muted" style="cursor:pointer; font-size: 11px;">DRAW ▾</span>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="mono text-muted" style="cursor:pointer; font-size: 13px;" title="Fullscreen">⛶</span>
+                    </div>
+                </div>
+                <!-- CHART CANVAS -->
+                <div style="flex: 1; position: relative; width: 100%; height: 100%; padding: 16px;">
+                    <canvas id="modal-trade-chart"></canvas>
+                </div>
+            </div>
         </div>
-    </aside>
+    </div>
 
     <div class="app-container">
                 <!-- ─── 1. TERMINAL SIDEBAR NAVIGATION ─── -->

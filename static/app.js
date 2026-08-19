@@ -3851,8 +3851,10 @@ function openInspectorDrawer(title, payload) {
     }
     drawer.classList.add('open');
     drawer.classList.add('active');
+    drawer.style.display = 'flex';
     backdrop.classList.add('open');
     backdrop.classList.add('active');
+    backdrop.style.display = 'block';
 }
 
 function closeInspectorDrawer() {
@@ -3861,11 +3863,164 @@ function closeInspectorDrawer() {
     if (drawer) {
         drawer.classList.remove('open');
         drawer.classList.remove('active');
+        drawer.style.display = 'none';
     }
     if (backdrop) {
         backdrop.classList.remove('open');
         backdrop.classList.remove('active');
+        backdrop.style.display = 'none';
     }
+    if (window.modalChartInstance) {
+        window.modalChartInstance.destroy();
+        window.modalChartInstance = null;
+    }
+}
+window.closeDetailModal = closeInspectorDrawer;
+
+function changeModalTimeframe(tf, el) {
+    if (el) {
+        document.querySelectorAll('#modal-tf-row .mkt-tf').forEach(t => {
+            t.classList.remove('active');
+            t.style.color = 'var(--text-muted)';
+            t.style.fontWeight = 'normal';
+        });
+        el.classList.add('active');
+        el.style.color = 'var(--accent-primary)';
+        el.style.fontWeight = '700';
+    }
+    if (window.currentModalItem) {
+        const item = window.currentModalItem;
+        renderModalCandleChart(item.symbol, tf, item.entry, item.sl, item.tp, item.exit, item.side);
+    }
+}
+
+async function renderModalCandleChart(sym, tf, entry, sl, tp, exit, side) {
+    const chartCanvas = document.getElementById('modal-trade-chart');
+    if (!chartCanvas) return;
+
+    if (window.modalChartInstance) {
+        window.modalChartInstance.destroy();
+        window.modalChartInstance = null;
+    }
+
+    let labels = [];
+    let priceData = [];
+    
+    try {
+        const resp = await apiClient.get(`/api/candles?symbol=${sym || 'BTCUSDT'}&timeframe=${tf || '15m'}&limit=40`);
+        if (resp && resp.candles && Array.isArray(resp.candles) && resp.candles.length > 0) {
+            labels = resp.candles.map(c => {
+                const d = new Date(c.time || c.timestamp || Date.now());
+                return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+            });
+            priceData = resp.candles.map(c => Number(c.close || c.price || 0));
+        }
+    } catch (err) {
+        console.warn("Candle fetch for modal fallback:", err);
+    }
+
+    if (priceData.length === 0) {
+        if (entry > 0) {
+            labels = ['T-3', 'T-2', 'T-1', 'Entry', 'Current', 'Target'];
+            const e = Number(entry);
+            const m = exit > 0 ? Number(exit) : (tp > 0 ? Number(tp) : e * 1.01);
+            priceData = [e * 0.995, e * 0.998, e * 0.999, e, (e + m) / 2, m];
+        } else {
+            labels = ['T-1', 'T0', 'T+1'];
+            priceData = [100, 101, 102];
+        }
+    }
+
+    const isProfitable = (exit > 0 && entry > 0) ? (side === 'SELL' ? entry >= exit : exit >= entry) : true;
+    const strokeColor = isProfitable ? '#22C55E' : '#EF4444';
+    const fillColor = isProfitable ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)';
+
+    const datasets = [{
+        label: `${sym || 'SYMBOL'} Price`,
+        data: priceData,
+        borderColor: strokeColor,
+        backgroundColor: fillColor,
+        borderWidth: 2,
+        fill: true,
+        tension: 0.15,
+        pointRadius: 2,
+        pointHoverRadius: 5
+    }];
+
+    if (entry > 0) {
+        datasets.push({
+            label: 'Entry',
+            data: new Array(priceData.length).fill(Number(entry)),
+            borderColor: '#3B82F6',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: false
+        });
+    }
+    if (sl > 0) {
+        datasets.push({
+            label: 'SL',
+            data: new Array(priceData.length).fill(Number(sl)),
+            borderColor: '#EF4444',
+            borderWidth: 1,
+            borderDash: [2, 2],
+            pointRadius: 0,
+            fill: false
+        });
+    }
+    if (tp > 0) {
+        datasets.push({
+            label: 'TP',
+            data: new Array(priceData.length).fill(Number(tp)),
+            borderColor: '#22C55E',
+            borderWidth: 1,
+            borderDash: [2, 2],
+            pointRadius: 0,
+            fill: false
+        });
+    }
+
+    const ctx = chartCanvas.getContext('2d');
+    window.modalChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 250 },
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: { color: '#A7B5C8', font: { family: 'JetBrains Mono', size: 10 }, boxWidth: 12 }
+                },
+                tooltip: {
+                    backgroundColor: '#070A0F',
+                    borderColor: '#1D2A3A',
+                    borderWidth: 1,
+                    titleColor: '#F8FAFC',
+                    bodyColor: '#A7B5C8',
+                    titleFont: { family: 'JetBrains Mono' },
+                    bodyFont: { family: 'JetBrains Mono' }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: '#1D2A3A' },
+                    ticks: { color: '#66758A', font: { family: 'JetBrains Mono', size: 9 }, maxTicksLimit: 8 }
+                },
+                y: {
+                    grid: { color: '#1D2A3A' },
+                    ticks: { color: '#66758A', font: { family: 'JetBrains Mono', size: 9 } }
+                }
+            }
+        }
+    });
 }
 
 function exportTradesJSON() {
@@ -4245,39 +4400,15 @@ function inspectSignalLifecycle(s) {
 
     document.getElementById('drawer-body').innerHTML = html;
     
+    document.getElementById('drawer-backdrop').classList.add('open');
+    document.getElementById('drawer-backdrop').classList.add('active');
     document.getElementById('drawer-backdrop').style.display = 'block';
+    document.getElementById('inspector-drawer').classList.add('open');
+    document.getElementById('inspector-drawer').classList.add('active');
     document.getElementById('inspector-drawer').style.display = 'flex';
 
-    // Chart
-    const chartContainer = document.getElementById('modal-trade-chart');
-    if (chartContainer) {
-        let ctx = chartContainer.getContext('2d');
-        if (window.modalChartInstance) { window.modalChartInstance.destroy(); }
-        window.modalChartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: ['Prior', 'Signal', 'Next'],
-                datasets: [{
-                    label: 'Price',
-                    data: [entry*0.99, entry, entry*1.01],
-                    borderColor: '#3B82F6',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } },
-                    y: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } }
-                }
-            }
-        });
-    }
+    window.currentModalItem = { symbol: sym, timeframe: tf, entry: entry, sl: sl, tp: tp, exit: 0, side: side };
+    renderModalCandleChart(sym, tf, entry, sl, tp, 0, side);
 }
 
 // ==========================================
@@ -4435,71 +4566,15 @@ function inspectPosition(p) {
 
     document.getElementById('drawer-body').innerHTML = html;
     
+    document.getElementById('drawer-backdrop').classList.add('open');
+    document.getElementById('drawer-backdrop').classList.add('active');
     document.getElementById('drawer-backdrop').style.display = 'block';
+    document.getElementById('inspector-drawer').classList.add('open');
+    document.getElementById('inspector-drawer').classList.add('active');
     document.getElementById('inspector-drawer').style.display = 'flex';
 
-    // Chart
-    const chartContainer = document.getElementById('modal-trade-chart');
-    if (chartContainer) {
-        let ctx = chartContainer.getContext('2d');
-        if (window.modalChartInstance) { window.modalChartInstance.destroy(); }
-        
-        let pointData = [];
-        if (entry > 0 && mark > 0) {
-            pointData = [entry, (entry + mark)/2, mark];
-        } else {
-            pointData = [entry];
-        }
-
-        window.modalChartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: ['Entry', 'Active', 'Current'],
-                datasets: [{
-                    label: 'Price',
-                    data: pointData,
-                    borderColor: '#3B82F6',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { 
-                    legend: { display: false },
-                    annotation: {
-                        annotations: {
-                            lineSL: {
-                                type: 'line',
-                                yMin: sl,
-                                yMax: sl,
-                                borderColor: 'rgba(239, 68, 68, 0.5)',
-                                borderWidth: 1,
-                                borderDash: [5, 5],
-                                display: sl > 0
-                            },
-                            lineTP: {
-                                type: 'line',
-                                yMin: tp,
-                                yMax: tp,
-                                borderColor: 'rgba(16, 185, 129, 0.5)',
-                                borderWidth: 1,
-                                borderDash: [5, 5],
-                                display: tp > 0
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } },
-                    y: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } }
-                }
-            }
-        });
-    }
+    window.currentModalItem = { symbol: sym, timeframe: tf, entry: entry, sl: sl, tp: tp, exit: mark, side: side };
+    renderModalCandleChart(sym, tf, entry, sl, tp, mark, side);
 }
 
 // ==========================================
@@ -4775,71 +4850,15 @@ function inspectTradeLifecycleV2(t) {
 
     document.getElementById('drawer-body').innerHTML = html;
     
+    document.getElementById('drawer-backdrop').classList.add('open');
+    document.getElementById('drawer-backdrop').classList.add('active');
     document.getElementById('drawer-backdrop').style.display = 'block';
+    document.getElementById('inspector-drawer').classList.add('open');
+    document.getElementById('inspector-drawer').classList.add('active');
     document.getElementById('inspector-drawer').style.display = 'flex';
 
-    // Chart
-    const chartContainer = document.getElementById('modal-trade-chart');
-    if (chartContainer) {
-        let ctx = chartContainer.getContext('2d');
-        if (window.modalChartInstance) { window.modalChartInstance.destroy(); }
-        
-        let pointData = [];
-        if (entry > 0 && exit > 0) {
-            pointData = [entry*0.99, entry, exit, exit*1.01]; // simulated trajectory
-        } else {
-            pointData = [entry];
-        }
-
-        window.modalChartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: ['Pre', 'Entry', 'Exit', 'Post'],
-                datasets: [{
-                    label: 'Price',
-                    data: pointData,
-                    borderColor: net >= 0 ? '#10B981' : '#EF4444',
-                    backgroundColor: net >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { 
-                    legend: { display: false },
-                    annotation: {
-                        annotations: {
-                            lineSL: {
-                                type: 'line',
-                                yMin: sl,
-                                yMax: sl,
-                                borderColor: 'rgba(239, 68, 68, 0.5)',
-                                borderWidth: 1,
-                                borderDash: [5, 5],
-                                display: sl > 0
-                            },
-                            lineTP: {
-                                type: 'line',
-                                yMin: tp,
-                                yMax: tp,
-                                borderColor: 'rgba(16, 185, 129, 0.5)',
-                                borderWidth: 1,
-                                borderDash: [5, 5],
-                                display: tp > 0
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } },
-                    y: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } }
-                }
-            }
-        });
-    }
+    window.currentModalItem = { symbol: sym, timeframe: tf, entry: entry, sl: sl, tp: tp, exit: exit, side: side };
+    renderModalCandleChart(sym, tf, entry, sl, tp, exit, side);
 }
 
 // ==========================================
