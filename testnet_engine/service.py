@@ -752,6 +752,20 @@ class TestnetService:
                         self.stats["COOLDOWN_REJECTED"] += 1
                         self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "ON_COOLDOWN")
                         continue
+
+                    # Pre-execution duplicate position guard
+                    # Risk gate uses portfolio file which may be slightly stale on fast restarts.
+                    # This in-memory check prevents double-entry into the same symbol.
+                    if symbol in self.active_positions:
+                        existing = self.active_positions[symbol]
+                        if existing.get("status") == "OPEN":
+                            logger.warning(
+                                f"[DUPLICATE_POSITION_GUARD] {symbol} already has OPEN position "
+                                f"(SignalID: {signal_id}). Skipping duplicate entry."
+                            )
+                            self.stats["OTHER_REJECTED"] += 1
+                            self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "DUPLICATE_POSITION_GUARD")
+                            continue
                         
                     tf = candidate.get("tf", "15m")
                     # Re-validate with absolute latest price
@@ -860,6 +874,23 @@ class TestnetService:
                             est_fee = notional * 0.001
                             
                             logger.info(f"[ORDER_FILLED] {symbol} {side} {executed_qty} @ {actual_price:.4f} | OrderID: {entry_oid} | SignalID: {signal_id}")
+
+                            # Partial fill detection: warn if filled quantity < 95% of requested
+                            proposed_qty = float(qty_str)
+                            if proposed_qty > 0 and executed_qty / proposed_qty < 0.95:
+                                fill_pct = (executed_qty / proposed_qty) * 100
+                                logger.warning(
+                                    f"[PARTIAL_FILL] {symbol} {side} filled {fill_pct:.1f}% of proposed qty. "
+                                    f"Requested: {proposed_qty}, Executed: {executed_qty}"
+                                )
+                                self.telemetry.record_execution_event({
+                                    "event_type": "partial_fill_detected",
+                                    "symbol": symbol,
+                                    "trade_id": signal_id,
+                                    "proposed_qty": proposed_qty,
+                                    "executed_qty": executed_qty,
+                                    "fill_pct": round(fill_pct, 2)
+                                })
                             
                             self.active_positions[symbol] = {
                                 "strategy": strategy_name,

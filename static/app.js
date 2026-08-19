@@ -3259,15 +3259,26 @@ async function fetchRiskData() {
             const r = riskRes.risk;
             const setV = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
 
+            // Equity & Capital
             setV('rk-top-equity', formatCurrency(r.total_equity));
             setV('rk-top-cash', formatCurrency(r.cash_usdt));
             setV('rk-top-managed', formatCurrency(r.managed_asset_value || r.deployed_capital));
-            setV('rk-top-exposure', (r.risk_used_pct || 0).toFixed(2) + '%');
+
+            // Explicit MAX / USED / AVAILABLE labels
+            setV('rk-top-max-exp', (r.max_exposure_pct || 0).toFixed(2) + '%');
             setV('rk-top-used', (r.risk_used_pct || 0).toFixed(2) + '%');
+            setV('rk-top-exposure', (r.risk_used_pct || 0).toFixed(2) + '%');
             setV('rk-top-avail', (r.available_risk_pct || 0).toFixed(2) + '%');
+
+            // Positions
             setV('rk-top-open-pos', r.current_open_positions || 0);
             setV('rk-top-max-pos', r.max_open_positions || 5);
+
+            // Drawdown & Daily Loss
             setV('rk-top-mdd', (r.max_drawdown_pct || 0).toFixed(2) + '%');
+            setV('rk-top-max-dd', (r.max_drawdown_pct !== undefined ? r.max_drawdown_pct : 5.00).toFixed(2) + '%');
+            setV('rk-top-daily-limit', (r.max_daily_loss_pct !== undefined ? r.max_daily_loss_pct : 2.00).toFixed(2) + '%');
+            setV('rk-top-single-exp', (r.max_single_asset_exposure_pct !== undefined ? r.max_single_asset_exposure_pct : 2.00).toFixed(2) + '%');
 
             const dailyEl = document.getElementById('rk-top-daily-pnl');
             if (dailyEl) {
@@ -3626,12 +3637,12 @@ async function backgroundPoll() {
     try {
         if (activeViewName === 'trades') {
             await fetchTrades();
-        } else if (activeViewName === 'signals') {
-            await fetchSignals();
-        } else if (activeViewName === 'market') {
+        } else if (activeViewName === 'scanner') {
+            await fetchScannerDataV2();
+        } else if (activeViewName === 'markets') {
             await fetchMarketsData();
         } else if (activeViewName === 'strategies') {
-            await fetchStrategies();
+            await fetchStrategiesV2();
         } else if (activeViewName === 'risk') {
             await fetchRiskData();
         } else if (activeViewName === 'analytics') {
@@ -3667,40 +3678,6 @@ function calcDurationBetween(start, end) {
 }
 
 function inspectTradeLifecycle(t) {
-
-    // Render Modal Chart
-    const chartContainer = document.getElementById('modal-trade-chart');
-    if (chartContainer) {
-        let ctx = chartContainer.getContext('2d');
-        if (window.modalChartInstance) { window.modalChartInstance.destroy(); }
-        window.modalChartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: ['Entry', 'Mid', 'Exit'],
-                datasets: [{
-                    label: 'Price',
-                    data: [entryPx, (entryPx+exitPx)/2, exitPx],
-                    borderColor: '#3B82F6',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false }
-                },
-                scales: {
-                    x: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } },
-                    y: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } }
-                }
-            }
-        });
-    }
-
     if (!t) return;
     const sym = t.symbol || '-';
     const strat = t.strategy || 'ADX_EMA';
@@ -3776,6 +3753,45 @@ function inspectTradeLifecycle(t) {
     `;
 
     openInspectorDrawer(`TRADE AUDIT • ${sym} ${side}`, html);
+
+    // Render Modal Chart AFTER variables are defined
+    const chartContainer = document.getElementById('modal-trade-chart');
+    if (chartContainer && entryPx > 0) {
+        try {
+            let ctx = chartContainer.getContext('2d');
+            if (window.modalChartInstance) { window.modalChartInstance.destroy(); }
+            const midPx = exitPx > 0 ? (entryPx + exitPx) / 2 : entryPx;
+            const exitLabel = exitPx > 0 ? exitPx : entryPx;
+            window.modalChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Entry', 'Mid', 'Exit'],
+                    datasets: [{
+                        label: 'Price',
+                        data: [entryPx, midPx, exitLabel],
+                        borderColor: netPnl >= 0 ? '#22C55E' : '#EF4444',
+                        backgroundColor: netPnl >= 0 ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointBackgroundColor: netPnl >= 0 ? '#22C55E' : '#EF4444'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { color: 'rgba(29,42,58,0.6)' }, ticks: { color: '#66758A', font: { size: 10 } } },
+                        y: { grid: { color: 'rgba(29,42,58,0.6)' }, ticks: { color: '#66758A', font: { size: 10 }, callback: v => '$' + Number(v).toFixed(2) } }
+                    }
+                }
+            });
+        } catch (chartErr) {
+            console.warn('Trade chart render skipped:', chartErr.message);
+        }
+    }
 }
 
 let seenNotifEventIds = new Set();
@@ -4217,28 +4233,34 @@ async function fetchScannerDataV2() {
         const data = await apiClient.get('/api/scanner');
         if (!data) return;
 
-        // KPI
-        document.getElementById('scan2-evals').innerText = data.evaluations || 0;
-        document.getElementById('scan2-signals').innerText = data.signals || 0;
-        document.getElementById('scan2-qual').innerText = data.qualified || 0;
-        document.getElementById('scan2-rej').innerText = data.rejected || 0;
+        // KPI — use actual API field names (UPPER_CASE from scanner_stats)
+        const setKpi = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val !== undefined ? val : 0; };
+        setKpi('scan2-evals', data.strategy_evaluations || data.TOTAL_CANDLES || 0);
+        setKpi('scan2-signals', data.TOTAL_SIGNALS || 0);
+        setKpi('scan2-qual', data.QUALIFIED || data.PROFITABILITY_ACCEPTED || 0);
+        setKpi('scan2-rej', (data.PROFITABILITY_REJECTED || 0) + (data.RISK_REJECTED || 0));
 
-        // Live Signals
-        if (data.recent_signals && Array.isArray(data.recent_signals)) {
-            globalScannerData = data.recent_signals;
-            renderScannerTable();
+        // Signals table — use recent_signals if available, else reshape top_opportunities
+        const signals = data.recent_signals && Array.isArray(data.recent_signals) ? data.recent_signals
+            : (data.top_opportunities && Array.isArray(data.top_opportunities) ? data.top_opportunities : []);
+
+        if (signals.length > 0 || globalScannerData.length === 0) {
+            globalScannerData = signals;
         }
+        renderScannerTable();
         
-        // Active metrics
-        if (data.active_symbols) document.getElementById('scan2-act-sym').innerText = data.active_symbols;
-        if (data.active_timeframes) document.getElementById('scan2-act-tf').innerText = data.active_timeframes;
-        if (data.active_strategies) document.getElementById('scan2-act-strat').innerText = data.active_strategies;
+        // Active scan metrics
+        const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+        setEl('scan2-act-sym', data.active_symbols || data.symbols_scanned || data.symbol_count || '-');
+        setEl('scan2-act-tf', data.active_timeframes || (data.timeframe_metrics ? Object.keys(data.timeframe_metrics).length : '-'));
+        setEl('scan2-act-strat', data.active_strategies || (data.strategy_metrics ? Object.keys(data.strategy_metrics).length : '-'));
         
-        // Live Footer
+        // Live scanning footer
         const footer = document.getElementById('scan2-live-status');
         if (footer) {
-            const syms = data.active_symbol_list || ['BTCUSDT', 'ETHUSDT', 'LINKUSDT'];
-            footer.innerHTML = syms.map(s => `<span style="color: var(--profit-green);">${s} ● SCANNING</span>`).join('');
+            const syms = data.active_symbol_list || data.symbols || ['BTCUSDT', 'ETHUSDT', 'LINKUSDT'];
+            const symList = Array.isArray(syms) ? syms : [syms];
+            footer.innerHTML = symList.slice(0, 8).map(s => `<span style="color: var(--profit-green);">${s} ● SCANNING</span>`).join(' ');
         }
 
     } catch (e) {
@@ -5316,43 +5338,56 @@ async function fetchSystemData() {
             connStateEl.className = 'mono loss';
         }
 
-        // Persistence (Mocking last sync based on latest fetch)
+        // Persistence — last sync time based on actual fetch
         const nowIst = new Date().toLocaleTimeString([], {hour12:false}) + ' IST';
-        document.getElementById('sys-hc').innerText = nowIst;
-        document.getElementById('sys-sync').innerText = nowIst;
+        const sysHcEl = document.getElementById('sys-hc');
+        const sysSyncEl = document.getElementById('sys-sync');
+        if (sysHcEl) sysHcEl.innerText = nowIst;
+        if (sysSyncEl) sysSyncEl.innerText = nowIst;
 
-        // Generate synthetic chronological events based on health payload
-        const events = [];
-        const now = Date.now();
-        
-        events.push({ time: now - 2000, comp: 'ENGINE', msg: 'Heartbeat', cls: 'text-secondary' });
-        events.push({ time: now - 15000, comp: 'SUPERVISOR', msg: 'Health check passed', cls: 'profit' });
-        
-        if (hb.last_market_update) {
-            events.push({ time: new Date(hb.last_market_update).getTime(), comp: 'MARKET DATA', msg: 'WebSocket update received', cls: 'text-primary' });
+        // Load REAL system events from API
+        try {
+            const sysEventsRes = await apiClient.get('/api/system-events?limit=20');
+            const eventsBody = document.getElementById('sys-events-body');
+            if (eventsBody) {
+                const realEvents = (sysEventsRes && Array.isArray(sysEventsRes.events)) ? sysEventsRes.events : [];
+
+                // Build synthetic heartbeat row from hb payload as fallback/addition
+                const syntheticRows = [];
+                if (hb.last_candle_close) {
+                    syntheticRows.push({ timestamp: hb.last_candle_close, event_type: 'CANDLE_CLOSED', message: 'Candle closed — strategy evaluation triggered', status: 'OK' });
+                }
+                if (hb.last_strategy_evaluation) {
+                    syntheticRows.push({ timestamp: hb.last_strategy_evaluation, event_type: 'STRATEGY_EVAL', message: 'Strategy evaluation completed', status: 'OK' });
+                }
+                if (hb.last_market_update) {
+                    syntheticRows.push({ timestamp: hb.last_market_update, event_type: 'MARKET_UPDATE', message: 'WebSocket market data received', status: 'OK' });
+                }
+
+                const allEvents = [...realEvents, ...syntheticRows].sort((a, b) => {
+                    return new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime();
+                }).slice(0, 20);
+
+                if (allEvents.length === 0) {
+                    eventsBody.innerHTML = `<tr><td colspan="3" class="idle-state-row">No system events recorded yet — waiting for engine activity</td></tr>`;
+                } else {
+                    eventsBody.innerHTML = allEvents.map(ev => {
+                        const ts = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString([], {hour12:false}) : '-';
+                        const comp = (ev.event_type || ev.source || 'SYSTEM').toUpperCase().replace(/_/g, ' ');
+                        const msg = ev.message || ev.msg || ev.status || '-';
+                        const isErr = (ev.status === 'ERROR' || comp.includes('FAILED') || comp.includes('HALT'));
+                        const cls = isErr ? 'loss' : (comp.includes('CANDLE') || comp.includes('STRATEGY') ? 'cyan' : 'text-secondary');
+                        return `<tr>
+                            <td class="mono text-muted" style="width:15%;">${ts}</td>
+                            <td class="td-strong" style="width:22%;">${comp}</td>
+                            <td class="mono ${cls}">${msg}</td>
+                        </tr>`;
+                    }).join('');
+                }
+            }
+        } catch (sysEvErr) {
+            console.warn('System events fetch failed:', sysEvErr.message);
         }
-        if (hb.last_candle_close) {
-            events.push({ time: new Date(hb.last_candle_close).getTime(), comp: 'SCANNER', msg: 'Candle closed', cls: 'text-primary' });
-        }
-        if (hb.last_strategy_evaluation) {
-            events.push({ time: new Date(hb.last_strategy_evaluation).getTime(), comp: 'STRATEGY', msg: 'Evaluation completed', cls: 'cyan' });
-        }
-        
-        // Sort newest first
-        events.sort((a, b) => b.time - a.time);
-        
-        let evtHtml = '';
-        events.forEach(e => {
-            const timeStr = new Date(e.time).toLocaleTimeString([], {hour12:false});
-            evtHtml += `
-                <tr>
-                    <td class="mono text-muted" style="width: 15%;">${timeStr}</td>
-                    <td class="td-strong" style="width: 20%;">${e.comp}</td>
-                    <td class="mono ${e.cls}">${e.msg}</td>
-                </tr>
-            `;
-        });
-        document.getElementById('sys-events-body').innerHTML = evtHtml;
 
     } catch (e) {
         console.error("fetchSystemData error:", e);
@@ -5385,17 +5420,21 @@ async function fetchSettings(silent = false) {
 
 async function saveSettings() {
     try {
-        // Collect everything (simplified for UI demonstration purposes)
+        const maxOpenEl = document.getElementById('set-max-open');
+        const maxDayEl = document.getElementById('set-max-day');
         const payload = {
-            max_open_trades: parseInt(document.getElementById('set-max-open').value) || 5,
-            max_trades_per_day: parseInt(document.getElementById('set-max-day').value) || 50
+            max_open_trades: parseInt(maxOpenEl ? maxOpenEl.value : 5) || 5,
+            max_trades_per_day: parseInt(maxDayEl ? maxDayEl.value : 50) || 50
         };
 
         const result = await apiClient.post('/api/config', payload);
         if (result && result.status === 'success') {
             showToast('Configuration saved successfully', 'success');
+            // Confirm roundtrip: reload settings from server to verify save took effect
+            setTimeout(() => fetchSettings(true), 800);
         } else {
-            showToast('Failed to save configuration', 'error');
+            const errMsg = result && result.error ? result.error : 'Failed to save configuration';
+            showToast(errMsg, 'error');
         }
     } catch (e) {
         showToast('Error saving configuration', 'error');

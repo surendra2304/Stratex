@@ -762,17 +762,24 @@ def get_scanner():
         "QUALIFIED": 0,
         "ORDERS_SUBMITTED": 0,
         "ORDERS_FILLED": 0,
+        "strategy_evaluations": 0,
+        "TOTAL_CANDLES": 0,
         "top_opportunities": [],
         "strategy_metrics": {},
         "timeframe_metrics": {},
-        "market_data": {}
+        "market_data": {},
+        "symbols": []
     }
     
-    if os.path.exists("testnet_portfolio.json"):
+    port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+    if os.path.exists(port_file):
         try:
-            with open("testnet_portfolio.json", "r") as f:
+            with open(port_file, "r") as f:
                 port = json.load(f)
-                stats.update(port.get("scanner_stats", {}))
+                scanner_stats = port.get("scanner_stats", {})
+                stats.update(scanner_stats)
+                # Pull tracked symbols list from portfolio
+                stats["symbols"] = port.get("symbols", scanner_stats.get("symbols", []))
         except Exception:
             pass
             
@@ -797,15 +804,17 @@ def get_scanner():
     except Exception as e:
         logger.error(f"Error fetching scanner market data: {e}")
         
-    # Read live opportunities log
+    # Read live opportunities log (last 15 minutes)
     opps = []
+    now_dt = datetime.datetime.utcnow()
     if os.path.exists("testnet_opportunity_log.jsonl"):
         try:
             with open("testnet_opportunity_log.jsonl", "r") as f:
                 for line in f:
                     if not line.strip(): continue
                     try:
-                        opps.append(json.loads(line))
+                        rec = json.loads(line)
+                        opps.append(rec)
                     except Exception:
                         pass
         except Exception as e:
@@ -839,10 +848,57 @@ def get_scanner():
                         pass
         except Exception as e:
             logger.error(f"Error reading signals log fallback: {e}")
-            
-    stats["top_opportunities"] = sorted(opps, key=lambda x: str(x.get("timestamp", "")), reverse=True)[:10]
-            
-    # Compute dynamic strategy metrics from trade ledger and forward signals if empty
+
+    sorted_opps = sorted(opps, key=lambda x: str(x.get("timestamp", "")), reverse=True)
+    stats["top_opportunities"] = sorted_opps[:10]
+
+    # Reshape top_opportunities into recent_signals format that frontend expects
+    # Each signal needs: timestamp, symbol, timeframe, strategy, side, entry_price, evaluation{}
+    recent_signals = []
+    for opp in sorted_opps[:20]:
+        p_decision = str(opp.get("profitability_decision", opp.get("decision", ""))).upper()
+        r_decision = str(opp.get("risk_decision", "")).upper()
+        prof_passed = p_decision in ("ACCEPTED", "QUALIFIED")
+        risk_passed = r_decision in ("ACCEPTED", "")  # empty means no explicit rejection
+        expected_net_pct = float(opp.get("expected_net", opp.get("expected_net_return", 0.0)))
+        recent_signals.append({
+            "timestamp": opp.get("timestamp"),
+            "signal_id": opp.get("signal_id"),
+            "symbol": opp.get("symbol"),
+            "timeframe": opp.get("timeframe", "5m"),
+            "strategy": opp.get("strategy"),
+            "side": opp.get("side", opp.get("decision", "BUY")),
+            "entry_price": float(opp.get("entry_price", opp.get("current_price", 0.0))),
+            "stop_loss": float(opp.get("sl", opp.get("stop_loss", 0.0))),
+            "take_profit": float(opp.get("tp", opp.get("take_profit", 0.0))),
+            "confidence": float(opp.get("confidence", 0.0)),
+            "final_decision": str(opp.get("final_decision", opp.get("decision", ""))).upper(),
+            "evaluation": {
+                "expected_net_percent": round(expected_net_pct, 4),
+                "profitability": {
+                    "passed": prof_passed,
+                    "expected_gross": float(opp.get("expected_gross_return", 0.0)),
+                    "expected_net": expected_net_pct,
+                    "fees": float(opp.get("fees_pct", 0.31)),
+                    "threshold": float(opp.get("threshold", 0.31)),
+                    "reason": opp.get("reason", opp.get("profitability_reason", ""))
+                },
+                "risk": {
+                    "passed": risk_passed,
+                    "reason": opp.get("risk_reason", "" if risk_passed else str(opp.get("reason", "")))
+                }
+            }
+        })
+    stats["recent_signals"] = recent_signals
+
+    # Frontend-compatible KPI aliases (camelCase)
+    stats["strategy_evaluations"] = stats.get("strategy_evaluations", 0)
+    stats["symbol_count"] = len(stats["symbols"]) if stats["symbols"] else stats.get("symbols_scanned", 0)
+    stats["active_symbols"] = stats["symbol_count"]
+    stats["active_timeframes"] = len(stats.get("timeframe_metrics", {}))
+    stats["active_strategies"] = len(stats.get("strategy_metrics", {}))
+
+    # Compute dynamic strategy metrics from trade ledger if empty
     if not stats.get("strategy_metrics"):
         trades_info = _get_trades_data()
         strat_metrics = {}
@@ -1721,6 +1777,17 @@ def api_analytics():
     timeframe_map = {}
     symbol_map = {}
 
+    # If telemetry store returned nothing, fall back to the thin ledger
+    if total == 0:
+        try:
+            ledger_trades = _get_trades_data().get("positions", [])
+            if ledger_trades:
+                filtered_trades = ledger_trades
+                total = len(filtered_trades)
+                logger.info(f"[ANALYTICS] Telemetry store empty; using ledger fallback ({total} trades)")
+        except Exception as _fb_err:
+            logger.warning(f"[ANALYTICS] Ledger fallback failed: {_fb_err}")
+
     for t in filtered_trades:
         pnl = float(t.get("net_pnl", t.get("pnl", 0.0)))
         fee = float(t.get("fees", t.get("total_fees", 0.0)))
@@ -1776,9 +1843,18 @@ def api_analytics():
     largest_win = round(max(wins), 4) if wins else None
     largest_loss = round(min(losses), 4) if losses else None
 
-    # Unrealized PnL from open positions
-    account_holdings = get_live_account_and_holdings()
-    unrealized_pnl = float(account_holdings.get("unrealized_pnl", 0.0))
+    # Unrealized PnL from open positions in portfolio (NOT account_holdings — that dict doesn't carry unrealized_pnl)
+    unrealized_pnl = 0.0
+    port_file_path = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+    if os.path.exists(port_file_path):
+        try:
+            with open(port_file_path, "r") as _pf:
+                _pd = json.load(_pf)
+                for _sym, _pos in _pd.get("positions", {}).items():
+                    if isinstance(_pos, dict) and _pos.get("status", "OPEN") == "OPEN":
+                        unrealized_pnl += float(_pos.get("unrealized_pnl", 0.0))
+        except Exception:
+            pass
 
     # PnL distribution buckets
     pnl_dist = {

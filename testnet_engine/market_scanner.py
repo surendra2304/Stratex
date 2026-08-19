@@ -113,9 +113,11 @@ class MarketScanner:
                     last_close = self.last_candle_close.get((sym, tf), now - datetime.timedelta(days=1))
                     elapsed_close = (now - last_close).total_seconds()
                     
-                    if elapsed > max(15, tf_secs * 1.5) or elapsed_close > tf_secs + 15:
+                    # Faster stale threshold: cap at 90s so 1m candles are detected quickly
+                    stale_threshold = max(15, min(tf_secs * 1.5, 90))
+                    if elapsed > stale_threshold or elapsed_close > tf_secs + 15:
                         sym_stale = True
-                        if self.data_health_status[sym] == "OK":
+                        if self.data_health_status.get(sym) == "OK":
                             logger.warning(f"[CANDLE_CLOSE_MISSED] {sym} ({tf}) data STALE. Tick elapsed: {elapsed:.1f}s, Close elapsed: {elapsed_close:.1f}s")
                             logger.warning(f"[REST_FALLBACK] Triggering historical sync for {sym} ({tf})")
                         
@@ -139,26 +141,34 @@ class MarketScanner:
                     self.data_health_status[sym] = "OK"
                     all_stale = False
             
-            # If all symbols are completely dead for > 60 seconds, reconnect socket
+            # If all symbols are completely dead for > 120 seconds, reconnect socket atomically
             if all_stale and len(self.symbols) > 0:
                 max_elapsed = max([(now - self.last_market_update.get((s, t), now)).total_seconds() for s in self.symbols for t in self.timeframes])
                 if max_elapsed > 120:
-                    logger.critical("[SCANNER] 🚨 Entire websocket appears DEAD. Attempting reconnect...")
+                    logger.critical("[SCANNER] 🚨 Entire websocket appears DEAD. Attempting atomic reconnect...")
                     try:
-                        self.twm.stop()
-                        time.sleep(5)
-                        self.twm = ThreadedWebsocketManager(testnet=self.testnet)
-                        self.twm.start()
+                        old_twm = self.twm
+                        # Build new TWM before stopping old one — prevents gap window
+                        new_twm = ThreadedWebsocketManager(testnet=self.testnet)
+                        new_twm.start()
                         streams = [f"{sym.lower()}@kline_{tf}" for sym in self.symbols for tf in self.timeframes]
-                        self.twm.start_multiplex_socket(callback=self._handle_socket_message, streams=streams)
-                        
+                        new_twm.start_multiplex_socket(callback=self._handle_socket_message, streams=streams)
+                        # Swap atomically
+                        self.twm = new_twm
+                        # Now safely stop the old one
+                        try:
+                            old_twm.stop()
+                        except Exception as stop_err:
+                            logger.warning(f"[SCANNER] Old TWM stop error (non-fatal): {stop_err}")
+                        # Reset staleness timers only after new stream confirmed
                         for sym in self.symbols:
                             for tf in self.timeframes:
-                                self.last_market_update[(sym, tf)] = datetime.datetime.utcnow() # Reset timeout
+                                self.last_market_update[(sym, tf)] = datetime.datetime.utcnow()
+                        logger.info("[SCANNER] Atomic reconnect completed successfully.")
                     except Exception as e:
-                        logger.error(f"[SCANNER] Reconnect failed: {e}")
+                        logger.error(f"[SCANNER] Atomic reconnect failed: {e}")
                         
-            time.sleep(5)
+            time.sleep(3)  # Reduced from 5s for faster stale detection
 
     def register_callback(self, callback_func):
         """Register a function to be called when a candle closes. Signature: cb(symbol, tf, df, health)"""
@@ -187,15 +197,16 @@ class MarketScanner:
             
         self.last_candle_close[(symbol, tf)] = datetime.datetime.utcnow()
             
-        # Update Cache
+        # Parse new row
         vol = float(kline.get('v', 0))
         taker_vol = float(kline.get('V', vol / 2.0))
         buy_vol = taker_vol
         sell_vol = max(0.0, vol - buy_vol)
         vol_delta = buy_vol - sell_vol
 
+        candle_ts = pd.to_datetime(kline.get('t', int(time.time() * 1000)), unit='ms')
         new_row = {
-            'timestamp': pd.to_datetime(kline.get('t', int(time.time() * 1000)), unit='ms'),
+            'timestamp': candle_ts,
             'close_time': pd.to_datetime(kline.get('T', int(time.time() * 1000)), unit='ms'),
             'open': float(kline['o']),
             'high': float(kline['h']),
@@ -213,8 +224,17 @@ class MarketScanner:
         with self._cache_lock:
             if (symbol, tf) in self.candle_cache:
                 df = self.candle_cache[(symbol, tf)]
-                # Append new row and keep last 250 rows cleanly indexed
+                
+                # Duplicate candle prevention: skip if this timestamp already exists
+                if 'timestamp' in df.columns and len(df) > 0:
+                    existing_ts = df['timestamp'].iloc[-1]
+                    if existing_ts == candle_ts:
+                        logger.debug(f"[DUPLICATE_CANDLE_SKIPPED] {symbol} {tf} ts={candle_ts} already in cache")
+                        return
+                
+                # Append and sort by timestamp to handle any out-of-order delivery
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+                df = df.sort_values('timestamp', ascending=True).reset_index(drop=True)
                 if len(df) > 250:
                     df = df.iloc[-250:].reset_index(drop=True)
                 self.candle_cache[(symbol, tf)] = df
