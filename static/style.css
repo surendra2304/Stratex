@@ -4,53 +4,72 @@
 ============================================================================== */
 
 :root {
-    /* ── Surface & Canvas (Premium Black Institutional) ── */
-    --bg-base:        #05070B;  /* Primary Background */
-    --bg-sidebar:     #070A0F;  /* Sidebar */
-    --bg-header:      #080C12;  /* Header */
-    --bg-panel:       #0A0F16;  /* Main Panel */
-    --bg-panel-hover: #111923;  /* Elevated Panel */
-    --bg-subtle:      #111923;  /* Elevated Panel (used for inputs/headers) */
-    --bg-input:       #070A0F;
+    /* ── Surface & Canvas (Premium Institutional Black Palette) ── */
+    --bg-base:        #05070B;  /* Primary Canvas */
+    --bg-sidebar:     #070A0F;  /* Terminal Sidebar */
+    --bg-header:      #080C12;  /* Top Status Bar */
+    --bg-panel:       #111923;  /* Institutional Panel / Card */
+    --bg-panel-hover: #16202C;  /* Elevated Interactive Panel */
+    --bg-subtle:      #0A0F16;  /* Inner Container Background */
+    --bg-input:       #070A0F;  /* Input & Select Background */
 
     /* ── Hairline Borders ── */
-    --border-subtle:  #1D2A3A;  /* Border */
-    --border-medium:  #1D2A3A;  /* Standard border */
-    --border-active:  #2A3B52;  /* Active / Hover border */
-    --border-indigo:  rgba(59, 130, 246, 0.4);
+    --border-subtle:  #1D2A3A;  /* Standard Hairline Border */
+    --border-medium:  #1D2A3A;  /* Divider & Header Border */
+    --border-active:  #2A3B52;  /* Hover / Focus Border */
+    --border-indigo:  rgba(59, 130, 246, 0.3);
 
     /* ── Brand & Accent Semantics ── */
-    --accent-primary:   #3B82F6;  /* Primary Blue */
-    --accent-primary-dim: rgba(59, 130, 246, 0.12);
-    --accent-secondary: #22D3EE;  /* Cyan */
+    --accent-primary:       #3B82F6;  /* Primary Blue */
+    --accent-primary-dim:   rgba(59, 130, 246, 0.12);
+    --accent-secondary:     #22D3EE;  /* Cyan Accent */
     --accent-secondary-dim: rgba(34, 211, 238, 0.12);
-    --accent-bright:    #60A5FA;  /* Bright Blue */
+    --accent-bright:        #60A5FA;  /* Bright Blue */
 
     /* ── Financial Semantic Colors ── */
     --profit-green:   #22C55E;  /* Profit / Success */
     --profit-dim:     rgba(34, 197, 94, 0.12);
     --loss-red:       #EF4444;  /* Loss / Danger */
     --loss-dim:       rgba(239, 68, 68, 0.12);
-    --warning-amber:  #F59E0B;  /* Warning */
+    --warning-amber:  #F59E0B;  /* Warning / Pending */
     --warning-dim:    rgba(245, 158, 11, 0.12);
 
     /* ── Typography & Readability ── */
-    --text-primary:   #F8FAFC;  /* Primary Text */
-    --text-secondary: #A7B5C8;  /* Secondary Text */
-    --text-muted:     #66758A;  /* Muted Text */
-    --text-dim:       #3D4A5A;  /* Disabled */
+    --text-primary:   #F8FAFC;  /* High-Contrast Primary Text */
+    --text-secondary: #A7B5C8;  /* Readable Secondary Text */
+    --text-muted:     #66758A;  /* Muted Labels & Headers */
+    --text-dim:       #3D4A5A;  /* Disabled Elements */
 
     /* ── Font Stacks ── */
-    --font-heading:   'Inter', sans-serif;
-    --font-body:      'Inter', sans-serif;
-    --font-mono:      'JetBrains Mono', monospace;
+    --font-heading:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-body:      'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono:      'JetBrains Mono', 'SF Mono', Consolas, monospace;
 
     /* ── Dimensions & Spacing Scale ── */
     --sidebar-width:  220px;
     --status-height:  48px;
     --footer-height:  30px;
-    --space-card:     24px;
-    --row-height:     52px;
+    --space-card:     20px;
+    --row-height:     48px;
+}
+
+/* ─── INSTITUTIONAL SCROLLBAR ─── */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-subtle);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--border-active);
 }
 
 /* ─── BASE RESETS ─── */
