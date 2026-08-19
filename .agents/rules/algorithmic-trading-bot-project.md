@@ -170,8 +170,19 @@ Future agents must **NEVER** reintroduce any of the following removed items:
 
 ---
 
-## 9. Development Protocol & Memory Maintenance
+## 9. DIARY MAINTENANCE PROTOCOL
 Before and after future development sessions:
 1. **Before coding:** Read this rule file, read `DIARY.md`, inspect existing repository code, and maintain approved architecture.
-2. **After implementation:** Append chronological entries to `DIARY.md` (and `diary/YYYY-MM-DD.md`) recording completed work, files changed, tests passed, bugs resolved, and current state.
+2. **After implementation (Every session must update the diary):**
+   - Determine today's date.
+   - Open `diary/YYYY-MM-DD.md` (Create it if missing).
+   - Add the detailed work completed during the session to the dated diary file.
+   - Update the corresponding DAY section in `DIARY.md` (the master summary).
+   - Include important bugs, fixes, decisions, tests, deployment state and commits.
+   - Never skip diary updates for completed development sessions.
+   - Never invent historical activity.
+   - Never delete historical diary entries.
+   - Follow `DIARY_SPEC.md` exactly.
+   - Review diary changes before commit.
+   - Commit diary changes to GitHub.
 3. **Persistence:** Never overwrite historical diary entries or silently alter approved UI structures.
