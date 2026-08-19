@@ -21,6 +21,12 @@ if '\ufeffAPI_KEY' in os.environ:
 API_KEY = os.getenv("API_KEY", "")
 SECRET_KEY = os.getenv("SECRET_KEY", "")
 
+# --- Gemini AI Configuration (from environment / .env file only) ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_ENABLED = os.getenv("GEMINI_ENABLED", "True").lower() == "true"
+
+
 # --- Testnet Base URLs ---
 BASE_URL = "https://testnet.binance.vision"
 WS_URL = "wss://ws-api.testnet.binance.vision/ws-api/v3"

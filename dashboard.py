@@ -2687,9 +2687,96 @@ def api_config():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
+# ==============================================================================
+# GEMINI AI ANALYSIS LAYER ENDPOINTS (Advisory & Diagnostics Only)
+# ==============================================================================
+@app.route('/api/ai/status', methods=['GET'])
+def api_ai_status():
+    """Returns safe Gemini AI status metadata without revealing keys."""
+    try:
+        from gemini_service import get_gemini_service
+        service = get_gemini_service()
+        return jsonify(service.get_status())
+    except Exception as e:
+        logger.warning(f"[API_AI_STATUS] Error: {e}")
+        return jsonify({
+            "status": "SUCCESS",
+            "gemini": {
+                "enabled": False,
+                "configured": False,
+                "status": "UNAVAILABLE",
+                "model": "gemini-2.5-flash"
+            }
+        })
+
+@app.route('/api/ai/test-connection', methods=['POST'])
+def api_ai_test_connection():
+    """Triggers a server-side connectivity test with Google Gemini."""
+    try:
+        from gemini_service import get_gemini_service
+        service = get_gemini_service()
+        res = service.test_connection()
+        return jsonify(res)
+    except Exception as e:
+        logger.warning(f"[API_AI_TEST] Error: {e}")
+        return jsonify({"success": False, "status": "UNAVAILABLE", "message": str(e)}), 500
+
+@app.route('/api/ai/signal-analysis', methods=['POST'])
+def api_ai_signal_analysis():
+    """Generates structured natural-language rationale for a scanner signal."""
+    try:
+        from gemini_service import get_gemini_service
+        data = request.get_json() or {}
+        service = get_gemini_service()
+        analysis = service.analyze_signal(data)
+        return jsonify({"status": "SUCCESS", "analysis": analysis})
+    except Exception as e:
+        logger.warning(f"[API_AI_SIGNAL] Error: {e}")
+        return jsonify({"status": "SUCCESS", "analysis": {"why": "Analysis unavailable", "ai_available": False}})
+
+@app.route('/api/ai/trade-analysis', methods=['POST'])
+def api_ai_trade_analysis():
+    """Generates post-trade review & execution audit for closed trades."""
+    try:
+        from gemini_service import get_gemini_service
+        data = request.get_json() or {}
+        service = get_gemini_service()
+        analysis = service.analyze_trade(data)
+        return jsonify({"status": "SUCCESS", "analysis": analysis})
+    except Exception as e:
+        logger.warning(f"[API_AI_TRADE] Error: {e}")
+        return jsonify({"status": "SUCCESS", "analysis": {"trade_summary": "Review unavailable", "ai_available": False}})
+
+@app.route('/api/ai/performance-analysis', methods=['POST'])
+def api_ai_performance_analysis():
+    """Provides quantitative portfolio observations and strategy notes."""
+    try:
+        from gemini_service import get_gemini_service
+        data = request.get_json() or {}
+        service = get_gemini_service()
+        analysis = service.analyze_performance(data)
+        return jsonify({"status": "SUCCESS", "analysis": analysis})
+    except Exception as e:
+        logger.warning(f"[API_AI_PERF] Error: {e}")
+        return jsonify({"status": "SUCCESS", "analysis": {"performance_summary": "Summary unavailable", "ai_available": False}})
+
+@app.route('/api/ai/system-analysis', methods=['POST'])
+def api_ai_system_analysis():
+    """Provides high-level system diagnostics based on recent events."""
+    try:
+        from gemini_service import get_gemini_service
+        data = request.get_json() or {}
+        service = get_gemini_service()
+        analysis = service.analyze_system_diagnostics(data)
+        return jsonify({"status": "SUCCESS", "analysis": analysis})
+    except Exception as e:
+        logger.warning(f"[API_AI_SYS] Error: {e}")
+        return jsonify({"status": "SUCCESS", "analysis": {"system_summary": "Diagnostics unavailable", "ai_available": False}})
+
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)
+
 
 if __name__ == '__main__':
     print("🚀 Starting Unified Live Trading Dashboard...")

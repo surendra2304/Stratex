@@ -56,6 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 fetchSystemData();
             } else if (targetView === 'settings') {
                 fetchSettings(true);
+                fetchGeminiStatus();
             }
         });
     });
@@ -3444,6 +3445,35 @@ async function fetchAnalyticsData() {
         renderComparisonTable('an-tf-body', res.timeframe_comparison);
         renderComparisonTable('an-sym-body', res.symbol_comparison);
 
+        // Asynchronously synthesize Gemini AI Performance Summary
+        const aiPerfBox = document.getElementById('ai-perf-content');
+        if (aiPerfBox && !aiPerfBox.dataset.loaded) {
+            apiClient.post('/api/ai/performance-analysis', {
+                timeframe: activeAnalyticsTimeframe,
+                total_trades: a.total_trades || 0,
+                win_rate: a.win_rate || 0.0,
+                net_pnl: a.net_pnl || 0.0,
+                profit_factor: a.profit_factor || 0.0,
+                max_drawdown: a.max_drawdown || 0.0,
+                strategies: res.strategy_comparison || {}
+            }).then(aiRes => {
+                if (aiRes && aiRes.status === 'SUCCESS' && aiRes.analysis) {
+                    const an = aiRes.analysis;
+                    aiPerfBox.innerHTML = `
+                        <div style="margin-bottom: 6px;"><strong style="color:var(--text-primary);">Audit:</strong> ${an.performance_summary || '-'}</div>
+                        <div style="margin-bottom: 6px;"><strong style="color:var(--text-primary);">Strategy Alpha:</strong> ${an.strategy_observations || '-'}</div>
+                        <div style="margin-bottom: 6px;"><strong style="color:var(--text-primary);">Risk Containment:</strong> ${an.risk_observations || '-'}</div>
+                        <div style="color: var(--accent-primary); font-size: 10px;">🎯 <strong>Focus:</strong> ${an.suggested_focus || '-'}</div>
+                    `;
+                    aiPerfBox.dataset.loaded = "true";
+                } else {
+                    aiPerfBox.innerHTML = '<span class="text-muted">AI Performance Summary Unavailable</span>';
+                }
+            }).catch(() => {
+                if (aiPerfBox) aiPerfBox.innerHTML = '<span class="text-muted">AI Performance Summary Unavailable</span>';
+            });
+        }
+
     } catch (e) {
         console.error("Failed to fetch analytics:", e);
     }
@@ -3750,9 +3780,50 @@ function inspectTradeLifecycle(t) {
                 <div class="inspector-row"><span class="inspector-lbl">OCO List ID</span><span class="inspector-val mono">${t.oco_id || '-'}</span></div>
             </div>
         </div>
+        <div class="inspector-card" id="ai-trade-card" style="border: 1px solid rgba(59, 130, 246, 0.4); background: rgba(59, 130, 246, 0.03);">
+            <div class="inspector-card-header" style="color: var(--accent-primary); display: flex; justify-content: space-between;">
+                <span>🤖 AI TRADE REVIEW (GEMINI)</span>
+                <span class="mono" style="font-size: 9px; opacity: 0.8;">ADVISORY ONLY</span>
+            </div>
+            <div id="ai-trd-content" style="font-size: 11px; color: var(--text-secondary); line-height: 1.45; padding: 4px 0;">
+                <span style="opacity: 0.7;">Analyzing trade lifecycle and execution quality...</span>
+            </div>
+        </div>
     `;
 
     openInspectorDrawer(`TRADE AUDIT • ${sym} ${side}`, html);
+
+    // Asynchronously fetch Gemini AI trade review
+    requestAiTradeAnalysis({
+        trade_id: t.entry_order_id || t.signal_id || `${sym}_${t.timestamp || Date.now()}`,
+        symbol: sym,
+        timeframe: tf,
+        strategy: strat,
+        side: side,
+        entry_price: entryPx,
+        exit_price: exitPx,
+        net_pnl: netPnl,
+        fees: fees,
+        duration: dur,
+        close_reason: outcome
+    }).then(aiRes => {
+        const aiBox = document.getElementById('ai-trd-content');
+        if (!aiBox) return;
+        if (aiRes) {
+            aiBox.innerHTML = `
+                <div style="margin-bottom: 6px;"><strong style="color:var(--text-primary);">Summary:</strong> ${aiRes.trade_summary || '-'}</div>
+                <div style="margin-bottom: 4px;"><strong style="color:var(--text-primary);">Execution:</strong> ${aiRes.execution_quality || '-'}</div>
+                ${aiRes.what_went_well ? `<div style="margin-bottom: 3px; color: var(--profit-green); font-size: 10px;">✓ ${aiRes.what_went_well}</div>` : ''}
+                ${aiRes.what_went_wrong ? `<div style="margin-bottom: 3px; color: var(--loss-red); font-size: 10px;">⚠ ${aiRes.what_went_wrong}</div>` : ''}
+                ${aiRes.key_lesson ? `<div style="margin-top: 4px; font-size: 10px; color: var(--accent-primary);">💡 <em>${aiRes.key_lesson}</em></div>` : ''}
+            `;
+        } else {
+            aiBox.innerHTML = '<span class="text-muted">AI Review Unavailable</span>';
+        }
+    }).catch(() => {
+        const aiBox = document.getElementById('ai-trd-content');
+        if (aiBox) aiBox.innerHTML = '<span class="text-muted">AI Review Unavailable</span>';
+    });
 
     // Render Modal Chart AFTER variables are defined
     const chartContainer = document.getElementById('modal-trade-chart');
@@ -4418,6 +4489,15 @@ function inspectSignalLifecycle(s) {
                 <div style="font-family: var(--font-heading); font-size: 14px; font-weight: 700; color: ${finalColor};">${finalStatus}</div>
             </div>
         </div>
+        <div class="terminal-card" id="ai-signal-card" style="margin-bottom: 16px; border: 1px solid rgba(59, 130, 246, 0.4); background: rgba(59, 130, 246, 0.03);">
+            <div class="card-title" style="color: var(--accent-primary); display: flex; justify-content: space-between;">
+                <span>🤖 AI ANALYSIS (GEMINI)</span>
+                <span class="mono" id="ai-sig-status" style="font-size: 9px; opacity: 0.8;">ADVISORY ONLY</span>
+            </div>
+            <div id="ai-sig-content" style="font-size: 11px; color: var(--text-secondary); line-height: 1.45; padding-top: 4px;">
+                <span style="opacity: 0.7;">Synthesizing market context and technical setup...</span>
+            </div>
+        </div>
     `;
 
     document.getElementById('drawer-body').innerHTML = html;
@@ -4431,6 +4511,44 @@ function inspectSignalLifecycle(s) {
 
     window.currentModalItem = { symbol: sym, timeframe: tf, entry: entry, sl: sl, tp: tp, exit: 0, side: side };
     renderModalCandleChart(sym, tf, entry, sl, tp, 0, side);
+
+    // Asynchronously fetch Gemini AI rationale without blocking UI
+    requestAiSignalAnalysis({
+        signal_id: s.signal_id || `${sym}_${Date.now()}`,
+        symbol: sym,
+        timeframe: tf,
+        strategy: strat,
+        side: side,
+        entry_price: entry,
+        stop_loss: sl,
+        take_profit: tp,
+        confidence: s.confidence || 0.5,
+        expected_net_edge: prof.expected_net || 0.0,
+        profitability_result: prof.passed ? 'PASSED' : 'REJECTED',
+        risk_result: risk.passed ? 'PASSED' : 'REJECTED',
+        result: isQual ? 'QUALIFIED' : 'REJECTED',
+        reason: combinedReason
+    }).then(aiRes => {
+        const aiBox = document.getElementById('ai-sig-content');
+        if (!aiBox) return;
+        if (aiRes) {
+            const whyText = aiRes.why || 'Setup evaluated by strategy parameters.';
+            const howText = aiRes.how || '';
+            const strengths = Array.isArray(aiRes.strengths) ? aiRes.strengths.map(st => `• ${st}`).join('<br>') : '';
+            const risks = Array.isArray(aiRes.risks) ? aiRes.risks.map(rk => `• ${rk}`).join('<br>') : '';
+            aiBox.innerHTML = `
+                <div style="margin-bottom: 6px;"><strong style="color:var(--text-primary);">Why:</strong> ${whyText}</div>
+                ${howText ? `<div style="margin-bottom: 6px;"><strong style="color:var(--text-primary);">Alignment:</strong> ${howText}</div>` : ''}
+                ${strengths ? `<div style="margin-bottom: 4px; color: var(--profit-green); font-size: 10px;">${strengths}</div>` : ''}
+                ${risks ? `<div style="color: var(--loss-red); font-size: 10px;">${risks}</div>` : ''}
+            `;
+        } else {
+            aiBox.innerHTML = '<span class="text-muted">AI Analysis Unavailable</span>';
+        }
+    }).catch(() => {
+        const aiBox = document.getElementById('ai-sig-content');
+        if (aiBox) aiBox.innerHTML = '<span class="text-muted">AI Analysis Unavailable</span>';
+    });
 }
 
 // ==========================================
@@ -5389,6 +5507,35 @@ async function fetchSystemData() {
             console.warn('System events fetch failed:', sysEvErr.message);
         }
 
+        // Asynchronously synthesize Gemini AI System Diagnostics
+        const aiSysBox = document.getElementById('ai-sys-content');
+        if (aiSysBox && !aiSysBox.dataset.loaded) {
+            apiClient.post('/api/ai/system-analysis', {
+                uptime: hb.uptime_seconds ? formatUptime(hb.uptime_seconds) : '00:00:00',
+                engine_status: (hb.engine_status || 'RUNNING').toUpperCase(),
+                reconnect_count: hb.reconnect_count || 0,
+                recent_events: []
+            }).then(aiRes => {
+                if (aiRes && aiRes.status === 'SUCCESS' && aiRes.analysis) {
+                    const an = aiRes.analysis;
+                    const hRating = an.health_rating || 'OPTIMAL';
+                    const hColor = hRating === 'OPTIMAL' ? 'var(--profit-green)' : (hRating === 'NORMAL' ? 'var(--accent-primary)' : 'var(--loss-red)');
+                    const insights = Array.isArray(an.telemetry_insights) ? an.telemetry_insights.map(i => `• ${i}`).join('<br>') : '';
+                    aiSysBox.innerHTML = `
+                        <div style="margin-bottom: 6px;"><strong style="color:var(--text-primary);">Health Rating:</strong> <span style="color:${hColor}; font-weight:700;">${hRating}</span></div>
+                        <div style="margin-bottom: 6px;"><strong style="color:var(--text-primary);">Diagnosis:</strong> ${an.system_summary || '-'}</div>
+                        ${insights ? `<div style="margin-bottom: 4px; color: var(--text-secondary); font-size: 10px;">${insights}</div>` : ''}
+                        <div style="color: var(--accent-primary); font-size: 10px;">🛠️ <strong>Action:</strong> ${an.action_items || 'None required'}</div>
+                    `;
+                    aiSysBox.dataset.loaded = "true";
+                } else {
+                    aiSysBox.innerHTML = '<span class="text-muted">AI System Diagnostics Unavailable</span>';
+                }
+            }).catch(() => {
+                if (aiSysBox) aiSysBox.innerHTML = '<span class="text-muted">AI System Diagnostics Unavailable</span>';
+            });
+        }
+
     } catch (e) {
         console.error("fetchSystemData error:", e);
     }
@@ -5477,3 +5624,99 @@ function toggleManualTrading() {
         showToast('Manual Trading Mode DISABLED', 'info');
     }
 }
+
+// ==========================================
+// GEMINI AI INTEGRATION (Analysis & Diagnostics)
+// ==========================================
+
+async function fetchGeminiStatus() {
+    try {
+        const data = await apiClient.get('/api/ai/status');
+        if (data && data.gemini) {
+            const g = data.gemini;
+            const ind = document.getElementById('gemini-status-indicator');
+            const txt = document.getElementById('gemini-status-text');
+            const modelName = document.getElementById('gemini-model-name');
+            const enabledSel = document.getElementById('set-gemini-enabled');
+
+            if (ind && txt) {
+                if (g.status === 'CONNECTED') {
+                    ind.className = 'dot dot-green';
+                    txt.innerText = 'CONNECTED';
+                    txt.style.color = 'var(--profit-green)';
+                } else {
+                    ind.className = 'dot dot-red';
+                    txt.innerText = 'UNAVAILABLE';
+                    txt.style.color = 'var(--loss-red)';
+                }
+            }
+            if (modelName && g.model) {
+                modelName.innerText = g.model;
+            }
+            if (enabledSel && g.enabled !== undefined) {
+                enabledSel.value = g.enabled ? 'ON' : 'OFF';
+            }
+        }
+    } catch (e) {
+        console.warn('fetchGeminiStatus error:', e);
+    }
+}
+
+async function testGeminiConnection() {
+    const btn = document.getElementById('btn-test-gemini');
+    const resultBox = document.getElementById('gemini-test-result');
+    if (btn) btn.disabled = true;
+    if (resultBox) {
+        resultBox.style.display = 'block';
+        resultBox.style.color = 'var(--accent-primary)';
+        resultBox.innerText = 'Testing Gemini API connectivity...';
+    }
+
+    try {
+        const res = await apiClient.post('/api/ai/test-connection', {});
+        if (res && res.success) {
+            if (resultBox) {
+                resultBox.style.color = 'var(--profit-green)';
+                resultBox.innerText = `✓ ${res.message} (Model: ${res.model || 'gemini-2.5-flash'})`;
+            }
+            fetchGeminiStatus();
+        } else {
+            if (resultBox) {
+                resultBox.style.color = 'var(--loss-red)';
+                resultBox.innerText = `✕ ${res ? res.message : 'Connection failed'}`;
+            }
+        }
+    } catch (e) {
+        if (resultBox) {
+            resultBox.style.color = 'var(--loss-red)';
+            resultBox.innerText = '✕ Network error testing Gemini';
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function requestAiSignalAnalysis(signalPayload) {
+    try {
+        const res = await apiClient.post('/api/ai/signal-analysis', signalPayload);
+        if (res && res.status === 'SUCCESS' && res.analysis) {
+            return res.analysis;
+        }
+    } catch (e) {
+        console.warn('requestAiSignalAnalysis error:', e);
+    }
+    return null;
+}
+
+async function requestAiTradeAnalysis(tradePayload) {
+    try {
+        const res = await apiClient.post('/api/ai/trade-analysis', tradePayload);
+        if (res && res.status === 'SUCCESS' && res.analysis) {
+            return res.analysis;
+        }
+    } catch (e) {
+        console.warn('requestAiTradeAnalysis error:', e);
+    }
+    return null;
+}
+
