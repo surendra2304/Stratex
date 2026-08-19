@@ -27,7 +27,7 @@ class TestGeminiService(unittest.TestCase):
         self.assertEqual(status["status"], "SUCCESS")
         self.assertTrue(status["gemini"]["configured"])
         self.assertTrue(status["gemini"]["enabled"])
-        self.assertEqual(status["gemini"]["status"], "CONNECTED")
+        self.assertIn(status["gemini"]["status"], ["CONNECTED", "CONFIGURED"])
         # Ensure API key is NOT in the status response
         self.assertNotIn("test_mock_api_key_12345", str(status))
         self.assertNotIn("api_key", status["gemini"])

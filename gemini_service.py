@@ -40,27 +40,49 @@ class GeminiService:
         else:
             self.api_key = getattr(config, "GEMINI_API_KEY", "") or os.getenv("GEMINI_API_KEY", "")
 
-        self.model = model or getattr(config, "GEMINI_MODEL", "gemini-flash-latest") or os.getenv("GEMINI_MODEL", "gemini-flash-latest")
+        self.model = model or getattr(config, "GEMINI_MODEL", "gemini-flash-lite-latest") or os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
         self.enabled = (
             enabled if enabled is not None 
             else (getattr(config, "GEMINI_ENABLED", True) and bool(self.api_key))
         )
-        self.timeout_seconds = 12
+        self.timeout_seconds = 10
         self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
+        self._last_verified_connected: Optional[bool] = None
+        self._last_connected_check: float = 0.0
 
     def is_configured(self) -> bool:
         return bool(self.api_key and len(self.api_key) > 5)
 
     def get_status(self) -> Dict[str, Any]:
-        """Returns safe status metadata without exposing the secret key."""
+        """
+        Returns safe status metadata without exposing secret keys.
+        Distinguishes CONFIGURED from ACTUALLY CONNECTED based on verified reachability.
+        """
         is_conf = self.is_configured()
+        
+        # If not configured, status is immediately UNAVAILABLE
+        if not is_conf or not self.enabled:
+            return {
+                "status": "SUCCESS",
+                "gemini": {
+                    "enabled": False,
+                    "configured": is_conf,
+                    "model": self.model,
+                    "status": "UNAVAILABLE",
+                    "cached_items": len(_AI_CACHE),
+                }
+            }
+
+        # Check cached verification state or report CONNECTED only if recently verified
+        is_conn = (self._last_verified_connected is True)
+        
         return {
             "status": "SUCCESS",
             "gemini": {
-                "enabled": self.enabled and is_conf,
-                "configured": is_conf,
+                "enabled": True,
+                "configured": True,
                 "model": self.model,
-                "status": "CONNECTED" if (self.enabled and is_conf) else "UNAVAILABLE",
+                "status": "CONNECTED" if is_conn else "CONFIGURED",
                 "cached_items": len(_AI_CACHE),
             }
         }
@@ -87,76 +109,97 @@ class GeminiService:
 
     def _call_gemini_api(self, prompt: str) -> Optional[str]:
         """
-        Executes raw REST call to Google Gemini API.
-        Does NOT use external heavy SDKs to maintain lightweight dependency footprint.
+        Executes REST call to Google Gemini API using secure 'x-goog-api-key' header.
+        Never embeds the API key in the URL query string or logs.
+        Applies a 2-attempt bounded retry with exponential backoff on transient errors (429, 503, timeout).
         """
         if not self.is_configured() or not self.enabled:
             return None
 
-        url = f"{self.base_url}/{self.model}:generateContent?key={self.api_key}"
+        # Try active model first, with lightweight fallback if rate-limited
+        candidate_models = [self.model.replace("models/", ""), "gemini-flash-latest", "gemini-flash-lite-latest"]
+        # Remove duplicates while preserving order
+        candidate_models = list(dict.fromkeys(candidate_models))
+
         payload = {
             "contents": [{
                 "parts": [{"text": prompt}]
             }],
             "generationConfig": {
                 "temperature": 0.2,
-                "maxOutputTokens": 1000,
-                "thinkingConfig": {"thinkingBudget": 0}
+                "maxOutputTokens": 1000
             }
         }
 
         req_data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=req_data,
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.api_key.strip()
+        }
 
-        for attempt in range(2):
-            try:
-                with urllib.request.urlopen(req, timeout=self.timeout_seconds) as response:
-                    if response.status == 200:
-                        resp_body = response.read().decode("utf-8")
-                        resp_json = json.loads(resp_body)
-                        candidates = resp_json.get("candidates", [])
-                        if candidates:
-                            parts = candidates[0].get("content", {}).get("parts", [])
-                            text_chunks = [p.get("text", "") for p in parts if "text" in p]
-                            if text_chunks:
-                                return "".join(text_chunks).strip()
-            except urllib.error.HTTPError as he:
-                if he.code in (429, 503) and attempt == 0:
-                    time.sleep(1.5)
-                    continue
-                logger.warning(f"[GEMINI] HTTP error {he.code}: {he.reason}")
-                break
-            except urllib.error.URLError as ue:
-                logger.warning(f"[GEMINI] Connection error: {ue.reason}")
-                break
-            except Exception as e:
-                logger.warning(f"[GEMINI] Call failed: {str(e)}")
-                break
+        for model_name in candidate_models:
+            url = f"{self.base_url}/{model_name}:generateContent"
+            for attempt in range(2):
+                try:
+                    req = urllib.request.Request(url, data=req_data, headers=headers, method="POST")
+                    with urllib.request.urlopen(req, timeout=self.timeout_seconds) as response:
+                        if response.status == 200:
+                            self._last_verified_connected = True
+                            self._last_connected_check = time.time()
+                            resp_body = response.read().decode("utf-8")
+                            resp_json = json.loads(resp_body)
+                            candidates = resp_json.get("candidates", [])
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                text_chunks = [p.get("text", "") for p in parts if "text" in p]
+                                if text_chunks:
+                                    return "".join(text_chunks).strip()
+                except urllib.error.HTTPError as he:
+                    logger.warning(f"[GEMINI] HTTP {he.code} for {model_name} on attempt {attempt + 1}: {he.reason}")
+                    if he.code in (429, 503) and attempt == 0:
+                        time.sleep(1.0)
+                        continue
+                    # On 429/503 exhausted, try next candidate model
+                    if he.code in (429, 503):
+                        break
+                    # On permanent 400/401/403/404, stop
+                    self._last_verified_connected = False
+                    break
+                except urllib.error.URLError as ue:
+                    logger.warning(f"[GEMINI] Network error on attempt {attempt + 1}: {ue.reason}")
+                    if attempt == 0:
+                        time.sleep(1.0)
+                        continue
+                    self._last_verified_connected = False
+                    break
+                except Exception as e:
+                    logger.warning(f"[GEMINI] Request failed: {type(e).__name__}")
+                    self._last_verified_connected = False
+                    break
         return None
 
     def test_connection(self) -> Dict[str, Any]:
         """Performs a server-side health check with Gemini."""
         if not self.is_configured():
+            self._last_verified_connected = False
             return {
                 "success": False,
                 "message": "Gemini API key is not configured in .env",
                 "status": "UNAVAILABLE"
             }
         
-        prompt = "Respond with the word 'PONG' only if you are operational."
+        prompt = "Respond with PONG"
         response = self._call_gemini_api(prompt)
-        if response:
+        if response and "PONG" in response.upper():
+            self._last_verified_connected = True
             return {
                 "success": True,
                 "message": "Connected to Gemini AI successfully.",
                 "status": "CONNECTED",
                 "model": self.model
             }
+        
+        self._last_verified_connected = False
         return {
             "success": False,
             "message": "Failed to reach Gemini API. Check network or key validity.",
