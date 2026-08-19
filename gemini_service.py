@@ -40,12 +40,12 @@ class GeminiService:
         else:
             self.api_key = getattr(config, "GEMINI_API_KEY", "") or os.getenv("GEMINI_API_KEY", "")
 
-        self.model = model or getattr(config, "GEMINI_MODEL", "gemini-2.5-flash") or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self.model = model or getattr(config, "GEMINI_MODEL", "gemini-flash-latest") or os.getenv("GEMINI_MODEL", "gemini-flash-latest")
         self.enabled = (
             enabled if enabled is not None 
             else (getattr(config, "GEMINI_ENABLED", True) and bool(self.api_key))
         )
-        self.timeout_seconds = 8
+        self.timeout_seconds = 12
         self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
 
     def is_configured(self) -> bool:
@@ -100,34 +100,43 @@ class GeminiService:
             }],
             "generationConfig": {
                 "temperature": 0.2,
-                "maxOutputTokens": 600,
-                "topP": 0.8
+                "maxOutputTokens": 1000,
+                "thinkingConfig": {"thinkingBudget": 0}
             }
         }
 
-        try:
-            req_data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(
-                url,
-                data=req_data,
-                headers={"Content-Type": "application/json"},
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as response:
-                if response.status == 200:
-                    resp_body = response.read().decode("utf-8")
-                    resp_json = json.loads(resp_body)
-                    candidates = resp_json.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts:
-                            return parts[0].get("text", "").strip()
-        except urllib.error.HTTPError as he:
-            logger.warning(f"[GEMINI] HTTP error {he.code}: {he.reason}")
-        except urllib.error.URLError as ue:
-            logger.warning(f"[GEMINI] Connection error: {ue.reason}")
-        except Exception as e:
-            logger.warning(f"[GEMINI] Call failed: {str(e)}")
+        req_data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=req_data,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout_seconds) as response:
+                    if response.status == 200:
+                        resp_body = response.read().decode("utf-8")
+                        resp_json = json.loads(resp_body)
+                        candidates = resp_json.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            text_chunks = [p.get("text", "") for p in parts if "text" in p]
+                            if text_chunks:
+                                return "".join(text_chunks).strip()
+            except urllib.error.HTTPError as he:
+                if he.code in (429, 503) and attempt == 0:
+                    time.sleep(1.5)
+                    continue
+                logger.warning(f"[GEMINI] HTTP error {he.code}: {he.reason}")
+                break
+            except urllib.error.URLError as ue:
+                logger.warning(f"[GEMINI] Connection error: {ue.reason}")
+                break
+            except Exception as e:
+                logger.warning(f"[GEMINI] Call failed: {str(e)}")
+                break
         return None
 
     def test_connection(self) -> Dict[str, Any]:

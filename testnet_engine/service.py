@@ -7,6 +7,7 @@ import datetime
 import threading
 import queue
 import importlib
+import config
 from config import TRADING_MODE, ACTIVE_STRATEGIES
 from logger import get_logger
 from data import add_indicators
