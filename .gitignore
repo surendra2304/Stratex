@@ -42,6 +42,9 @@ sim_portfolio.json
 sim_session.json
 bot.pid
 testnet_portfolio.json.tmp
+paper_trade_ledger.jsonl
+testnet_position_history.jsonl
+trade_log.csv
 
 # ── Data cache ─────────────────────────────────────────────────────────────────
 data_cache/

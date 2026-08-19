@@ -129,7 +129,10 @@ def _validate_trade_schema(trade: dict):
         if val is not None:
             try:
                 f_val = float(val)
-                if not math.isfinite(f_val) or f_val <= 0:
+                # Allow zero as a sentinel for 'not set'
+                if f_val == 0:
+                    continue
+                if not math.isfinite(f_val) or f_val < 0:
                     raise StateCorruptionError(f"Invalid {p_field} {val}.")
             except (ValueError, TypeError):
                 raise StateCorruptionError(f"Field {p_field} must be a positive finite number or None.")

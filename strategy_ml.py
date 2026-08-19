@@ -173,7 +173,9 @@ class MLStrategy:
         """Generates trading signals with volatility-adjusted SL/TP."""
         if self.model_buy is None or self.scaler is None:
             return SignalResult(None, None, None, "PROBABILISTIC", None, None)
-            
+        # Guard against None input
+        if df is None:
+            return SignalResult(None, None, None, "PROBABILISTIC", None, None)
         if len(df) < 20:
             return SignalResult(None, None, None, "PROBABILISTIC", None, None)
             
