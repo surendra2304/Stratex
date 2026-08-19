@@ -69,3 +69,5 @@ PRODUCTION_STRATEGIES.md
 
 # ── Heartbeat variants ─────────────────────────────────────────────────────────
 *heartbeat.json
+# Local UI backup
+backup_ui/
