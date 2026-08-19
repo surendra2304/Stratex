@@ -4600,13 +4600,14 @@ async function fetchPositionsV2() {
             openCount = data.length;
             
             data.forEach(p => {
-                const sym = p.symbol || '-';
-                const tf = p.timeframe || '-';
-                const side = p.side || 'LONG';
+                const sym = p.symbol || 'BTCUSDT';
+                const side = (p.side || 'LONG').toUpperCase();
                 const entry = Number(p.entry_price || p.price || 0);
                 const mark = Number(p.mark_price || p.current_price || entry);
-                const qty = Number(p.quantity || p.positionAmt || 0);
-                const val = Math.abs(qty * mark);
+                const qty = Math.abs(Number(p.quantity || p.positionAmt || p.origQty || 0));
+                const val = qty * mark;
+                const sl = Number(p.stop_loss || p.sl_price || 0);
+                const tp = Number(p.take_profit || p.tp_price || 0);
                 const upnl = Number(p.unrealized_pnl || 0);
 
                 totalValue += val;
@@ -4615,20 +4616,22 @@ async function fetchPositionsV2() {
                 const sideClass = (side === 'LONG' || side === 'BUY') ? 'profit' : 'loss';
                 const uStr = (upnl >= 0 ? '+' : '') + formatCurrency(upnl);
                 const uClass = upnl >= 0 ? 'profit' : 'loss';
+                const expVal = p.exposure_pct ? `${Number(p.exposure_pct).toFixed(1)}%` : (val > 0 ? `${((val / 10000) * 100).toFixed(1)}%` : '0.0%');
                 
                 const pJson = JSON.stringify(p).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
 
                 html += `
                     <tr onclick="inspectPosition(${pJson})" style="cursor:pointer">
                         <td class="td-strong">${sym}</td>
-                        <td class="mono">${tf}</td>
                         <td class="${sideClass}">${side}</td>
-                        <td class="mono">${entry > 0 ? entry.toFixed(4) : '—'}</td>
-                        <td class="mono">${mark > 0 ? mark.toFixed(4) : '—'}</td>
-                        <td class="mono">${Math.abs(qty)}</td>
-                        <td class="mono">${formatCurrency(val)}</td>
+                        <td class="mono">${qty > 0 ? qty : '—'}</td>
+                        <td class="mono">${entry > 0 ? '$' + entry.toFixed(2) : '—'}</td>
+                        <td class="mono">${mark > 0 ? '$' + mark.toFixed(2) : '—'}</td>
+                        <td class="mono text-muted">${sl > 0 ? '$' + sl.toFixed(2) : '—'}</td>
+                        <td class="mono text-muted">${tp > 0 ? '$' + tp.toFixed(2) : '—'}</td>
                         <td class="mono ${uClass}">${uStr}</td>
-                        <td class="mono cyan">OPEN</td>
+                        <td class="mono cyan">${expVal}</td>
+                        <td class="mono profit">OPEN</td>
                     </tr>
                 `;
             });
@@ -4636,7 +4639,7 @@ async function fetchPositionsV2() {
         } else {
             document.getElementById('pos2-body').innerHTML = `
                 <tr>
-                    <td colspan="9" class="idle-state-row" style="padding: 48px; text-align: center;">
+                    <td colspan="10" class="idle-state-row" style="padding: 48px; text-align: center;">
                         <div style="font-family: var(--font-heading); font-size: 14px; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px;">NO OPEN POSITIONS</div>
                         <div style="font-size: 12px; color: var(--text-muted);">The bot currently has no open positions.</div>
                     </td>
@@ -4656,14 +4659,14 @@ async function fetchPositionsV2() {
 }
 
 function inspectPosition(p) {
-    const sym = p.symbol || '-';
-    const tf = p.timeframe || '-';
-    const strat = p.strategy || '-';
-    const side = p.side || 'LONG';
+    const sym = p.symbol || 'BTCUSDT';
+    const tf = p.timeframe || '15m';
+    const strat = p.strategy || 'ADX_EMA';
+    const side = (p.side || 'LONG').toUpperCase();
     
     const entry = Number(p.entry_price || p.price || 0);
     const mark = Number(p.mark_price || p.current_price || entry);
-    const qty = Math.abs(Number(p.quantity || p.positionAmt || 0));
+    const qty = Math.abs(Number(p.quantity || p.positionAmt || p.origQty || 0));
     const val = qty * mark;
     
     const sl = Number(p.stop_loss || p.sl_price || 0);
@@ -4671,67 +4674,49 @@ function inspectPosition(p) {
     
     const upnl = Number(p.unrealized_pnl || 0);
     const retPct = entry > 0 ? (upnl / (qty * entry)) * 100 : 0;
+    const expVal = p.exposure_pct ? `${Number(p.exposure_pct).toFixed(1)}%` : (val > 0 ? `${((val / 10000) * 100).toFixed(1)}%` : '0.0%');
     
     const time = p.entry_timestamp || p.timestamp || Date.now();
     const entryTimeStr = new Date(time).toLocaleTimeString('en-US', { hour12: false });
-    const lastUpdStr = new Date(p.last_update || Date.now()).toLocaleTimeString('en-US', { hour12: false });
     const durStr = calcDurationBetween(time, Date.now());
 
     // Update Drawer Title
-    document.getElementById('drawer-title').innerText = 'POSITION DETAILS';
-    document.querySelector('.drawer-title-wrap .badge-indigo').innerText = 'OPEN';
-    document.querySelector('.drawer-title-wrap .badge-indigo').style.background = 'rgba(34, 211, 238, 0.1)';
-    document.querySelector('.drawer-title-wrap .badge-indigo').style.color = 'var(--text-primary)';
-    document.querySelector('.drawer-title-wrap .badge-indigo').style.borderColor = 'var(--accent-primary)';
+    document.getElementById('drawer-title').innerText = 'POSITION DETAILS & LIVE CHART';
+    const titleBadge = document.querySelector('.drawer-title-wrap .badge-indigo');
+    if (titleBadge) {
+        titleBadge.innerText = 'OPEN';
+        titleBadge.style.background = 'rgba(34, 211, 238, 0.1)';
+        titleBadge.style.color = 'var(--accent-secondary)';
+        titleBadge.style.borderColor = 'var(--accent-secondary)';
+    }
 
     let html = `
-        <div style="font-family: var(--font-heading); font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">
+        <div style="font-family: var(--font-heading); font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px;">
             ${sym} · ${tf} · ${strat} · <span class="${side === 'LONG' || side === 'BUY' ? 'profit' : 'loss'}">${side}</span>
         </div>
-        <div class="mono text-secondary" style="font-size: 11px; margin-bottom: 24px;">Active Trade</div>
+        <div class="mono text-secondary" style="font-size: 11px; margin-bottom: 16px;">Active Since ${entryTimeStr} IST (${durStr})</div>
 
-        <!-- POSITION SUMMARY -->
+        <!-- POSITION DETAILS -->
         <div class="terminal-card" style="margin-bottom: 16px;">
-            <div class="card-title">POSITION SUMMARY</div>
-            <div class="kv-row"><span>Entry Price</span><span class="mono">${entry > 0 ? entry.toFixed(4) : '—'}</span></div>
-            <div class="kv-row"><span>Current Price</span><span class="mono">${mark > 0 ? mark.toFixed(4) : '—'}</span></div>
+            <div class="card-title">POSITION TELEMETRY</div>
+            <div class="kv-row"><span>Entry Price</span><span class="mono td-strong">${entry > 0 ? '$' + entry.toFixed(2) : '—'}</span></div>
+            <div class="kv-row"><span>Current Price</span><span class="mono cyan">${mark > 0 ? '$' + mark.toFixed(2) : '—'}</span></div>
             <div class="kv-row"><span>Quantity</span><span class="mono">${qty > 0 ? qty : '—'}</span></div>
+            <div class="kv-row"><span>Stop Loss</span><span class="mono text-muted">${sl > 0 ? '$' + sl.toFixed(2) : '—'}</span></div>
+            <div class="kv-row"><span>Take Profit</span><span class="mono text-muted">${tp > 0 ? '$' + tp.toFixed(2) : '—'}</span></div>
+            <div class="kv-row"><span>Unrealized PnL</span><span class="mono ${upnl >= 0 ? 'profit' : 'loss'}">${(upnl >= 0 ? '+' : '') + formatCurrency(upnl)} (${retPct >= 0 ? '+' : ''}${retPct.toFixed(2)}%)</span></div>
+            <div class="kv-row"><span>Exposure</span><span class="mono cyan">${expVal}</span></div>
+            <div class="kv-row"><span>Protection Status</span><span class="mono ${sl > 0 || tp > 0 ? 'profit' : 'text-muted'}">${sl > 0 || tp > 0 ? 'ACTIVE (SL/TP OCO)' : 'UNPROTECTED'}</span></div>
+            <div class="kv-row"><span>Holding Duration</span><span class="mono">${durStr}</span></div>
+        </div>
+
+        <!-- RISK & ORDER METRICS -->
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">ORDER & RISK STATE</div>
             <div class="kv-row"><span>Position Value</span><span class="mono">${val > 0 ? formatCurrency(val) : '—'}</span></div>
-            <div class="kv-row"><span>Unrealized PnL</span><span class="mono ${upnl >= 0 ? 'profit' : 'loss'}">${(upnl >= 0 ? '+' : '') + formatCurrency(upnl)}</span></div>
-            <div class="kv-row"><span>Return %</span><span class="mono ${retPct >= 0 ? 'profit' : 'loss'}">${(retPct >= 0 ? '+' : '') + retPct.toFixed(2)}%</span></div>
-            <div class="kv-row"><span>Position ID</span><span class="mono">${p.position_id || p.order_id || '—'}</span></div>
-        </div>
-
-        <!-- POSITION STATE -->
-        <div class="terminal-card" style="margin-bottom: 16px;">
-            <div class="card-title">POSITION STATE</div>
-            <div class="kv-row"><span>Entry Time</span><span class="mono">${entryTimeStr}</span></div>
-            <div class="kv-row"><span>Last Update</span><span class="mono">${lastUpdStr}</span></div>
-            <div class="kv-row"><span>Duration</span><span class="mono">${durStr}</span></div>
-        </div>
-
-        <!-- ACCOUNT STATE -->
-        <div class="terminal-card" style="margin-bottom: 16px;">
-            <div class="card-title">ACCOUNT STATE</div>
-            <div class="kv-row"><span>Entry Balance</span><span class="mono">${p.entry_balance ? formatCurrency(p.entry_balance) : '—'}</span></div>
-            <div class="kv-row"><span>Current Balance</span><span class="mono">${p.current_balance ? formatCurrency(p.current_balance) : '—'}</span></div>
-        </div>
-
-        <!-- PROTECTION -->
-        <div class="terminal-card" style="margin-bottom: 16px;">
-            <div class="card-title">PROTECTION</div>
-            <div class="kv-row"><span>Status</span><span class="mono ${sl > 0 || tp > 0 ? 'profit' : 'loss'}">${sl > 0 || tp > 0 ? 'ACTIVE' : 'NONE'}</span></div>
-            <div class="kv-row"><span>Stop Loss</span><span class="mono">${sl > 0 ? sl.toFixed(4) : '—'}</span></div>
-            <div class="kv-row"><span>Take Profit</span><span class="mono">${tp > 0 ? tp.toFixed(4) : '—'}</span></div>
-        </div>
-
-        <!-- EXECUTION -->
-        <div class="terminal-card" style="margin-bottom: 16px;">
-            <div class="card-title">EXECUTION</div>
-            <div class="kv-row"><span>Entry Order ID</span><span class="mono">${p.order_id || '—'}</span></div>
-            <div class="kv-row"><span>Order Type</span><span class="mono">${p.order_type || 'MARKET'}</span></div>
-            <div class="kv-row"><span>Filled Qty</span><span class="mono">${qty > 0 ? qty : '—'}</span></div>
-            <div class="kv-row"><span>Average Entry</span><span class="mono">${entry > 0 ? entry.toFixed(4) : '—'}</span></div>
+            <div class="kv-row"><span>Order ID</span><span class="mono text-secondary">${p.position_id || p.order_id || 'SPOT_OCO_ORDER'}</span></div>
+            <div class="kv-row"><span>Execution Venue</span><span class="mono">BINANCE SPOT TESTNET</span></div>
+            <div class="kv-row"><span>Trailing Stop</span><span class="mono text-muted">DYNAMIC ATR</span></div>
         </div>
     `;
 
@@ -4949,73 +4934,42 @@ function inspectTradeLifecycleV2(t) {
     const eqExit = t.equity_after_exit ? formatCurrency(t.equity_after_exit) : '—';
 
     // Update Drawer Title
-    document.getElementById('drawer-title').innerText = 'TRADE DETAILS';
-    document.querySelector('.drawer-title-wrap .badge-indigo').innerText = 'CLOSED';
-    document.querySelector('.drawer-title-wrap .badge-indigo').style.background = 'rgba(255, 255, 255, 0.1)';
-    document.querySelector('.drawer-title-wrap .badge-indigo').style.color = 'var(--text-primary)';
-    document.querySelector('.drawer-title-wrap .badge-indigo').style.borderColor = 'var(--border-medium)';
+    document.getElementById('drawer-title').innerText = 'TRADE DETAILS & HISTORICAL CHART';
+    const titleBadge = document.querySelector('.drawer-title-wrap .badge-indigo');
+    if (titleBadge) {
+        titleBadge.innerText = 'CLOSED';
+        titleBadge.style.background = 'rgba(255, 255, 255, 0.08)';
+        titleBadge.style.color = 'var(--text-primary)';
+        titleBadge.style.borderColor = 'var(--border-medium)';
+    }
 
     let html = `
-        <div style="font-family: var(--font-heading); font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">
-            ${sym} · ${tf} · ${strat} · <span class="${side === 'LONG' || side === 'BUY' ? 'profit' : 'loss'}">${side}</span>
+        <div style="font-family: var(--font-heading); font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px;">
+            ${sym} · ${tf} · <span class="${side === 'LONG' || side === 'BUY' ? 'profit' : 'loss'}">${side}</span>
         </div>
-        <div class="mono text-secondary" style="font-size: 11px; margin-bottom: 24px;">Closed Trade</div>
+        <div class="mono text-secondary" style="font-size: 11px; margin-bottom: 16px;">Executed ${entryTimeStr} → ${closeTimeStr} IST (${durStr})</div>
 
-        <!-- TRADE SUMMARY -->
+        <!-- TRADE AUDIT METRICS -->
         <div class="terminal-card" style="margin-bottom: 16px;">
-            <div class="card-title">TRADE SUMMARY</div>
-            <div class="kv-row"><span>Trade ID</span><span class="mono">${t.trade_id || t.order_id || '—'}</span></div>
-            <div class="kv-row"><span>Entry</span><span class="mono">${entry > 0 ? entry.toFixed(4) : '—'}</span></div>
-            <div class="kv-row"><span>Exit</span><span class="mono">${exit > 0 ? exit.toFixed(4) : '—'}</span></div>
-            <div class="kv-row"><span>Quantity</span><span class="mono">${qty > 0 ? qty : '—'}</span></div>
-            <div class="kv-row"><span>Position Value</span><span class="mono">${val > 0 ? formatCurrency(val) : '—'}</span></div>
-            <div class="kv-row"><span>Stop Loss</span><span class="mono">${sl > 0 ? sl.toFixed(4) : '—'}</span></div>
-            <div class="kv-row"><span>Take Profit</span><span class="mono">${tp > 0 ? tp.toFixed(4) : '—'}</span></div>
-            <div class="kv-row"><span>Close Reason</span><span class="mono">${reason}</span></div>
-            <div class="kv-row"><span>Holding Time</span><span class="mono">${durStr}</span></div>
-        </div>
-
-        <!-- TRADE NUMBERS -->
-        <div class="terminal-card" style="margin-bottom: 16px;">
-            <div class="card-title">TRADE NUMBERS</div>
-            <div class="kv-row"><span>Risk %</span><span class="mono">${t.risk_percent ? t.risk_percent.toFixed(2) + '%' : '—'}</span></div>
-            <div class="kv-row"><span>Risk Value</span><span class="mono">${t.risk_value ? formatCurrency(t.risk_value) : '—'}</span></div>
+            <div class="card-title">TRADE AUDIT METRICS</div>
+            <div class="kv-row"><span>Entry Price</span><span class="mono td-strong">${entry > 0 ? '$' + entry.toFixed(2) : '—'}</span></div>
+            <div class="kv-row"><span>Exit Price</span><span class="mono cyan">${exit > 0 ? '$' + exit.toFixed(2) : '—'}</span></div>
+            <div class="kv-row"><span>Stop Loss (SL)</span><span class="mono text-muted">${sl > 0 ? '$' + sl.toFixed(2) : '—'}</span></div>
+            <div class="kv-row"><span>Take Profit (TP)</span><span class="mono text-muted">${tp > 0 ? '$' + tp.toFixed(2) : '—'}</span></div>
+            <div class="kv-row"><span>Executed Quantity</span><span class="mono">${qty > 0 ? qty : '—'}</span></div>
+            <div class="kv-row"><span>Exchange Fees</span><span class="mono loss">-${formatCurrency(fees)}</span></div>
+            <div class="kv-row"><span>Gross PnL</span><span class="mono ${gross >= 0 ? 'profit' : 'loss'}">${(gross >= 0 ? '+' : '') + formatCurrency(gross)}</span></div>
+            <div class="kv-row"><span>Net Realized PnL</span><span class="mono ${net >= 0 ? 'profit' : 'loss'}" style="font-weight: 700; font-size: 13px;">${(net >= 0 ? '+' : '') + formatCurrency(net)}</span></div>
+            <div class="kv-row"><span>Holding Duration</span><span class="mono">${durStr}</span></div>
+            <div class="kv-row"><span>Close Reason</span><span class="mono ${net >= 0 ? 'profit' : 'loss'}">${reason}</span></div>
         </div>
 
-        <!-- ACCOUNT STATE -->
+        <!-- ACCOUNT TRANSITION STATE -->
         <div class="terminal-card" style="margin-bottom: 16px;">
-            <div class="card-title">ACCOUNT STATE</div>
+            <div class="card-title">ACCOUNT TRANSITION AUDIT</div>
             <div class="kv-row"><span>Balance Before Entry</span><span class="mono">${balEntry}</span></div>
             <div class="kv-row"><span>Balance After Close</span><span class="mono">${balExit}</span></div>
-            <div class="kv-row"><span>Equity Before Entry</span><span class="mono">${eqEntry}</span></div>
-            <div class="kv-row"><span>Equity After Close</span><span class="mono">${eqExit}</span></div>
-        </div>
-
-        <!-- PERFORMANCE -->
-        <div class="terminal-card" style="margin-bottom: 16px;">
-            <div class="card-title">PERFORMANCE</div>
-            <div class="kv-row"><span>Profit/Loss</span><span class="mono ${gross >= 0 ? 'profit' : 'loss'}">${(gross >= 0 ? '+' : '') + formatCurrency(gross)}</span></div>
-            <div class="kv-row"><span>Fees</span><span class="mono loss">-${formatCurrency(fees)}</span></div>
-            <div class="kv-row"><span>Net PnL</span><span class="mono ${net >= 0 ? 'profit' : 'loss'}">${(net >= 0 ? '+' : '') + formatCurrency(net)}</span></div>
-            <div class="kv-row"><span>Return</span><span class="mono ${net >= 0 ? 'profit' : 'loss'}">${val > 0 ? ((net / val) * 100).toFixed(2) + '%' : '—'}</span></div>
-        </div>
-
-        <!-- TRADE LIFECYCLE -->
-        <div class="terminal-card" style="margin-bottom: 16px;">
-            <div class="card-title">TRADE LIFECYCLE</div>
-            <div class="kv-row"><span>Signal Generated</span><span class="mono text-secondary">${t.signal_timestamp ? new Date(t.signal_timestamp).toLocaleTimeString('en-US', {hour12:false}) : entryTimeStr}</span></div>
-            <div class="kv-row"><span>Position Opened</span><span class="mono text-secondary">${entryTimeStr}</span></div>
-            <div class="kv-row"><span>Position Closed</span><span class="mono text-secondary">${closeTimeStr}</span></div>
-        </div>
-
-        <!-- EXECUTION -->
-        <div class="terminal-card" style="margin-bottom: 16px;">
-            <div class="card-title">EXECUTION</div>
-            <div class="kv-row"><span>Entry Order ID</span><span class="mono">${t.entry_order_id || t.order_id || '—'}</span></div>
-            <div class="kv-row"><span>Exit Order ID</span><span class="mono">${t.exit_order_id || '—'}</span></div>
-            <div class="kv-row"><span>Filled Quantity</span><span class="mono">${qty > 0 ? qty : '—'}</span></div>
-            <div class="kv-row"><span>Average Entry</span><span class="mono">${entry > 0 ? entry.toFixed(4) : '—'}</span></div>
-            <div class="kv-row"><span>Average Exit</span><span class="mono">${exit > 0 ? exit.toFixed(4) : '—'}</span></div>
+            <div class="kv-row"><span>Trade Order ID</span><span class="mono text-secondary">${t.trade_id || t.order_id || 'SPOT_LEDGER_CLOSED'}</span></div>
         </div>
     `;
 
