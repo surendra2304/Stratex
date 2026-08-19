@@ -59,6 +59,15 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     });
+
+    // Auto-activate view if URL contains a hash (e.g. #trades)
+    const initialHash = (window.location.hash || '').replace('#', '').trim();
+    if (initialHash) {
+        const matchingNav = document.querySelector(`.nav-item[data-view="${initialHash}"]`);
+        if (matchingNav) {
+            matchingNav.click();
+        }
+    }
 });
 
 // ==========================================
@@ -4837,7 +4846,7 @@ function inspectTradeLifecycleV2(t) {
 // MARKETS LOGIC V2
 // ==========================================
 
-let activeMarketSymbol = 'BTCUSDT';
+activeMarketSymbol = 'BTCUSDT';
 let activeMarketTF = '15m';
 let marketsChartInst = null;
 let marketCandles = [];
