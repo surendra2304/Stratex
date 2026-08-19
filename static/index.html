@@ -387,10 +387,10 @@
                         <h1 class="page-title">SCANNER</h1>
                     </div>
                     <div class="scanner-toolbar" style="display: flex; gap: 12px; align-items: center; position: relative;">
-                        <button class="btn-terminal" onclick="document.getElementById('scanner-filter-dropdown').classList.toggle('show')" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">FILTERS ▼</button>
+                        <button class="btn-terminal" id="btn-scanner-filter-toggle" onclick="document.getElementById('scanner-filter-dropdown').classList.toggle('show')" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">FILTERS ▼</button>
                         
                         <!-- FILTERS DROPDOWN -->
-                        <div id="scanner-filter-dropdown" class="dropdown-menu" style="display: none; position: absolute; right: 150px; top: 100%; margin-top: 8px; background: var(--bg-panel); border: 1px solid var(--border-medium); border-radius: 4px; padding: 16px; z-index: 100; box-shadow: 0 10px 20px rgba(0,0,0,0.5); width: 250px;">
+                        <div id="scanner-filter-dropdown" class="dropdown-menu" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 8px; background: var(--bg-panel); border: 1px solid var(--border-medium); border-radius: 4px; padding: 16px; z-index: 100; box-shadow: 0 10px 20px rgba(0,0,0,0.5); width: 250px;">
                             <div style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px;">SYMBOL</div>
                             <select id="sf-symbol" class="select-terminal" style="width: 100%; margin-bottom: 12px; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-medium); padding: 6px; font-size: 11px;">
                                 <option value="ALL">ALL</option>
@@ -437,9 +437,6 @@
 
                             <button onclick="applyScannerFilters()" style="width: 100%; background: var(--accent-primary); color: #fff; border: none; padding: 6px; font-size: 11px; font-family: var(--font-heading); font-weight: 700; cursor: pointer;">APPLY FILTERS</button>
                         </div>
-
-                        <button class="btn-terminal" id="btn-scan-pause" onclick="toggleScannerPause()" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">PAUSE ⏸</button>
-                        <button class="btn-terminal" onclick="fetchScannerDataV2()" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">REFRESH ↻</button>
                     </div>
                 </div>
 
