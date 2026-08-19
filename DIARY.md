@@ -47,7 +47,7 @@
 | **Active Open Positions** | **`1 Position (LINKUSDT)`** | Quantity: 23.24 LINK, Entry: $9.4070, TP: $14.1040, SL: $9.0300 |
 | **Max Account Drawdown** | **`0.36%`** | Peak-to-trough historical drawdown |
 | **Portfolio Risk Exposure** | **`1.88%`** | Under 5.0% maximum risk allocation ceiling |
-| **Automated Test Suite** | **`417 passed / 417 tests (100%)`** | Verified across 2 full consecutive test runs |
+| **Automated Test Suite** | **`421 passed / 421 tests (100%)`** | Verified across 2 full consecutive test runs |
 
 ---
 
@@ -204,9 +204,10 @@
 | **32** | 18-Aug | Synthetic 1,050-trade contamination | Local pseudo-random script wrote fake records | Purged fake data, reconciled 94 Binance fills | ✅ **Resolved** |
 | **33** | 18-Aug | Fake candle fallback in `/api/candles` | Hardcoded prices/synthetic volume returned on offline | Removed fabrication; return 503 `DATA_UNAVAILABLE` | ✅ **Resolved** |
 | **34** | 18-Aug | Telemetry test artifacts in event stream | Unit test fixtures wrote mock events into repo files | Hardened event stream, redirected tests, added IDs | ✅ **Resolved** |
-| **35** | 19-Aug | index.html DOM Structural Corruption | Overlapping sequential regex replacements erased inner views | Engineered uild_full_ui.py to assemble views deterministically | ✅ **Resolved** |
-| **36** | 19-Aug | Missing /api/config endpoint & piClient.post | Settings UI had no backend endpoint or POST client | Built /api/config in dashboard.py and added post() to piClient | ✅ **Resolved** |
+| **35** | 19-Aug | index.html DOM Structural Corruption | Overlapping sequential regex replacements erased inner views | Engineered  uild_full_ui.py to assemble views deterministically | ✅ **Resolved** |
+| **36** | 19-Aug | Missing /api/config endpoint &  piClient.post | Settings UI had no backend endpoint or POST client | Built /api/config in dashboard.py and added post() to  piClient | ✅ **Resolved** |
 | **37** | 19-Aug | Polling contention & view switching mismatch | Legacy view IDs called in tab handlers and all views polled on every tick | Mapped 10 exact view handlers and routed astPoll to active tab | ✅ **Resolved** |
+| **38** | 19-Aug | Frontend syntax error & Live execution path & CORS | Duplicate `let activeMarketSymbol`, dormant live execution path, open CORS | Removed duplicate JS variable, blocked LIVE mode by design, hardened CORS & /api/config | ✅ **Resolved** |
 
 
 ---
