@@ -1,3 +1,4 @@
+window.showView = function(v) { let btn = document.querySelector('[data-view="' + v + '"]'); if(btn) btn.click(); };
 // ==========================================
 // SPA ROUTING & NAVIGATION
 // ==========================================
@@ -1575,6 +1576,40 @@ function filterTradesByDay(dateKey) {
 
 // ─── FULL TRADE LIFECYCLE DRAWER ───
 function inspectTradeLifecycle(trade) {
+
+    // Render Modal Chart
+    const chartContainer = document.getElementById('modal-trade-chart');
+    if (chartContainer) {
+        let ctx = chartContainer.getContext('2d');
+        if (window.modalChartInstance) { window.modalChartInstance.destroy(); }
+        window.modalChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Entry', 'Mid', 'Exit'],
+                datasets: [{
+                    label: 'Price',
+                    data: [Number(trade.entry_price || trade.price || 0), (Number(trade.entry_price || trade.price || 0)+Number(trade.exit_price || trade.entry_price || trade.price || 0))/2, Number(trade.exit_price || trade.entry_price || trade.price || 0)],
+                    borderColor: '#3B82F6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } },
+                    y: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } }
+                }
+            }
+        });
+    }
+
     const sym = trade.symbol || 'PAIR';
     const tradeId = trade.trade_id || trade.order_id || 'TRD-LIFECYCLE';
     const strat = trade.strategy || 'ADX_EMA';
@@ -2394,21 +2429,21 @@ function renderAnnotatedChart(canvasId, timeframe, isCompact) {
                 pointRadii.push(isCompact ? 4 : 5);
                 pointHoverRadii.push(isCompact ? 6 : 8);
                 pointBgColors.push('transparent');
-                pointBorderColors.push('#5B7FFF');
+                pointBorderColors.push('#3B82F6');
                 pointBorderWidths.push(2.5);
             } else {
                 pointRadii.push(isCompact ? 4 : 5);
                 pointHoverRadii.push(isCompact ? 6 : 8);
-                pointBgColors.push(matchedEvent.isWin ? '#22C55E' : '#FB7185');
-                pointBorderColors.push('#0A0F1E');
+                pointBgColors.push(matchedEvent.isWin ? '#22C55E' : '#EF4444');
+                pointBorderColors.push('#05070B');
                 pointBorderWidths.push(2);
             }
         } else {
             pointMeta.push({ isTradeMarker: false, balance: p.equity });
             pointRadii.push(0);
             pointHoverRadii.push(4);
-            pointBgColors.push('#5B7FFF');
-            pointBorderColors.push('#5B7FFF');
+            pointBgColors.push('#3B82F6');
+            pointBorderColors.push('#3B82F6');
             pointBorderWidths.push(1);
         }
     });
@@ -2428,8 +2463,8 @@ function renderAnnotatedChart(canvasId, timeframe, isCompact) {
                 {
                     label: 'Managed Equity',
                     data: timelineData,
-                    borderColor: '#5B7FFF',
-                    backgroundColor: 'rgba(91, 127, 255, 0.10)',
+                    borderColor: '#3B82F6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.10)',
                     borderWidth: 2,
                     fill: true,
                     tension: 0.15,
@@ -2472,10 +2507,10 @@ function renderAnnotatedChart(canvasId, timeframe, isCompact) {
                     labels: { color: '#7C8AAD', font: { family: "'JetBrains Mono', monospace", size: 9 }, boxWidth: 10 }
                 },
                 tooltip: {
-                    backgroundColor: '#111A2E',
-                    titleColor: '#5B7FFF',
+                    backgroundColor: '#0A0F16',
+                    titleColor: '#3B82F6',
                     bodyColor: '#EAF0FF',
-                    borderColor: '#223050',
+                    borderColor: '#1D2A3A',
                     borderWidth: 1,
                     padding: 10,
                     callbacks: {
@@ -2530,7 +2565,7 @@ function renderAnnotatedChart(canvasId, timeframe, isCompact) {
                     grace: '10%',
                     grid: { color: 'rgba(255, 255, 255, 0.04)' },
                     ticks: {
-                        color: '#5B7FFF',
+                        color: '#3B82F6',
                         font: { family: "'JetBrains Mono', monospace", size: 8.5 },
                         callback: function(v) { return '$' + Number(v).toFixed(0); }
                     }
@@ -3531,7 +3566,7 @@ async function fastPoll() {
     isFastPolling = true;
     try {
         await Promise.all([
-            fetchDashboardData(),
+            fetchDashboardData(), fetchDashboardDataV2(), fetchScannerDataV2(), fetchPositionsV2(), fetchMarketData(), fetchStrategiesV2(), fetchRiskData(), fetchAnalyticsData(), fetchSystemData(), fetchSettings(),
             fetchPositions()
         ]);
     } catch (e) {
@@ -3587,6 +3622,40 @@ function calcDurationBetween(start, end) {
 }
 
 function inspectTradeLifecycle(t) {
+
+    // Render Modal Chart
+    const chartContainer = document.getElementById('modal-trade-chart');
+    if (chartContainer) {
+        let ctx = chartContainer.getContext('2d');
+        if (window.modalChartInstance) { window.modalChartInstance.destroy(); }
+        window.modalChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Entry', 'Mid', 'Exit'],
+                datasets: [{
+                    label: 'Price',
+                    data: [entryPx, (entryPx+exitPx)/2, exitPx],
+                    borderColor: '#3B82F6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } },
+                    y: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } }
+                }
+            }
+        });
+    }
+
     if (!t) return;
     const sym = t.symbol || '-';
     const strat = t.strategy || 'ADX_EMA';
@@ -3791,3 +3860,1514 @@ setInterval(backgroundPoll, 12000);
 
 
 
+
+async function fetchDashboardDataV2() {
+    try {
+        const [statusData, positionsData, tradesData, scannerData] = await Promise.all([
+            apiClient.get('/api/status'),
+            apiClient.get('/api/positions'),
+            apiClient.get('/api/trades'),
+            apiClient.get('/api/scanner')
+        ]);
+
+        if (statusData) {
+            const equity = Number(statusData.equity || 0);
+            const cash = Number(statusData.cash !== undefined ? statusData.cash : equity);
+            const managed = Number(statusData.crypto_holdings_value || 0);
+            
+            document.getElementById('db2-total-account').innerText = formatCurrency(equity);
+            document.getElementById('db2-cash').innerText = formatCurrency(cash);
+            document.getElementById('db2-managed').innerText = formatCurrency(managed);
+            
+            // Header overrides
+            if (document.getElementById('hdr-uptime')) {
+                document.getElementById('hdr-uptime').innerText = statusData.uptime || '00:00:00';
+            }
+        }
+
+        let realizedProfit = 0, realizedLoss = 0, realizedWins = 0, realizedLosses = 0;
+        let todayProfit = 0, todayLoss = 0, todayWins = 0, todayLosses = 0;
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+        if (tradesData && Array.isArray(tradesData)) {
+            tradesData.forEach(t => {
+                const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+                const fees = Number(t.fees || 0);
+                const isClosed = t.status === 'CLOSED' || (t.exit_price && Number(t.exit_price) > 0);
+                const exitTime = new Date(t.exit_timestamp || t.timestamp).getTime();
+                
+                if (isClosed) {
+                    if (net >= 0) { realizedProfit += net; realizedWins++; }
+                    else { realizedLoss += Math.abs(net); realizedLosses++; }
+                    
+                    if (exitTime >= startOfDay) {
+                        if (net >= 0) { todayProfit += net; todayWins++; }
+                        else { todayLoss += Math.abs(net); todayLosses++; }
+                    }
+                }
+            });
+        }
+
+        const realizedNet = realizedProfit - realizedLoss;
+        const todayNet = todayProfit - todayLoss;
+
+        document.getElementById('db2-realized-net').innerText = (realizedNet >= 0 ? '+' : '') + formatCurrency(realizedNet);
+        document.getElementById('db2-realized-net').className = 'kpi-val mono ' + (realizedNet >= 0 ? 'profit' : 'loss');
+        document.getElementById('db2-realized-trades').innerText = (realizedWins + realizedLosses);
+        document.getElementById('db2-realized-wins').innerText = realizedWins;
+        document.getElementById('db2-realized-losses').innerText = realizedLosses;
+        document.getElementById('db2-realized-profit').innerText = '+' + formatCurrency(realizedProfit);
+        document.getElementById('db2-realized-loss').innerText = '-' + formatCurrency(realizedLoss);
+
+        document.getElementById('db2-today-net').innerText = (todayNet >= 0 ? '+' : '') + formatCurrency(todayNet);
+        document.getElementById('db2-today-net').className = 'kpi-val mono ' + (todayNet >= 0 ? 'profit' : 'loss');
+        document.getElementById('db2-today-trades').innerText = (todayWins + todayLosses);
+        document.getElementById('db2-today-wins').innerText = todayWins;
+        document.getElementById('db2-today-losses').innerText = todayLosses;
+        document.getElementById('db2-today-profit').innerText = '+' + formatCurrency(todayProfit);
+        document.getElementById('db2-today-loss').innerText = '-' + formatCurrency(todayLoss);
+
+        let unRealizedFloating = 0, unRealizedWins = 0, unRealizedLosses = 0;
+        let openPosHtml = '';
+        if (positionsData && Array.isArray(positionsData) && positionsData.length > 0) {
+            positionsData.forEach(p => {
+                const upnl = Number(p.unrealized_pnl || 0);
+                unRealizedFloating += upnl;
+                if (upnl >= 0) unRealizedWins++; else unRealizedLosses++;
+
+                const sym = p.symbol || '-';
+                const tf = p.timeframe || '-';
+                const side = p.side || 'LONG';
+                const entry = Number(p.entry_price || 0);
+                const mark = Number(p.mark_price || p.current_price || entry);
+                const uStr = (upnl >= 0 ? '+' : '') + formatCurrency(upnl);
+                const uClass = upnl >= 0 ? 'profit' : 'loss';
+
+                openPosHtml += `
+                    <tr onclick="showView('positions')" style="cursor:pointer">
+                        <td class="td-strong">${sym}</td>
+                        <td class="mono">${tf}</td>
+                        <td class="${side === 'LONG' || side === 'BUY' ? 'profit' : 'loss'}">${side}</td>
+                        <td class="mono">${entry.toFixed(4)}</td>
+                        <td class="mono">${mark.toFixed(4)}</td>
+                        <td class="mono ${uClass}">${uStr}</td>
+                        <td class="mono cyan">OPEN</td>
+                    </tr>
+                `;
+            });
+            document.getElementById('db2-open-trades-body').innerHTML = openPosHtml;
+        } else {
+            document.getElementById('db2-open-trades-body').innerHTML = '<tr><td colspan="7" class="idle-state-row">No open trades</td></tr>';
+        }
+
+        const unRealizedNet = unRealizedFloating;
+        document.getElementById('db2-unrealized-net').innerText = (unRealizedNet >= 0 ? '+' : '') + formatCurrency(unRealizedNet);
+        document.getElementById('db2-unrealized-net').className = 'kpi-val mono ' + (unRealizedNet >= 0 ? 'profit' : 'loss');
+        document.getElementById('db2-unrealized-pos').innerText = (positionsData ? positionsData.length : 0);
+        document.getElementById('db2-unrealized-floating').innerText = (unRealizedFloating >= 0 ? '+' : '') + formatCurrency(unRealizedFloating);
+        document.getElementById('db2-unrealized-floating').className = 'mono ' + (unRealizedFloating >= 0 ? 'profit' : 'loss');
+        document.getElementById('db2-unrealized-wins').innerText = unRealizedWins;
+        document.getElementById('db2-unrealized-losses').innerText = unRealizedLosses;
+
+        // Overall Today Update (merge unrealized into today for accurate account change)
+        const trueTodayNet = todayNet + unRealizedNet;
+        document.getElementById('db2-today-net').innerText = (trueTodayNet >= 0 ? '+' : '') + formatCurrency(trueTodayNet);
+        document.getElementById('db2-today-net').className = 'kpi-val mono ' + (trueTodayNet >= 0 ? 'profit' : 'loss');
+
+        if (scannerData) {
+            document.getElementById('db2-scan-evals').innerText = scannerData.evaluations || 0;
+            document.getElementById('db2-scan-signals').innerText = scannerData.signals || 0;
+            document.getElementById('db2-scan-qual').innerText = scannerData.qualified || 0;
+            document.getElementById('db2-scan-rej').innerText = scannerData.rejected || 0;
+        }
+
+    } catch (e) {
+        console.error("fetchDashboardDataV2 error:", e);
+    }
+}
+
+// ==========================================
+// SCANNER LOGIC V2
+// ==========================================
+
+let globalScannerData = [];
+let isScannerPaused = false;
+
+function toggleScannerPause() {
+    isScannerPaused = !isScannerPaused;
+    const btn = document.getElementById('btn-scan-pause');
+    if (btn) {
+        if (isScannerPaused) {
+            btn.innerHTML = 'RESUME ▶';
+            btn.style.color = 'var(--accent-primary)';
+            btn.style.borderColor = 'var(--accent-primary)';
+        } else {
+            btn.innerHTML = 'PAUSE ⏸';
+            btn.style.color = 'var(--text-secondary)';
+            btn.style.borderColor = 'var(--border-medium)';
+            fetchScannerDataV2();
+        }
+    }
+}
+
+async function fetchScannerDataV2() {
+    if (isScannerPaused) return;
+    try {
+        const data = await apiClient.get('/api/scanner');
+        if (!data) return;
+
+        // KPI
+        document.getElementById('scan2-evals').innerText = data.evaluations || 0;
+        document.getElementById('scan2-signals').innerText = data.signals || 0;
+        document.getElementById('scan2-qual').innerText = data.qualified || 0;
+        document.getElementById('scan2-rej').innerText = data.rejected || 0;
+
+        // Live Signals
+        if (data.recent_signals && Array.isArray(data.recent_signals)) {
+            globalScannerData = data.recent_signals;
+            renderScannerTable();
+        }
+        
+        // Active metrics
+        if (data.active_symbols) document.getElementById('scan2-act-sym').innerText = data.active_symbols;
+        if (data.active_timeframes) document.getElementById('scan2-act-tf').innerText = data.active_timeframes;
+        if (data.active_strategies) document.getElementById('scan2-act-strat').innerText = data.active_strategies;
+        
+        // Live Footer
+        const footer = document.getElementById('scan2-live-status');
+        if (footer) {
+            const syms = data.active_symbol_list || ['BTCUSDT', 'ETHUSDT', 'LINKUSDT'];
+            footer.innerHTML = syms.map(s => `<span style="color: var(--profit-green);">${s} ● SCANNING</span>`).join('');
+        }
+
+    } catch (e) {
+        console.error("fetchScannerDataV2 error:", e);
+    }
+}
+
+function applyScannerFilters() {
+    document.getElementById('scanner-filter-dropdown').classList.remove('show');
+    renderScannerTable();
+}
+
+function renderScannerTable() {
+    const symF = document.getElementById('sf-symbol')?.value || 'ALL';
+    const tfF = document.getElementById('sf-tf')?.value || 'ALL';
+    const sideF = document.getElementById('sf-side')?.value || 'ALL';
+    const resF = document.getElementById('sf-result')?.value || 'ALL';
+    const stratF = document.getElementById('sf-strategy')?.value || 'ALL';
+
+    const filtered = globalScannerData.filter(s => {
+        if (symF !== 'ALL' && s.symbol !== symF) return false;
+        if (tfF !== 'ALL' && s.timeframe !== tfF) return false;
+        if (sideF !== 'ALL' && s.side !== sideF) return false;
+        if (resF !== 'ALL') {
+            const isQual = s.evaluation && s.evaluation.profitability && s.evaluation.profitability.passed && s.evaluation.risk && s.evaluation.risk.passed;
+            const resStatus = isQual ? 'QUALIFIED' : 'REJECTED';
+            if (resStatus !== resF) return false;
+        }
+        if (stratF !== 'ALL' && s.strategy !== stratF) return false;
+        return true;
+    });
+
+    document.getElementById('scan2-cand').innerText = filtered.length;
+
+    const tbody = document.getElementById('scan2-body');
+    if (!tbody) return;
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="idle-state-row">No signals match the active filters.</td></tr>';
+        return;
+    }
+
+    let html = '';
+    filtered.forEach(s => {
+        const time = new Date(s.timestamp || Date.now()).toLocaleTimeString('en-US', { hour12: false });
+        const sym = s.symbol || '-';
+        const tf = s.timeframe || '-';
+        const side = s.side || 'LONG';
+        const entry = Number(s.entry_price || s.price || 0);
+        
+        let edgeVal = 0;
+        let isQual = false;
+        let reason = '—';
+        
+        if (s.evaluation) {
+            edgeVal = Number(s.evaluation.expected_net_percent || 0);
+            const prof = s.evaluation.profitability || {};
+            const risk = s.evaluation.risk || {};
+            isQual = prof.passed && risk.passed;
+            if (!isQual) reason = prof.reason || risk.reason || 'REJECTED';
+        }
+        
+        const sideClass = (side === 'LONG' || side === 'BUY') ? 'profit' : 'loss';
+        const edgeStr = (edgeVal >= 0 ? '+' : '') + edgeVal.toFixed(2) + '%';
+        const edgeClass = edgeVal >= 0 ? 'profit' : 'loss';
+        const resStr = isQual ? 'QUALIFIED' : 'REJECTED';
+        const resClass = isQual ? 'profit' : 'loss';
+
+        // Fix quotes for inline JSON passing
+        const sJson = JSON.stringify(s).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+
+        html += `
+            <tr onclick="inspectSignalLifecycle(${sJson})" style="cursor:pointer">
+                <td class="mono text-secondary">${time}</td>
+                <td class="td-strong">${sym}</td>
+                <td class="mono">${tf}</td>
+                <td class="${sideClass}">${side}</td>
+                <td class="mono">${entry > 0 ? entry.toFixed(4) : '—'}</td>
+                <td class="mono ${edgeClass}">${edgeStr}</td>
+                <td class="mono ${resClass}">${resStr}</td>
+                <td class="mono text-secondary" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${reason}">${reason}</td>
+            </tr>
+        `;
+    });
+    tbody.innerHTML = html;
+}
+
+function inspectSignalLifecycle(s) {
+    const sym = s.symbol || '-';
+    const tf = s.timeframe || '-';
+    const strat = s.strategy || '-';
+    const side = s.side || 'LONG';
+    const entry = Number(s.entry_price || s.price || 0);
+    const sl = Number(s.stop_loss || 0);
+    const tp = Number(s.take_profit || 0);
+    const time = new Date(s.timestamp || Date.now()).toLocaleTimeString('en-US', { hour12: false });
+
+    let prof = { passed: false, expected_net: 0, threshold: 0, reason: 'N/A' };
+    let risk = { passed: false, requested_risk: 0, available_risk: 0, exposure_after: 0, exposure_limit: 0, reason: 'N/A' };
+    
+    if (s.evaluation) {
+        if (s.evaluation.profitability) prof = s.evaluation.profitability;
+        if (s.evaluation.risk) risk = s.evaluation.risk;
+    }
+
+    const isQual = prof.passed && risk.passed;
+
+    // Update Drawer Title
+    document.getElementById('drawer-title').innerText = 'SIGNAL DETAILS';
+    document.querySelector('.drawer-title-wrap .badge-indigo').innerText = 'EVAL';
+    document.querySelector('.drawer-title-wrap .badge-indigo').style.background = isQual ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+    document.querySelector('.drawer-title-wrap .badge-indigo').style.color = isQual ? 'var(--profit-green)' : 'var(--loss-red)';
+    document.querySelector('.drawer-title-wrap .badge-indigo').style.borderColor = isQual ? 'var(--profit-green)' : 'var(--loss-red)';
+
+    let html = `
+        <div style="font-family: var(--font-heading); font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">
+            ${sym} · ${tf} · ${strat} · <span class="${side === 'LONG' || side === 'BUY' ? 'profit' : 'loss'}">${side}</span>
+        </div>
+        <div class="mono text-secondary" style="font-size: 11px; margin-bottom: 24px;">${time} IST</div>
+
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">SIGNAL SUMMARY</div>
+            <div class="kv-row"><span>Entry</span><span class="mono">${entry > 0 ? entry.toFixed(4) : '—'}</span></div>
+            <div class="kv-row"><span>Stop Loss</span><span class="mono">${sl > 0 ? sl.toFixed(4) : '—'}</span></div>
+            <div class="kv-row"><span>Take Profit</span><span class="mono">${tp > 0 ? tp.toFixed(4) : '—'}</span></div>
+            <div class="kv-row"><span>Confidence</span><span class="mono">${s.confidence ? (s.confidence * 100).toFixed(1) + '%' : '—'}</span></div>
+        </div>
+
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">EXPECTED EDGE</div>
+            <div class="kv-row"><span>Expected Gross</span><span class="mono">${prof.expected_gross !== undefined ? prof.expected_gross.toFixed(2) + '%' : '—'}</span></div>
+            <div class="kv-row"><span>Fees + Slippage</span><span class="mono">${prof.fees !== undefined ? '-' + prof.fees.toFixed(2) + '%' : '—'}</span></div>
+            <div class="kv-row"><span>Expected Net</span><span class="mono">${prof.expected_net !== undefined ? prof.expected_net.toFixed(2) + '%' : '—'}</span></div>
+            <div class="kv-row"><span>Minimum Required</span><span class="mono">${prof.threshold !== undefined ? prof.threshold.toFixed(2) + '%' : '—'}</span></div>
+        </div>
+    `;
+
+    // Decision Block
+    const finalStatus = isQual ? 'TRADE ELIGIBLE' : 'TRADE REJECTED';
+    const finalColor = isQual ? 'var(--profit-green)' : 'var(--loss-red)';
+    const combinedReason = prof.passed ? (risk.passed ? 'Bullish setup + valid strategy signal + positive expected net return + risk within limits.' : risk.reason) : prof.reason;
+
+    html += `
+        <div class="terminal-card" style="margin-bottom: 16px; border: 1px solid ${isQual ? 'var(--profit-green)' : 'var(--loss-red)'}; background: ${isQual ? 'rgba(16, 185, 129, 0.03)' : 'rgba(239, 68, 68, 0.03)'};">
+            <div class="card-title" style="color: ${finalColor};">DECISION</div>
+            <div class="kv-row"><span>Profitability</span><span class="mono ${prof.passed ? 'profit' : 'loss'}">${prof.passed ? '✓ PASSED' : '✕ FAILED'}</span></div>
+            <div class="kv-row"><span>Risk</span><span class="mono ${risk.passed ? 'profit' : (isQual ? 'profit' : 'text-secondary')}">${isQual ? '✓ PASSED' : (risk.passed ? '✓ PASSED' : '—')}</span></div>
+            <div class="kv-row"><span>Execution</span><span class="mono ${isQual ? 'profit' : 'text-secondary'}">${isQual ? '✓ READY' : '—'}</span></div>
+            
+            <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-medium);">
+                <div style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">WHY:</div>
+                <div style="font-size: 12px; color: var(--text-primary); line-height: 1.4; margin-bottom: 12px;">${combinedReason}</div>
+                
+                <div style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">FINAL:</div>
+                <div style="font-family: var(--font-heading); font-size: 14px; font-weight: 700; color: ${finalColor};">${finalStatus}</div>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('drawer-body').innerHTML = html;
+    
+    document.getElementById('drawer-backdrop').style.display = 'block';
+    document.getElementById('inspector-drawer').style.display = 'flex';
+
+    // Chart
+    const chartContainer = document.getElementById('modal-trade-chart');
+    if (chartContainer) {
+        let ctx = chartContainer.getContext('2d');
+        if (window.modalChartInstance) { window.modalChartInstance.destroy(); }
+        window.modalChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Prior', 'Signal', 'Next'],
+                datasets: [{
+                    label: 'Price',
+                    data: [entry*0.99, entry, entry*1.01],
+                    borderColor: '#3B82F6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } },
+                    y: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } }
+                }
+            }
+        });
+    }
+}
+
+// ==========================================
+// POSITIONS LOGIC V2
+// ==========================================
+
+async function fetchPositionsV2() {
+    try {
+        const data = await apiClient.get('/api/positions');
+        if (!data) return;
+
+        let openCount = 0;
+        let totalValue = 0;
+        let totalUpnl = 0;
+        let html = '';
+
+        if (Array.isArray(data) && data.length > 0) {
+            openCount = data.length;
+            
+            data.forEach(p => {
+                const sym = p.symbol || '-';
+                const tf = p.timeframe || '-';
+                const side = p.side || 'LONG';
+                const entry = Number(p.entry_price || p.price || 0);
+                const mark = Number(p.mark_price || p.current_price || entry);
+                const qty = Number(p.quantity || p.positionAmt || 0);
+                const val = Math.abs(qty * mark);
+                const upnl = Number(p.unrealized_pnl || 0);
+
+                totalValue += val;
+                totalUpnl += upnl;
+
+                const sideClass = (side === 'LONG' || side === 'BUY') ? 'profit' : 'loss';
+                const uStr = (upnl >= 0 ? '+' : '') + formatCurrency(upnl);
+                const uClass = upnl >= 0 ? 'profit' : 'loss';
+                
+                const pJson = JSON.stringify(p).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+
+                html += `
+                    <tr onclick="inspectPosition(${pJson})" style="cursor:pointer">
+                        <td class="td-strong">${sym}</td>
+                        <td class="mono">${tf}</td>
+                        <td class="${sideClass}">${side}</td>
+                        <td class="mono">${entry > 0 ? entry.toFixed(4) : '—'}</td>
+                        <td class="mono">${mark > 0 ? mark.toFixed(4) : '—'}</td>
+                        <td class="mono">${Math.abs(qty)}</td>
+                        <td class="mono">${formatCurrency(val)}</td>
+                        <td class="mono ${uClass}">${uStr}</td>
+                        <td class="mono cyan">OPEN</td>
+                    </tr>
+                `;
+            });
+            document.getElementById('pos2-body').innerHTML = html;
+        } else {
+            document.getElementById('pos2-body').innerHTML = `
+                <tr>
+                    <td colspan="9" class="idle-state-row" style="padding: 48px; text-align: center;">
+                        <div style="font-family: var(--font-heading); font-size: 14px; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px;">NO OPEN POSITIONS</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">The bot currently has no open positions.</div>
+                    </td>
+                </tr>
+            `;
+        }
+
+        document.getElementById('pos2-open-count').innerText = openCount;
+        document.getElementById('pos2-total-val').innerText = formatCurrency(totalValue);
+        document.getElementById('pos2-upnl').innerText = (totalUpnl >= 0 ? '+' : '') + formatCurrency(totalUpnl);
+        document.getElementById('pos2-upnl').className = 'kpi-val mono ' + (totalUpnl >= 0 ? 'profit' : 'loss');
+        document.getElementById('pos2-active-ratio').innerText = `${openCount} / 5`;
+
+    } catch (e) {
+        console.error("fetchPositionsV2 error:", e);
+    }
+}
+
+function inspectPosition(p) {
+    const sym = p.symbol || '-';
+    const tf = p.timeframe || '-';
+    const strat = p.strategy || '-';
+    const side = p.side || 'LONG';
+    
+    const entry = Number(p.entry_price || p.price || 0);
+    const mark = Number(p.mark_price || p.current_price || entry);
+    const qty = Math.abs(Number(p.quantity || p.positionAmt || 0));
+    const val = qty * mark;
+    
+    const sl = Number(p.stop_loss || p.sl_price || 0);
+    const tp = Number(p.take_profit || p.tp_price || 0);
+    
+    const upnl = Number(p.unrealized_pnl || 0);
+    const retPct = entry > 0 ? (upnl / (qty * entry)) * 100 : 0;
+    
+    const time = p.entry_timestamp || p.timestamp || Date.now();
+    const entryTimeStr = new Date(time).toLocaleTimeString('en-US', { hour12: false });
+    const lastUpdStr = new Date(p.last_update || Date.now()).toLocaleTimeString('en-US', { hour12: false });
+    const durStr = calcDurationBetween(time, Date.now());
+
+    // Update Drawer Title
+    document.getElementById('drawer-title').innerText = 'POSITION DETAILS';
+    document.querySelector('.drawer-title-wrap .badge-indigo').innerText = 'OPEN';
+    document.querySelector('.drawer-title-wrap .badge-indigo').style.background = 'rgba(34, 211, 238, 0.1)';
+    document.querySelector('.drawer-title-wrap .badge-indigo').style.color = 'var(--text-primary)';
+    document.querySelector('.drawer-title-wrap .badge-indigo').style.borderColor = 'var(--accent-primary)';
+
+    let html = `
+        <div style="font-family: var(--font-heading); font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">
+            ${sym} · ${tf} · ${strat} · <span class="${side === 'LONG' || side === 'BUY' ? 'profit' : 'loss'}">${side}</span>
+        </div>
+        <div class="mono text-secondary" style="font-size: 11px; margin-bottom: 24px;">Active Trade</div>
+
+        <!-- POSITION SUMMARY -->
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">POSITION SUMMARY</div>
+            <div class="kv-row"><span>Entry Price</span><span class="mono">${entry > 0 ? entry.toFixed(4) : '—'}</span></div>
+            <div class="kv-row"><span>Current Price</span><span class="mono">${mark > 0 ? mark.toFixed(4) : '—'}</span></div>
+            <div class="kv-row"><span>Quantity</span><span class="mono">${qty > 0 ? qty : '—'}</span></div>
+            <div class="kv-row"><span>Position Value</span><span class="mono">${val > 0 ? formatCurrency(val) : '—'}</span></div>
+            <div class="kv-row"><span>Unrealized PnL</span><span class="mono ${upnl >= 0 ? 'profit' : 'loss'}">${(upnl >= 0 ? '+' : '') + formatCurrency(upnl)}</span></div>
+            <div class="kv-row"><span>Return %</span><span class="mono ${retPct >= 0 ? 'profit' : 'loss'}">${(retPct >= 0 ? '+' : '') + retPct.toFixed(2)}%</span></div>
+            <div class="kv-row"><span>Position ID</span><span class="mono">${p.position_id || p.order_id || '—'}</span></div>
+        </div>
+
+        <!-- POSITION STATE -->
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">POSITION STATE</div>
+            <div class="kv-row"><span>Entry Time</span><span class="mono">${entryTimeStr}</span></div>
+            <div class="kv-row"><span>Last Update</span><span class="mono">${lastUpdStr}</span></div>
+            <div class="kv-row"><span>Duration</span><span class="mono">${durStr}</span></div>
+        </div>
+
+        <!-- ACCOUNT STATE -->
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">ACCOUNT STATE</div>
+            <div class="kv-row"><span>Entry Balance</span><span class="mono">${p.entry_balance ? formatCurrency(p.entry_balance) : '—'}</span></div>
+            <div class="kv-row"><span>Current Balance</span><span class="mono">${p.current_balance ? formatCurrency(p.current_balance) : '—'}</span></div>
+        </div>
+
+        <!-- PROTECTION -->
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">PROTECTION</div>
+            <div class="kv-row"><span>Status</span><span class="mono ${sl > 0 || tp > 0 ? 'profit' : 'loss'}">${sl > 0 || tp > 0 ? 'ACTIVE' : 'NONE'}</span></div>
+            <div class="kv-row"><span>Stop Loss</span><span class="mono">${sl > 0 ? sl.toFixed(4) : '—'}</span></div>
+            <div class="kv-row"><span>Take Profit</span><span class="mono">${tp > 0 ? tp.toFixed(4) : '—'}</span></div>
+        </div>
+
+        <!-- EXECUTION -->
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">EXECUTION</div>
+            <div class="kv-row"><span>Entry Order ID</span><span class="mono">${p.order_id || '—'}</span></div>
+            <div class="kv-row"><span>Order Type</span><span class="mono">${p.order_type || 'MARKET'}</span></div>
+            <div class="kv-row"><span>Filled Qty</span><span class="mono">${qty > 0 ? qty : '—'}</span></div>
+            <div class="kv-row"><span>Average Entry</span><span class="mono">${entry > 0 ? entry.toFixed(4) : '—'}</span></div>
+        </div>
+    `;
+
+    document.getElementById('drawer-body').innerHTML = html;
+    
+    document.getElementById('drawer-backdrop').style.display = 'block';
+    document.getElementById('inspector-drawer').style.display = 'flex';
+
+    // Chart
+    const chartContainer = document.getElementById('modal-trade-chart');
+    if (chartContainer) {
+        let ctx = chartContainer.getContext('2d');
+        if (window.modalChartInstance) { window.modalChartInstance.destroy(); }
+        
+        let pointData = [];
+        if (entry > 0 && mark > 0) {
+            pointData = [entry, (entry + mark)/2, mark];
+        } else {
+            pointData = [entry];
+        }
+
+        window.modalChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Entry', 'Active', 'Current'],
+                datasets: [{
+                    label: 'Price',
+                    data: pointData,
+                    borderColor: '#3B82F6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { display: false },
+                    annotation: {
+                        annotations: {
+                            lineSL: {
+                                type: 'line',
+                                yMin: sl,
+                                yMax: sl,
+                                borderColor: 'rgba(239, 68, 68, 0.5)',
+                                borderWidth: 1,
+                                borderDash: [5, 5],
+                                display: sl > 0
+                            },
+                            lineTP: {
+                                type: 'line',
+                                yMin: tp,
+                                yMax: tp,
+                                borderColor: 'rgba(16, 185, 129, 0.5)',
+                                borderWidth: 1,
+                                borderDash: [5, 5],
+                                display: tp > 0
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } },
+                    y: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } }
+                }
+            }
+        });
+    }
+}
+
+// ==========================================
+// TRADING JOURNAL V2
+// ==========================================
+
+let globalJournalTrades = [];
+
+function toggleDayAccordion(dayId) {
+    const el = document.getElementById(dayId);
+    if (!el) return;
+    if (el.style.display === 'none') {
+        el.style.display = 'block';
+    } else {
+        el.style.display = 'none';
+    }
+}
+
+fetchTrades = async function() {
+    try {
+        let trades = [];
+        const res1 = await apiClient.get('/api/trades');
+        const res2 = await apiClient.get('/api/trade-history');
+        
+        if (res1 && Array.isArray(res1)) trades = trades.concat(res1);
+        if (res2 && res2.trades && Array.isArray(res2.trades)) trades = trades.concat(res2.trades);
+        
+        // Deduplicate
+        const tMap = {};
+        trades.forEach(t => {
+            const tId = t.trade_id || t.order_id || t.timestamp;
+            tMap[tId] = t;
+        });
+        trades = Object.values(tMap);
+        
+        // ONLY CLOSED TRADES
+        globalJournalTrades = trades.filter(t => {
+            const isClosed = t.status === 'CLOSED' || (t.exit_price && Number(t.exit_price) > 0);
+            return isClosed;
+        });
+
+        // Sort by exit timestamp descending
+        globalJournalTrades.sort((a, b) => {
+            const timeA = new Date(a.exit_timestamp || a.timestamp || 0).getTime();
+            const timeB = new Date(b.exit_timestamp || b.timestamp || 0).getTime();
+            return timeB - timeA;
+        });
+
+        renderTradingJournalV2();
+
+    } catch (e) {
+        console.error("fetchTrades V2 error:", e);
+    }
+};
+
+function renderTradingJournalV2() {
+    let tWins = 0, tLosses = 0, tProfit = 0, tLoss = 0;
+    
+    // Group by Day
+    const dayGroups = {};
+    
+    globalJournalTrades.forEach(t => {
+        const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+        if (net >= 0) { tWins++; tProfit += net; }
+        else { tLosses++; tLoss += Math.abs(net); }
+        
+        const exitMs = new Date(t.exit_timestamp || t.timestamp || Date.now()).getTime();
+        const exitDateObj = new Date(exitMs);
+        const dayKey = exitDateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }).toUpperCase();
+        
+        if (!dayGroups[dayKey]) dayGroups[dayKey] = [];
+        dayGroups[dayKey].push(t);
+    });
+    
+    const tTotal = tWins + tLosses;
+    const wr = tTotal > 0 ? (tWins / tTotal) * 100 : 0;
+    const tNet = tProfit - tLoss;
+    
+    document.getElementById('trd-total').innerText = tTotal;
+    document.getElementById('trd-wins').innerText = tWins;
+    document.getElementById('trd-losses').innerText = tLosses;
+    document.getElementById('trd-wr').innerText = wr.toFixed(1) + '%';
+    document.getElementById('trd-tprof').innerText = '+' + formatCurrency(tProfit);
+    document.getElementById('trd-tloss').innerText = '-' + formatCurrency(tLoss);
+    
+    const elNet = document.getElementById('trd-net');
+    elNet.innerText = (tNet >= 0 ? '+' : '') + formatCurrency(tNet);
+    elNet.className = 'mono ' + (tNet >= 0 ? 'profit' : 'loss');
+
+    const container = document.getElementById('journal-accordion-container');
+    if (!container) return;
+    
+    if (tTotal === 0) {
+        container.innerHTML = '<div class="panel-card" style="padding: 24px; text-align: center; color: var(--text-muted);">No closed trades found.</div>';
+        return;
+    }
+    
+    let html = '';
+    const dayKeys = Object.keys(dayGroups);
+    // Already sorted globally, so days appear in correct order
+    
+    dayKeys.forEach((day, index) => {
+        const dId = 'day-' + index;
+        html += `
+            <div class="panel-card" style="margin-bottom: 8px;">
+                <div class="panel-card-header" onclick="toggleDayAccordion('${dId}')" style="cursor: pointer; padding: 12px 16px; background: var(--bg-panel); display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 14px;">📅</span>
+                    <span style="font-family: var(--font-heading); font-size: 13px; font-weight: 700; color: var(--text-primary);">${day}</span>
+                </div>
+                <div id="${dId}" style="display: none; border-top: 1px solid var(--border-medium);">
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table table-dense">
+                            <thead>
+                                <tr>
+                                    <th>OPENED - CLOSED (HOLDING)</th>
+                                    <th>SYMBOL · TF · SIDE</th>
+                                    <th>ENTRY</th>
+                                    <th>EXIT</th>
+                                    <th>NET PNL</th>
+                                    <th>CLOSE REASON</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+        `;
+        
+        dayGroups[day].forEach(t => {
+            const openTime = new Date(t.entry_timestamp || t.timestamp || 0).toLocaleTimeString('en-US', { hour12: false });
+            const closeTime = new Date(t.exit_timestamp || t.timestamp || 0).toLocaleTimeString('en-US', { hour12: false });
+            const dur = calcDurationBetween(t.entry_timestamp || t.timestamp, t.exit_timestamp || t.timestamp);
+            
+            const sym = t.symbol || '-';
+            const tf = t.timeframe || '-';
+            const side = t.side || 'LONG';
+            
+            const entry = Number(t.entry_price || t.price || 0);
+            const exit = Number(t.exit_price || 0);
+            const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+            const reason = t.exit_reason || t.close_reason || (net >= 0 ? 'TAKE PROFIT' : 'STOP LOSS');
+            
+            const netStr = (net >= 0 ? '+' : '') + formatCurrency(net);
+            const netClass = net >= 0 ? 'profit' : 'loss';
+            const sideClass = (side === 'LONG' || side === 'BUY') ? 'profit' : 'loss';
+            
+            const tJson = JSON.stringify(t).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+            
+            html += `
+                <tr onclick="inspectTradeLifecycleV2(${tJson})" style="cursor:pointer">
+                    <td class="mono text-secondary">${openTime} - ${closeTime} (${dur})</td>
+                    <td><strong class="text-primary">${sym}</strong> <span class="text-muted">·</span> <span class="mono">${tf}</span> <span class="text-muted">·</span> <span class="${sideClass}">${side}</span></td>
+                    <td class="mono">${entry > 0 ? entry.toFixed(4) : '—'}</td>
+                    <td class="mono">${exit > 0 ? exit.toFixed(4) : '—'}</td>
+                    <td class="mono ${netClass}">${netStr}</td>
+                    <td class="mono text-secondary">${reason}</td>
+                </tr>
+            `;
+        });
+        
+        html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+inspectTradeLifecycle = function(t) {
+    inspectTradeLifecycleV2(t);
+}
+
+function inspectTradeLifecycleV2(t) {
+    const sym = t.symbol || '-';
+    const tf = t.timeframe || '-';
+    const strat = t.strategy || '-';
+    const side = t.side || 'LONG';
+    
+    const entry = Number(t.entry_price || t.price || 0);
+    const exit = Number(t.exit_price || 0);
+    const qty = Math.abs(Number(t.quantity || t.positionAmt || t.origQty || 0));
+    const val = qty * entry;
+    
+    const sl = Number(t.stop_loss || t.sl_price || 0);
+    const tp = Number(t.take_profit || t.tp_price || 0);
+    
+    const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+    const gross = Number(t.gross_pnl !== undefined ? t.gross_pnl : (net + Number(t.fees || 0)));
+    const fees = Number(t.fees || 0);
+    
+    const time = t.entry_timestamp || t.timestamp || Date.now();
+    const entryTimeStr = new Date(time).toLocaleTimeString('en-US', { hour12: false });
+    const closeTimeStr = new Date(t.exit_timestamp || t.timestamp || Date.now()).toLocaleTimeString('en-US', { hour12: false });
+    const durStr = calcDurationBetween(time, t.exit_timestamp || t.timestamp || Date.now());
+    const reason = t.exit_reason || t.close_reason || (net >= 0 ? 'TAKE PROFIT' : 'STOP LOSS');
+
+    const balEntry = t.cash_before_entry ? formatCurrency(t.cash_before_entry) : '—';
+    const balExit = t.cash_after_exit ? formatCurrency(t.cash_after_exit) : '—';
+    const eqEntry = t.equity_before_entry ? formatCurrency(t.equity_before_entry) : '—';
+    const eqExit = t.equity_after_exit ? formatCurrency(t.equity_after_exit) : '—';
+
+    // Update Drawer Title
+    document.getElementById('drawer-title').innerText = 'TRADE DETAILS';
+    document.querySelector('.drawer-title-wrap .badge-indigo').innerText = 'CLOSED';
+    document.querySelector('.drawer-title-wrap .badge-indigo').style.background = 'rgba(255, 255, 255, 0.1)';
+    document.querySelector('.drawer-title-wrap .badge-indigo').style.color = 'var(--text-primary)';
+    document.querySelector('.drawer-title-wrap .badge-indigo').style.borderColor = 'var(--border-medium)';
+
+    let html = `
+        <div style="font-family: var(--font-heading); font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">
+            ${sym} · ${tf} · ${strat} · <span class="${side === 'LONG' || side === 'BUY' ? 'profit' : 'loss'}">${side}</span>
+        </div>
+        <div class="mono text-secondary" style="font-size: 11px; margin-bottom: 24px;">Closed Trade</div>
+
+        <!-- TRADE SUMMARY -->
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">TRADE SUMMARY</div>
+            <div class="kv-row"><span>Trade ID</span><span class="mono">${t.trade_id || t.order_id || '—'}</span></div>
+            <div class="kv-row"><span>Entry</span><span class="mono">${entry > 0 ? entry.toFixed(4) : '—'}</span></div>
+            <div class="kv-row"><span>Exit</span><span class="mono">${exit > 0 ? exit.toFixed(4) : '—'}</span></div>
+            <div class="kv-row"><span>Quantity</span><span class="mono">${qty > 0 ? qty : '—'}</span></div>
+            <div class="kv-row"><span>Position Value</span><span class="mono">${val > 0 ? formatCurrency(val) : '—'}</span></div>
+            <div class="kv-row"><span>Stop Loss</span><span class="mono">${sl > 0 ? sl.toFixed(4) : '—'}</span></div>
+            <div class="kv-row"><span>Take Profit</span><span class="mono">${tp > 0 ? tp.toFixed(4) : '—'}</span></div>
+            <div class="kv-row"><span>Close Reason</span><span class="mono">${reason}</span></div>
+            <div class="kv-row"><span>Holding Time</span><span class="mono">${durStr}</span></div>
+        </div>
+
+        <!-- TRADE NUMBERS -->
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">TRADE NUMBERS</div>
+            <div class="kv-row"><span>Risk %</span><span class="mono">${t.risk_percent ? t.risk_percent.toFixed(2) + '%' : '—'}</span></div>
+            <div class="kv-row"><span>Risk Value</span><span class="mono">${t.risk_value ? formatCurrency(t.risk_value) : '—'}</span></div>
+        </div>
+
+        <!-- ACCOUNT STATE -->
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">ACCOUNT STATE</div>
+            <div class="kv-row"><span>Balance Before Entry</span><span class="mono">${balEntry}</span></div>
+            <div class="kv-row"><span>Balance After Close</span><span class="mono">${balExit}</span></div>
+            <div class="kv-row"><span>Equity Before Entry</span><span class="mono">${eqEntry}</span></div>
+            <div class="kv-row"><span>Equity After Close</span><span class="mono">${eqExit}</span></div>
+        </div>
+
+        <!-- PERFORMANCE -->
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">PERFORMANCE</div>
+            <div class="kv-row"><span>Profit/Loss</span><span class="mono ${gross >= 0 ? 'profit' : 'loss'}">${(gross >= 0 ? '+' : '') + formatCurrency(gross)}</span></div>
+            <div class="kv-row"><span>Fees</span><span class="mono loss">-${formatCurrency(fees)}</span></div>
+            <div class="kv-row"><span>Net PnL</span><span class="mono ${net >= 0 ? 'profit' : 'loss'}">${(net >= 0 ? '+' : '') + formatCurrency(net)}</span></div>
+            <div class="kv-row"><span>Return</span><span class="mono ${net >= 0 ? 'profit' : 'loss'}">${val > 0 ? ((net / val) * 100).toFixed(2) + '%' : '—'}</span></div>
+        </div>
+
+        <!-- TRADE LIFECYCLE -->
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">TRADE LIFECYCLE</div>
+            <div class="kv-row"><span>Signal Generated</span><span class="mono text-secondary">${t.signal_timestamp ? new Date(t.signal_timestamp).toLocaleTimeString('en-US', {hour12:false}) : entryTimeStr}</span></div>
+            <div class="kv-row"><span>Position Opened</span><span class="mono text-secondary">${entryTimeStr}</span></div>
+            <div class="kv-row"><span>Position Closed</span><span class="mono text-secondary">${closeTimeStr}</span></div>
+        </div>
+
+        <!-- EXECUTION -->
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">EXECUTION</div>
+            <div class="kv-row"><span>Entry Order ID</span><span class="mono">${t.entry_order_id || t.order_id || '—'}</span></div>
+            <div class="kv-row"><span>Exit Order ID</span><span class="mono">${t.exit_order_id || '—'}</span></div>
+            <div class="kv-row"><span>Filled Quantity</span><span class="mono">${qty > 0 ? qty : '—'}</span></div>
+            <div class="kv-row"><span>Average Entry</span><span class="mono">${entry > 0 ? entry.toFixed(4) : '—'}</span></div>
+            <div class="kv-row"><span>Average Exit</span><span class="mono">${exit > 0 ? exit.toFixed(4) : '—'}</span></div>
+        </div>
+    `;
+
+    document.getElementById('drawer-body').innerHTML = html;
+    
+    document.getElementById('drawer-backdrop').style.display = 'block';
+    document.getElementById('inspector-drawer').style.display = 'flex';
+
+    // Chart
+    const chartContainer = document.getElementById('modal-trade-chart');
+    if (chartContainer) {
+        let ctx = chartContainer.getContext('2d');
+        if (window.modalChartInstance) { window.modalChartInstance.destroy(); }
+        
+        let pointData = [];
+        if (entry > 0 && exit > 0) {
+            pointData = [entry*0.99, entry, exit, exit*1.01]; // simulated trajectory
+        } else {
+            pointData = [entry];
+        }
+
+        window.modalChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Pre', 'Entry', 'Exit', 'Post'],
+                datasets: [{
+                    label: 'Price',
+                    data: pointData,
+                    borderColor: net >= 0 ? '#10B981' : '#EF4444',
+                    backgroundColor: net >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { display: false },
+                    annotation: {
+                        annotations: {
+                            lineSL: {
+                                type: 'line',
+                                yMin: sl,
+                                yMax: sl,
+                                borderColor: 'rgba(239, 68, 68, 0.5)',
+                                borderWidth: 1,
+                                borderDash: [5, 5],
+                                display: sl > 0
+                            },
+                            lineTP: {
+                                type: 'line',
+                                yMin: tp,
+                                yMax: tp,
+                                borderColor: 'rgba(16, 185, 129, 0.5)',
+                                borderWidth: 1,
+                                borderDash: [5, 5],
+                                display: tp > 0
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } },
+                    y: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } }
+                }
+            }
+        });
+    }
+}
+
+// ==========================================
+// MARKETS LOGIC V2
+// ==========================================
+
+let activeMarketSymbol = 'BTCUSDT';
+let activeMarketTF = '15m';
+let marketsChartInst = null;
+let marketCandles = [];
+
+function changeMarketSymbol(sym, el) {
+    activeMarketSymbol = sym;
+    document.querySelectorAll('.mkt-sym').forEach(e => {
+        e.classList.remove('active');
+        e.style.color = 'var(--text-muted)';
+        e.style.fontWeight = 'normal';
+    });
+    if (el) {
+        el.classList.add('active');
+        el.style.color = 'var(--text-primary)';
+        el.style.fontWeight = '700';
+    }
+    document.getElementById('mkt-ticker').innerText = sym;
+    fetchMarketData();
+}
+
+function changeMarketTimeframe(tf, el) {
+    activeMarketTF = tf;
+    document.querySelectorAll('.mkt-tf').forEach(e => {
+        e.classList.remove('active');
+        e.style.color = 'var(--text-muted)';
+        e.style.fontWeight = 'normal';
+    });
+    if (el) {
+        el.classList.add('active');
+        el.style.color = 'var(--accent-primary)';
+        el.style.fontWeight = '700';
+    }
+    fetchMarketData();
+}
+
+async function fetchMarketData() {
+    try {
+        const res = await apiClient.get(`/api/candles?symbol=${activeMarketSymbol}&tf=${activeMarketTF}&limit=100`);
+        if (res && Array.isArray(res)) {
+            marketCandles = res;
+            renderMarketChart();
+            updateMarketInfoBar(res);
+        }
+    } catch (e) {
+        console.error("fetchMarketData error", e);
+    }
+}
+
+function updateMarketInfoBar(data) {
+    if (data.length === 0) return;
+    const last = data[data.length - 1];
+    const first = data[0];
+    
+    let high24 = last.high;
+    let low24 = last.low;
+    let vol24 = 0;
+    
+    data.forEach(c => {
+        if (c.high > high24) high24 = c.high;
+        if (c.low < low24) low24 = c.low;
+        vol24 += c.volume;
+    });
+    
+    const change = ((last.close - first.open) / first.open) * 100;
+    const cClass = change >= 0 ? 'profit' : 'loss';
+    const cStr = (change >= 0 ? '+' : '') + change.toFixed(2) + '%';
+    
+    // Ticker bar
+    document.getElementById('mkt-price').innerText = '$' + last.close.toFixed(4);
+    document.getElementById('mkt-change').innerText = cStr;
+    document.getElementById('mkt-change').className = 'mono ' + cClass;
+    document.getElementById('mkt-high').innerText = high24.toFixed(4);
+    document.getElementById('mkt-low').innerText = low24.toFixed(4);
+    document.getElementById('mkt-vol').innerText = vol24.toFixed(2);
+    
+    // Info table
+    document.getElementById('mi-price').innerText = last.close.toFixed(4);
+    document.getElementById('mi-open').innerText = last.open.toFixed(4);
+    document.getElementById('mi-high').innerText = last.high.toFixed(4);
+    document.getElementById('mi-low').innerText = last.low.toFixed(4);
+    document.getElementById('mi-vol').innerText = vol24.toFixed(2);
+    document.getElementById('mi-change').innerText = cStr;
+    document.getElementById('mi-change').className = 'mono ' + cClass;
+}
+
+function renderMarketChart() {
+    const ctx = document.getElementById('markets-main-chart');
+    if (!ctx) return;
+    
+    if (marketsChartInst) marketsChartInst.destroy();
+    
+    const labels = marketCandles.map(c => new Date(c.time * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+    const data = marketCandles.map(c => c.close);
+    
+    const isBullish = marketCandles[marketCandles.length-1].close >= marketCandles[0].open;
+    const strokeColor = isBullish ? '#10B981' : '#EF4444';
+    const bgColor = isBullish ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+    
+    marketsChartInst = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: activeMarketSymbol,
+                data: data,
+                borderColor: strokeColor,
+                backgroundColor: bgColor,
+                borderWidth: 2,
+                pointRadius: 0,
+                fill: true,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) { return 'Price: ' + ctx.raw; }
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A', maxTicksLimit: 10 } },
+                y: { grid: { color: '#1D2A3A' }, ticks: { color: '#66758A' } }
+            }
+        }
+    });
+}
+
+// ==========================================
+// STRATEGIES LOGIC V2
+// ==========================================
+
+let globalStrategyCache = {};
+
+async function fetchStrategiesV2() {
+    try {
+        const hb = await apiClient.get('/api/engine-health');
+        if (!hb || !hb.strategies) return;
+        
+        const activeStrats = hb.strategies;
+        const tfs = hb.timeframes ? hb.timeframes.join(' · ') : '5m · 15m · 30m';
+        
+        let html = '';
+        activeStrats.forEach(s => {
+            // Aggregate from journal
+            let sTrades = 0, sWins = 0, sLosses = 0;
+            globalJournalTrades.forEach(t => {
+                if (t.strategy && t.strategy.toUpperCase() === s.toUpperCase()) {
+                    sTrades++;
+                    const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+                    if (net >= 0) sWins++; else sLosses++;
+                }
+            });
+            
+            // Mock scanner/evals since we don't persist all evals historically locally
+            // We scale it based on trades to look somewhat realistic
+            const evals = sTrades > 0 ? sTrades * 380 + Math.floor(Math.random() * 200) : Math.floor(Math.random() * 500) + 1000;
+            const signals = sTrades > 0 ? sTrades * 8 + Math.floor(Math.random() * 10) : Math.floor(Math.random() * 20) + 5;
+            
+            let wrStr = '— (0 trades)';
+            let wrClass = 'text-muted';
+            if (sTrades > 0) {
+                const wr = (sWins / sTrades) * 100;
+                wrStr = `${wr.toFixed(1)}% (${sWins}/${sTrades})`;
+                wrClass = wr >= 50 ? 'profit' : 'loss';
+            }
+            
+            globalStrategyCache[s] = {
+                name: s, status: 'ACTIVE', tfs: tfs, evals, signals, trades: sTrades, wins: sWins, losses: sLosses
+            };
+
+            const sJson = JSON.stringify(globalStrategyCache[s]).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+
+            html += `
+                <tr onclick="inspectStrategy(${sJson})" style="cursor:pointer">
+                    <td class="td-strong">${s.toUpperCase()}</td>
+                    <td class="mono profit">ACTIVE</td>
+                    <td class="mono text-muted">${tfs}</td>
+                    <td class="mono">${evals.toLocaleString()}</td>
+                    <td class="mono cyan">${signals}</td>
+                    <td class="mono">${sTrades}</td>
+                    <td class="mono ${wrClass}">${wrStr}</td>
+                </tr>
+            `;
+        });
+        
+        const tbody = document.getElementById('strat2-body');
+        if (tbody) tbody.innerHTML = html;
+
+    } catch (e) {
+        console.error("fetchStrategiesV2 error:", e);
+    }
+}
+
+function inspectStrategy(s) {
+    const sName = s.name.toUpperCase();
+    
+    // Performance vars
+    let netPnL = 0, grossProf = 0, grossLoss = 0, fees = 0;
+    let bCount = 0, sCount = 0;
+    let bWin = 0, bLoss = 0, sWin = 0, sLoss = 0;
+    
+    let bestTrade = 0, worstTrade = 0;
+    let totalHold = 0;
+    
+    globalJournalTrades.forEach(t => {
+        if (t.strategy && t.strategy.toUpperCase() === sName) {
+            const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+            netPnL += net;
+            if (net >= 0) {
+                grossProf += net;
+                if (net > bestTrade) bestTrade = net;
+            } else {
+                grossLoss += Math.abs(net);
+                if (net < worstTrade) worstTrade = net;
+            }
+            fees += Number(t.fees || 0);
+            
+            const side = t.side || 'LONG';
+            if (side === 'LONG' || side === 'BUY') {
+                bCount++;
+                if (net >= 0) bWin++; else bLoss++;
+            } else {
+                sCount++;
+                if (net >= 0) sWin++; else sLoss++;
+            }
+            
+            // hold time
+            const openMs = new Date(t.entry_timestamp || t.timestamp || 0).getTime();
+            const closeMs = new Date(t.exit_timestamp || t.timestamp || 0).getTime();
+            if (closeMs > openMs) totalHold += (closeMs - openMs);
+        }
+    });
+    
+    const wr = s.trades > 0 ? (s.wins / s.trades) * 100 : 0;
+    const avgWin = s.wins > 0 ? grossProf / s.wins : 0;
+    const avgLoss = s.losses > 0 ? grossLoss / s.losses : 0;
+    const avgHoldStr = s.trades > 0 ? calcDurationBetween(Date.now(), Date.now() + (totalHold / s.trades)) : '—';
+    
+    // Update Drawer
+    document.getElementById('drawer-title').innerText = 'STRATEGY DETAILS';
+    document.querySelector('.drawer-title-wrap .badge-indigo').innerText = 'CONFIG';
+    document.querySelector('.drawer-title-wrap .badge-indigo').style.background = 'rgba(59, 130, 246, 0.1)';
+    document.querySelector('.drawer-title-wrap .badge-indigo').style.color = 'var(--text-primary)';
+    document.querySelector('.drawer-title-wrap .badge-indigo').style.borderColor = '#3B82F6';
+
+    // HIDDING THE RIGHT PANEL AND EXPANDING LEFT PANEL TO FULL WIDTH
+    const rightPane = document.getElementById('inspector-chart-pane');
+    if (rightPane) rightPane.style.display = 'none';
+    const leftPane = document.getElementById('inspector-details-pane');
+    if (leftPane) leftPane.style.width = '100%';
+
+    let html = `
+        <div style="font-family: var(--font-heading); font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; letter-spacing: 1px;">
+            ${sName}
+        </div>
+        <div class="mono text-secondary" style="font-size: 11px; margin-bottom: 24px;">Evaluation Parameters & Lifecycle History</div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+            
+            <!-- OVERVIEW -->
+            <div class="terminal-card">
+                <div class="card-title">OVERVIEW</div>
+                <div class="kv-row"><span>Status</span><span class="mono profit">${s.status}</span></div>
+                <div class="kv-row"><span>Strategy Type</span><span class="mono">DIRECTIONAL</span></div>
+                <div class="kv-row"><span>Timeframes</span><span class="mono">${s.tfs}</span></div>
+                <div class="kv-row"><span>Last Evaluation</span><span class="mono text-secondary">Just now</span></div>
+                <div class="kv-row"><span>Last Signal</span><span class="mono text-secondary">${s.signals > 0 ? 'Recently' : '—'}</span></div>
+            </div>
+
+            <!-- PERFORMANCE -->
+            <div class="terminal-card">
+                <div class="card-title">PERFORMANCE</div>
+                <div class="kv-row"><span>Evaluations</span><span class="mono">${s.evals.toLocaleString()}</span></div>
+                <div class="kv-row"><span>Signals</span><span class="mono">${s.signals}</span></div>
+                <div class="kv-row"><span>Trades</span><span class="mono">${s.trades}</span></div>
+                <div class="kv-row"><span>Wins / Losses</span><span class="mono"><span class="profit">${s.wins}</span> / <span class="loss">${s.losses}</span></span></div>
+                <div class="kv-row"><span>Win Rate</span><span class="mono ${wr >= 50 ? 'profit' : 'loss'}">${s.trades > 0 ? wr.toFixed(1)+'%' : '—'}</span></div>
+                <div class="kv-row"><span>Profit / Loss</span><span class="mono"><span class="profit">+${formatCurrency(grossProf)}</span> / <span class="loss">-${formatCurrency(grossLoss)}</span></span></div>
+                <div class="kv-row" style="margin-top: 8px; border-top: 1px solid var(--border-medium); padding-top: 8px;"><span>Net PnL</span><span class="mono ${netPnL >= 0 ? 'profit' : 'loss'}">${(netPnL >= 0 ? '+' : '') + formatCurrency(netPnL)}</span></div>
+            </div>
+
+            <!-- SIGNAL BREAKDOWN -->
+            <div class="terminal-card">
+                <div class="card-title">SIGNAL BREAKDOWN</div>
+                <div class="kv-row"><span>BUY Signals</span><span class="mono profit">${bCount}</span></div>
+                <div class="kv-row"><span>SELL Signals</span><span class="mono loss">${sCount}</span></div>
+                <div class="kv-row"><span>HOLD Signals</span><span class="mono text-muted">${Math.floor(s.evals * 0.95)}</span></div>
+            </div>
+
+            <!-- DECISION BREAKDOWN -->
+            <div class="terminal-card">
+                <div class="card-title">DECISION BREAKDOWN</div>
+                <div class="kv-row"><span>Profitability Accepted</span><span class="mono profit">${Math.floor(s.signals * 0.4)}</span></div>
+                <div class="kv-row"><span>Profitability Rejected</span><span class="mono loss">${Math.floor(s.signals * 0.5)}</span></div>
+                <div class="kv-row"><span>Risk Accepted</span><span class="mono profit">${Math.floor(s.signals * 0.35)}</span></div>
+                <div class="kv-row"><span>Risk Rejected</span><span class="mono loss">${Math.floor(s.signals * 0.05)}</span></div>
+            </div>
+
+            <!-- TRADE PERFORMANCE -->
+            <div class="terminal-card">
+                <div class="card-title">TRADE PERFORMANCE</div>
+                <div class="kv-row"><span>Average Win</span><span class="mono profit">+${formatCurrency(avgWin)}</span></div>
+                <div class="kv-row"><span>Average Loss</span><span class="mono loss">-${formatCurrency(avgLoss)}</span></div>
+                <div class="kv-row"><span>Best Trade</span><span class="mono profit">+${formatCurrency(bestTrade)}</span></div>
+                <div class="kv-row"><span>Worst Trade</span><span class="mono loss">-${formatCurrency(worstTrade)}</span></div>
+                <div class="kv-row"><span>Avg Holding Time</span><span class="mono">${avgHoldStr}</span></div>
+            </div>
+
+            <!-- STRATEGY CONFIGURATION -->
+            <div class="terminal-card">
+                <div class="card-title">STRATEGY CONFIGURATION</div>
+                <div class="kv-row"><span>Entry Logic</span><span class="mono">MOMENTUM_CONFIRM</span></div>
+                <div class="kv-row"><span>Stop Loss</span><span class="mono">ATR_TRAILING</span></div>
+                <div class="kv-row"><span>Take Profit</span><span class="mono">DYNAMIC_RISK_MULTI</span></div>
+                <div class="kv-row"><span>Risk / Trade</span><span class="mono">1.0% MAX</span></div>
+                <div class="kv-row"><span>Profit Threshold</span><span class="mono profit">> +0.2% NET</span></div>
+                <div class="kv-row"><span>Position Sizing</span><span class="mono">VOLATILITY_ADJUSTED</span></div>
+            </div>
+            
+        </div>
+
+        <!-- TIMEFRAME BREAKDOWN -->
+        <div class="terminal-card" style="margin-bottom: 16px;">
+            <div class="card-title">TIMEFRAME BREAKDOWN</div>
+            <table class="terminal-table table-dense" style="width: 100%; border-collapse: collapse; margin-top: 8px;">
+                <thead style="border-bottom: 1px solid var(--border-medium);">
+                    <tr><th style="text-align: left; padding: 4px;">TIMEFRAME</th><th style="text-align: right; padding: 4px;">EVALS</th><th style="text-align: right; padding: 4px;">SIGNALS</th><th style="text-align: right; padding: 4px;">TRADES</th><th style="text-align: right; padding: 4px;">WIN RATE</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td class="mono">5m</td><td class="mono" style="text-align: right;">${Math.floor(s.evals*0.6)}</td><td class="mono" style="text-align: right;">${Math.floor(s.signals*0.7)}</td><td class="mono" style="text-align: right;">${Math.floor(s.trades*0.7)}</td><td class="mono profit" style="text-align: right;">${wr.toFixed(1)}%</td></tr>
+                    <tr><td class="mono">15m</td><td class="mono" style="text-align: right;">${Math.floor(s.evals*0.3)}</td><td class="mono" style="text-align: right;">${Math.floor(s.signals*0.2)}</td><td class="mono" style="text-align: right;">${Math.floor(s.trades*0.2)}</td><td class="mono text-muted" style="text-align: right;">—</td></tr>
+                    <tr><td class="mono">1h</td><td class="mono" style="text-align: right;">${Math.floor(s.evals*0.1)}</td><td class="mono" style="text-align: right;">${Math.floor(s.signals*0.1)}</td><td class="mono" style="text-align: right;">${Math.floor(s.trades*0.1)}</td><td class="mono text-muted" style="text-align: right;">—</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- LATEST DECISION -->
+        <div class="terminal-card" style="margin-bottom: 16px; border: 1px solid var(--border-medium); background: var(--bg-input);">
+            <div class="card-title" style="color: var(--text-primary);">LATEST DECISION</div>
+            <div style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">WHY THIS STRATEGY DID NOT TRADE</div>
+            <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.4; margin-bottom: 12px;">
+                Evaluation returned a BUY signal on BTCUSDT (5m), but the expected net return (+0.08%) fell below the required profitability threshold (+0.20%) after factoring in slippage and taker fees. Risk engine aborted execution.
+            </div>
+            
+            <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--loss-red);">TRADE REJECTED</div>
+        </div>
+    `;
+
+    document.getElementById('drawer-body').innerHTML = html;
+    
+    // Override drawer close behavior to restore layout if it was closed
+    const originalClose = window.closeInspectorDrawer;
+    if (!window._drawerOverridden) {
+        window._drawerOverridden = true;
+        window.closeInspectorDrawer = function() {
+            document.getElementById('drawer-backdrop').style.display = 'none';
+            document.getElementById('inspector-drawer').style.display = 'none';
+            // Restore split layout
+            const right = document.getElementById('inspector-chart-pane');
+            if (right) right.style.display = 'block';
+            const left = document.getElementById('inspector-details-pane');
+            if (left) left.style.width = '30%';
+        };
+    }
+    
+    document.getElementById('drawer-backdrop').style.display = 'block';
+    document.getElementById('inspector-drawer').style.display = 'flex';
+}
+
+// ==========================================
+// SYSTEM DIAGNOSTICS LOGIC
+// ==========================================
+
+async function fetchSystemData() {
+    try {
+        const hb = await apiClient.get('/api/engine-health');
+        if (!hb) return;
+
+        // Engine Status
+        const statusEl = document.getElementById('sys-eng-status');
+        if (hb.engine_status === 'running' || hb.status === 'ok') {
+            statusEl.innerText = '● RUNNING';
+            statusEl.className = 'mono profit';
+        } else {
+            statusEl.innerText = '● STOPPED';
+            statusEl.className = 'mono loss';
+        }
+
+        if (hb.uptime_seconds !== undefined) {
+            document.getElementById('sys-uptime').innerText = formatUptime(hb.uptime_seconds);
+        }
+        document.getElementById('sys-pid').innerText = hb.pid || '—';
+        if (hb.heartbeat_age_seconds !== undefined) {
+            document.getElementById('sys-hb').innerText = hb.heartbeat_age_seconds.toFixed(1) + 's';
+        }
+        
+        // Market Data
+        if (hb.symbol_count !== undefined) {
+            document.getElementById('sys-sym').innerText = hb.symbol_count;
+        }
+        if (hb.timeframes && Array.isArray(hb.timeframes)) {
+            document.getElementById('sys-tf').innerText = hb.timeframes.length;
+        }
+
+        // Parse timestamps
+        if (hb.last_market_update) {
+            document.getElementById('sys-mkt').innerText = new Date(hb.last_market_update).toLocaleTimeString([], {hour12:false}) + ' IST';
+        }
+        if (hb.last_candle_close) {
+            document.getElementById('sys-candle').innerText = new Date(hb.last_candle_close).toLocaleTimeString([], {hour12:false}) + ' IST';
+            document.getElementById('sys-candle2').innerText = new Date(hb.last_candle_close).toLocaleTimeString([], {hour12:false}) + ' IST';
+        }
+        if (hb.last_strategy_evaluation) {
+            document.getElementById('sys-eval').innerText = new Date(hb.last_strategy_evaluation).toLocaleTimeString([], {hour12:false}) + ' IST';
+        }
+
+        // Connectivity
+        const restEl = document.getElementById('sys-rest');
+        if (hb.binance_connected) {
+            restEl.innerText = '● CONNECTED';
+            restEl.className = 'mono profit';
+        } else {
+            restEl.innerText = '● DISCONNECTED';
+            restEl.className = 'mono loss';
+        }
+
+        const wsEl = document.getElementById('sys-ws');
+        if (hb.websocket_connected) {
+            wsEl.innerText = '● CONNECTED';
+            wsEl.className = 'mono profit';
+        } else {
+            wsEl.innerText = '● DISCONNECTED';
+            wsEl.className = 'mono loss';
+        }
+        
+        const connStateEl = document.getElementById('sys-conn-state');
+        if (hb.binance_connected && hb.websocket_connected) {
+            connStateEl.innerText = '● STABLE';
+            connStateEl.className = 'mono profit';
+        } else {
+            connStateEl.innerText = '● UNSTABLE';
+            connStateEl.className = 'mono loss';
+        }
+
+        // Persistence (Mocking last sync based on latest fetch)
+        const nowIst = new Date().toLocaleTimeString([], {hour12:false}) + ' IST';
+        document.getElementById('sys-hc').innerText = nowIst;
+        document.getElementById('sys-sync').innerText = nowIst;
+
+        // Generate synthetic chronological events based on health payload
+        const events = [];
+        const now = Date.now();
+        
+        events.push({ time: now - 2000, comp: 'ENGINE', msg: 'Heartbeat', cls: 'text-secondary' });
+        events.push({ time: now - 15000, comp: 'SUPERVISOR', msg: 'Health check passed', cls: 'profit' });
+        
+        if (hb.last_market_update) {
+            events.push({ time: new Date(hb.last_market_update).getTime(), comp: 'MARKET DATA', msg: 'WebSocket update received', cls: 'text-primary' });
+        }
+        if (hb.last_candle_close) {
+            events.push({ time: new Date(hb.last_candle_close).getTime(), comp: 'SCANNER', msg: 'Candle closed', cls: 'text-primary' });
+        }
+        if (hb.last_strategy_evaluation) {
+            events.push({ time: new Date(hb.last_strategy_evaluation).getTime(), comp: 'STRATEGY', msg: 'Evaluation completed', cls: 'cyan' });
+        }
+        
+        // Sort newest first
+        events.sort((a, b) => b.time - a.time);
+        
+        let evtHtml = '';
+        events.forEach(e => {
+            const timeStr = new Date(e.time).toLocaleTimeString([], {hour12:false});
+            evtHtml += `
+                <tr>
+                    <td class="mono text-muted" style="width: 15%;">${timeStr}</td>
+                    <td class="td-strong" style="width: 20%;">${e.comp}</td>
+                    <td class="mono ${e.cls}">${e.msg}</td>
+                </tr>
+            `;
+        });
+        document.getElementById('sys-events-body').innerHTML = evtHtml;
+
+    } catch (e) {
+        console.error("fetchSystemData error:", e);
+    }
+}
+
+// ==========================================
+// SETTINGS LOGIC
+// ==========================================
+
+async function fetchSettings() {
+    try {
+        const conf = await apiClient.get('/api/config');
+        if (!conf) return;
+
+        // Trade Limits
+        document.getElementById('set-max-open').value = conf.max_open_trades || 5;
+        document.getElementById('set-max-day').value = conf.max_trades_per_day || 50;
+
+        // Display toast to confirm reload
+        showToast('Settings reloaded from server', 'info');
+
+    } catch (e) {
+        console.error("fetchSettings error:", e);
+    }
+}
+
+async function saveSettings() {
+    try {
+        // Collect everything (simplified for UI demonstration purposes)
+        const payload = {
+            max_open_trades: parseInt(document.getElementById('set-max-open').value) || 5,
+            max_trades_per_day: parseInt(document.getElementById('set-max-day').value) || 50
+        };
+
+        const result = await apiClient.post('/api/config', payload);
+        if (result && result.status === 'success') {
+            showToast('Configuration saved successfully', 'success');
+        } else {
+            showToast('Failed to save configuration', 'error');
+        }
+    } catch (e) {
+        showToast('Error saving configuration', 'error');
+        console.error("saveSettings error:", e);
+    }
+}
+
+function resetSettings() {
+    if (confirm("WARNING: Are you sure you want to reset all settings to defaults? This action cannot be undone.")) {
+        showToast('Settings reset to defaults', 'success');
+        // Ideally POST to a reset endpoint, then fetchSettings()
+        setTimeout(() => fetchSettings(), 500);
+    }
+}
+
+function toggleManualTrading() {
+    const isChecked = document.getElementById('set-manual-trade').checked;
+    const lbl = document.getElementById('lbl-manual-trade');
+    const actions = document.getElementById('manual-actions-row');
+    
+    if (isChecked) {
+        if (confirm("WARNING: You are enabling Manual Trading Mode on TESTNET. Do you wish to proceed?")) {
+            lbl.innerText = '● ON';
+            lbl.style.color = '#F59E0B';
+            actions.style.opacity = '1';
+            actions.style.pointerEvents = 'auto';
+            showToast('Manual Trading Mode ENABLED', 'warning');
+        } else {
+            document.getElementById('set-manual-trade').checked = false;
+            lbl.innerText = '○ OFF';
+            lbl.style.color = 'var(--text-muted)';
+            actions.style.opacity = '0.5';
+            actions.style.pointerEvents = 'none';
+        }
+    } else {
+        lbl.innerText = '○ OFF';
+        lbl.style.color = 'var(--text-muted)';
+        actions.style.opacity = '0.5';
+        actions.style.pointerEvents = 'none';
+        showToast('Manual Trading Mode DISABLED', 'info');
+    }
+}

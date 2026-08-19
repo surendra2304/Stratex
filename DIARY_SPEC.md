@@ -42,7 +42,7 @@
 
 ```
 /
-├── BOT_DIARY.md              # Master chronological index and consolidated project history
+├── DIARY.md              # Master chronological index and consolidated project history
 ├── DIARY_SPEC.md             # This permanent maintenance specification
 ├── diary/                    # Day-by-day detailed raw chronicle logs
 │   ├── 2026-08-14.md
@@ -58,7 +58,7 @@
 
 ## 3. Standard Daily Entry Schema
 
-Every daily entry in `diary/YYYY-MM-DD.md` and `BOT_DIARY.md` must adhere to the following standardized section structure:
+Every daily entry in `diary/YYYY-MM-DD.md` and `DIARY.md` must adhere to the following standardized section structure:
 
 1. `## Daily Summary`
 2. `## User Directives / Requirements`

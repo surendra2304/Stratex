@@ -32,773 +32,434 @@
     </aside>
 
     <div class="app-container">
-        <!-- ─── 1. TERMINAL SIDEBAR NAVIGATION ─── -->
+                <!-- ─── 1. TERMINAL SIDEBAR NAVIGATION ─── -->
         <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="brand">
-                    <div class="brand-title">
-                        <span class="brand-dot"></span>
-                        <div class="brand-text">
-                            <span class="brand-main">ALGORITHMIC</span>
-                            <span class="brand-sub">TRADING BOT</span>
-                        </div>
-                    </div>
-                    <div class="brand-badge-row">
-                        <span class="badge-indigo"><span class="pulse-dot"></span>BINANCE TESTNET</span>
-                        <span class="badge-mono">v5.0</span>
-                    </div>
-                </div>
-            </div>
-            
-            <nav class="sidebar-nav">
-                <div class="nav-section-label">PORTFOLIO &amp; TRADES</div>
+            <nav class="sidebar-nav" style="padding-top: 24px;">
                 <a href="#dashboard" class="nav-item active" data-view="dashboard" id="nav-dashboard">
-                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="7" height="7" rx="1"></rect>
-                        <rect x="14" y="3" width="7" height="7" rx="1"></rect>
-                        <rect x="14" y="14" width="7" height="7" rx="1"></rect>
-                        <rect x="3" y="14" width="7" height="7" rx="1"></rect>
-                    </svg>
-                    <span>Overview</span>
+                    <span>Dashboard</span>
+                    <span class="nav-indicator"></span>
+                </a>
+                <a href="#scanner" class="nav-item" data-view="scanner" id="nav-scanner">
+                    <span>Scanner</span>
+                    <span class="nav-indicator"></span>
+                </a>
+                <a href="#positions" class="nav-item" data-view="positions" id="nav-positions">
+                    <span>Positions</span>
                     <span class="nav-indicator"></span>
                 </a>
                 <a href="#trades" class="nav-item" data-view="trades" id="nav-trades">
-                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="1" x2="12" y2="23"></line>
-                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                    </svg>
-                    <span>Trade Journal</span>
-                    <span class="nav-badge-pill" id="nav-open-trades-badge">0 OPEN</span>
+                    <span>Trades</span>
                     <span class="nav-indicator"></span>
                 </a>
-                <a href="#analytics" class="nav-item" data-view="analytics" id="nav-analytics">
-                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path>
-                        <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
-                    </svg>
-                    <span>Balance History</span>
-                    <span class="nav-indicator"></span>
-                </a>
-
-                <div class="nav-section-label">INTELLIGENCE</div>
-                <a href="#signals" class="nav-item" data-view="signals" id="nav-signals">
-                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                    </svg>
-                    <span>Signals &amp; Scanner</span>
-                    <span class="nav-indicator"></span>
-                </a>
-                <a href="#market" class="nav-item" data-view="market" id="nav-market">
-                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                    </svg>
+                <a href="#markets" class="nav-item" data-view="markets" id="nav-markets">
                     <span>Markets</span>
                     <span class="nav-indicator"></span>
                 </a>
                 <a href="#strategies" class="nav-item" data-view="strategies" id="nav-strategies">
-                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                    </svg>
                     <span>Strategies</span>
                     <span class="nav-indicator"></span>
                 </a>
-
-                <div class="nav-section-label">GOVERNANCE &amp; SYSTEM</div>
                 <a href="#risk" class="nav-item" data-view="risk" id="nav-risk">
-                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                    </svg>
-                    <span>Risk Control</span>
+                    <span>Risk</span>
                     <span class="nav-indicator"></span>
                 </a>
-                <a href="#activity" class="nav-item" data-view="activity" id="nav-activity">
-                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="8" y1="6" x2="21" y2="6"></line>
-                        <line x1="8" y1="12" x2="21" y2="12"></line>
-                        <line x1="8" y1="18" x2="21" y2="18"></line>
-                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                    </svg>
-                    <span>Activity Audit</span>
+                <a href="#analytics" class="nav-item" data-view="analytics" id="nav-analytics">
+                    <span>Analytics</span>
+                    <span class="nav-indicator"></span>
+                </a>
+                <a href="#system" class="nav-item" data-view="system" id="nav-system">
+                    <span>System</span>
                     <span class="nav-indicator"></span>
                 </a>
                 <a href="#settings" class="nav-item" data-view="settings" id="nav-settings">
-                    <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                    </svg>
-                    <span>System</span>
+                    <span>Settings</span>
                     <span class="nav-indicator"></span>
                 </a>
             </nav>
 
-            <div class="sidebar-system-health">
-                <div class="sidebar-health-title">
-                    <span>MICROSERVICES</span>
-                    <span class="live-ping" id="ws-latency-pill">--</span>
+            <div class="sidebar-system-health" style="border-top: 1px solid var(--border-medium); padding: 16px 20px;">
+                <div style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 12px; letter-spacing: 0.5px;">SYSTEM STATUS</div>
+                
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;"><span style="color: var(--text-secondary); font-size: 11px;">Binance REST</span><span class="dot dot-green" id="h-bn-rest"></span></div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;"><span style="color: var(--text-secondary); font-size: 11px;">WebSocket</span><span class="dot dot-green" id="h-ws"></span></div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;"><span style="color: var(--text-secondary); font-size: 11px;">Market Data</span><span class="dot dot-green" id="h-md"></span></div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;"><span style="color: var(--text-secondary); font-size: 11px;">Execution</span><span class="dot dot-green" id="h-ex"></span></div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;"><span style="color: var(--text-secondary); font-size: 11px;">Strategy</span><span class="dot dot-green" id="h-se"></span></div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;"><span style="color: var(--text-secondary); font-size: 11px;">Portfolio</span><span class="dot dot-green" id="h-pf"></span></div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;"><span style="color: var(--text-secondary); font-size: 11px;">Risk</span><span class="dot dot-green" id="h-rk"></span></div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;"><span style="color: var(--text-secondary); font-size: 11px;">Persistence</span><span class="dot dot-green" id="h-db"></span></div>
                 </div>
-                <div class="health-grid">
-                    <div class="health-item"><span class="dot dot-amber" id="h-bn"></span><span class="health-name">BINANCE</span></div>
-                    <div class="health-item"><span class="dot dot-amber" id="h-ws"></span><span class="health-name">STREAM</span></div>
-                    <div class="health-item"><span class="dot dot-amber" id="h-se"></span><span class="health-name">STRATEGY</span></div>
-                    <div class="health-item"><span class="dot dot-amber" id="h-rk"></span><span class="health-name">RISK</span></div>
+
+                <div style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 12px; letter-spacing: 0.5px;">LATENCY</div>
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="color: var(--text-secondary); font-size: 11px;">REST</span>
+                    <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-primary);" id="lat-rest">42 ms</span>
                 </div>
-                <div class="sidebar-meta-text" id="sidebar-meta-text">-- STRATEGIES • -- PAIRS</div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: var(--text-secondary); font-size: 11px;">WebSocket</span>
+                    <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-primary);" id="lat-ws">18 ms</span>
+                </div>
             </div>
         </aside>
 
         <!-- ─── 2. MAIN WORKSPACE CONTENT ─── -->
         <main class="main-content">
-            <!-- PERSISTENT TOP STATUS BAR -->
+                        <!-- PERSISTENT TOP STATUS BAR -->
             <header class="top-status-bar">
                 <div class="status-left">
+                    <div class="brand-title" style="margin-right: 20px;">
+                        <span style="color: #F59E0B; font-size: 16px;">⚡</span>
+                        <span class="brand-main" style="color: var(--text-primary); font-family: var(--font-heading); font-weight: 700;">ALGORITHMIC TRADING BOT</span>
+                    </div>
+                    
                     <div class="engine-state-badge">
-                        <span class="dot dot-amber" id="status-indicator"></span>
-                        <span class="engine-state-label">ENGINE:</span>
-                        <strong id="engine-status" class="engine-state-val">CONNECTING...</strong>
-                    </div>
-
-                    <div class="status-sep">/</div>
-
-                    <div class="status-item">
-                        <span class="status-lbl">FEED:</span>
-                        <span class="status-val mono" id="feed-latency">--</span>
-                    </div>
-
-                    <div class="status-sep">/</div>
-
-                    <div class="status-item">
-                        <span class="status-lbl">PAIRS:</span>
-                        <span class="status-val mono" id="hdr-pairs-count">-- SPOT</span>
-                    </div>
-
-                    <div class="status-sep">/</div>
-
-                    <div class="status-item">
-                        <span class="status-lbl">STRATEGIES:</span>
-                        <span class="status-val mono" id="hdr-strat-count">-- ACTIVE</span>
-                    </div>
-                </div>
-                
-                <div class="status-right">
-                    <div class="clock-display">
-                        <span class="clock-icon">🕒</span>
-                        <span id="live-clock" class="mono clock-val">--:--:-- IST</span>
+                        <span class="dot dot-green" id="status-indicator"></span>
+                        <strong id="engine-status" class="engine-state-val" style="color: var(--profit-green);">ENGINE ONLINE</strong>
                     </div>
 
                     <div class="status-sep">|</div>
 
-                    <div class="notif-bell-container">
-                        <button class="btn-terminal-icon" id="btn-notif" onclick="toggleNotificationDropdown()" title="System Alerts">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                            </svg>
-                            <span class="badge-count" id="notif-badge" style="display: none;">0</span>
-                        </button>
-                        <div class="notif-dropdown" id="notification-dropdown">
-                            <div class="notif-dropdown-header">
-                                <span>NOTIFICATION LEDGER</span>
-                                <span class="action-link" onclick="clearNotifications()">CLEAR</span>
-                            </div>
-                            <div class="notif-dropdown-body" id="notif-dropdown-body">
-                                <div class="notif-empty">No unread system events</div>
-                            </div>
-                        </div>
+                    <div class="status-item">
+                        <span class="badge-mono" style="border: none; background: transparent; padding: 0;">TESTNET</span>
                     </div>
 
-                    <button class="btn-terminal-pill" id="btn-sound-toggle" onclick="toggleSoundAlerts()" title="Toggle Terminal Audio">
-                        <span id="sound-status-text">🔊 AUDIO ON</span>
-                    </button>
+                    <div class="status-sep">|</div>
 
-                    <button class="btn-terminal-action" onclick="refreshDashboardNow()" title="Force Sync">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                            <polyline points="23 4 23 10 17 10"></polyline>
-                            <polyline points="1 20 1 14 7 14"></polyline>
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                        </svg>
-                        <span>SYNC</span>
+                    <div class="status-item">
+                        <span class="status-lbl">UPTIME</span>
+                        <span class="status-val mono" id="hdr-uptime">00:00:00</span>
+                    </div>
+                </div>
+                
+                <div class="status-right">
+                    <div class="clock-display" style="border: none; background: transparent; padding: 0;">
+                        <span id="live-clock" class="mono clock-val">--:--:-- IST</span>
+                    </div>
+
+                    <div class="notif-bell-container" style="margin-left: 10px;">
+                        <button class="btn-terminal-icon" id="btn-notif" onclick="toggleNotificationDropdown()" title="System Alerts" style="border: none; background: transparent; font-size: 16px;">
+                            🔔
+                            <span class="badge-count" id="notif-badge" style="display: none;">0</span>
+                        </button>
+                    </div>
+
+                    <button class="btn-terminal-pill" id="btn-sound-toggle" onclick="toggleSoundAlerts()" title="Toggle Terminal Audio" style="border: none; background: transparent;">
+                        <span id="sound-status-text">🔊 ON</span>
                     </button>
                 </div>
             </header>
 
-            <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 1: OVERVIEW DASHBOARD
-            ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container active" id="view-dashboard">
-                <div class="page-header">
+                        <div class="view-container active" id="view-dashboard">
+                <div class="page-header" style="margin-bottom: 16px;">
                     <div class="page-title-wrap">
-                        <h1 class="page-title">Portfolio Overview</h1>
-                        <p class="page-subtitle">Real-time executive summary of capital, today's trading performance, and spot deployment.</p>
+                        <h1 class="page-title">Dashboard</h1>
                     </div>
                 </div>
 
-                <!-- 4 EXECUTIVE KPI CARDS -->
-                <section class="dashboard-hero-kpi-grid">
-                    <div class="panel-card kpi-card">
-                        <div class="kpi-head">
-                            <span class="kpi-label">TOTAL MANAGED EQUITY</span>
-                            <span class="live-dot-indigo" title="Live streaming balance"></span>
+                <!-- 4 KPI CARDS -->
+                <section class="dashboard-hero-kpi-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px;">
+                    <div class="panel-card kpi-card" onclick="showView('analytics')" style="cursor: pointer; padding: 16px;">
+                        <div class="kpi-head" style="margin-bottom: 12px;">
+                            <span class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px;">TOTAL ACCOUNT VALUE</span>
                         </div>
-                        <div class="kpi-val" id="db-equity">$0.00</div>
-                        <div class="kpi-sub">
-                            <span>Binance Wallet: <strong id="snap-wallet">$0.00</strong></span>
-                            <span class="sep">•</span>
-                            <span>Cash: <strong id="snap-cash" class="cyan">$0.00</strong></span>
+                        <div class="kpi-val mono" id="db2-total-account" style="font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">$0.00</div>
+                        <div class="kpi-sub" style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-secondary);">
+                            <div style="display: flex; justify-content: space-between;"><span>Cash</span><span id="db2-cash" class="mono">$0.00</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>Managed</span><span id="db2-managed" class="mono">$0.00</span></div>
                         </div>
                     </div>
 
-                    <div class="panel-card kpi-card">
-                        <div class="kpi-head">
-                            <span class="kpi-label">TODAY'S NET RETURN</span>
-                            <span class="live-dot-green"></span>
+                    <div class="panel-card kpi-card" onclick="showView('analytics')" style="cursor: pointer; padding: 16px;">
+                        <div class="kpi-head" style="margin-bottom: 12px;">
+                            <span class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px;">TODAY'S PNL</span>
                         </div>
-                        <div class="kpi-val" id="db-today-pnl">$0.00</div>
-                        <div class="kpi-sub">
-                            <span>Realized: <strong id="db-realized-pnl" class="profit">$0.00</strong></span>
-                            <span class="sep">•</span>
-                            <span>Float: <strong id="db-unrealized-pnl">$0.00</strong></span>
+                        <div class="kpi-val mono" id="db2-today-net" style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">$0.00</div>
+                        <div class="kpi-sub" style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-secondary);">
+                            <div style="display: flex; justify-content: space-between;"><span>Trades <span id="db2-today-trades">0</span></span><span>Wins <span id="db2-today-wins" class="profit">0</span> / Losses <span id="db2-today-losses" class="loss">0</span></span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>Profit <span id="db2-today-profit" class="profit">+$0.00</span></span><span>Loss <span id="db2-today-loss" class="loss">-$0.00</span></span></div>
                         </div>
                     </div>
 
-                    <div class="panel-card kpi-card">
-                        <div class="kpi-head">
-                            <span class="kpi-label">SPOT ASSET DEPLOYMENT</span>
-                            <span class="kpi-badge mono" id="snap-pos">0 / 5</span>
+                    <div class="panel-card kpi-card" onclick="showView('trades')" style="cursor: pointer; padding: 16px;">
+                        <div class="kpi-head" style="margin-bottom: 12px;">
+                            <span class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px;">REALIZED PNL</span>
                         </div>
-                        <div class="kpi-val" id="snap-managed">$0.00</div>
-                        <div class="kpi-sub">
-                            <span>Exposure: <strong id="snap-exposure" class="profit">0.0%</strong></span>
-                            <span class="sep">•</span>
-                            <span>5 Slots Idle</span>
+                        <div class="kpi-val mono" id="db2-realized-net" style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">$0.00</div>
+                        <div class="kpi-sub" style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-secondary);">
+                            <div style="display: flex; justify-content: space-between;"><span>Closed Trades <span id="db2-realized-trades">0</span></span><span>Wins <span id="db2-realized-wins" class="profit">0</span> / Losses <span id="db2-realized-losses" class="loss">0</span></span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>Profit <span id="db2-realized-profit" class="profit">+$0.00</span></span><span>Loss <span id="db2-realized-loss" class="loss">-$0.00</span></span></div>
                         </div>
                     </div>
 
-                    <div class="panel-card kpi-card">
-                        <div class="kpi-head">
-                            <span class="kpi-label">RISK CAPACITY &amp; DRAWDOWN</span>
-                            <span class="kpi-badge badge-guard">GUARD ON</span>
+                    <div class="panel-card kpi-card" onclick="showView('positions')" style="cursor: pointer; padding: 16px;">
+                        <div class="kpi-head" style="margin-bottom: 12px;">
+                            <span class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px;">UNREALIZED PNL</span>
                         </div>
-                        <div class="kpi-val" id="db-drawdown">0.00%</div>
-                        <div class="kpi-sub">
-                            <span>Available: <strong id="snap-avail-risk" class="profit">20.0%</strong></span>
-                            <span class="sep">•</span>
-                            <span>Fees: <strong id="db-fees">$0.00</strong></span>
+                        <div class="kpi-val mono" id="db2-unrealized-net" style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">$0.00</div>
+                        <div class="kpi-sub" style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-secondary);">
+                            <div style="display: flex; justify-content: space-between;"><span>Open Positions <span id="db2-unrealized-pos">0</span></span><span>Floating PnL <span id="db2-unrealized-floating" class="mono">+$0.00</span></span></div>
+                            <div style="display: flex; justify-content: space-between;"><span>Wins <span id="db2-unrealized-wins" class="profit">0</span></span><span>Losses <span id="db2-unrealized-losses" class="loss">0</span></span></div>
                         </div>
                     </div>
                 </section>
 
-                <!-- MAIN WORKSPACE GRID -->
-                <section class="dashboard-main-grid">
-                    <!-- LEFT COLUMN: Equity Curve + Active Spot Positions -->
-                    <div class="grid-col-left">
-                        <div class="panel-card chart-card">
-                            <div class="panel-card-header">
-                                <div class="panel-card-title">
-                                    <span class="indigo-indicator"></span>
-                                    <span>EQUITY &amp; CASH ACCUMULATION TIMELINE</span>
-                                </div>
-                                <div class="chart-controls">
-                                    <button class="btn-tf active" id="btn-eq-1d" onclick="setEquityChartTf('1D')">1D</button>
-                                    <button class="btn-tf" id="btn-eq-7d" onclick="setEquityChartTf('7D')">7D</button>
-                                    <button class="btn-tf" id="btn-eq-30d" onclick="setEquityChartTf('30D')">30D</button>
-                                    <button class="btn-tf" id="btn-eq-90d" onclick="setEquityChartTf('90D')">90D</button>
-                                    <button class="btn-tf" id="btn-eq-all" onclick="setEquityChartTf('ALL')">ALL</button>
-                                </div>
-                            </div>
-                            <div class="chart-body">
-                                <canvas id="equityTimelineChart"></canvas>
-                            </div>
+                <!-- MARKET SCANNER SUMMARY -->
+                <section class="dashboard-scanner-summary" style="margin-bottom: 16px;">
+                    <div class="panel-card" onclick="showView('scanner')" style="cursor: pointer;">
+                        <div class="panel-card-header" style="height: 36px; min-height: 36px; padding: 0 16px;">
+                            <div class="panel-card-title">MARKET SCANNER</div>
                         </div>
-
-                        <div class="panel-card table-card">
-                            <div class="panel-card-header">
-                                <div class="panel-card-title">
-                                    <span class="green-indicator"></span>
-                                    <span>ACTIVE SPOT POSITIONS</span>
-                                </div>
-                                <a href="#trades" class="panel-action-link" onclick="showView('trades')">OPEN TRADE JOURNAL &rarr;</a>
+                        <div class="panel-card-body" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 16px;">
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted);">EVALUATIONS</span>
+                                <span id="db2-scan-evals" class="mono" style="font-size: 16px; font-weight: 700; color: var(--text-primary);">0</span>
                             </div>
-                            <div class="panel-table-wrap">
-                                <table class="terminal-table">
-                                    <thead>
-                                        <tr>
-                                            <th>SYMBOL</th>
-                                            <th>STRATEGY</th>
-                                            <th>ENTRY PRICE</th>
-                                            <th>MARK PRICE</th>
-                                            <th>PROTECTION (SL/TP)</th>
-                                            <th>UNREALIZED PNL</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="active-pos-body">
-                                        <tr>
-                                            <td colspan="6" class="idle-state-row">
-                                                <div class="idle-state-content">
-                                                    <span class="radar-pulse"></span>
-                                                    <span id="pos-idle-msg">No open positions — scanner active</span>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted);">SIGNALS</span>
+                                <span id="db2-scan-signals" class="mono" style="font-size: 16px; font-weight: 700; color: var(--accent-primary);">0</span>
                             </div>
-                        </div>
-                    </div>
-
-                    <!-- RIGHT COLUMN: Allocation Matrix + Opportunity Scanner -->
-                    <div class="grid-col-right">
-                        <div class="panel-card alloc-card">
-                            <div class="panel-card-header">
-                                <div class="panel-card-title">
-                                    <span class="indigo-indicator"></span>
-                                    <span>CAPITAL ALLOCATION MATRIX</span>
-                                </div>
-                                <span class="badge-mono" id="snap-exposure-badge">0.0% EXPOSURE</span>
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted);">QUALIFIED</span>
+                                <span id="db2-scan-qual" class="mono" style="font-size: 16px; font-weight: 700; color: var(--profit-green);">0</span>
                             </div>
-                            <div class="alloc-card-body">
-                                <div class="alloc-gauge-track">
-                                    <div class="alloc-gauge-fill-cash" id="alloc-bar-cash" style="width: 100%;"></div>
-                                    <div class="alloc-gauge-fill-crypto" id="alloc-bar-crypto" style="width: 0%;"></div>
-                                </div>
-                                <div class="alloc-meta-grid">
-                                    <div class="alloc-meta-item">
-                                        <span class="alloc-meta-lbl">LIQUID USDT</span>
-                                        <span class="alloc-meta-val cyan mono" id="alloc-cash-txt">$0.00</span>
-                                    </div>
-                                    <div class="alloc-meta-item" style="text-align: right;">
-                                        <span class="alloc-meta-lbl">DEPLOYED CRYPTO</span>
-                                        <span class="alloc-meta-val profit mono" id="alloc-crypto-txt">$0.00</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="panel-card opp-radar-card">
-                            <div class="panel-card-header">
-                                <div class="panel-card-title">
-                                    <span class="cyan-indicator"></span>
-                                    <span>LIVE OPPORTUNITY SCANNER</span>
-                                </div>
-                                <a href="#signals" class="panel-action-link" onclick="showView('signals')">FULL PIPELINE &rarr;</a>
-                            </div>
-                            <div class="opp-radar-body">
-                                <table class="terminal-table table-dense">
-                                    <thead>
-                                        <tr>
-                                            <th>PAIR</th>
-                                            <th>TF</th>
-                                            <th>STRATEGY</th>
-                                            <th>EDGE</th>
-                                            <th>DECISION</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="opp-short-body">
-                                        <tr>
-                                            <td colspan="5" class="idle-state-row">
-                                                <div class="idle-state-content">
-                                                    <span>Market in consolidation • Waiting for net alpha &gt; friction hurdle</span>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <div class="panel-card funnel-card">
-                            <div class="panel-card-header">
-                                <div class="panel-card-title">
-                                    <span class="green-indicator"></span>
-                                    <span>EXECUTION FUNNEL FLOW</span>
-                                </div>
-                                <span class="badge-mono">HFT GATE</span>
-                            </div>
-                            <div class="funnel-body">
-                                <div class="funnel-flow-container">
-                                    <div class="funnel-step">
-                                        <span class="step-num mono" id="fn-signals">0</span>
-                                        <span class="step-lbl">SIGNALS</span>
-                                    </div>
-                                    <span class="flow-arrow">&rsaquo;</span>
-                                    <div class="funnel-step">
-                                        <span class="step-num profit mono" id="fn-prof-acc">0</span>
-                                        <span class="step-lbl">PROFIT PASS</span>
-                                    </div>
-                                    <span class="flow-arrow">&rsaquo;</span>
-                                    <div class="funnel-step">
-                                        <span class="step-num profit mono" id="fn-risk-acc">0</span>
-                                        <span class="step-lbl">RISK PASS</span>
-                                    </div>
-                                    <span class="flow-arrow">&rsaquo;</span>
-                                    <div class="funnel-step highlight-fill">
-                                        <span class="step-num profit mono" id="fn-filled">0</span>
-                                        <span class="step-lbl">FILLED</span>
-                                    </div>
-                                </div>
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted);">REJECTED</span>
+                                <span id="db2-scan-rej" class="mono" style="font-size: 16px; font-weight: 700; color: var(--loss-red);">0</span>
                             </div>
                         </div>
                     </div>
                 </section>
-            </div>
 
-            <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 2: TRADE JOURNAL (THE CORE FEATURE)
-            ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container" id="view-trades">
-                <div class="page-header">
-                    <div class="page-title-wrap">
-                        <h1 class="page-title">Trade Journal &amp; Execution Audit</h1>
-                        <p class="page-subtitle">Detailed trade lifecycle tracking, entry/exit balance impacts, and calendar-day performance grouping.</p>
-                    </div>
-                </div>
-
-                <!-- JOURNAL SUMMARY KPI STRIP -->
-                <div class="journal-metrics-strip">
-                    <div class="panel-card journal-metric-card">
-                        <span class="journal-metric-lbl">TOTAL TRADES</span>
-                        <div class="journal-metric-val mono" id="trd-total">0</div>
-                    </div>
-                    <div class="panel-card journal-metric-card">
-                        <span class="journal-metric-lbl">WIN RATE</span>
-                        <div class="journal-metric-val profit mono" id="trd-winrate">0.0%</div>
-                    </div>
-                    <div class="panel-card journal-metric-card">
-                        <span class="journal-metric-lbl">NET REALIZED PNL</span>
-                        <div class="journal-metric-val profit mono" id="trd-net-pnl">$0.00</div>
-                    </div>
-                    <div class="panel-card journal-metric-card">
-                        <span class="journal-metric-lbl">PROFIT FACTOR</span>
-                        <div class="journal-metric-val cyan mono" id="trd-pf">0.00</div>
-                    </div>
-                    <div class="panel-card journal-metric-card">
-                        <span class="journal-metric-lbl">TOTAL FEES PAID</span>
-                        <div class="journal-metric-val mono" id="trd-fees">$0.00</div>
-                    </div>
-                    <div class="panel-card journal-metric-card">
-                        <span class="journal-metric-lbl">AVG WIN / LOSS</span>
-                        <div class="journal-metric-sub mono"><span class="profit" id="trd-avg-win">+$0.00</span> / <span class="loss" id="trd-avg-loss">-$0.00</span></div>
-                    </div>
-                </div>
-
-                <!-- UNIFIED FILTER TOOLBAR -->
-                <div class="journal-filter-toolbar">
-                    <div class="filter-group">
-                        <span class="filter-lbl">VIEW MODE:</span>
-                        <button class="btn-filter active" id="btn-journal-view-table" onclick="setJournalViewMode('table')">
-                            <span>📋 LEDGER VIEW</span>
-                        </button>
-                        <button class="btn-filter" id="btn-journal-view-cal" onclick="setJournalViewMode('calendar')">
-                            <span>📅 CALENDAR VIEW</span>
-                        </button>
-                    </div>
-
-                    <div class="filter-group">
-                        <span class="filter-lbl">STATUS:</span>
-                        <button class="btn-filter active" id="btn-jnl-all" onclick="setJournalStatusFilter('ALL')">ALL</button>
-                        <button class="btn-filter" id="btn-jnl-open" onclick="setJournalStatusFilter('OPEN')">ACTIVE (<span id="jnl-open-count">0</span>)</button>
-                        <button class="btn-filter" id="btn-jnl-closed" onclick="setJournalStatusFilter('CLOSED')">CLOSED (<span id="jnl-closed-count">0</span>)</button>
-                    </div>
-
-                    <div class="filter-group">
-                        <span class="filter-lbl">STRATEGY:</span>
-                        <select class="select-terminal" id="journal-filter-strat" onchange="applyJournalFilters()">
-                            <option value="ALL">ALL STRATEGIES</option>
-                            <option value="AGGRESSOR">AGGRESSOR</option>
-                            <option value="SCALPER">SCALPER</option>
-                            <option value="SUPERTREND">SUPERTREND</option>
-                            <option value="ML">ML</option>
-                            <option value="SWING">SWING</option>
-                            <option value="ADX_EMA">ADX_EMA</option>
-                        </select>
-                    </div>
-
-                    <div class="filter-group">
-                        <span class="filter-lbl">TIMEFRAME:</span>
-                        <select class="select-terminal" id="journal-filter-tf" onchange="applyJournalFilters()">
-                            <option value="ALL">ALL TF</option>
-                            <option value="5m">5m</option>
-                            <option value="15m">15m</option>
-                            <option value="30m">30m</option>
-                            <option value="1h">1h</option>
-                            <option value="2h">2h</option>
-                            <option value="4h">4h</option>
-                        </select>
-                    </div>
-
-                    <div class="filter-group" style="margin-left: auto;">
-                        <input type="text" class="input-terminal search-box" id="journal-filter-search" placeholder="Search symbol / ID..." oninput="applyJournalFilters()">
-                    </div>
-                </div>
-
-                <!-- ════ JOURNAL CONTENT VIEW A: LEDGER TABLES (ACTIVE & DAY-GROUPED CLOSED) ════ -->
-                <div id="journal-table-view-container">
-                    <!-- 1. ACTIVE TRADES SECTION -->
-                    <div class="journal-section-card" id="journal-active-section">
-                        <div class="journal-section-header">
-                            <div class="journal-section-title">
-                                <span class="live-dot-indigo"></span>
-                                <span>ACTIVE SPOT TRADES</span>
-                                <span class="badge-indigo" id="journal-active-slots-badge">0 / 5 SLOTS IN USE</span>
-                            </div>
-                            <span class="badge-mono">LIVE POSITION TELEMETRY</span>
+                <!-- LATEST OPEN TRADES -->
+                <section class="dashboard-latest-trades">
+                    <div class="panel-card table-card" style="height: auto; max-height: 300px;">
+                        <div class="panel-card-header" style="height: 36px; min-height: 36px; padding: 0 16px;">
+                            <div class="panel-card-title">LATEST OPEN TRADES</div>
                         </div>
                         <div class="panel-table-wrap">
-                            <table class="terminal-table">
+                            <table class="terminal-table table-dense">
                                 <thead>
                                     <tr>
-                                        <th>OPEN TIME</th>
-                                        <th>SYMBOL &amp; SIDE</th>
-                                        <th>STRATEGY &amp; TF</th>
-                                        <th>ENTRY PRICE</th>
-                                        <th>MARK PRICE</th>
-                                        <th>POSITION QTY</th>
-                                        <th>PROTECTION (SL / TP)</th>
-                                        <th>UNREALIZED PNL</th>
-                                        <th>DURATION</th>
-                                        <th>BALANCE @ ENTRY</th>
-                                        <th>ACTION</th>
+                                        <th>SYMBOL</th>
+                                        <th>TF</th>
+                                        <th>SIDE</th>
+                                        <th>ENTRY</th>
+                                        <th>CURRENT</th>
+                                        <th>U.PNL</th>
+                                        <th>STATUS</th>
                                     </tr>
                                 </thead>
-                                <tbody id="journal-active-tbody">
+                                <tbody id="db2-open-trades-body">
                                     <tr>
-                                        <td colspan="11" class="idle-state-row">
-                                            <div class="idle-state-content">
-                                                <span class="radar-pulse"></span>
-                                                <span id="journal-open-idle-msg">No open positions — scanner active</span>
-                                            </div>
-                                        </td>
+                                        <td colspan="7" class="idle-state-row">No open trades</td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
+                </section>
+            </div>
 
-                    <!-- 2. CLOSED TRADES SECTION (GROUPED BY DAY) -->
-                    <div class="journal-section-card" id="journal-closed-section" style="margin-top: 24px;">
-                        <div class="journal-section-header">
-                            <div class="journal-section-title">
-                                <span class="green-indicator"></span>
-                                <span>CLOSED TRADES &amp; DAY-BY-DAY AUDIT</span>
-                            </div>
-                            <span class="badge-mono">CLICK ROW TO INSPECT FULL LIFECYCLE</span>
-                        </div>
+            <!-- ═══════════════════════════════════════════════════════════════
+                 VIEW: SCANNER
+            ═══════════════════════════════════════════════════════════════ -->
+            <div class="view-container" id="view-scanner">
+                <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div class="page-title-wrap">
+                        <h1 class="page-title">SCANNER</h1>
+                    </div>
+                    <div class="scanner-toolbar" style="display: flex; gap: 12px; align-items: center; position: relative;">
+                        <button class="btn-terminal" onclick="document.getElementById('scanner-filter-dropdown').classList.toggle('show')" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">FILTERS ▼</button>
                         
-                        <!-- DYNAMIC DAY-GROUPED LIST CONTAINER -->
-                        <div id="journal-days-container" class="journal-days-container">
-                            <div class="idle-state-row">
-                                <div class="idle-state-content">
-                                    <span>No closed trades in selected window • Historical execution records will stream as OCO orders close</span>
-                                </div>
-                            </div>
+                        <!-- FILTERS DROPDOWN -->
+                        <div id="scanner-filter-dropdown" class="dropdown-menu" style="display: none; position: absolute; right: 150px; top: 100%; margin-top: 8px; background: var(--bg-panel); border: 1px solid var(--border-medium); border-radius: 4px; padding: 16px; z-index: 100; box-shadow: 0 10px 20px rgba(0,0,0,0.5); width: 250px;">
+                            <div style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px;">SYMBOL</div>
+                            <select id="sf-symbol" class="select-terminal" style="width: 100%; margin-bottom: 12px; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-medium); padding: 6px; font-size: 11px;">
+                                <option value="ALL">ALL</option>
+                                <option value="BTCUSDT">BTCUSDT</option>
+                                <option value="ETHUSDT">ETHUSDT</option>
+                                <option value="LINKUSDT">LINKUSDT</option>
+                                <option value="SOLUSDT">SOLUSDT</option>
+                            </select>
+
+                            <div style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px;">TIMEFRAME</div>
+                            <select id="sf-tf" class="select-terminal" style="width: 100%; margin-bottom: 12px; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-medium); padding: 6px; font-size: 11px;">
+                                <option value="ALL">ALL</option>
+                                <option value="5m">5m</option>
+                                <option value="15m">15m</option>
+                                <option value="30m">30m</option>
+                                <option value="1h">1h</option>
+                                <option value="2h">2h</option>
+                                <option value="4h">4h</option>
+                            </select>
+
+                            <div style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px;">SIDE</div>
+                            <select id="sf-side" class="select-terminal" style="width: 100%; margin-bottom: 12px; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-medium); padding: 6px; font-size: 11px;">
+                                <option value="ALL">ALL</option>
+                                <option value="BUY">BUY</option>
+                                <option value="SELL">SELL</option>
+                                <option value="HOLD">HOLD</option>
+                            </select>
+
+                            <div style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px;">RESULT</div>
+                            <select id="sf-result" class="select-terminal" style="width: 100%; margin-bottom: 12px; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-medium); padding: 6px; font-size: 11px;">
+                                <option value="ALL">ALL</option>
+                                <option value="QUALIFIED">QUALIFIED</option>
+                                <option value="REJECTED">REJECTED</option>
+                                <option value="HOLD">HOLD</option>
+                            </select>
+
+                            <div style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px;">STRATEGY</div>
+                            <select id="sf-strategy" class="select-terminal" style="width: 100%; margin-bottom: 12px; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-medium); padding: 6px; font-size: 11px;">
+                                <option value="ALL">ALL</option>
+                                <option value="ADX_EMA">ADX_EMA</option>
+                                <option value="ML">ML</option>
+                                <option value="SCALPER">SCALPER</option>
+                            </select>
+
+                            <button onclick="applyScannerFilters()" style="width: 100%; background: var(--accent-primary); color: #fff; border: none; padding: 6px; font-size: 11px; font-family: var(--font-heading); font-weight: 700; cursor: pointer;">APPLY FILTERS</button>
                         </div>
+
+                        <button class="btn-terminal" id="btn-scan-pause" onclick="toggleScannerPause()" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">PAUSE ⏸</button>
+                        <button class="btn-terminal" onclick="fetchScannerDataV2()" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">REFRESH ↻</button>
                     </div>
                 </div>
 
-                <!-- ════ JOURNAL CONTENT VIEW B: CALENDAR HEATMAP VIEW ════ -->
-                <div id="journal-calendar-view-container" style="display: none;">
-                    <div class="panel-card calendar-panel-card">
-                        <div class="calendar-header-nav">
-                            <button class="btn-filter" onclick="navCalendarMonth(-1)">&larr; PREV MONTH</button>
-                            <h2 class="calendar-month-title" id="calendar-month-title">AUGUST 2026</h2>
-                            <button class="btn-filter" onclick="navCalendarMonth(1)">NEXT MONTH &rarr;</button>
+                <!-- KPI ROW -->
+                <section class="dashboard-hero-kpi-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 16px;">
+                    <div class="panel-card" style="padding: 16px;">
+                        <div class="kpi-head" style="margin-bottom: 12px;">
+                            <span class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px;">EVALUATIONS</span>
                         </div>
-                        <div class="calendar-grid-container">
-                            <div class="calendar-weekdays-row">
-                                <div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div><div>SUN</div>
-                            </div>
-                            <div class="calendar-days-grid" id="calendar-days-grid">
-                                <!-- Dynamically generated month day cells -->
-                            </div>
+                        <div class="kpi-val mono" id="scan2-evals" style="font-size: 20px; font-weight: 700; color: var(--text-primary);">0</div>
+                    </div>
+                    <div class="panel-card" style="padding: 16px;">
+                        <div class="kpi-head" style="margin-bottom: 12px;">
+                            <span class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px;">SIGNALS</span>
                         </div>
-                        <div class="calendar-legend">
-                            <span class="legend-item"><span class="legend-box profit-high"></span> Highly Profitable</span>
-                            <span class="legend-item"><span class="legend-box profit-low"></span> Profitable</span>
-                            <span class="legend-item"><span class="legend-box neutral"></span> No Trades</span>
-                            <span class="legend-item"><span class="legend-box loss-low"></span> Loss</span>
-                            <span class="legend-item"><span class="legend-box loss-high"></span> Significant Loss</span>
+                        <div class="kpi-val mono cyan" id="scan2-signals" style="font-size: 20px; font-weight: 700; color: var(--accent-primary);">0</div>
+                    </div>
+                    <div class="panel-card" style="padding: 16px;">
+                        <div class="kpi-head" style="margin-bottom: 12px;">
+                            <span class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px;">QUALIFIED</span>
                         </div>
+                        <div class="kpi-val mono profit" id="scan2-qual" style="font-size: 20px; font-weight: 700;">0</div>
                     </div>
-                </div>
-            </div>
-
-            <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 3: BALANCE HISTORY & ANNOTATED EQUITY CURVE
-            ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container" id="view-analytics">
-                <div class="page-header">
-                    <div class="page-title-wrap">
-                        <h1 class="page-title">Balance History &amp; Annotated Equity Curve</h1>
-                        <p class="page-subtitle">Interactive equity progression annotated with exact trade open (hollow) and close (filled) balance milestones.</p>
-                    </div>
-                    <div class="filter-group">
-                        <span class="filter-lbl">RANGE:</span>
-                        <button class="btn-filter active" id="btn-bh-1d" onclick="setBalanceHistoryTf('1D')">1D</button>
-                        <button class="btn-filter" id="btn-bh-7d" onclick="setBalanceHistoryTf('7D')">7D</button>
-                        <button class="btn-filter" id="btn-bh-30d" onclick="setBalanceHistoryTf('30D')">30D</button>
-                        <button class="btn-filter" id="btn-bh-90d" onclick="setBalanceHistoryTf('90D')">90D</button>
-                        <button class="btn-filter" id="btn-bh-all" onclick="setBalanceHistoryTf('ALL')">ALL TIME</button>
-                    </div>
-                </div>
-
-                <!-- MAIN ANNOTATED BALANCE CHART CARD -->
-                <div class="panel-card chart-card" style="height: 380px;">
-                    <div class="panel-card-header">
-                        <div class="panel-card-title">
-                            <span class="indigo-indicator"></span>
-                            <span>PORTFOLIO BALANCE &amp; TRADE EXECUTION MILESTONES</span>
+                    <div class="panel-card" style="padding: 16px;">
+                        <div class="kpi-head" style="margin-bottom: 12px;">
+                            <span class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px;">REJECTED</span>
                         </div>
-                        <div class="chart-legend-pills">
-                            <span class="legend-pill"><span class="legend-dot-hollow"></span> Open Marker</span>
-                            <span class="legend-pill"><span class="legend-dot-green"></span> Win Close</span>
-                            <span class="legend-pill"><span class="legend-dot-red"></span> Loss Close</span>
-                            <span class="badge-mono">CLICK MARKER TO INSPECT</span>
+                        <div class="kpi-val mono loss" id="scan2-rej" style="font-size: 20px; font-weight: 700;">0</div>
+                    </div>
+                    <div class="panel-card" style="padding: 16px;">
+                        <div class="kpi-head" style="margin-bottom: 12px;">
+                            <span class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px;">CURRENT CANDIDATES</span>
                         </div>
+                        <div class="kpi-val mono" id="scan2-cand" style="font-size: 20px; font-weight: 700; color: var(--text-primary);">0</div>
                     </div>
-                    <div class="chart-body">
-                        <canvas id="pnlHistChart"></canvas>
-                    </div>
-                </div>
+                </section>
 
-                <!-- SLIM SECONDARY ROW OF STAT CARDS -->
-                <div class="balance-stats-strip">
-                    <div class="panel-card balance-stat-card">
-                        <span class="balance-stat-lbl">STARTING BALANCE</span>
-                        <div class="balance-stat-val mono" id="bh-start-bal">$0.00</div>
-                        <span class="balance-stat-sub">Beginning of window</span>
-                    </div>
-                    <div class="panel-card balance-stat-card">
-                        <span class="balance-stat-lbl">CURRENT BALANCE</span>
-                        <div class="balance-stat-val cyan mono" id="bh-current-bal">$0.00</div>
-                        <span class="balance-stat-sub">Live streaming total</span>
-                    </div>
-                    <div class="panel-card balance-stat-card">
-                        <span class="balance-stat-lbl">NET CHANGE</span>
-                        <div class="balance-stat-val profit mono" id="bh-net-change">$0.00 (0.00%)</div>
-                        <span class="balance-stat-sub">Return for selected range</span>
-                    </div>
-                    <div class="panel-card balance-stat-card">
-                        <span class="balance-stat-lbl">BEST DAY</span>
-                        <div class="balance-stat-val profit mono" id="bh-best-day">+$0.00</div>
-                        <span class="balance-stat-sub" id="bh-best-day-date">--</span>
-                    </div>
-                    <div class="panel-card balance-stat-card">
-                        <span class="balance-stat-lbl">WORST DAY</span>
-                        <div class="balance-stat-val loss mono" id="bh-worst-day">-$0.00</div>
-                        <span class="balance-stat-sub" id="bh-worst-day-date">--</span>
-                    </div>
-                </div>
-
-                <!-- DIAGNOSTIC FUNNEL: "WHY DIDN'T IT TRADE?" -->
-                <div class="panel-card" style="margin-top: 24px;">
-                    <div class="panel-card-header">
-                        <div class="panel-card-title"><span>🔍 DIAGNOSTIC FUNNEL: "WHY DIDN'T IT TRADE?"</span></div>
-                        <span class="badge-mono" id="diag-dominant-reason">DOMINANT REASON: SCANNING</span>
-                    </div>
-                    <div class="panel-card-body">
-                        <div class="funnel-diag-grid">
-                            <div class="funnel-diag-step">
-                                <span class="diag-num mono" id="an-evals">0</span>
-                                <span class="diag-lbl">EVALUATIONS</span>
-                            </div>
-                            <div class="funnel-diag-sep">&rarr;</div>
-                            <div class="funnel-diag-step">
-                                <span class="diag-num mono" id="an-signals">0</span>
-                                <span class="diag-lbl">SIGNALS</span>
-                            </div>
-                            <div class="funnel-diag-sep">&rarr;</div>
-                            <div class="funnel-diag-step">
-                                <span class="diag-num profit mono" id="an-prof-acc">0</span>
-                                <span class="diag-sub loss mono" id="an-prof-rej">/ 0 Rej</span>
-                                <span class="diag-lbl">PROFIT PASS</span>
-                            </div>
-                            <div class="funnel-diag-sep">&rarr;</div>
-                            <div class="funnel-diag-step">
-                                <span class="diag-num profit mono" id="an-risk-acc">0</span>
-                                <span class="diag-sub loss mono" id="an-risk-rej">/ 0 Rej</span>
-                                <span class="diag-lbl">RISK PASS</span>
-                            </div>
-                            <div class="funnel-diag-sep">&rarr;</div>
-                            <div class="funnel-diag-step">
-                                <span class="diag-num cyan mono" id="an-ord-sub">0</span>
-                                <span class="diag-lbl">SUBMITTED</span>
-                            </div>
-                            <div class="funnel-diag-sep">&rarr;</div>
-                            <div class="funnel-diag-step highlight">
-                                <span class="diag-num profit mono" id="an-ord-fill">0</span>
-                                <span class="diag-lbl">FILLED</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 4: SIGNALS & SCANNER
-            ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container" id="view-signals">
-                <div class="page-header">
-                    <div class="page-title-wrap">
-                        <h1 class="page-title">Live Signal Pipeline &amp; Strategy Evaluation</h1>
-                        <p class="page-subtitle">Real-time radar of incoming setups evaluated against profit and risk hurdles.</p>
-                    </div>
-                </div>
-
-                <div class="filter-toolbar">
-                    <div class="filter-group">
-                        <span class="filter-lbl">DIRECTION:</span>
-                        <button class="btn-filter active" id="sig-btn-all" onclick="setSignalQuickFilter('ALL')">ALL</button>
-                        <button class="btn-filter" id="sig-btn-buy" onclick="setSignalQuickFilter('BUY')">BUY</button>
-                        <button class="btn-filter" id="sig-btn-sell" onclick="setSignalQuickFilter('SELL')">SELL</button>
-                        <button class="btn-filter" id="sig-btn-hold" onclick="setSignalQuickFilter('HOLD')">HOLD</button>
-                        <button class="btn-filter" id="sig-btn-acc" onclick="setSignalQuickFilter('ACCEPTED')">ACCEPTED</button>
-                        <button class="btn-filter" id="sig-btn-rej" onclick="setSignalQuickFilter('REJECTED')">REJECTED</button>
-                    </div>
-
-                    <div class="filter-group">
-                        <span class="filter-lbl">STRATEGY:</span>
-                        <select class="select-terminal" id="sig-filter-strat" onchange="applySignalFilters()">
-                            <option value="ALL">ALL STRATEGIES</option>
-                            <option value="AGGRESSOR">AGGRESSOR</option>
-                            <option value="SCALPER">SCALPER</option>
-                            <option value="SUPERTREND">SUPERTREND</option>
-                            <option value="ML">ML</option>
-                            <option value="SWING">SWING</option>
-                            <option value="ADX_EMA">ADX_EMA</option>
-                        </select>
-                    </div>
-
-                    <div class="filter-group" style="margin-left: auto;">
-                        <input type="text" class="input-terminal search-box" id="sig-filter-sym" placeholder="Search symbol..." oninput="applySignalFilters()">
-                    </div>
-                </div>
-
-                <div class="panel-card" style="flex: 1;">
+                <!-- MAIN TABLE -->
+                <div class="panel-card table-card" style="margin-bottom: 16px; min-height: 400px;">
                     <div class="panel-table-wrap">
-                        <table class="terminal-table">
+                        <table class="terminal-table table-dense">
                             <thead>
                                 <tr>
                                     <th>TIME</th>
                                     <th>SYMBOL</th>
                                     <th>TF</th>
-                                    <th>STRATEGY</th>
                                     <th>SIDE</th>
                                     <th>ENTRY</th>
-                                    <th>STOP</th>
-                                    <th>TARGET</th>
-                                    <th>CONF</th>
-                                    <th>EXP GROSS</th>
-                                    <th>EXP NET</th>
-                                    <th>PROFIT GATE</th>
-                                    <th>RISK GATE</th>
-                                    <th>FINAL</th>
+                                    <th>EDGE</th>
+                                    <th>RESULT</th>
                                     <th>REASON</th>
                                 </tr>
                             </thead>
-                            <tbody id="signals-full-body">
-                                <tr><td colspan="15" class="idle-state-row">No signals recorded yet — scanner evaluating setups</td></tr>
+                            <tbody id="scan2-body">
+                                <tr><td colspan="8" class="idle-state-row">Waiting for live data...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- LIVE SCAN STATUS FOOTER -->
+                <div class="panel-card" style="padding: 12px 16px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted);">LIVE SCAN STATUS</div>
+                    <div id="scan2-live-status" class="mono" style="font-size: 11px; color: var(--text-secondary); display: flex; gap: 16px; flex-wrap: wrap;">
+                        <span style="color: var(--profit-green);">BTCUSDT ● SCANNING</span>
+                        <span style="color: var(--profit-green);">ETHUSDT ● SCANNING</span>
+                        <span style="color: var(--profit-green);">LINKUSDT ● SCANNING</span>
+                        <span style="color: var(--profit-green);">SOLUSDT ● SCANNING</span>
+                    </div>
+                    <div style="display: flex; gap: 24px; font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                        <span>Active Symbols <span id="scan2-act-sym" class="mono" style="color: var(--text-primary);">0</span></span>
+                        <span>Active Timeframes <span id="scan2-act-tf" class="mono" style="color: var(--text-primary);">0</span></span>
+                        <span>Active Strategies <span id="scan2-act-strat" class="mono" style="color: var(--text-primary);">0</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════════════════════
+                 VIEW: POSITIONS
+            ═══════════════════════════════════════════════════════════════ -->
+            <div class="view-container" id="view-positions">
+                <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div class="page-title-wrap">
+                        <h1 class="page-title">POSITIONS</h1>
+                    </div>
+                    <div class="scanner-toolbar" style="display: flex; gap: 12px; align-items: center;">
+                        <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">FILTERS ▼</button>
+                        <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">SEARCH 🔍</button>
+                        <button class="btn-terminal" onclick="fetchPositionsV2()" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">REFRESH ↻</button>
+                    </div>
+                </div>
+
+                <!-- KPI ROW -->
+                <section class="dashboard-hero-kpi-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px;">
+                    <div class="panel-card" style="padding: 16px;">
+                        <div class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 12px; letter-spacing: 0.8px;">OPEN POSITIONS</div>
+                        <div class="kpi-val mono" id="pos2-open-count" style="font-size: 20px; font-weight: 700; color: var(--text-primary);">0</div>
+                    </div>
+                    <div class="panel-card" style="padding: 16px;">
+                        <div class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 12px; letter-spacing: 0.8px;">TOTAL POSITION VALUE</div>
+                        <div class="kpi-val mono" id="pos2-total-val" style="font-size: 20px; font-weight: 700; color: var(--text-primary);">$0.00</div>
+                    </div>
+                    <div class="panel-card" style="padding: 16px;">
+                        <div class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 12px; letter-spacing: 0.8px;">UNREALIZED PNL</div>
+                        <div class="kpi-val mono" id="pos2-upnl" style="font-size: 20px; font-weight: 700;">$0.00</div>
+                    </div>
+                    <div class="panel-card" style="padding: 16px;">
+                        <div class="kpi-label" style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 12px; letter-spacing: 0.8px;">ACTIVE POSITIONS</div>
+                        <div class="kpi-val mono" id="pos2-active-ratio" style="font-size: 20px; font-weight: 700; color: var(--text-primary);">0 / 5</div>
+                    </div>
+                </section>
+
+                <!-- MAIN TABLE -->
+                <div class="panel-card table-card" style="margin-bottom: 16px; min-height: 400px;">
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table table-dense">
+                            <thead>
+                                <tr>
+                                    <th>SYMBOL</th>
+                                    <th>TF</th>
+                                    <th>SIDE</th>
+                                    <th>ENTRY</th>
+                                    <th>CURRENT</th>
+                                    <th>QTY</th>
+                                    <th>VALUE</th>
+                                    <th>U.PNL</th>
+                                    <th>STATUS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pos2-body">
+                                <tr>
+                                    <td colspan="9" class="idle-state-row" style="padding: 48px; text-align: center;">
+                                        <div style="font-family: var(--font-heading); font-size: 14px; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px;">NO OPEN POSITIONS</div>
+                                        <div style="font-size: 12px; color: var(--text-muted);">The bot currently has no open positions.</div>
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -806,233 +467,830 @@
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 5: MARKETS
+                 VIEW: TRADES (TRADING JOURNAL)
             ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container" id="view-market">
-                <div class="market-terminal-layout">
-                    <div class="panel-card market-watch-panel">
-                        <div class="panel-card-header">
-                            <div class="panel-card-title"><span>📡 LIVE SPOT WATCHLIST</span></div>
-                            <span class="badge-mono" id="mkt-pairs-badge">-- PAIRS</span>
-                        </div>
-                        <div class="panel-table-wrap">
-                            <table class="terminal-table">
-                                <thead>
-                                    <tr>
-                                        <th>SYMBOL</th>
-                                        <th>PRICE</th>
-                                        <th>24H CHG</th>
-                                        <th>SIGNAL</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="market-watchlist-body"></tbody>
-                            </table>
-                        </div>
+            <div class="view-container" id="view-trades">
+                <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div class="page-title-wrap">
+                        <h1 class="page-title">TRADING JOURNAL</h1>
                     </div>
-
-                    <div class="panel-card market-chart-panel">
-                        <div class="panel-card-header">
-                            <div class="market-chart-meta">
-                                <span class="market-sym-badge" id="market-chart-symbol">BTCUSDT</span>
-                                <span class="market-price-val mono" id="market-chart-price">--</span>
-                                <span class="market-chg-val mono" id="market-chart-chg">--</span>
-                            </div>
-                            <div class="chart-controls">
-                                <button class="btn-tf active" onclick="setMarketChartTf('5m')">5m</button>
-                                <button class="btn-tf" onclick="setMarketChartTf('15m')">15m</button>
-                                <button class="btn-tf" onclick="setMarketChartTf('1h')">1h</button>
-                                <button class="btn-tf" onclick="setMarketChartTf('4h')">4h</button>
-                            </div>
-                        </div>
-                        <div class="chart-body" style="flex: 1; position: relative;">
-                            <canvas id="marketCandleChart"></canvas>
-                        </div>
+                    <div class="scanner-toolbar" style="display: flex; gap: 12px; align-items: center;">
+                        <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">SEARCH 🔍</button>
+                        <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">FILTERS ▼</button>
+                        <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">DATE RANGE</button>
+                        <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">EXPORT</button>
+                        <button class="btn-terminal" onclick="fetchTrades()" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">↻</button>
                     </div>
+                </div>
 
-                    <div class="panel-card market-details-panel">
-                        <div class="panel-card-header">
-                            <div class="panel-card-title"><span id="market-details-title">BTCUSDT TELEMETRY</span></div>
-                            <span class="tag-pass" id="market-details-status">LIVE</span>
-                        </div>
-                        <div class="panel-card-body" id="market-details-content">
-                            <div class="idle-state-row">Select a symbol to view live quant indicators</div>
-                        </div>
+                <!-- TOP KPI SUMMARY -->
+                <div class="panel-card table-card" style="margin-bottom: 16px;">
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table table-dense">
+                            <thead>
+                                <tr>
+                                    <th>TOTAL TRADES</th>
+                                    <th>WINS</th>
+                                    <th>LOSSES</th>
+                                    <th>WIN RATE</th>
+                                    <th>TOTAL PROFIT</th>
+                                    <th>TOTAL LOSS</th>
+                                    <th>NET PNL</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="mono" id="trd-total" style="font-size: 14px; font-weight: 700; color: var(--text-primary);">0</td>
+                                    <td class="mono profit" id="trd-wins" style="font-size: 14px; font-weight: 700;">0</td>
+                                    <td class="mono loss" id="trd-losses" style="font-size: 14px; font-weight: 700;">0</td>
+                                    <td class="mono" id="trd-wr" style="font-size: 14px; font-weight: 700; color: var(--text-primary);">0.0%</td>
+                                    <td class="mono profit" id="trd-tprof" style="font-size: 14px; font-weight: 700;">+$0.00</td>
+                                    <td class="mono loss" id="trd-tloss" style="font-size: 14px; font-weight: 700;">-$0.00</td>
+                                    <td class="mono" id="trd-net" style="font-size: 14px; font-weight: 700;">+$0.00</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- DAY ACCORDION -->
+                <div id="journal-accordion-container" style="display: flex; flex-direction: column; gap: 8px;">
+                    <div class="panel-card" style="padding: 24px; text-align: center; color: var(--text-muted);">
+                        Loading closed trades...
                     </div>
                 </div>
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 6: STRATEGIES
+                 VIEW: MARKETS
             ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container" id="view-strategies">
-                <div class="panel-card">
-                    <div class="panel-card-header">
-                        <div class="panel-card-title"><span>QUANT STRATEGY ATTRIBUTION MATRIX</span></div>
+            <div class="view-container" id="view-markets">
+                <div class="page-header" style="margin-bottom: 16px;">
+                    <h1 class="page-title">MARKETS</h1>
+                </div>
+
+                <!-- SYMBOL SELECTOR -->
+                <div id="mkt-symbol-row" style="display: flex; gap: 16px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 8px; border-bottom: 1px solid var(--border-medium);">
+                    <span class="mono mkt-sym active" style="cursor:pointer; color:var(--text-primary); font-weight:700;" onclick="changeMarketSymbol('BTCUSDT', this)">BTCUSDT</span>
+                    <span class="mono mkt-sym" style="cursor:pointer; color:var(--text-muted);" onclick="changeMarketSymbol('ETHUSDT', this)">ETHUSDT</span>
+                    <span class="mono mkt-sym" style="cursor:pointer; color:var(--text-muted);" onclick="changeMarketSymbol('LINKUSDT', this)">LINKUSDT</span>
+                    <span class="mono mkt-sym" style="cursor:pointer; color:var(--text-muted);" onclick="changeMarketSymbol('SOLUSDT', this)">SOLUSDT</span>
+                    <span class="mono mkt-sym" style="cursor:pointer; color:var(--text-muted);" onclick="changeMarketSymbol('DOGEUSDT', this)">DOGEUSDT</span>
+                    <span class="mono mkt-sym" style="cursor:pointer; color:var(--text-muted);" onclick="changeMarketSymbol('XRPUSDT', this)">XRPUSDT</span>
+                    <span class="mono mkt-sym" style="cursor:pointer; color:var(--text-muted);" onclick="changeMarketSymbol('BNBUSDT', this)">BNBUSDT</span>
+                    <span class="mono mkt-sym" style="cursor:pointer; color:var(--text-muted);" onclick="changeMarketSymbol('ADAUSDT', this)">ADAUSDT</span>
+                </div>
+
+                <!-- TICKER BAR -->
+                <div class="panel-card" style="padding: 16px; display: flex; align-items: center; gap: 24px; margin-bottom: 16px; flex-wrap: wrap;">
+                    <div style="font-family: var(--font-heading); font-size: 24px; font-weight: 700; color: var(--text-primary);" id="mkt-ticker">BTCUSDT</div>
+                    <div class="mono" style="font-size: 24px; font-weight: 700; color: var(--text-primary);" id="mkt-price">0.00</div>
+                    <div class="mono profit" style="font-size: 16px; font-weight: 700;" id="mkt-change">+0.00%</div>
+                    <div style="width: 1px; height: 32px; background: var(--border-medium);"></div>
+                    <div style="display: flex; flex-direction: column;">
+                        <span style="font-size: 10px; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">24H HIGH</span>
+                        <span class="mono" style="font-size: 13px;" id="mkt-high">0.00</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column;">
+                        <span style="font-size: 10px; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">24H LOW</span>
+                        <span class="mono" style="font-size: 13px;" id="mkt-low">0.00</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column;">
+                        <span style="font-size: 10px; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">VOLUME</span>
+                        <span class="mono" style="font-size: 13px;" id="mkt-vol">0.00</span>
+                    </div>
+                    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+                        <div class="pulse-dot" style="width: 8px; height: 8px; background: var(--profit-green); border-radius: 50%; animation: pulse 2s infinite;"></div>
+                        <span class="mono" style="font-size: 12px; font-weight: 700; color: var(--profit-green);">LIVE</span>
+                    </div>
+                </div>
+
+                <!-- CHART CONTAINER -->
+                <div class="panel-card" style="display: flex; flex-direction: column; margin-bottom: 16px; min-height: 500px; height: 60vh;">
+                    <!-- CHART TOOLBAR -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border-medium);">
+                        <div style="display: flex; gap: 16px; align-items: center;">
+                            <!-- TIMEFRAMES -->
+                            <div id="mkt-tf-row" style="display: flex; gap: 12px;">
+                                <span class="mono mkt-tf" style="cursor:pointer; color:var(--text-muted);" onclick="changeMarketTimeframe('5m', this)">5m</span>
+                                <span class="mono mkt-tf active" style="cursor:pointer; color:var(--accent-primary); font-weight:700;" onclick="changeMarketTimeframe('15m', this)">15m</span>
+                                <span class="mono mkt-tf" style="cursor:pointer; color:var(--text-muted);" onclick="changeMarketTimeframe('30m', this)">30m</span>
+                                <span class="mono mkt-tf" style="cursor:pointer; color:var(--text-muted);" onclick="changeMarketTimeframe('1h', this)">1h</span>
+                                <span class="mono mkt-tf" style="cursor:pointer; color:var(--text-muted);" onclick="changeMarketTimeframe('2h', this)">2h</span>
+                                <span class="mono mkt-tf" style="cursor:pointer; color:var(--text-muted);" onclick="changeMarketTimeframe('4h', this)">4h</span>
+                            </div>
+                            
+                            <div style="width: 1px; height: 16px; background: var(--border-medium);"></div>
+                            
+                            <!-- DROPDOWNS -->
+                            <div class="dropdown">
+                                <span class="mono text-muted" style="cursor:pointer; font-size: 12px;">CANDLESTICK ▾</span>
+                            </div>
+                            <div style="width: 1px; height: 16px; background: var(--border-medium);"></div>
+                            <div class="dropdown">
+                                <span class="mono text-muted" style="cursor:pointer; font-size: 12px;">INDICATORS ▾</span>
+                            </div>
+                            <div style="width: 1px; height: 16px; background: var(--border-medium);"></div>
+                            <div class="dropdown">
+                                <span class="mono text-muted" style="cursor:pointer; font-size: 12px;">DRAW ▾</span>
+                            </div>
+                        </div>
+                        <div>
+                            <span class="mono text-muted" style="cursor:pointer; font-size: 14px;" title="Fullscreen">⛶</span>
+                        </div>
+                    </div>
+                    
+                    <!-- CHART CANVAS -->
+                    <div style="flex: 1; position: relative; width: 100%; padding: 16px;">
+                        <canvas id="markets-main-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- MARKET INFORMATION -->
+                <div class="panel-card table-card">
+                    <div style="padding: 16px; font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border-medium); letter-spacing: 0.8px;">
+                        MARKET INFORMATION
                     </div>
                     <div class="panel-table-wrap">
-                        <table class="terminal-table">
+                        <table class="terminal-table table-dense">
+                            <thead>
+                                <tr>
+                                    <th>PRICE</th>
+                                    <th>OPEN</th>
+                                    <th>HIGH</th>
+                                    <th>LOW</th>
+                                    <th>VOLUME</th>
+                                    <th>24H CHANGE</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="mono" id="mi-price">0.00</td>
+                                    <td class="mono" id="mi-open">0.00</td>
+                                    <td class="mono" id="mi-high">0.00</td>
+                                    <td class="mono" id="mi-low">0.00</td>
+                                    <td class="mono" id="mi-vol">0.00</td>
+                                    <td class="mono" id="mi-change">0.00%</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════════════════════
+                 VIEW: STRATEGIES
+            ═══════════════════════════════════════════════════════════════ -->
+            <div class="view-container" id="view-strategies">
+                <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div class="page-title-wrap">
+                        <h1 class="page-title">STRATEGIES</h1>
+                    </div>
+                    <div class="scanner-toolbar" style="display: flex; gap: 12px; align-items: center;">
+                        <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">FILTERS ▼</button>
+                        <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">SEARCH 🔍</button>
+                        <button class="btn-terminal" onclick="fetchStrategiesV2()" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">REFRESH ↻</button>
+                    </div>
+                </div>
+
+                <!-- MAIN TABLE -->
+                <div class="panel-card table-card" style="margin-bottom: 16px; min-height: 400px;">
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table table-dense">
                             <thead>
                                 <tr>
                                     <th>STRATEGY</th>
                                     <th>STATUS</th>
                                     <th>TIMEFRAMES</th>
                                     <th>EVALUATIONS</th>
-                                    <th>BUY</th>
-                                    <th>SELL</th>
-                                    <th>HOLD</th>
-                                    <th>QUALIFIED</th>
-                                    <th>PROFIT REJ</th>
-                                    <th>RISK REJ</th>
-                                    <th>ORDERS</th>
-                                    <th>FILLS</th>
+                                    <th>SIGNALS</th>
+                                    <th>TRADES</th>
                                     <th>WIN RATE</th>
-                                    <th>NET PNL</th>
                                 </tr>
                             </thead>
-                            <tbody id="strat-summary-body"></tbody>
+                            <tbody id="strat2-body">
+                                <tr><td colspan="7" class="idle-state-row" style="padding: 48px; text-align: center;">Loading strategy configuration...</td></tr>
+                            </tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 7: RISK CONTROL
+                 VIEW: RISK
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-risk">
-                <div class="dashboard-hero-kpi-grid">
-                    <div class="panel-card kpi-card"><div class="kpi-label">TOTAL EQUITY</div><div class="kpi-val mono" id="rk-top-equity">--</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">LIQUID CASH</div><div class="kpi-val cyan mono" id="rk-top-cash">--</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">EXPOSURE</div><div class="kpi-val mono" id="rk-top-exposure">--</div></div>
-                    <div class="panel-card kpi-card"><div class="kpi-label">MAX DRAWDOWN</div><div class="kpi-val loss mono" id="rk-top-mdd">--</div></div>
+                <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div class="page-title-wrap">
+                        <h1 class="page-title">RISK CONTROL</h1>
+                    </div>
+                    <div class="scanner-toolbar" style="display: flex; gap: 12px; align-items: center;">
+                        <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">FILTERS ▼</button>
+                        <button class="btn-terminal" onclick="fetchRiskData()" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">REFRESH ↻</button>
+                    </div>
                 </div>
 
-                <div class="panel-card" style="flex: 1; margin-top: 24px;">
-                    <div class="panel-card-header">
-                        <div class="panel-card-title"><span>REAL-TIME RISK DECISION &amp; GATE AUDIT</span></div>
+                <!-- KPI ROW -->
+                <div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 16px; gap: 16px; display: grid;">
+                    <div class="kpi-card" style="padding: 16px; border: 1px solid var(--border-medium); background: var(--bg-panel);">
+                        <div class="kpi-title" style="font-size: 10px; font-family: var(--font-heading); color: var(--text-muted); margin-bottom: 8px; letter-spacing: 0.5px;">TOTAL EQUITY</div>
+                        <div class="kpi-value mono" id="r-eq" style="font-size: 20px; color: var(--text-primary);">$0.00</div>
+                    </div>
+                    <div class="kpi-card" style="padding: 16px; border: 1px solid var(--border-medium); background: var(--bg-panel);">
+                        <div class="kpi-title" style="font-size: 10px; font-family: var(--font-heading); color: var(--text-muted); margin-bottom: 8px; letter-spacing: 0.5px;">CURRENT EXPOSURE</div>
+                        <div class="kpi-value mono" id="r-exp" style="font-size: 20px; color: var(--text-primary);">$0.00</div>
+                    </div>
+                    <div class="kpi-card" style="padding: 16px; border: 1px solid var(--border-medium); background: var(--bg-panel);">
+                        <div class="kpi-title" style="font-size: 10px; font-family: var(--font-heading); color: var(--text-muted); margin-bottom: 8px; letter-spacing: 0.5px;">RISK USED</div>
+                        <div class="kpi-value mono" id="r-used" style="font-size: 20px; color: var(--text-primary);">0.00%</div>
+                    </div>
+                    <div class="kpi-card" style="padding: 16px; border: 1px solid var(--border-medium); background: var(--bg-panel);">
+                        <div class="kpi-title" style="font-size: 10px; font-family: var(--font-heading); color: var(--text-muted); margin-bottom: 8px; letter-spacing: 0.5px;">OPEN POSITIONS</div>
+                        <div class="kpi-value mono" id="r-pos" style="font-size: 20px; color: var(--text-primary);">0 / 5</div>
+                    </div>
+                </div>
+
+                <!-- RISK LIMITS -->
+                <div class="panel-card" style="margin-bottom: 16px;">
+                    <div style="padding: 12px 16px; font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border-medium); letter-spacing: 1px;">
+                        RISK LIMITS
                     </div>
                     <div class="panel-table-wrap">
-                        <table class="terminal-table">
+                        <table class="terminal-table table-dense" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 20%;">PORTFOLIO EXPOSURE</th>
+                                    <th style="width: 20%;">RISK PER TRADE</th>
+                                    <th style="width: 20%;">DAILY LOSS</th>
+                                    <th style="width: 20%;">MAX DRAWDOWN</th>
+                                    <th style="width: 20%;">MAX OPEN POSITIONS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="risk-limits-body">
+                                <tr><td colspan="5" class="idle-state-row text-center" style="padding: 24px;">Loading risk parameters...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- CURRENT EXPOSURE -->
+                <div class="panel-card" style="margin-bottom: 16px;">
+                    <div style="padding: 12px 16px; font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border-medium); letter-spacing: 1px;">
+                        CURRENT EXPOSURE
+                    </div>
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table table-dense" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>SYMBOL</th>
+                                    <th>POSITION VALUE</th>
+                                    <th>% OF EQUITY</th>
+                                    <th>RISK</th>
+                                    <th>STATUS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="risk-exp-body">
+                                <tr><td colspan="5" class="idle-state-row text-center" style="padding: 24px;">Loading active exposures...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- RISK DECISIONS -->
+                <div class="panel-card" style="margin-bottom: 16px;">
+                    <div style="padding: 12px 16px; font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border-medium); letter-spacing: 1px;">
+                        RISK DECISIONS
+                    </div>
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table table-dense" style="width: 100%;">
                             <thead>
                                 <tr>
                                     <th>TIME</th>
                                     <th>SYMBOL</th>
                                     <th>TF</th>
-                                    <th>STRATEGY</th>
-                                    <th>REQ RISK</th>
-                                    <th>AVAIL RISK</th>
-                                    <th>EXPOSURE</th>
-                                    <th>DECISION</th>
+                                    <th>REQUESTED RISK</th>
+                                    <th>AVAILABLE RISK</th>
+                                    <th>RESULT</th>
                                     <th>REASON</th>
                                 </tr>
                             </thead>
-                            <tbody id="risk-logs-body">
-                                <tr><td colspan="9" class="idle-state-row">All portfolio safety constraints intact • Zero risk gate breaches recorded</td></tr>
+                            <tbody id="risk-dec-body">
+                                <tr><td colspan="7" class="idle-state-row text-center" style="padding: 24px;">Loading engine decisions...</td></tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                <!-- PROTECTION STATUS -->
+                <div class="panel-card" style="margin-bottom: 16px;">
+                    <div style="padding: 12px 16px; font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border-medium); letter-spacing: 1px;">
+                        PROTECTION STATUS
+                    </div>
+                    <div style="padding: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 32px; background: var(--bg-panel);">
+                        <div style="display: flex; flex-direction: column; gap: 16px;">
+                            <div style="display: flex; justify-content: space-between;"><span class="mono text-secondary" style="font-size: 12px;">DAILY LOSS LIMIT</span><span class="mono profit">● HEALTHY</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span class="mono text-secondary" style="font-size: 12px;">EXPOSURE LIMIT</span><span class="mono profit">● HEALTHY</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span class="mono text-secondary" style="font-size: 12px;">STOP LOSS</span><span class="mono cyan">● ACTIVE</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span class="mono text-secondary" style="font-size: 12px;">DUPLICATE PROTECTION</span><span class="mono cyan">● ACTIVE</span></div>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 16px;">
+                            <div style="display: flex; justify-content: space-between;"><span class="mono text-secondary" style="font-size: 12px;">MAX DRAWDOWN</span><span class="mono profit">● HEALTHY</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span class="mono text-secondary" style="font-size: 12px;">POSITION LIMIT</span><span class="mono profit">● HEALTHY</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span class="mono text-secondary" style="font-size: 12px;">TAKE PROFIT</span><span class="mono cyan">● ACTIVE</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span class="mono text-secondary" style="font-size: 12px;">SAFETY HALT</span><span class="mono text-muted">● INACTIVE</span></div>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 8: ACTIVITY
+                 VIEW: ANALYTICS
             ═══════════════════════════════════════════════════════════════ -->
-            <div class="view-container" id="view-activity">
-                <div class="filter-toolbar">
-                    <div class="filter-group">
-                        <span class="filter-lbl">EVENT TYPE:</span>
-                        <button class="btn-filter active" id="btn-act-all" onclick="filterActivity('ALL')">ALL</button>
-                        <button class="btn-filter" id="btn-act-trades" onclick="filterActivity('TRADES')">TRADES</button>
-                        <button class="btn-filter" id="btn-act-balance" onclick="filterActivity('BALANCE')">BALANCE &amp; FEES</button>
-                        <button class="btn-filter" id="btn-act-system" onclick="filterActivity('SYSTEM')">SYSTEM &amp; SAFETY</button>
-                        <button class="btn-filter" id="btn-act-signals" onclick="filterActivity('SIGNALS')">SIGNALS</button>
+            <div class="view-container" id="view-analytics">
+                <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div class="page-title-wrap">
+                        <h1 class="page-title">ANALYTICS</h1>
                     </div>
-                    <div class="filter-group" style="margin-left: auto;">
-                        <span class="badge-mono" id="activity-count">0 Events Logged</span>
+                    
+                    <div style="display: flex; gap: 16px; align-items: center;">
+                        <!-- PERIOD SELECTOR -->
+                        <div id="analytics-period-row" style="display: flex; gap: 12px;">
+                            <span class="mono an-period" style="cursor:pointer; color:var(--text-muted);" onclick="changeAnalyticsPeriod('1D', this)">1D</span>
+                            <span class="mono an-period" style="cursor:pointer; color:var(--text-muted);" onclick="changeAnalyticsPeriod('7D', this)">7D</span>
+                            <span class="mono an-period" style="cursor:pointer; color:var(--text-muted);" onclick="changeAnalyticsPeriod('30D', this)">30D</span>
+                            <span class="mono an-period active" style="cursor:pointer; color:var(--accent-primary); font-weight:700;" onclick="changeAnalyticsPeriod('ALL', this)">ALL</span>
+                        </div>
+                        
+                        <div style="width: 1px; height: 16px; background: var(--border-medium);"></div>
+                        
+                        <div class="scanner-toolbar" style="display: flex; gap: 12px; align-items: center;">
+                            <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">FILTERS ▼</button>
+                            <button class="btn-terminal" onclick="fetchAnalyticsData()" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">REFRESH ↻</button>
+                        </div>
                     </div>
                 </div>
 
-                <div class="panel-card" style="flex: 1;">
+                <!-- KPI ROW -->
+                <div class="panel-card" style="margin-bottom: 16px;">
+                    <table class="terminal-table table-dense" style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th style="width: 20%;">NET PNL</th>
+                                <th style="width: 20%;">TOTAL TRADES</th>
+                                <th style="width: 20%;">WIN RATE</th>
+                                <th style="width: 20%;">PROFIT FACTOR</th>
+                                <th style="width: 20%;">MAX DRAWDOWN</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="mono profit" id="an-net-pnl" style="font-size: 16px; font-weight: 700;">$0.00</td>
+                                <td class="mono" id="an-total-trades" style="font-size: 16px;">0</td>
+                                <td class="mono" id="an-win-rate" style="font-size: 16px;">0.0%</td>
+                                <td class="mono" id="an-profit-factor" style="font-size: 16px;">0.00</td>
+                                <td class="mono loss" id="an-max-dd" style="font-size: 16px;">0.00%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- EQUITY CHART -->
+                <div class="panel-card" style="margin-bottom: 16px; display: flex; flex-direction: column;">
+                    <div style="padding: 12px 16px; font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border-medium); letter-spacing: 1px;">
+                        EQUITY / PNL
+                    </div>
+                    <div style="padding: 16px; height: 350px; width: 100%; position: relative;">
+                        <canvas id="analytics-equity-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- PNL BREAKDOWN & DRAWDOWN CHART -->
+                <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 16px; margin-bottom: 16px;">
+                    <div class="panel-card">
+                        <div style="padding: 12px 16px; font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border-medium); letter-spacing: 1px;">
+                            PNL BREAKDOWN
+                        </div>
+                        <div style="padding: 16px;">
+                            <div class="kv-row" style="margin-bottom: 12px;"><span>REALIZED</span><span class="mono" id="an-realized">$0.00</span></div>
+                            <div class="kv-row" style="margin-bottom: 12px;"><span>UNREALIZED</span><span class="mono" id="an-unrealized">$0.00</span></div>
+                            <div class="kv-row" style="margin-bottom: 12px;"><span>FEES</span><span class="mono loss" id="an-fees">-$0.00</span></div>
+                            <div class="kv-row" style="margin-top: 16px; border-top: 1px solid var(--border-medium); padding-top: 16px;"><span>NET PNL</span><span class="mono profit td-strong" style="font-size: 14px;" id="an-net-pnl2">$0.00</span></div>
+                        </div>
+                    </div>
+                    <div class="panel-card" style="display: flex; flex-direction: column;">
+                        <div style="padding: 12px 16px; font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border-medium); letter-spacing: 1px;">
+                            DRAWDOWN
+                        </div>
+                        <div style="padding: 16px; flex: 1; min-height: 150px; position: relative;">
+                            <canvas id="analytics-drawdown-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STRATEGY & TIMEFRAME PERFORMANCE -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div class="panel-card table-card">
+                        <div style="padding: 12px 16px; font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border-medium); letter-spacing: 1px;">
+                            STRATEGY PERFORMANCE
+                        </div>
+                        <div class="panel-table-wrap">
+                            <table class="terminal-table table-dense" style="width: 100%;">
+                                <tbody id="an-strat-body">
+                                    <tr><td class="text-center text-muted" style="padding: 24px;">No data</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="panel-card table-card">
+                        <div style="padding: 12px 16px; font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border-medium); letter-spacing: 1px;">
+                            TIMEFRAME PERFORMANCE
+                        </div>
+                        <div class="panel-table-wrap">
+                            <table class="terminal-table table-dense" style="width: 100%;">
+                                <tbody id="an-tf-body">
+                                    <tr><td class="text-center text-muted" style="padding: 24px;">No data</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TRADE PERFORMANCE -->
+                <div class="panel-card" style="margin-bottom: 16px;">
+                    <div style="padding: 12px 16px; font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border-medium); letter-spacing: 1px;">
+                        TRADE PERFORMANCE
+                    </div>
+                    <table class="terminal-table table-dense" style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th style="width: 20%;">TOTAL PROFIT</th>
+                                <th style="width: 20%;">TOTAL LOSS</th>
+                                <th style="width: 20%;">AVG WIN</th>
+                                <th style="width: 20%;">AVG LOSS</th>
+                                <th style="width: 20%;">AVG TRADE</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="mono profit" id="an-tp">$0.00</td>
+                                <td class="mono loss" id="an-tl">-$0.00</td>
+                                <td class="mono profit" id="an-aw">$0.00</td>
+                                <td class="mono loss" id="an-al">-$0.00</td>
+                                <td class="mono" id="an-at">$0.00</td>
+                            </tr>
+                        </tbody>
+                        <thead style="border-top: 1px solid var(--border-medium);">
+                            <tr>
+                                <th>BEST TRADE</th>
+                                <th>WORST TRADE</th>
+                                <th>LONGEST HOLD</th>
+                                <th>SHORTEST HOLD</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="mono profit" id="an-best">$0.00</td>
+                                <td class="mono loss" id="an-worst">-$0.00</td>
+                                <td class="mono" id="an-long">0m</td>
+                                <td class="mono" id="an-short">0m</td>
+                                <td></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════════════════════
+                 VIEW: SYSTEM
+            ═══════════════════════════════════════════════════════════════ -->
+            <div class="view-container" id="view-system">
+                <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h1 class="page-title">SYSTEM</h1>
+                    <button class="btn-terminal" onclick="fetchSystemData()" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">REFRESH ↻</button>
+                </div>
+
+                <!-- ENGINE STATUS & MARKET DATA -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div class="terminal-card">
+                        <div class="card-title">ENGINE STATUS</div>
+                        <div class="kv-row"><span>STATUS</span><span class="mono profit" id="sys-eng-status">● RUNNING</span></div>
+                        <div class="kv-row"><span>UPTIME</span><span class="mono" id="sys-uptime">00:00:00</span></div>
+                        <div class="kv-row"><span>PID</span><span class="mono" id="sys-pid">—</span></div>
+                        <div class="kv-row"><span>RESTART COUNT</span><span class="mono">0</span></div>
+                        <div class="kv-row"><span>HEARTBEAT</span><span class="mono" id="sys-hb">0.0s</span></div>
+                        <div class="kv-row"><span>LAST EVALUATION</span><span class="mono text-secondary" id="sys-eval">—</span></div>
+                        <div class="kv-row"><span>LAST CANDLE</span><span class="mono text-secondary" id="sys-candle">—</span></div>
+                        <div class="kv-row"><span>SAFETY HALT</span><span class="mono text-muted">● INACTIVE</span></div>
+                    </div>
+                    <div class="terminal-card">
+                        <div class="card-title">MARKET DATA</div>
+                        <div class="kv-row"><span>ACTIVE SYMBOLS</span><span class="mono" id="sys-sym">0</span></div>
+                        <div class="kv-row"><span>ACTIVE TIMEFRAMES</span><span class="mono" id="sys-tf">0</span></div>
+                        <div class="kv-row"><span>ACTIVE STREAMS</span><span class="mono" id="sys-str">0</span></div>
+                        <div class="kv-row"><span>LAST MARKET UPDATE</span><span class="mono text-secondary" id="sys-mkt">—</span></div>
+                        <div class="kv-row"><span>LAST CANDLE CLOSE</span><span class="mono text-secondary" id="sys-candle2">—</span></div>
+                        <div class="kv-row"><span>STALE STREAMS</span><span class="mono profit">0</span></div>
+                    </div>
+                </div>
+
+                <!-- CONNECTIVITY & SUPERVISOR -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div class="terminal-card">
+                        <div class="card-title">CONNECTIVITY & LATENCY</div>
+                        <div class="kv-row"><span>BINANCE REST</span><span class="mono profit" id="sys-rest">● CONNECTED</span></div>
+                        <div class="kv-row"><span>REST LATENCY</span><span class="mono" id="sys-rest-lat">0 ms</span></div>
+                        <div class="kv-row"><span>REST RECONNECTS</span><span class="mono">0</span></div>
+                        <div class="kv-row" style="margin-top: 12px; border-top: 1px solid var(--border-medium); padding-top: 12px;"><span>WEBSOCKET</span><span class="mono profit" id="sys-ws">● CONNECTED</span></div>
+                        <div class="kv-row"><span>WS LATENCY</span><span class="mono" id="sys-ws-lat">0 ms</span></div>
+                        <div class="kv-row"><span>CONNECTION STATE</span><span class="mono profit" id="sys-conn-state">● STABLE</span></div>
+                    </div>
+                    <div class="terminal-card">
+                        <div class="card-title">SUPERVISOR & PERSISTENCE</div>
+                        <div class="kv-row"><span>SUPERVISOR STATUS</span><span class="mono profit">● RUNNING</span></div>
+                        <div class="kv-row"><span>LAST HEALTH CHECK</span><span class="mono text-secondary" id="sys-hc">—</span></div>
+                        <div class="kv-row"><span>RESTART HISTORY</span><span class="mono">0</span></div>
+                        <div class="kv-row" style="margin-top: 12px; border-top: 1px solid var(--border-medium); padding-top: 12px;"><span>LEDGER</span><span class="mono profit">● HEALTHY</span></div>
+                        <div class="kv-row"><span>PORTFOLIO STATE</span><span class="mono profit">● HEALTHY</span></div>
+                        <div class="kv-row"><span>OPPORTUNITY LOG</span><span class="mono profit">● HEALTHY</span></div>
+                        <div class="kv-row"><span>LAST SYNC</span><span class="mono text-secondary" id="sys-sync">—</span></div>
+                    </div>
+                </div>
+
+                <!-- RECENT EVENTS -->
+                <div class="panel-card" style="margin-bottom: 16px;">
+                    <div style="padding: 12px 16px; font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border-medium); letter-spacing: 1px;">
+                        RECENT SYSTEM EVENTS
+                    </div>
                     <div class="panel-table-wrap">
-                        <table class="terminal-table">
-                            <thead>
-                                <tr>
-                                    <th>TIMESTAMP</th>
-                                    <th>EVENT TYPE</th>
-                                    <th>SYMBOL</th>
-                                    <th>STRATEGY</th>
-                                    <th>BALANCE</th>
-                                    <th>EQUITY</th>
-                                    <th>PNL / VALUE</th>
-                                    <th>TRADE / ORDER ID</th>
-                                    <th>DESCRIPTION</th>
-                                </tr>
-                            </thead>
-                            <tbody id="activity-logs-body">
-                                <tr><td colspan="9" class="idle-state-row">Audit ledger initialized • Live trade executions and system events will stream here</td></tr>
+                        <table class="terminal-table table-dense" style="width: 100%;">
+                            <tbody id="sys-events-body">
+                                <tr><td class="text-center text-muted" style="padding: 24px;">No recent events</td></tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                <!-- DIAGNOSTICS & DEPLOYMENT -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div class="terminal-card">
+                        <div class="card-title">DIAGNOSTICS</div>
+                        <div class="kv-row"><span>RECENT ERRORS</span><span class="mono profit">0</span></div>
+                        <div class="kv-row"><span>WARNINGS</span><span class="mono profit">0</span></div>
+                        <div class="kv-row"><span>RECOVERY EVENTS</span><span class="mono text-muted">0</span></div>
+                    </div>
+                    <div class="terminal-card" style="background: var(--bg-panel); border: 1px solid var(--border-medium);">
+                        <div class="card-title">DEPLOYMENT</div>
+                        <div class="kv-row"><span>RENDER</span><span class="mono profit">● LIVE</span></div>
+                        <div class="kv-row"><span>UPTIMEROBOT</span><span class="mono cyan">● MONITORING</span></div>
+                        <div class="kv-row"><span>ENVIRONMENT</span><span class="mono text-secondary">TESTNET</span></div>
+                        <div class="kv-row"><span>REGION</span><span class="mono text-secondary">FRANKFURT</span></div>
+                        <div class="kv-row"><span>VERSION</span><span class="mono text-secondary">5.0</span></div>
+                        <div class="kv-row"><span>COMMIT</span><span class="mono text-secondary">c726f13</span></div>
+                        <div class="kv-row"><span>CONTAINER</span><span class="mono profit">● HEALTHY</span></div>
                     </div>
                 </div>
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
-                 VIEW 9: SETTINGS / HEALTH
+                 VIEW: SETTINGS
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-settings">
-                <div class="settings-grid">
-                    <div class="panel-card">
-                        <div class="panel-card-header"><div class="panel-card-title"><span>ENGINE CONFIGURATION</span></div></div>
-                        <div class="panel-table-wrap">
-                            <table class="terminal-table">
-                                <tbody id="set-strat-body">
-                                    <tr><td>Trading Mode</td><td><span class="tag-pass" id="set-mode">BINANCE TESTNET</span></td></tr>
-                                    <tr><td>Execution Route</td><td>Spot OCO Protection</td></tr>
-                                    <tr><td>Max Leverage</td><td>1.0x (Spot Only)</td></tr>
-                                    <tr><td>Max Open Positions</td><td>5</td></tr>
-                                    <tr><td>Max Risk Per Trade</td><td>1.0%</td></tr>
-                                    <tr><td>Max Portfolio Risk</td><td>20.0%</td></tr>
-                                    <tr><td>Max Daily Loss Limit</td><td>3.0%</td></tr>
-                                    <tr><td>Max Hard Drawdown</td><td>10.0%</td></tr>
-                                </tbody>
-                            </table>
+                <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h1 class="page-title">SETTINGS</h1>
+                    <div class="scanner-toolbar" style="display: flex; gap: 12px; align-items: center;">
+                        <button class="btn-terminal" onclick="saveSettings()" style="border: 1px solid var(--accent-primary); background: var(--accent-primary-dim); padding: 4px 16px; font-size: 11px; font-family: var(--font-mono); color: var(--accent-primary); cursor: pointer; font-weight: 700;">SAVE</button>
+                        <button class="btn-terminal" onclick="resetSettings()" style="border: 1px solid var(--loss-red); background: rgba(239, 68, 68, 0.1); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--loss-red); cursor: pointer;">RESET</button>
+                        <button class="btn-terminal" onclick="fetchSettings()" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">↻</button>
+                    </div>
+                </div>
+
+                <!-- TRADING MODE -->
+                <div class="panel-card" style="margin-bottom: 16px; padding: 16px;">
+                    <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; letter-spacing: 1px;">
+                        TRADING MODE
+                    </div>
+                    <div style="display: flex; gap: 32px; margin-bottom: 16px; flex-wrap: wrap;">
+                        <div class="kv-row" style="flex: 1;"><span>ENVIRONMENT</span><span class="mono text-secondary">TESTNET</span></div>
+                        <div class="kv-row" style="flex: 1;"><span>EXCHANGE</span><span class="mono text-secondary">BINANCE</span></div>
+                        <div class="kv-row" style="flex: 1;"><span>MODE</span><span class="mono text-secondary">AUTOMATIC</span></div>
+                        <div class="kv-row" style="flex: 1;"><span>EXECUTION</span><span class="mono text-secondary">SPOT</span></div>
+                        <div class="kv-row" style="flex: 1;"><span>LIVE TRADING</span><span class="mono text-muted">● DISABLED</span></div>
+                    </div>
+                    
+                    <div style="border: 1px solid var(--border-medium); background: var(--bg-base); padding: 16px; position: relative;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: #F59E0B;">MANUAL TRADING MODE</div>
+                            <label class="switch-terminal" style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="set-manual-trade" onchange="toggleManualTrading()" style="accent-color: #F59E0B;">
+                                <span class="mono" id="lbl-manual-trade" style="color: var(--text-muted);">○ OFF</span>
+                            </label>
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 12px;">
+                            Enable manual control of TESTNET positions and orders.<br>
+                            When enabled: BUY · SELL · CLOSE POSITION · CLOSE BOT TRADE · CANCEL ORDER
+                        </div>
+                        <div id="manual-actions-row" style="display: flex; gap: 12px; opacity: 0.5; pointer-events: none;">
+                            <button class="btn-terminal" style="border: 1px solid var(--profit-green); background: rgba(16, 185, 129, 0.1); color: var(--profit-green); padding: 4px 16px;">BUY</button>
+                            <button class="btn-terminal" style="border: 1px solid var(--loss-red); background: rgba(239, 68, 68, 0.1); color: var(--loss-red); padding: 4px 16px;">SELL</button>
+                            <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); color: var(--text-primary); padding: 4px 16px;">CLOSE POSITION</button>
+                            <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); color: var(--text-primary); padding: 4px 16px;">CLOSE BOT TRADE</button>
+                            <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); color: var(--text-primary); padding: 4px 16px;">CANCEL ORDER</button>
                         </div>
                     </div>
+                </div>
 
-                    <div class="panel-card">
-                        <div class="panel-card-header"><div class="panel-card-title"><span>MICROSERVICES HEALTH</span></div></div>
-                        <div class="panel-table-wrap">
-                            <table class="terminal-table">
-                                <thead><tr><th>SUBSYSTEM</th><th>STATUS</th><th>TELEMETRY</th></tr></thead>
-                                <tbody id="sys-health-body">
-                                    <tr><td colspan="3" class="idle-state-row" style="text-align:center;padding:10px;">Loading system health...</td></tr>
-                                </tbody>
-                            </table>
+                <!-- LIMITS -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; letter-spacing: 1px;">
+                            TRADE LIMITS
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <div class="kv-row" style="align-items: center;"><span>MAX OPEN TRADES</span><input type="number" id="set-max-open" class="input-terminal mono text-right" value="5" style="width: 80px;"></div>
+                            <div class="kv-row" style="align-items: center;"><span>MAX TRADES / DAY</span><input type="number" id="set-max-day" class="input-terminal mono text-right" value="50" style="width: 80px;"></div>
+                            <div class="kv-row" style="align-items: center;"><span>MAX TRADES / SYMBOL</span><input type="number" id="set-max-sym" class="input-terminal mono text-right" value="1" style="width: 80px;"></div>
+                            <div class="kv-row" style="align-items: center;"><span>MAX TRADES / STRATEGY</span><input type="number" id="set-max-strat" class="input-terminal mono text-right" value="3" style="width: 80px;"></div>
+                            <div class="kv-row" style="align-items: center;"><span>COOLDOWN AFTER TRADE</span><input type="text" id="set-cd-trade" class="input-terminal mono text-right" value="5m" style="width: 80px;"></div>
+                            <div class="kv-row" style="align-items: center;"><span>SYMBOL COOLDOWN</span><input type="text" id="set-cd-sym" class="input-terminal mono text-right" value="5m" style="width: 80px;"></div>
+                        </div>
+                    </div>
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; letter-spacing: 1px;">
+                            RISK LIMITS
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <div class="kv-row" style="align-items: center;"><span>RISK PER TRADE</span><input type="text" id="set-risk-trade" class="input-terminal mono text-right" value="0.50%" style="width: 80px;"></div>
+                            <div class="kv-row" style="align-items: center;"><span>MAX PORTFOLIO RISK</span><input type="text" id="set-risk-port" class="input-terminal mono text-right" value="5.00%" style="width: 80px;"></div>
+                            <div class="kv-row" style="align-items: center;"><span>MAX PORTFOLIO EXPOSURE</span><input type="text" id="set-exp-port" class="input-terminal mono text-right" value="5.00%" style="width: 80px;"></div>
+                            <div class="kv-row" style="align-items: center;"><span>MAX DRAWDOWN</span><input type="text" id="set-max-dd" class="input-terminal mono text-right" value="5.00%" style="width: 80px;"></div>
+                            <div class="kv-row" style="align-items: center;"><span>DAILY LOSS LIMIT</span><input type="text" id="set-daily-loss" class="input-terminal mono text-right" value="$100" style="width: 80px;"></div>
+                            <div class="kv-row" style="align-items: center;"><span>MAX OPEN POSITIONS</span><input type="number" id="set-max-pos" class="input-terminal mono text-right" value="5" style="width: 80px;"></div>
+                            <div class="kv-row" style="align-items: center;"><span>DUPLICATE PROTECTION</span><select id="set-dup-prot" class="select-terminal mono text-right" style="width: 80px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                            <div class="kv-row" style="align-items: center;"><span>SAFETY HALT</span><select id="set-safe-halt" class="select-terminal mono text-right" style="width: 80px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STRATEGIES -->
+                <div class="panel-card table-card" style="margin-bottom: 16px;">
+                    <div style="padding: 12px 16px; font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border-medium); letter-spacing: 1px;">
+                        STRATEGIES & TIMEFRAMES
+                    </div>
+                    <div class="panel-table-wrap">
+                        <table class="terminal-table table-dense" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 25%;">STRATEGY</th>
+                                    <th style="width: 15%;">STATUS</th>
+                                    <th style="width: 60%;">ACTIVE TIMEFRAMES</th>
+                                </tr>
+                            </thead>
+                            <tbody id="set-strat-body">
+                                <tr>
+                                    <td class="td-strong">ADX_EMA</td>
+                                    <td class="mono profit">● ON</td>
+                                    <td class="mono">5m · 15m · 30m · 1h · 2h · 4h</td>
+                                </tr>
+                                <tr>
+                                    <td class="td-strong">ML</td>
+                                    <td class="mono profit">● ON</td>
+                                    <td class="mono">5m · 15m</td>
+                                </tr>
+                                <tr>
+                                    <td class="td-strong">SCALPER</td>
+                                    <td class="mono profit">● ON</td>
+                                    <td class="mono">5m</td>
+                                </tr>
+                                <tr>
+                                    <td class="td-strong">AGGRESSOR</td>
+                                    <td class="mono profit">● ON</td>
+                                    <td class="mono">5m · 15m</td>
+                                </tr>
+                                <tr>
+                                    <td class="td-strong">SWING</td>
+                                    <td class="mono profit">● ON</td>
+                                    <td class="mono">30m · 1h</td>
+                                </tr>
+                                <tr>
+                                    <td class="td-strong text-muted">SUPERTREND</td>
+                                    <td class="mono text-muted">● OFF</td>
+                                    <td class="mono text-muted">15m · 1h</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="padding: 12px 16px; border-top: 1px solid var(--border-medium); display: flex; gap: 12px;">
+                        <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); color: var(--text-primary); padding: 4px 12px;">ENABLE / DISABLE STRATEGY</button>
+                        <button class="btn-terminal" style="border: 1px solid var(--border-medium); background: var(--bg-input); color: var(--text-primary); padding: 4px 12px;">ADD / REMOVE TIMEFRAME</button>
+                    </div>
+                </div>
+
+                <!-- PROFITABILITY & EXECUTION -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; letter-spacing: 1px;">
+                            PROFITABILITY
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <div class="kv-row" style="align-items: center;"><span>MIN EXPECTED NET RETURN</span><input type="text" id="set-min-net" class="input-terminal mono text-right" value="0.05%" style="width: 100px;"></div>
+                            <div class="kv-row" style="align-items: center;"><span>MINIMUM EDGE</span><input type="text" id="set-min-edge" class="input-terminal mono text-right" value="0.10%" style="width: 100px;"></div>
+                            <div class="kv-row" style="align-items: center;"><span>PROFITABILITY GATE</span><select id="set-prof-gate" class="select-terminal mono text-right" style="width: 100px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                            <div class="kv-row" style="align-items: center;"><span>FEE MODEL</span><select id="set-fee-mod" class="select-terminal mono text-right" style="width: 100px;"><option value="BINANCE">BINANCE</option></select></div>
+                            <div class="kv-row" style="align-items: center;"><span>PROFITABILITY BUFFER</span><input type="text" id="set-prof-buf" class="input-terminal mono text-right" value="0.00%" style="width: 100px;"></div>
+                        </div>
+                    </div>
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; letter-spacing: 1px;">
+                            EXECUTION
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <div class="kv-row" style="align-items: center;"><span>EXECUTION MODE</span><select id="set-exec-mod" class="select-terminal mono text-right" style="width: 100px;"><option value="AUTO">AUTO</option></select></div>
+                            <div class="kv-row" style="align-items: center;"><span>ORDER TYPE</span><select id="set-ord-typ" class="select-terminal mono text-right" style="width: 100px;"><option value="MARKET">MARKET</option></select></div>
+                            <div class="kv-row" style="align-items: center;"><span>SLIPPAGE MODEL</span><select id="set-slip-mod" class="select-terminal mono text-right" style="width: 100px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                            <div class="kv-row" style="align-items: center;"><span>SPREAD MODEL</span><select id="set-spread-mod" class="select-terminal mono text-right" style="width: 100px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                            <div class="kv-row" style="align-items: center;"><span>BINANCE FILTER CHECK</span><select id="set-bin-fil" class="select-terminal mono text-right" style="width: 100px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                            <div class="kv-row" style="align-items: center;"><span>MIN NOTIONAL CHECK</span><select id="set-min-not" class="select-terminal mono text-right" style="width: 100px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                            <div class="kv-row" style="align-items: center;"><span>STOP LOSS</span><select id="set-exec-sl" class="select-terminal mono text-right" style="width: 100px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                            <div class="kv-row" style="align-items: center;"><span>TAKE PROFIT</span><select id="set-exec-tp" class="select-terminal mono text-right" style="width: 100px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                            <div class="kv-row" style="align-items: center;"><span>PROTECTION</span><select id="set-exec-prot" class="select-terminal mono text-right" style="width: 100px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                            <div class="kv-row" style="align-items: center;"><span>AUTO RETRY</span><select id="set-exec-retry" class="select-terminal mono text-right" style="width: 100px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- POSITION & PROTECTION SETTINGS -->
+                <div class="panel-card" style="margin-bottom: 16px; padding: 16px;">
+                    <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; letter-spacing: 1px;">
+                        POSITION & PROTECTION SETTINGS
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div class="kv-row" style="align-items: center;"><span>DEFAULT STOP LOSS</span><select id="set-def-sl" class="select-terminal mono text-right" style="width: 120px;"><option value="STRATEGY">STRATEGY</option></select></div>
+                        <div class="kv-row" style="align-items: center;"><span>DEFAULT TAKE PROFIT</span><select id="set-def-tp" class="select-terminal mono text-right" style="width: 120px;"><option value="STRATEGY">STRATEGY</option></select></div>
+                        <div class="kv-row" style="align-items: center;"><span>MIN RISK / REWARD</span><input type="text" id="set-min-rr" class="input-terminal mono text-right" value="1.50" style="width: 120px;"></div>
+                        <div class="kv-row" style="align-items: center;"><span>MAX POSITION DURATION</span><input type="text" id="set-max-dur" class="input-terminal mono text-right" value="0" style="width: 120px;"></div>
+                        <div class="kv-row" style="align-items: center;"><span>TRAILING STOP</span><select id="set-trail-stop" class="select-terminal mono text-right" style="width: 120px;"><option value="OFF">OFF</option></select></div>
+                        <div class="kv-row" style="align-items: center;"><span>BREAK-EVEN</span><select id="set-break-even" class="select-terminal mono text-right" style="width: 120px;"><option value="OFF">OFF</option></select></div>
+                        <div class="kv-row" style="align-items: center;"><span>PARTIAL CLOSE</span><select id="set-part-close" class="select-terminal mono text-right" style="width: 120px;"><option value="OFF">OFF</option></select></div>
+                        <div class="kv-row" style="align-items: center;"><span>SESSION AUTO CLOSE</span><select id="set-auto-close" class="select-terminal mono text-right" style="width: 120px;"><option value="OFF">OFF</option></select></div>
+                    </div>
+                </div>
+
+                <!-- NOTIFICATIONS & SOUND -->
+                <div class="panel-card" style="margin-bottom: 16px; padding: 16px;">
+                    <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; letter-spacing: 1px;">
+                        NOTIFICATIONS & SOUND
+                    </div>
+                    <div style="display: flex; gap: 32px; margin-bottom: 16px; align-items: center; border-bottom: 1px solid var(--border-medium); padding-bottom: 16px;">
+                        <div class="kv-row" style="width: 200px;"><span>NOTIFICATIONS</span><select id="set-glob-notif" class="select-terminal mono text-right" style="width: 80px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                        <div class="kv-row" style="width: 180px;"><span>SOUND</span><select id="set-glob-sound" class="select-terminal mono text-right" style="width: 80px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                        <div class="kv-row" style="width: 200px;"><span>SOUND VOLUME</span><input type="text" id="set-vol" class="input-terminal mono text-right" value="70%" style="width: 80px;"></div>
+                        <div class="kv-row" style="width: 150px;"><span>TEST SOUND</span><button class="btn-terminal mono" style="padding: 4px 12px;" onclick="playAudioAlert('success')">▶</button></div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+                        <div class="kv-row"><span>TRADE OPENED</span><select class="select-terminal mono text-right" style="width: 60px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                        <div class="kv-row"><span>TRADE CLOSED</span><select class="select-terminal mono text-right" style="width: 60px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                        <div class="kv-row"><span>TAKE PROFIT</span><select class="select-terminal mono text-right" style="width: 60px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                        <div class="kv-row"><span>STOP LOSS</span><select class="select-terminal mono text-right" style="width: 60px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                        <div class="kv-row"><span>ORDER FAILED</span><select class="select-terminal mono text-right" style="width: 60px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                        <div class="kv-row"><span>NEW SIGNAL</span><select class="select-terminal mono text-right" style="width: 60px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                        <div class="kv-row"><span>ENGINE OFFLINE</span><select class="select-terminal mono text-right" style="width: 60px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                        <div class="kv-row"><span>ENGINE RECOVERED</span><select class="select-terminal mono text-right" style="width: 60px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                        <div class="kv-row"><span>SAFETY HALT</span><select class="select-terminal mono text-right" style="width: 60px;"><option value="ON">ON</option><option value="OFF">OFF</option></select></div>
+                    </div>
+                </div>
+
+                <!-- TRADING UNIVERSE -->
+                <div class="panel-card" style="margin-bottom: 16px; padding: 16px;">
+                    <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; letter-spacing: 1px;">
+                        TRADING UNIVERSE
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px;">SYMBOLS</div>
+                        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                            <label style="color: var(--text-primary); font-size: 11px;" class="mono"><input type="checkbox" checked style="accent-color: var(--accent-primary);"> BTCUSDT</label>
+                            <label style="color: var(--text-primary); font-size: 11px;" class="mono"><input type="checkbox" checked style="accent-color: var(--accent-primary);"> ETHUSDT</label>
+                            <label style="color: var(--text-primary); font-size: 11px;" class="mono"><input type="checkbox" checked style="accent-color: var(--accent-primary);"> LINKUSDT</label>
+                            <label style="color: var(--text-primary); font-size: 11px;" class="mono"><input type="checkbox" checked style="accent-color: var(--accent-primary);"> SOLUSDT</label>
+                            <label style="color: var(--text-primary); font-size: 11px;" class="mono"><input type="checkbox" checked style="accent-color: var(--accent-primary);"> DOGEUSDT</label>
+                            <label style="color: var(--text-primary); font-size: 11px;" class="mono"><input type="checkbox" checked style="accent-color: var(--accent-primary);"> BNBUSDT</label>
+                            <label style="color: var(--text-primary); font-size: 11px;" class="mono"><input type="checkbox" checked style="accent-color: var(--accent-primary);"> XRPUSDT</label>
+                            <label style="color: var(--text-primary); font-size: 11px;" class="mono"><input type="checkbox" checked style="accent-color: var(--accent-primary);"> ADAUSDT</label>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <div style="font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px;">TIMEFRAMES</div>
+                        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                            <label style="color: var(--text-primary); font-size: 11px;" class="mono"><input type="checkbox" checked style="accent-color: var(--accent-primary);"> 5m</label>
+                            <label style="color: var(--text-primary); font-size: 11px;" class="mono"><input type="checkbox" checked style="accent-color: var(--accent-primary);"> 15m</label>
+                            <label style="color: var(--text-primary); font-size: 11px;" class="mono"><input type="checkbox" checked style="accent-color: var(--accent-primary);"> 30m</label>
+                            <label style="color: var(--text-primary); font-size: 11px;" class="mono"><input type="checkbox" checked style="accent-color: var(--accent-primary);"> 1h</label>
+                            <label style="color: var(--text-primary); font-size: 11px;" class="mono"><input type="checkbox" checked style="accent-color: var(--accent-primary);"> 2h</label>
+                            <label style="color: var(--text-primary); font-size: 11px;" class="mono"><input type="checkbox" checked style="accent-color: var(--accent-primary);"> 4h</label>
                         </div>
                     </div>
                 </div>
             </div>
-
-            <!-- PERSISTENT DIAGNOSTIC FOOTER -->
-            <footer class="bottom-diagnostic-footer">
-                <div class="footer-left">
-                    <span class="footer-item"><span class="dot dot-amber" id="btm-bn"></span> BINANCE REST</span>
-                    <span class="footer-sep">/</span>
-                    <span class="footer-item"><span class="dot dot-amber" id="btm-ws"></span> WS FEED</span>
-                    <span class="footer-sep">/</span>
-                    <span class="footer-item"><span class="dot dot-amber" id="btm-md"></span> MARKET</span>
-                    <span class="footer-sep">/</span>
-                    <span class="footer-item"><span class="dot dot-amber" id="btm-ex"></span> EXECUTION</span>
-                    <span class="footer-sep">/</span>
-                    <span class="footer-item"><span class="dot dot-amber" id="btm-st"></span> STRATEGY</span>
-                    <span class="footer-sep">/</span>
-                    <span class="footer-item"><span class="dot dot-amber" id="btm-rs"></span> RISK</span>
-                </div>
-                <div class="footer-right">
-                    <span class="footer-meta">FEED TIME: <strong id="btm-last-mkt" class="mono">--:--:--</strong></span>
-                    <span class="footer-sep">•</span>
-                    <span class="footer-meta">LAST EVAL: <strong id="btm-last-strat" class="mono">--:--:--</strong></span>
-                </div>
-            </footer>
 
         </main>
     </div>

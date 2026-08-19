@@ -6,7 +6,7 @@ Lightweight automated assistant and validator for the Algorithmic Trading Bot Ma
 Capabilities:
 1. Validates chronological ordering and absence of duplicate bug numbers.
 2. Checks that daily logs exist in diary/YYYY-MM-DD.md.
-3. Appends session entries to BOT_DIARY.md without altering historical days.
+3. Appends session entries to DIARY.md without altering historical days.
 """
 
 import os
@@ -19,7 +19,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='repla
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIARY_DIR = os.path.join(REPO_ROOT, "diary")
-MASTER_DIARY_FILE = os.path.join(REPO_ROOT, "BOT_DIARY.md")
+MASTER_DIARY_FILE = os.path.join(REPO_ROOT, "DIARY.md")
 
 def validate_diary():
     print("=== VALIDATING BOT DIARY & CHRONICLES ===")

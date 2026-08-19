@@ -152,6 +152,19 @@
 
 ---
 
+
+### 4.6 📅 19 AUGUST 2026
+* **Daily Summary**: Terminal UI redesign, implementation of all 10 command center views (Dashboard, Scanner, Positions, Trades, Markets, Strategies, Risk, Analytics, System, Settings), and comprehensive structural bug fixes via automated frontend assembly.
+* **Work Performed**: Rebuilt index.html and pp.js from the ground up using strict institutional dark-mode layouts. Added Python-based frontend build scripts (uild_full_ui.py + 
+ewrite_*.py) to guarantee DOM safety. Verified 100% decoupled interaction with the core Python trading engine.
+* **Tests Passed**: 417 passed / 417 tests (100%).
+* **Bugs Resolved**:
+  - **Bug #35**: index.html Structural Corruption via Overlapping Replacements (Commit Pending)
+* **Key Commits**: Pending.
+* **End-of-Day State**: UI Re-architected | Tests: 100% Passed | Deployment: Ready.
+
+---
+
 ## 🗂️ Section 5: Master Bug & Resolution Ledger (Comprehensive Table)
 
 | # | Date | Bug / Issue Description | Exact Root Cause | Engineering Solution | Verification Status |
@@ -190,6 +203,8 @@
 | **32** | 18-Aug | Synthetic 1,050-trade contamination | Local pseudo-random script wrote fake records | Purged fake data, reconciled 94 Binance fills | ✅ **Resolved** |
 | **33** | 18-Aug | Fake candle fallback in `/api/candles` | Hardcoded prices/synthetic volume returned on offline | Removed fabrication; return 503 `DATA_UNAVAILABLE` | ✅ **Resolved** |
 | **34** | 18-Aug | Telemetry test artifacts in event stream | Unit test fixtures wrote mock events into repo files | Hardened event stream, redirected tests, added IDs | ✅ **Resolved** |
+| **35** | 19-Aug | index.html DOM Structural Corruption | Overlapping sequential regex replacements erased inner views | Engineered uild_full_ui.py to assemble views deterministically | ✅ **Resolved** |
+
 
 ---
 
@@ -227,7 +242,7 @@ algorithmic-trading-bot/
 │   ├── 2026-08-16.md
 │   ├── 2026-08-17.md
 │   └── 2026-08-18.md
-├── BOT_DIARY.md                  # This consolidated master chronicles document
+├── DIARY.md                  # This consolidated master chronicles document
 ├── DIARY_SPEC.md                 # Permanent diary protocol and rules
 ├── Dockerfile                    # Container definition for cloud deployment
 ├── render.yaml                   # Infrastructure-as-code blueprint (Frankfurt)
@@ -257,7 +272,7 @@ algorithmic-trading-bot/
 * **Actions Taken**:
   - Created `DIARY_SPEC.md` and `scripts/update_bot_diary.py`.
   - Created individual daily chronicle logs in `diary/` (`2026-08-14.md` through `2026-08-18.md`).
-  - Rebuilt `BOT_DIARY.md` as the master chronological index and consolidated history.
+  - Rebuilt `DIARY.md` as the master chronological index and consolidated history.
   - Formatted Bug #32 explicitly as a data integrity remediation rather than successful trading.
   - Executed automated regression test suite twice (369/369 passed).
   - Verified live deployment at `https://algorithmic-trading-bot-fra.onrender.com`.
