@@ -6369,5 +6369,466 @@ async function renderModalCandleChart(symbol, timeframe, entryPrice, stopLoss, t
 
 window.renderModalCandleChart = renderModalCandleChart;
 
+// ==========================================
+// ANALYTICS LOGIC (DATA & VISUALIZATIONS)
+// ==========================================
+
+let activeAnalyticsPeriod = 'ALL';
+let analyticsEquityChartInst = null;
+let analyticsDrawdownChartInst = null;
+
+function changeAnalyticsPeriod(period, el) {
+    activeAnalyticsPeriod = period;
+    document.querySelectorAll('#analytics-period-row .an-period').forEach(e => {
+        e.classList.remove('active');
+        e.style.color = 'var(--text-muted)';
+        e.style.fontWeight = 'normal';
+    });
+    if (el) {
+        el.classList.add('active');
+        el.style.color = 'var(--accent-primary)';
+        el.style.fontWeight = '700';
+    }
+    fetchAnalyticsData();
+}
+
+window.changeAnalyticsPeriod = changeAnalyticsPeriod;
+
+async function fetchAnalyticsData() {
+    try {
+        // Fetch raw backend data concurrently
+        const [tradesRes, historyRes, eqTimelineRes, statusRes] = await Promise.all([
+            apiClient.get('/api/trades'),
+            apiClient.get('/api/trade-history'),
+            apiClient.get(`/api/equity?timeframe=${activeAnalyticsPeriod}`),
+            apiClient.get('/api/status')
+        ]);
+
+        let rawTrades = [];
+        if (Array.isArray(tradesRes)) rawTrades = rawTrades.concat(tradesRes);
+        if (historyRes && Array.isArray(historyRes.trades)) rawTrades = rawTrades.concat(historyRes.trades);
+
+        // Deduplicate trades
+        const tMap = {};
+        rawTrades.forEach(t => {
+            const tId = t.trade_id || t.order_id || t.timestamp;
+            if (tId) tMap[tId] = t;
+        });
+        const closedTrades = Object.values(tMap).filter(t => t.status === 'CLOSED' || (t.exit_price && Number(t.exit_price) > 0));
+
+        // Filter trades by period if not ALL
+        const nowMs = Date.now();
+        const filteredTrades = closedTrades.filter(t => {
+            if (activeAnalyticsPeriod === 'ALL') return true;
+            const tTime = new Date(t.exit_timestamp || t.timestamp || 0).getTime();
+            if (activeAnalyticsPeriod === '1D') return (nowMs - tTime) <= 86400000;
+            if (activeAnalyticsPeriod === '7D') return (nowMs - tTime) <= 7 * 86400000;
+            if (activeAnalyticsPeriod === '30D') return (nowMs - tTime) <= 30 * 86400000;
+            return true;
+        });
+
+        // Compute deterministic metrics
+        let totalProfit = 0, totalLoss = 0, winCount = 0, lossCount = 0, totalFees = 0;
+        let bestTrade = 0, worstTrade = 0;
+        let longestHoldMs = 0, shortestHoldMs = Infinity;
+        let totalHoldMs = 0;
+
+        const stratMap = {};
+        const tfMap = {};
+
+        filteredTrades.forEach(t => {
+            const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
+            const fees = Number(t.fees || 0);
+            totalFees += fees;
+
+            if (net >= 0) {
+                winCount++;
+                totalProfit += net;
+                if (net > bestTrade) bestTrade = net;
+            } else {
+                lossCount++;
+                totalLoss += Math.abs(net);
+                if (net < worstTrade) worstTrade = net;
+            }
+
+            // Holding duration
+            const openTime = new Date(t.entry_timestamp || t.timestamp || 0).getTime();
+            const closeTime = new Date(t.exit_timestamp || t.timestamp || 0).getTime();
+            if (closeTime > openTime) {
+                const duration = closeTime - openTime;
+                totalHoldMs += duration;
+                if (duration > longestHoldMs) longestHoldMs = duration;
+                if (duration < shortestHoldMs) shortestHoldMs = duration;
+            }
+
+            // Strategy breakdown
+            const strat = (t.strategy || 'ADX_EMA').toUpperCase();
+            if (!stratMap[strat]) stratMap[strat] = { trades: 0, wins: 0, net: 0 };
+            stratMap[strat].trades++;
+            stratMap[strat].net += net;
+            if (net >= 0) stratMap[strat].wins++;
+
+            // Timeframe breakdown
+            const tf = t.timeframe || '15m';
+            if (!tfMap[tf]) tfMap[tf] = { trades: 0, wins: 0, net: 0 };
+            tfMap[tf].trades++;
+            tfMap[tf].net += net;
+            if (net >= 0) tfMap[tf].wins++;
+        });
+
+        const totalTrades = winCount + lossCount;
+        const winRate = totalTrades > 0 ? (winCount / totalTrades) * 100 : 0;
+        const profitFactor = totalLoss > 0 ? (totalProfit / totalLoss) : (totalProfit > 0 ? 99.9 : 0.0);
+        const netPnL = totalProfit - totalLoss;
+
+        const liveRealized = (statusRes && statusRes.realized_pnl !== undefined) ? Number(statusRes.realized_pnl) : netPnL;
+        const liveUnrealized = (statusRes && statusRes.unrealized_pnl !== undefined) ? Number(statusRes.unrealized_pnl) : 0;
+        const liveMaxDD = (statusRes && statusRes.max_drawdown !== undefined) ? Number(statusRes.max_drawdown) : 0;
+
+        // Populate Top KPI Cards
+        const netPnlEl = document.getElementById('an-net-pnl');
+        if (netPnlEl) {
+            netPnlEl.innerText = (netPnL >= 0 ? '+' : '') + formatCurrency(netPnL);
+            netPnlEl.className = 'mono ' + (netPnL >= 0 ? 'profit' : 'loss');
+        }
+        const totTrdEl = document.getElementById('an-total-trades');
+        if (totTrdEl) totTrdEl.innerText = totalTrades;
+        const wrEl = document.getElementById('an-win-rate');
+        if (wrEl) {
+            wrEl.innerText = winRate.toFixed(1) + '%';
+            wrEl.className = 'mono ' + (winRate >= 50 ? 'profit' : 'loss');
+        }
+        const pfEl = document.getElementById('an-profit-factor');
+        if (pfEl) {
+            pfEl.innerText = profitFactor.toFixed(2);
+            pfEl.className = 'mono ' + (profitFactor >= 1.0 ? 'profit' : 'loss');
+        }
+        const maxDdEl = document.getElementById('an-max-dd');
+        if (maxDdEl) maxDdEl.innerText = (liveMaxDD > 0 ? '-' : '') + liveMaxDD.toFixed(2) + '%';
+
+        // Populate PnL Breakdown Card
+        const rzEl = document.getElementById('an-realized');
+        if (rzEl) rzEl.innerText = (liveRealized >= 0 ? '+' : '') + formatCurrency(liveRealized);
+        const urzEl = document.getElementById('an-unrealized');
+        if (urzEl) urzEl.innerText = (liveUnrealized >= 0 ? '+' : '') + formatCurrency(liveUnrealized);
+        const feesEl = document.getElementById('an-fees');
+        if (feesEl) feesEl.innerText = '-' + formatCurrency(totalFees);
+        const netPnl2El = document.getElementById('an-net-pnl2');
+        if (netPnl2El) {
+            const totNet = liveRealized + liveUnrealized;
+            netPnl2El.innerText = (totNet >= 0 ? '+' : '') + formatCurrency(totNet);
+            netPnl2El.className = 'mono ' + (totNet >= 0 ? 'profit' : 'loss');
+        }
+
+        // Populate Trade Performance Table
+        const tpEl = document.getElementById('an-tp');
+        if (tpEl) tpEl.innerText = '+' + formatCurrency(totalProfit);
+        const tlEl = document.getElementById('an-tl');
+        if (tlEl) tlEl.innerText = '-' + formatCurrency(totalLoss);
+        const awEl = document.getElementById('an-aw');
+        if (awEl) awEl.innerText = winCount > 0 ? '+' + formatCurrency(totalProfit / winCount) : '$0.00';
+        const alEl = document.getElementById('an-al');
+        if (alEl) alEl.innerText = lossCount > 0 ? '-' + formatCurrency(totalLoss / lossCount) : '$0.00';
+        const atEl = document.getElementById('an-at');
+        if (atEl) {
+            const avgTrade = totalTrades > 0 ? (netPnL / totalTrades) : 0;
+            atEl.innerText = (avgTrade >= 0 ? '+' : '') + formatCurrency(avgTrade);
+            atEl.className = 'mono ' + (avgTrade >= 0 ? 'profit' : 'loss');
+        }
+        const bestEl = document.getElementById('an-best');
+        if (bestEl) bestEl.innerText = '+' + formatCurrency(bestTrade);
+        const worstEl = document.getElementById('an-worst');
+        if (worstEl) worstEl.innerText = (worstTrade < 0 ? '' : '-') + formatCurrency(Math.abs(worstTrade));
+        const longEl = document.getElementById('an-long');
+        if (longEl) longEl.innerText = longestHoldMs > 0 ? calcDurationBetween(nowMs, nowMs + longestHoldMs) : '0m';
+        const shortEl = document.getElementById('an-short');
+        if (shortEl) shortEl.innerText = (shortestHoldMs < Infinity && shortestHoldMs > 0) ? calcDurationBetween(nowMs, nowMs + shortestHoldMs) : '0m';
+
+        // Populate Strategy Breakdown Table
+        const stratBody = document.getElementById('an-strat-body');
+        if (stratBody) {
+            const stratKeys = Object.keys(stratMap);
+            if (stratKeys.length === 0) {
+                stratBody.innerHTML = `<tr><td colspan="4" class="text-center text-muted" style="padding: 16px;">No closed strategy trades in selected period</td></tr>`;
+            } else {
+                stratBody.innerHTML = stratKeys.map(s => {
+                    const st = stratMap[s];
+                    const sWr = (st.wins / st.trades) * 100;
+                    return `
+                        <tr>
+                            <td class="td-strong">${s}</td>
+                            <td class="mono">${st.trades} trades</td>
+                            <td class="mono ${sWr >= 50 ? 'profit' : 'loss'}">${sWr.toFixed(1)}% WR</td>
+                            <td class="mono ${st.net >= 0 ? 'profit' : 'loss'}" style="text-align: right;">${(st.net >= 0 ? '+' : '') + formatCurrency(st.net)}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+        // Populate Timeframe Breakdown Table
+        const tfBody = document.getElementById('an-tf-body');
+        if (tfBody) {
+            const tfKeys = Object.keys(tfMap);
+            if (tfKeys.length === 0) {
+                tfBody.innerHTML = `<tr><td colspan="4" class="text-center text-muted" style="padding: 16px;">No closed timeframe trades in selected period</td></tr>`;
+            } else {
+                tfBody.innerHTML = tfKeys.map(tf => {
+                    const tft = tfMap[tf];
+                    const tfWr = (tft.wins / tft.trades) * 100;
+                    return `
+                        <tr>
+                            <td class="td-strong">${tf}</td>
+                            <td class="mono">${tft.trades} trades</td>
+                            <td class="mono ${tfWr >= 50 ? 'profit' : 'loss'}">${tfWr.toFixed(1)}% WR</td>
+                            <td class="mono ${tft.net >= 0 ? 'profit' : 'loss'}" style="text-align: right;">${(tft.net >= 0 ? '+' : '') + formatCurrency(tft.net)}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+        // Render Charts from actual equity timeline
+        const timelinePoints = Array.isArray(eqTimelineRes) ? eqTimelineRes : [];
+        renderAnalyticsEquityChart(timelinePoints);
+        renderAnalyticsDrawdownChart(timelinePoints);
+
+        // Synthesize Gemini AI Performance Summary
+        requestAiAnalyticsSummary({
+            period: activeAnalyticsPeriod,
+            total_trades: totalTrades,
+            win_rate: winRate,
+            net_pnl: netPnL,
+            profit_factor: profitFactor,
+            max_drawdown: liveMaxDD,
+            best_trade: bestTrade,
+            worst_trade: worstTrade
+        });
+
+    } catch (e) {
+        console.error("fetchAnalyticsData error:", e);
+    }
+}
+
+window.fetchAnalyticsData = fetchAnalyticsData;
+
+function renderAnalyticsEquityChart(points) {
+    const canvas = document.getElementById('analytics-equity-chart');
+    if (!canvas) return;
+
+    if (analyticsEquityChartInst) {
+        try {
+            analyticsEquityChartInst.destroy();
+        } catch (e) {
+            console.warn("Destroy error analyticsEquityChartInst:", e);
+        }
+        analyticsEquityChartInst = null;
+    }
+
+    if (!points || points.length === 0) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.font = '12px "JetBrains Mono", monospace';
+        ctx.fillStyle = '#7C8AAD';
+        ctx.textAlign = 'center';
+        ctx.fillText('No historical equity data available for this timeframe', canvas.width / 2, canvas.height / 2);
+        return;
+    }
+
+    const labels = points.map(p => new Date(p.time || p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    const equityData = points.map(p => Number(p.equity || (p.cash + (p.managed_assets || 0))));
+    const cashData = points.map(p => Number(p.cash || 0));
+
+    const ctx = canvas.getContext('2d');
+    analyticsEquityChartInst = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Total Equity ($)',
+                    data: equityData,
+                    borderColor: '#3B82F6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.2,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'USDT Cash ($)',
+                    data: cashData,
+                    borderColor: '#10B981',
+                    borderWidth: 1.5,
+                    borderDash: [4, 4],
+                    fill: false,
+                    tension: 0.1,
+                    pointRadius: 0,
+                    pointHoverRadius: 3,
+                    yAxisID: 'y'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        color: '#7C8AAD',
+                        font: { family: "'JetBrains Mono', monospace", size: 10 },
+                        boxWidth: 12
+                    }
+                },
+                tooltip: {
+                    backgroundColor: '#0A0F16',
+                    titleColor: '#3B82F6',
+                    bodyColor: '#EAF0FF',
+                    borderColor: '#1D2A3A',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: function(item) {
+                            return `${item.dataset.label}: $${Number(item.raw).toFixed(2)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                    ticks: { color: '#7C8AAD', font: { family: "'JetBrains Mono', monospace", size: 9 }, maxTicksLimit: 10 }
+                },
+                y: {
+                    position: 'right',
+                    grid: { color: 'rgba(255, 255, 255, 0.06)' },
+                    ticks: {
+                        color: '#3B82F6',
+                        font: { family: "'JetBrains Mono', monospace", size: 9 },
+                        callback: function(v) { return '$' + Number(v).toFixed(2); }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderAnalyticsDrawdownChart(points) {
+    const canvas = document.getElementById('analytics-drawdown-chart');
+    if (!canvas) return;
+
+    if (analyticsDrawdownChartInst) {
+        try {
+            analyticsDrawdownChartInst.destroy();
+        } catch (e) {
+            console.warn("Destroy error analyticsDrawdownChartInst:", e);
+        }
+        analyticsDrawdownChartInst = null;
+    }
+
+    if (!points || points.length === 0) return;
+
+    // Calculate underwater curve from equity history
+    let peak = -Infinity;
+    const labels = points.map(p => new Date(p.time || p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    const ddData = points.map(p => {
+        const eq = Number(p.equity || (p.cash + (p.managed_assets || 0)));
+        if (eq > peak) peak = eq;
+        const dd = peak > 0 ? ((peak - eq) / peak) * 100 : 0;
+        return -Math.abs(dd);
+    });
+
+    const ctx = canvas.getContext('2d');
+    analyticsDrawdownChartInst = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Drawdown (%)',
+                data: ddData,
+                borderColor: '#EF4444',
+                backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                borderWidth: 1.5,
+                fill: true,
+                tension: 0.1,
+                pointRadius: 0,
+                pointHoverRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#0A0F16',
+                    titleColor: '#EF4444',
+                    bodyColor: '#EAF0FF',
+                    borderColor: '#1D2A3A',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: function(item) {
+                            return `Drawdown: ${Number(item.raw).toFixed(2)}%`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                    ticks: { color: '#7C8AAD', font: { family: "'JetBrains Mono', monospace", size: 9 }, maxTicksLimit: 6 }
+                },
+                y: {
+                    position: 'right',
+                    max: 0,
+                    grid: { color: 'rgba(255, 255, 255, 0.06)' },
+                    ticks: {
+                        color: '#EF4444',
+                        font: { family: "'JetBrains Mono', monospace", size: 9 },
+                        callback: function(v) { return Number(v).toFixed(1) + '%'; }
+                    }
+                }
+            }
+        }
+    });
+}
+
+async function requestAiAnalyticsSummary(payload) {
+    const aiBox = document.getElementById('ai-perf-content');
+    if (!aiBox) return;
+
+    try {
+        const res = await apiClient.post('/api/ai/trade-analysis', {
+            period: payload.period,
+            total_trades: payload.total_trades,
+            win_rate: payload.win_rate,
+            net_pnl: payload.net_pnl,
+            profit_factor: payload.profit_factor,
+            max_drawdown: payload.max_drawdown
+        });
+
+        if (res && res.status === 'SUCCESS' && res.analysis) {
+            const an = res.analysis;
+            const evalSummary = an.trade_summary || an.summary || `Evaluated ${payload.total_trades} trades with a ${payload.win_rate.toFixed(1)}% win rate.`;
+            const lessons = Array.isArray(an.lessons) ? an.lessons.map(l => `• ${l}`).join('<br>') : '';
+            aiBox.innerHTML = `
+                <div style="margin-bottom: 6px;"><strong style="color:var(--text-primary);">Synthesis:</strong> ${evalSummary}</div>
+                ${lessons ? `<div style="margin-bottom: 4px; color: var(--text-secondary); font-size: 10px;">${lessons}</div>` : ''}
+                <div style="color: var(--accent-primary); font-size: 10px;">📊 <strong>Profit Factor:</strong> ${payload.profit_factor.toFixed(2)} | <strong>Net PnL:</strong> ${(payload.net_pnl >= 0 ? '+' : '') + formatCurrency(payload.net_pnl)}</div>
+            `;
+        } else {
+            aiBox.innerHTML = '<span class="text-muted">AI Performance Summary Unavailable</span>';
+        }
+    } catch (e) {
+        if (aiBox) aiBox.innerHTML = '<span class="text-muted">AI Performance Summary Unavailable</span>';
+    }
+}
+
+
 
 
