@@ -174,12 +174,14 @@ TESTNET ONLY
 - System & Settings: Consolidated deployment card in System, tri-state Gemini auth (CONFIGURED/CONNECTED/UNAVAILABLE), strict TESTNET-only manual trading, and safe defaults.
 - Completed final browser-level UAT of all 10 views on Render.
 - Documented final production UAT audit log.
+- Remediated Quantum Research subsystem: Fixed relative import defects (DEF-01/02), built 5-fold walk-forward validation engine (`quantum/validation/`), and executed 10,000-sample bootstrap benchmark across 5 quantitative models.
+- Generated empirical `QUANTUM_BENCHMARK_REPORT.md` (Quantum Verdict: C - Insufficient Evidence / B - No Quantum Advantage Detected, 0.0s physical QPU time).
 
 ## Verification
-- Tests Passed: 429 passed / 429 tests (100%). Run 1: 429 passed. Run 2: 429 passed.
+- Tests Passed: 436 passed / 436 tests (100%). Run 1: 436 passed. Run 2: 436 passed.
 - Browser/UAT: PASS
 - Production: PASS
 - Gemini: REAL GEMINI
-- Trading safety: PASS
+- Quantum Benchmark: 5 Folds Executed (PASS)
+- Trading safety: 100% ISOLATED (Advisory / Research Only)
 - Git: CLEAN
-- Deployed commit: 06b3639
