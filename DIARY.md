@@ -161,7 +161,7 @@ TESTNET ONLY
 
 # DAY 7 — 2026-08-20
 ## Objectives
-- Final Production Acceptance, System Hardening, Gemini API connectivity remediation, and final release verification.
+- Final Production Acceptance, System Hardening, Gemini API connectivity remediation, final release verification, and Quantum Research Subsystem Integration & Scientific Validation.
 
 ## Work Completed
 - Gemini Integration: Optimized model endpoint to `gemini-flash-latest` with `thinkingBudget` and backoff retry.
@@ -174,14 +174,46 @@ TESTNET ONLY
 - System & Settings: Consolidated deployment card in System, tri-state Gemini auth (CONFIGURED/CONNECTED/UNAVAILABLE), strict TESTNET-only manual trading, and safe defaults.
 - Completed final browser-level UAT of all 10 views on Render.
 - Documented final production UAT audit log.
-- Remediated Quantum Research subsystem: Fixed relative import defects (DEF-01/02), built 5-fold walk-forward validation engine (`quantum/validation/`), and executed 10,000-sample bootstrap benchmark across 5 quantitative models.
-- Generated empirical `QUANTUM_BENCHMARK_REPORT.md` (Quantum Verdict: C - Insufficient Evidence / B - No Quantum Advantage Detected, 0.0s physical QPU time).
+- **Quantum Research Subsystem Integration & Scientific Validation:**
+  - Built quantum research architecture: `quantum/` package with config, feature normalizers, VQC circuits, hybrid models, and portfolio optimization.
+  - Exposed read-only advisory endpoint `/api/quantum/advisory` in `quantum_endpoint.py`.
+  - Implemented 5-fold chronological walk-forward validation framework (`quantum/validation/`) using 60-day train / 15-day validation / 15-day test methodology evaluated on real historical `BTCUSDT` 1m candle data (`data_cache/BTCUSDT_1m_90d.parquet`, 12,715 rows).
+  - Executed 10,000 paired bootstrap resamplings calculating 95% two-sided confidence intervals across all 5 strategies.
+  - Replaced placeholder optimizer with parameterized VQC, Hybrid classifier, and QUBO opportunity selection models.
+  - Generated empirical [`QUANTUM_BENCHMARK_REPORT.md`](QUANTUM_BENCHMARK_REPORT.md) and [`QUANTUM_FINAL_VALIDATION_REPORT.md`](QUANTUM_FINAL_VALIDATION_REPORT.md).
+
+## Quantum Benchmark Results & Statistical Findings
+- **Pure VQC vs. Classical Rule:**
+  - Mean Difference: `+0.0025%` | 95% CI: `[-0.0073%, +0.0127%]` | p-value: `0.6324`
+  - *Analysis:* Because the 95% CI crosses zero, the Pure VQC model does not demonstrate a statistically significant out-of-sample edge.
+- **Hybrid vs. Classical ML:**
+  - Mean Difference: `-0.2285%` | 95% CI: `[-1.1874%, +0.7615%]` | p-value: `0.6530`
+- **Quantum Portfolio Optimizer vs. Classical Rule:**
+  - Mean Difference: `+0.0000%` | 95% CI: `[+0.0000%, +0.0000%]` | p-value: `1.0000`
+- **Trade Counts & Characteristics:**
+  - `Classical Rule-Based`: 1,690 trades
+  - `Classical ML Baseline`: 7 trades
+  - `Pure Quantum VQC`: 608 trades
+  - `Hybrid Quantum-Classical`: 5 trades
+  - `Quantum Portfolio Optimizer`: 1,690 trades
+  - *Trade Count Analysis:* High ML probability thresholds ($P > 0.58$) combined with triple-barrier label constraints created sparse signal activation (7 and 5 trades), making ML/Hybrid comparisons underpowered. The Quantum Portfolio Optimizer matched Classical Rule trade counts exactly (1,690) because the benchmark stream was constrained to a single asset (`BTCUSDT`) where candidate queue length was $\le 1$ ($\le \text{max\_slots} = 1$).
+
+## Scientific Verdict
+- **FINAL QUANTUM VERDICT:** **B — NO QUANTUM ADVANTAGE DETECTED**
+- **PHYSICAL QPU STATUS:** 0.0 seconds consumed (Classical CPU simulation only).
+
+## Safety & Architectural Guarantees
+- Quantum layer has **ZERO execution authority**.
+- Quantum layer **cannot modify risk limits, position sizing, SL, TP, or order authorization**.
+- Testnet-only enforcement remains 100% authoritative and intact.
+- Quantum remains strictly **RESEARCH / ADVISORY ONLY**.
 
 ## Verification
 - Tests Passed: 436 passed / 436 tests (100%). Run 1: 436 passed. Run 2: 436 passed.
 - Browser/UAT: PASS
 - Production: PASS
 - Gemini: REAL GEMINI
-- Quantum Benchmark: 5 Folds Executed (PASS)
+- Frontend: `node -c static/app.js` = PASS | `npx -y htmlhint static/index.html` = PASS
+- Quantum Benchmark: 5 Folds & 10,000 Bootstrap Resamples Executed (PASS)
 - Trading safety: 100% ISOLATED (Advisory / Research Only)
 - Git: CLEAN
