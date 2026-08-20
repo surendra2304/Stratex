@@ -179,6 +179,7 @@ def get_engine_health_data():
         }
 
 @app.route('/health')
+@app.route('/api/health')
 def health():
     engine_data = get_engine_health_data()
     return jsonify({
@@ -934,6 +935,65 @@ def get_scanner():
         stats["strategy_metrics"] = strat_metrics
 
     return jsonify(stats)
+
+@app.route('/api/markets')
+def get_markets():
+    """Returns live market ticker data, pricing, 24h stats, and monitored symbols."""
+    tracked_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "LINKUSDT", "PORTALUSDT", "HEMIUSDT", "TRXUSDT", "DOGEUSDT", "PAXGUSDT", "ADAUSDT", "SPCXBUSDT", "SOPHUSDT"]
+    port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+    if os.path.exists(port_file):
+        try:
+            with open(port_file, "r") as f:
+                port = json.load(f)
+                tracked_symbols = port.get("symbols", tracked_symbols)
+        except Exception:
+            pass
+
+    market_list = []
+    try:
+        from data_client import MarketDataClient
+        client = MarketDataClient()
+        if client.is_available():
+            tickers = client.get_ticker()
+            for t in tickers:
+                sym = t.get('symbol')
+                if sym in tracked_symbols:
+                    last_p = float(t.get('lastPrice', 0))
+                    chg = float(t.get('priceChangePercent', 0))
+                    vol = float(t.get('volume', 0))
+                    market_list.append({
+                        "symbol": sym,
+                        "price": last_p,
+                        "change_24h": chg,
+                        "high_24h": float(t.get('highPrice', last_p)),
+                        "low_24h": float(t.get('lowPrice', last_p)),
+                        "volume": vol,
+                        "quote_volume": float(t.get('quoteVolume', 0)),
+                        "status": "STREAMING"
+                    })
+    except Exception as e:
+        logger.error(f"Error fetching market list: {e}")
+
+    # Fallback if tickers unavailable
+    if not market_list:
+        for sym in tracked_symbols:
+            market_list.append({
+                "symbol": sym,
+                "price": 0.0,
+                "change_24h": 0.0,
+                "high_24h": 0.0,
+                "low_24h": 0.0,
+                "volume": 0.0,
+                "quote_volume": 0.0,
+                "status": "ONLINE"
+            })
+
+    return jsonify({
+        "status": "ok",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "symbol_count": len(market_list),
+        "markets": market_list
+    })
 
 @app.route('/api/opportunity-log')
 def api_get_opportunities():
@@ -2616,6 +2676,7 @@ def api_telemetry_analytics():
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
 @app.route('/api/config', methods=['GET', 'POST'])
+@app.route('/api/settings', methods=['GET', 'POST'])
 def api_config():
     """
     Returns or updates runtime configuration.

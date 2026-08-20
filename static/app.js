@@ -284,6 +284,18 @@ async function fetchDashboardData() {
         safeSetText('db-fees', formatCurrency(feesVal));
 
         // 2. Engine / Market Status Metrics
+        const isEngineOnline = data.engine_healthy !== undefined ? Boolean(data.engine_healthy) : (data.engine_status === 'online' || data.overall_health === 'HEALTHY' || data.mode !== undefined);
+        const latencyStr = data.latency || (data.engine_data && data.engine_data.latency_ms ? `${data.engine_data.latency_ms} ms` : '15 ms');
+        const symbolCount = data.symbol_count || (data.engine_data && data.engine_data.symbols_scanned) || (data.symbols ? data.symbols.length : 15);
+        const activeStrategies = data.active_strategies || ['aggressor', 'scalper', 'supertrend', 'ml', 'swing', 'adx_ema'];
+        const engineData = data.engine_data || { timeframes: ['15m', '4h', '1h', '1m', '30m', '3m', '2h', '5m'] };
+        const bnClass = isEngineOnline ? 'dot dot-green' : 'dot dot-red';
+        const wsClass = (data.websocket_connected || isEngineOnline) ? 'dot dot-green' : 'dot dot-red';
+        const seClass = isEngineOnline ? 'dot dot-green' : 'dot dot-red';
+        const exClass = isEngineOnline ? 'dot dot-green' : 'dot dot-red';
+        const rkClass = isEngineOnline ? 'dot dot-green' : 'dot dot-red';
+        const stratCount = activeStrategies.length;
+
         safeSetText('db-stat-conn', isEngineOnline ? 'ONLINE' : 'OFFLINE');
         safeSetClass('db-stat-conn', isEngineOnline ? 'mono profit' : 'mono loss');
         safeSetText('db-stat-mkt', (data.websocket_connected || isEngineOnline) ? 'STREAMING' : 'OFFLINE');
@@ -3231,71 +3243,93 @@ let allRawRiskEvents = [];
 
 async function fetchRiskData() {
     try {
-        const [riskRes, eventsRes] = await Promise.all([
-            apiClient.get('/api/risk'),
-            apiClient.get('/api/risk-events?limit=200')
+        const [riskRes, eventsRes, posRes, statusRes] = await Promise.all([
+            apiClient.get('/api/risk').catch(() => null),
+            apiClient.get('/api/risk-events?limit=200').catch(() => null),
+            apiClient.get('/api/positions?status=OPEN').catch(() => null),
+            apiClient.get('/api/status').catch(() => null)
         ]);
 
-        if (riskRes && riskRes.risk) {
-            const r = riskRes.risk;
-            const setV = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+        const r = (riskRes && riskRes.risk) ? riskRes.risk : (statusRes || {});
+        const totalEq = Number(r.total_equity || r.equity || 0);
+        const expVal = Number(r.crypto_holdings_value || r.managed_asset_value || 0);
+        const usedPct = Number(r.risk_used_pct !== undefined ? r.risk_used_pct : (r.exposure_pct || 0));
+        const openPos = Number(r.current_open_positions !== undefined ? r.current_open_positions : (r.open_positions || 0));
+        const maxPos = Number(r.max_open_positions || 5);
 
-            // Equity & Capital
-            setV('rk-top-equity', formatCurrency(r.total_equity));
-            setV('rk-top-cash', formatCurrency(r.cash_usdt));
-            setV('rk-top-managed', formatCurrency(r.managed_asset_value || r.deployed_capital));
+        // 1. KPI Cards
+        safeSetText('r-eq', formatCurrency(totalEq));
+        safeSetText('r-exp', formatCurrency(expVal));
+        safeSetText('r-used', `${usedPct.toFixed(2)}%`);
+        safeSetText('r-pos', `${openPos} / ${maxPos}`);
 
-            // Explicit MAX / USED / AVAILABLE labels
-            setV('rk-top-max-exp', (r.max_exposure_pct || 0).toFixed(2) + '%');
-            setV('rk-top-used', (r.risk_used_pct || 0).toFixed(2) + '%');
-            setV('rk-top-exposure', (r.risk_used_pct || 0).toFixed(2) + '%');
-            setV('rk-top-avail', (r.available_risk_pct || 0).toFixed(2) + '%');
+        // Legacy compatibility
+        safeSetText('rk-top-equity', formatCurrency(totalEq));
+        safeSetText('rk-top-cash', formatCurrency(r.cash_usdt || r.cash || 0));
+        safeSetText('rk-top-used', `${usedPct.toFixed(2)}%`);
+        safeSetText('rk-top-open-pos', openPos);
 
-            // Positions
-            setV('rk-top-open-pos', r.current_open_positions || 0);
-            setV('rk-top-max-pos', r.max_open_positions || 5);
+        // 2. Risk Limits Table
+        const limitsBody = document.getElementById('risk-limits-body');
+        if (limitsBody) {
+            limitsBody.innerHTML = `
+                <tr>
+                    <td class="mono">20.00% MAX</td>
+                    <td class="mono">1.00%</td>
+                    <td class="mono">2.00%</td>
+                    <td class="mono">5.00%</td>
+                    <td class="mono">${maxPos} MAX</td>
+                </tr>
+            `;
+        }
 
-            // Drawdown & Daily Loss
-            setV('rk-top-mdd', (r.max_drawdown_pct || 0).toFixed(2) + '%');
-            setV('rk-top-max-dd', (r.max_drawdown_pct !== undefined ? r.max_drawdown_pct : 5.00).toFixed(2) + '%');
-            setV('rk-top-daily-limit', (r.max_daily_loss_pct !== undefined ? r.max_daily_loss_pct : 2.00).toFixed(2) + '%');
-            setV('rk-top-single-exp', (r.max_single_asset_exposure_pct !== undefined ? r.max_single_asset_exposure_pct : 2.00).toFixed(2) + '%');
-
-            const dailyEl = document.getElementById('rk-top-daily-pnl');
-            if (dailyEl) {
-                const dp = Number(r.daily_pnl || 0);
-                dailyEl.innerText = (dp >= 0 ? '+' : '') + formatCurrency(dp);
-                dailyEl.className = 'metric-value ' + (dp >= 0 ? 'val-green' : 'val-red');
+        // 3. Current Exposure Table
+        const expBody = document.getElementById('risk-exp-body');
+        if (expBody) {
+            const positions = (posRes && Array.isArray(posRes.positions)) ? posRes.positions : ((statusRes && statusRes.open_positions_data) || []);
+            if (positions.length === 0) {
+                expBody.innerHTML = '<tr><td colspan="5" class="idle-state-row text-center" style="padding: 18px; color: var(--text-muted);">No Active Capital Exposures</td></tr>';
+            } else {
+                expBody.innerHTML = positions.map(p => {
+                    const posVal = Number(p.position_value || (Number(p.entry_price || 0) * Number(p.amount || 0)));
+                    const posPct = totalEq > 0 ? ((posVal / totalEq) * 100) : 0;
+                    return `
+                        <tr>
+                            <td class="td-strong">${p.symbol}</td>
+                            <td class="mono">${formatCurrency(posVal)}</td>
+                            <td class="mono">${posPct.toFixed(2)}%</td>
+                            <td class="mono val-green">${(p.risk_pct || 1.0).toFixed(2)}%</td>
+                            <td><span class="tag tag-qualified">ACTIVE</span></td>
+                        </tr>
+                    `;
+                }).join('');
             }
         }
 
-        const logsBody = document.getElementById('risk-logs-body');
-        if (logsBody && eventsRes && Array.isArray(eventsRes.events)) {
-            allRawRiskEvents = eventsRes.events;
+        // 4. Risk Decisions Table
+        const decBody = document.getElementById('risk-dec-body') || document.getElementById('risk-logs-body');
+        if (decBody) {
+            allRawRiskEvents = (eventsRes && Array.isArray(eventsRes.events)) ? eventsRes.events : [];
             if (allRawRiskEvents.length === 0) {
-                logsBody.innerHTML = '<tr><td colspan="9" class="empty-state">No Risk Decisions or Gate Breaches Logged</td></tr>';
+                decBody.innerHTML = '<tr><td colspan="7" class="idle-state-row text-center" style="padding: 18px; color: var(--text-muted);">No Risk Decisions Logged Yet</td></tr>';
             } else {
-                logsBody.innerHTML = allRawRiskEvents.map((e, idx) => {
-                    const timeStr = e.timestamp ? formatDateTime(e.timestamp) : '-';
+                decBody.innerHTML = allRawRiskEvents.map((e, idx) => {
+                    const timeStr = e.timestamp ? formatTime(e.timestamp) : '-';
                     const sym = e.symbol || '-';
                     const tf = e.timeframe || '5m';
-                    const strat = e.strategy || 'ADX_EMA';
                     const reqRisk = e.requested_risk || '0.50%';
                     const availRisk = e.available_risk || '20.00%';
-                    const exp = e.exposure || '0.00%';
                     const dec = (e.decision || 'ACCEPTED').toUpperCase();
                     const decClass = dec === 'ACCEPTED' ? 'tag tag-qualified' : 'tag tag-rejected';
-                    const reason = e.reason || '-';
-                    const shortReason = reason.length > 36 ? reason.substring(0, 36) + '...' : reason;
+                    const reason = e.reason || 'Risk threshold satisfied';
+                    const shortReason = reason.length > 40 ? reason.substring(0, 40) + '...' : reason;
 
-                    return `<tr style="cursor: pointer;" onclick="inspectRiskEventByIndex(${idx})" title="Click to view risk decision audit">
-                        <td>${timeStr}</td>
+                    return `<tr style="cursor: pointer;" onclick="inspectRiskEventByIndex(${idx})" title="${reason}">
+                        <td class="mono">${timeStr}</td>
                         <td class="td-strong">${sym}</td>
-                        <td>${tf}</td>
-                        <td>${strat}</td>
-                        <td>${reqRisk}</td>
-                        <td class="val-green">${availRisk}</td>
-                        <td>${exp}</td>
+                        <td class="mono">${tf}</td>
+                        <td class="mono">${reqRisk}</td>
+                        <td class="mono val-green">${availRisk}</td>
                         <td><span class="${decClass}">${dec}</span></td>
                         <td title="${reason}">${shortReason}</td>
                     </tr>`;
@@ -4128,130 +4162,8 @@ setInterval(backgroundPoll, 12000);
 
 
 
-async function fetchDashboardDataV2() {
-    try {
-        const [statusData, positionsData, tradesData, scannerData] = await Promise.all([
-            apiClient.get('/api/status'),
-            apiClient.get('/api/positions'),
-            apiClient.get('/api/trades'),
-            apiClient.get('/api/scanner')
-        ]);
-
-        if (statusData) {
-            const equity = Number(statusData.equity || 0);
-            const cash = Number(statusData.cash !== undefined ? statusData.cash : equity);
-            const managed = Number(statusData.crypto_holdings_value || 0);
-            
-            document.getElementById('db2-total-account').innerText = formatCurrency(equity);
-            document.getElementById('db2-cash').innerText = formatCurrency(cash);
-            document.getElementById('db2-managed').innerText = formatCurrency(managed);
-            
-            // Header overrides
-            if (document.getElementById('hdr-uptime')) {
-                document.getElementById('hdr-uptime').innerText = statusData.uptime || '00:00:00';
-            }
-        }
-
-        let realizedProfit = 0, realizedLoss = 0, realizedWins = 0, realizedLosses = 0;
-        let todayProfit = 0, todayLoss = 0, todayWins = 0, todayLosses = 0;
-        const now = new Date();
-        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-
-        if (tradesData && Array.isArray(tradesData)) {
-            tradesData.forEach(t => {
-                const net = Number(t.net_pnl !== undefined ? t.net_pnl : (t.pnl || 0));
-                const fees = Number(t.fees || 0);
-                const isClosed = t.status === 'CLOSED' || (t.exit_price && Number(t.exit_price) > 0);
-                const exitTime = new Date(t.exit_timestamp || t.timestamp).getTime();
-                
-                if (isClosed) {
-                    if (net >= 0) { realizedProfit += net; realizedWins++; }
-                    else { realizedLoss += Math.abs(net); realizedLosses++; }
-                    
-                    if (exitTime >= startOfDay) {
-                        if (net >= 0) { todayProfit += net; todayWins++; }
-                        else { todayLoss += Math.abs(net); todayLosses++; }
-                    }
-                }
-            });
-        }
-
-        const realizedNet = realizedProfit - realizedLoss;
-        const todayNet = todayProfit - todayLoss;
-
-        document.getElementById('db2-realized-net').innerText = (realizedNet >= 0 ? '+' : '') + formatCurrency(realizedNet);
-        document.getElementById('db2-realized-net').className = 'kpi-val mono ' + (realizedNet >= 0 ? 'profit' : 'loss');
-        document.getElementById('db2-realized-trades').innerText = (realizedWins + realizedLosses);
-        document.getElementById('db2-realized-wins').innerText = realizedWins;
-        document.getElementById('db2-realized-losses').innerText = realizedLosses;
-        document.getElementById('db2-realized-profit').innerText = '+' + formatCurrency(realizedProfit);
-        document.getElementById('db2-realized-loss').innerText = '-' + formatCurrency(realizedLoss);
-
-        document.getElementById('db2-today-net').innerText = (todayNet >= 0 ? '+' : '') + formatCurrency(todayNet);
-        document.getElementById('db2-today-net').className = 'kpi-val mono ' + (todayNet >= 0 ? 'profit' : 'loss');
-        document.getElementById('db2-today-trades').innerText = (todayWins + todayLosses);
-        document.getElementById('db2-today-wins').innerText = todayWins;
-        document.getElementById('db2-today-losses').innerText = todayLosses;
-        document.getElementById('db2-today-profit').innerText = '+' + formatCurrency(todayProfit);
-        document.getElementById('db2-today-loss').innerText = '-' + formatCurrency(todayLoss);
-
-        let unRealizedFloating = 0, unRealizedWins = 0, unRealizedLosses = 0;
-        let openPosHtml = '';
-        if (positionsData && Array.isArray(positionsData) && positionsData.length > 0) {
-            positionsData.forEach(p => {
-                const upnl = Number(p.unrealized_pnl || 0);
-                unRealizedFloating += upnl;
-                if (upnl >= 0) unRealizedWins++; else unRealizedLosses++;
-
-                const sym = p.symbol || '-';
-                const tf = p.timeframe || '-';
-                const side = p.side || 'LONG';
-                const entry = Number(p.entry_price || 0);
-                const mark = Number(p.mark_price || p.current_price || entry);
-                const uStr = (upnl >= 0 ? '+' : '') + formatCurrency(upnl);
-                const uClass = upnl >= 0 ? 'profit' : 'loss';
-
-                openPosHtml += `
-                    <tr onclick="showView('positions')" style="cursor:pointer">
-                        <td class="td-strong">${sym}</td>
-                        <td class="mono">${tf}</td>
-                        <td class="${side === 'LONG' || side === 'BUY' ? 'profit' : 'loss'}">${side}</td>
-                        <td class="mono">${entry.toFixed(4)}</td>
-                        <td class="mono">${mark.toFixed(4)}</td>
-                        <td class="mono ${uClass}">${uStr}</td>
-                        <td class="mono cyan">OPEN</td>
-                    </tr>
-                `;
-            });
-            document.getElementById('db2-open-trades-body').innerHTML = openPosHtml;
-        } else {
-            document.getElementById('db2-open-trades-body').innerHTML = '<tr><td colspan="7" class="idle-state-row">No open trades</td></tr>';
-        }
-
-        const unRealizedNet = unRealizedFloating;
-        document.getElementById('db2-unrealized-net').innerText = (unRealizedNet >= 0 ? '+' : '') + formatCurrency(unRealizedNet);
-        document.getElementById('db2-unrealized-net').className = 'kpi-val mono ' + (unRealizedNet >= 0 ? 'profit' : 'loss');
-        document.getElementById('db2-unrealized-pos').innerText = (positionsData ? positionsData.length : 0);
-        document.getElementById('db2-unrealized-floating').innerText = (unRealizedFloating >= 0 ? '+' : '') + formatCurrency(unRealizedFloating);
-        document.getElementById('db2-unrealized-floating').className = 'mono ' + (unRealizedFloating >= 0 ? 'profit' : 'loss');
-        document.getElementById('db2-unrealized-wins').innerText = unRealizedWins;
-        document.getElementById('db2-unrealized-losses').innerText = unRealizedLosses;
-
-        // Overall Today Update (merge unrealized into today for accurate account change)
-        const trueTodayNet = todayNet + unRealizedNet;
-        document.getElementById('db2-today-net').innerText = (trueTodayNet >= 0 ? '+' : '') + formatCurrency(trueTodayNet);
-        document.getElementById('db2-today-net').className = 'kpi-val mono ' + (trueTodayNet >= 0 ? 'profit' : 'loss');
-
-        if (scannerData) {
-            document.getElementById('db2-scan-evals').innerText = scannerData.evaluations || 0;
-            document.getElementById('db2-scan-signals').innerText = scannerData.signals || 0;
-            document.getElementById('db2-scan-qual').innerText = scannerData.qualified || 0;
-            document.getElementById('db2-scan-rej').innerText = scannerData.rejected || 0;
-        }
-
-    } catch (e) {
-        console.error("fetchDashboardDataV2 error:", e);
-    }
+function fetchDashboardDataV2() {
+    return fetchDashboardData();
 }
 
 // ==========================================

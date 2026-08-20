@@ -561,8 +561,13 @@ html, body {
     border-radius: 8px;
     display: flex;
     flex-direction: column;
+    flex-shrink: 0;
     overflow: hidden;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+#mkt-symbol-row {
+    flex-shrink: 0;
 }
 
 .panel-card-header {
