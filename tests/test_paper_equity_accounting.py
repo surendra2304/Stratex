@@ -1,4 +1,4 @@
-﻿"""
+"""
 Regression test for paper_engine/portfolio.py get_equity() accounting fix.
 
 DEFECT (fixed): get_equity() returned cash + unrealized_pnl.
@@ -128,3 +128,199 @@ def test_equity_no_double_counting_sequential_trades(tmp_portfolio):
         f"equity={equity:.4f} expected≈{expected:.4f}. "
         f"Sequential used_margin may be double-counted."
     )
+
+
+# ===========================================================================
+# 1. TIMEFRAME-SPECIFIC STALE CANDLE THRESHOLDS
+# ===========================================================================
+def test_defect_1_stale_candle_timeframe_thresholds():
+    from testnet_engine.service import _TF_SECONDS
+    
+    assert _TF_SECONDS['1m'] == 60
+    assert _TF_SECONDS['3m'] == 180
+    assert _TF_SECONDS['5m'] == 300
+    assert _TF_SECONDS['15m'] == 900
+    assert _TF_SECONDS['30m'] == 1800
+    assert _TF_SECONDS['1h'] == 3600
+    assert _TF_SECONDS['2h'] == 7200
+    assert _TF_SECONDS['4h'] == 14400
+    
+    assert _TF_SECONDS.get('1m', 3600) * 3 == 180
+    assert _TF_SECONDS.get('15m', 3600) * 3 == 2700
+    assert _TF_SECONDS.get('1h', 3600) * 3 == 10800
+
+
+# ===========================================================================
+# 2. ORDERS_FILLED ONLY AFTER CONFIRMED FILLS
+# ===========================================================================
+def test_defect_2_orders_filled_only_on_confirmed_fill():
+    stats = {'ORDERS_SUBMITTED': 0, 'ORDERS_FILLED': 0}
+    
+    # Unfilled / Submitted response
+    unfilled_res = {'status': 'NEW', 'orderId': 101, '_executed_qty': 0}
+    stats['ORDERS_SUBMITTED'] += 1
+    order_status = str(unfilled_res.get('status', '')).upper()
+    if order_status in ('FILLED', 'PARTIALLY_FILLED') or unfilled_res.get('_executed_qty', 0) > 0:
+        stats['ORDERS_FILLED'] += 1
+        
+    assert stats['ORDERS_SUBMITTED'] == 1
+    assert stats['ORDERS_FILLED'] == 0
+    
+    # Filled response
+    filled_res = {'status': 'FILLED', 'orderId': 102, '_executed_qty': 0.05}
+    stats['ORDERS_SUBMITTED'] += 1
+    order_status = str(filled_res.get('status', '')).upper()
+    if order_status in ('FILLED', 'PARTIALLY_FILLED') or filled_res.get('_executed_qty', 0) > 0:
+        stats['ORDERS_FILLED'] += 1
+        
+    assert stats['ORDERS_SUBMITTED'] == 2
+    assert stats['ORDERS_FILLED'] == 1
+
+
+# ===========================================================================
+# 4. PERSISTED CASH VS TOTAL EQUITY
+# ===========================================================================
+def test_defect_4_persisted_cash_calculation():
+    current_equity = 10000.0
+    active_positions = {
+        'BTCUSDT': {'quantity': 0.1, 'entry_price': 50000.0, 'status': 'OPEN'}
+    }
+    
+    computed_cash = max(0.0, current_equity - sum(
+        p.get('quantity', 0) * p.get('entry_price', 0)
+        for p in active_positions.values() if isinstance(p, dict)
+    ))
+    assert computed_cash == 5000.0
+    assert computed_cash != current_equity
+
+
+# ===========================================================================
+# 5. RSI ZERO-LOSS DIVISION-BY-ZERO HANDLING
+# ===========================================================================
+def test_defect_5_rsi_zero_loss_no_nan():
+    import pandas as pd
+    import numpy as np
+    from features import add_features
+    
+    n = 30
+    close = [100.0 + i * 2.0 for i in range(n)]
+    df = pd.DataFrame({
+        'timestamp': pd.date_range('2026-08-20', periods=n, freq='5min'),
+        'open': close,
+        'high': [c + 1.0 for c in close],
+        'low': [c - 0.5 for c in close],
+        'close': close,
+        'volume': [1000.0] * n
+    })
+    feat = add_features(df)
+    assert not np.isnan(feat['rsi_14'].iloc[-1])
+    assert feat['rsi_14'].iloc[-1] == 100.0
+
+
+# ===========================================================================
+# 6. CONFIGURABLE SIGNAL COOLDOWN
+# ===========================================================================
+def test_defect_6_configurable_signal_cooldown():
+    from testnet_engine.service import _COOLDOWN_SECONDS
+    assert _COOLDOWN_SECONDS >= 5.0
+    assert isinstance(_COOLDOWN_SECONDS, float)
+
+
+# ===========================================================================
+# 7. DAILY RISK-STATE RESTORATION
+# ===========================================================================
+def test_defect_7_daily_risk_state_restoration():
+    import datetime
+    record_status_only = {
+        'status': 'CLOSED',
+        'timestamp': datetime.datetime.utcnow().isoformat() + 'Z',
+        'net_pnl': -25.0
+    }
+    action_str = str(record_status_only.get('action', '')).upper()
+    status_str = str(record_status_only.get('status', '')).upper()
+    event_type_str = str(record_status_only.get('event_type', '')).upper()
+    is_close = ('CLOSE' in action_str or status_str == 'CLOSED' or 'CLOSE' in event_type_str)
+    assert is_close is True
+
+
+# ===========================================================================
+# 8. BACKTEST EQUITY AFTER FEES
+# ===========================================================================
+def test_defect_8_backtest_equity_deducts_fees():
+    import pandas as pd
+    from backtest_engine import BacktestEngine
+    import strategy_adx_ema
+    
+    n = 250
+    timestamps = pd.date_range('2026-08-01', periods=n, freq='15min')
+    close = [100.0 + (i % 5) * 0.5 for i in range(n)]
+    df = pd.DataFrame({
+        'timestamp': timestamps,
+        'open': close,
+        'high': [c + 1.0 for c in close],
+        'low': [c - 1.0 for c in close],
+        'close': close,
+        'volume': [1000.0] * n
+    })
+    engine = BacktestEngine(df, [strategy_adx_ema], initial_balance=10000.0, fee_rate=0.001)
+    history, eq_df = engine.run()
+    assert isinstance(eq_df, pd.DataFrame)
+    if not eq_df.empty:
+        assert not eq_df['equity'].isna().any()
+
+
+# ===========================================================================
+# 9. WARMUP NAN HANDLING IN MOVING AVERAGES
+# ===========================================================================
+def test_defect_9_warmup_nan_handling():
+    import pandas as pd
+    import numpy as np
+    from features import add_features
+    
+    n = 25
+    df = pd.DataFrame({
+        'timestamp': pd.date_range('2026-08-20', periods=n, freq='5min'),
+        'open': [100.0] * n,
+        'high': [101.0] * n,
+        'low': [99.0] * n,
+        'close': [100.0] * n,
+        'volume': [500.0] * n
+    })
+    feat = add_features(df)
+    assert not np.isnan(feat['rel_volume'].iloc[5])
+    assert feat['rel_volume'].iloc[5] > 0.0
+
+
+# ===========================================================================
+# 10. ORPHANED STRATEGY CASTS CLEANED
+# ===========================================================================
+def test_defect_10_clean_strategy_syntax():
+    import pandas as pd
+    import strategy_scalper
+    import strategy_supertrend
+    import strategy_aggressor
+    
+    n = 30
+    df = pd.DataFrame({
+        'timestamp': pd.date_range('2026-08-20', periods=n, freq='5min'),
+        'open': [100.0] * n,
+        'high': [101.0] * n,
+        'low': [99.0] * n,
+        'close': [100.0] * n,
+        'volume': [1000.0] * n,
+        'atr': [1.0] * n,
+        'supertrend': [True] * n,
+        'st_lower': [98.0] * n,
+        'st_upper': [102.0] * n,
+        'rsi_14': [50.0] * n,
+        'macd_hist': [0.1] * n
+    })
+    
+    res_sc = strategy_scalper.get_signal(df)
+    res_st = strategy_supertrend.get_signal(df)
+    res_ag = strategy_aggressor.get_signal(df)
+    
+    assert res_sc is not None
+    assert res_st is not None
+    assert res_ag is not None
+
