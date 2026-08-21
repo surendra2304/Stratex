@@ -246,6 +246,25 @@ TESTNET ONLY
 - Accounting Invariant: $\text{Total Equity} = \text{USDT Cash} + \text{Used Margin} + \text{Unrealized PnL}$ verified across all fuzz, lifecycle, and stress tests.
 - Status: **Zero CRITICAL or HIGH defects remaining. Production Ready.**
 
+---
+
+# FINAL ALGORITHMIC TRADING BOT PROJECT HANDOFF — 2026-08-21
+## Objectives
+- Complete final repository handoff, documentation synchronization, and git provenance check for incoming AI engineering agents.
+
+## Work Completed
+- **API Input Hardening**: Fixed malformed query parameter `ValueError` risks across all Flask API endpoints using centralized `safe_int_param` and `safe_float_param` helpers in `dashboard.py`.
+- **Handoff Documentation**: Created canonical `PROJECT_HANDOFF.md` and `FINAL_HANDOFF_AUDIT.md` detailing the complete architecture, trading pipeline, strategy inventory, paper/testnet engine invariants, ML/Quantum/Gemini scientific status, and instructions for incoming AI agents.
+- **Safety Invariant Re-verification**: Verified that `LIVE_TRADING_ENABLED = False` is permanently locked and that all risk gates and daily loss limiters remain authoritative.
+- **Subsystem Verification**: Re-verified classical CPU simulation status of Quantum research modules (advisory only, no quantum advantage over baseline, $p > 0.63$) and Gemini AI advisory isolation.
+
+## Verification
+- Pytest Suite: **505 passed / 505 tests (100% across two consecutive runs in 61.49s and 66.47s)**.
+- Frontend Lints: `node -c static/app.js` (PASS) | `npx -y htmlhint static/index.html` (PASS).
+- Repository Status: Synchronized with `origin/master`, clean working tree.
+- Live Deployment: Healthy at `https://algorithmic-trading-bot-fra.onrender.com`.
+
+
 
 
 
