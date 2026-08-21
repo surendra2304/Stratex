@@ -44,14 +44,12 @@ Price constraint enforced by Binance:
   BUY OCO:  aboveStopPrice (SL) > last_price > belowPrice (TP)
 """
 
-import math
 import json
+import math
 import os
-import datetime
 import threading
 
 from binance.client import Client
-from binance.exceptions import BinanceAPIException
 
 from logger import get_logger
 
@@ -90,11 +88,11 @@ def _get_symbol_filters(client: Client, symbol: str) -> dict:
         if ft == "PRICE_FILTER":
             ts = float(f["tickSize"])
             result["tick_size"] = ts
-            result["price_precision"] = max(0, int(round(-math.log10(ts)))) if ts > 0 else 2
+            result["price_precision"] = max(0, round(-math.log10(ts))) if ts > 0 else 2
         elif ft == "LOT_SIZE":
             ss = float(f["stepSize"])
             result["step_size"] = ss
-            result["qty_precision"] = max(0, int(round(-math.log10(ss)))) if ss > 0 else 3
+            result["qty_precision"] = max(0, round(-math.log10(ss))) if ss > 0 else 3
         elif ft in ("MIN_NOTIONAL", "NOTIONAL"):
             result["min_notional"] = float(f.get("minNotional", f.get("notional", 10.0)))
 
@@ -129,7 +127,7 @@ def place_oco_protection(
     actual_fill_price: float,
     sl_price: float,
     tp_price: float,
-    list_client_order_id: str = None,
+    list_client_order_id: str | None = None,
 ) -> dict:
     """
     Place an OCO order protecting an open position.

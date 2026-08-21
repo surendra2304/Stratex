@@ -8,9 +8,7 @@ class CooldownFilter:
 
     def is_allowed(self, symbol, current_index):
         last_exit = self.last_trade_exit_index.get(symbol, -999)
-        if current_index - last_exit >= self.cooldown_candles:
-            return True
-        return False
+        return current_index - last_exit >= self.cooldown_candles
 
     def register_exit(self, symbol, current_index):
         self.last_trade_exit_index[symbol] = current_index

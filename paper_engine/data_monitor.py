@@ -1,5 +1,4 @@
 import time
-from typing import Dict, Optional
 
 
 class DataMonitor:
@@ -11,7 +10,7 @@ class DataMonitor:
 
     def __init__(self, heartbeat=None, degraded_threshold=10, critical_threshold=60, offline_threshold=300):
         self.heartbeat = heartbeat
-        self.symbols: Dict[str, dict] = {}
+        self.symbols: dict[str, dict] = {}
         self.degraded_threshold = degraded_threshold   # seconds
         self.critical_threshold = critical_threshold    # seconds
         self.offline_threshold = offline_threshold      # seconds
@@ -81,7 +80,7 @@ class DataMonitor:
 
     def check_staleness(self, max_stale_sec=300):
         now = time.time()
-        for sym, state in self.symbols.items():
+        for state in self.symbols.values():
             if now - state["last_timestamp"] > max_stale_sec:
                 if self.heartbeat is not None:
                     try:

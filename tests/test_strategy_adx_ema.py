@@ -10,21 +10,17 @@ CRITICAL REGRESSION GUARD (see bug report 2026-08-15):
   a fabricated ML confidence score.
 """
 
-import pytest
 import numpy as np
 import pandas as pd
-from unittest.mock import patch
 
 from strategy_adx_ema import (
-    get_signal,
-    add_features,
-    SignalResult,
-    _STRATEGY_TYPE,
     _OOS_WIN_RATE_PRIOR,
     _RR_RATIO,
+    SignalResult,
+    add_features,
+    get_signal,
 )
 from testnet_engine.profitability_gate import ProfitabilityGate, _resolve_strategy_type
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -142,7 +138,7 @@ class TestSignalLogic:
         """When a BUY is generated, SL < entry < TP and metadata is correct."""
         df = _buy_crossover_df()
         # Manually force a cross by overwriting the last two EMA rows
-        df_feats = add_features(df.copy())
+        add_features(df.copy())
         # If no natural signal, skip rather than fail — signal conditions are rare
         res = get_signal(df)
         if res.side == "BUY":
@@ -239,7 +235,7 @@ class TestSLTPCalculation:
 
     def test_risk_reward_ratio_is_1_5(self):
         """TP distance / SL distance must equal 1.5 (3ATR / 2ATR)."""
-        res, atr, entry = self._forced_buy_signal()
+        res, _atr, entry = self._forced_buy_signal()
         if res.side == "BUY":
             sl_dist = entry - res.sl
             tp_dist = res.tp - entry
@@ -268,7 +264,7 @@ class TestNoLookAhead:
         new_row = df.iloc[-1:].copy()
         new_row.index = [df.index[-1] + pd.Timedelta(hours=4)]
         new_row['close'] = df['close'].iloc[-1] * 2.0
-        df_extended = pd.concat([df, new_row])
+        pd.concat([df, new_row])
 
         # The signal for the N-th candle must not be affected
         # (the extension represents a future candle)

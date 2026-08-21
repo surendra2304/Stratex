@@ -2,7 +2,6 @@
 """Optimizer stub for quantum model training.
 Currently provides a deterministic no‑op optimizer that returns the initial parameters.
 """
-import numpy as np
 
 def optimize(model, feature_vectors, targets):
     """Placeholder optimizer.

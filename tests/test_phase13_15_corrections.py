@@ -16,27 +16,30 @@ Tests added per requirements:
   - PAPER mode never placing Binance orders (execution policy gate)
 """
 import json
-import math
 import os
-import time
 import uuid
-import tempfile
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from research_phase9.cost_engine import CostEngine
 from paper_engine.benchmark import BenchmarkComparators
-from paper_engine.kill_switch import trigger_kill_switch, is_kill_switch_active, reset_kill_switch
-from paper_engine.portfolio import PaperPortfolio
-from paper_engine.experiment_config import FrozenExperimentConfig, create_experiment, register_experiment
-from paper_engine.statistical_report import (
-    compute_trade_stats,
-    t_test_positive_expectancy,
-    evaluate_against_acceptance_criteria,
-    MIN_TRADES_FOR_INFERENCE,
+from paper_engine.experiment_config import (
+    FrozenExperimentConfig,
+    create_experiment,
+    register_experiment,
 )
-
+from paper_engine.kill_switch import (
+    trigger_kill_switch,
+)
+from paper_engine.portfolio import PaperPortfolio
+from paper_engine.statistical_report import (
+    MIN_TRADES_FOR_INFERENCE,
+    compute_trade_stats,
+    evaluate_against_acceptance_criteria,
+    t_test_positive_expectancy,
+)
+from research_phase9.cost_engine import CostEngine
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -294,7 +297,6 @@ class TestKillSwitchCosts:
         pos_id = str(uuid.uuid4())
         p.add_position(pos_id, "BTCUSDT", "LONG", 50000.0, 0.1)
 
-        cash_before = p.cash
         cost = CostEngine.get_binance_taker_config()
 
         summary = trigger_kill_switch(
@@ -566,7 +568,6 @@ class TestClassificationGate:
         assert result["duration_gate"] is False
 
     def test_evaluate_returns_blocked_when_trades_met_duration_not(self):
-        from paper_engine.statistical_report import evaluate_against_acceptance_criteria
         cfg = self._make_cfg()
         returns = [0.01] * 35
         result = evaluate_against_acceptance_criteria(
@@ -577,7 +578,6 @@ class TestClassificationGate:
         )
 
     def test_duration_met_insufficient_trades_yields_inconclusive(self):
-        from paper_engine.statistical_report import evaluate_against_acceptance_criteria
         cfg = self._make_cfg()
         returns = [0.01] * 5
         result = evaluate_against_acceptance_criteria(
@@ -588,7 +588,6 @@ class TestClassificationGate:
 
     def test_high_pnl_cannot_override_insufficient_sample_gate(self):
         """Even great returns cannot compensate for insufficient sample size."""
-        from paper_engine.statistical_report import evaluate_against_acceptance_criteria
         cfg = self._make_cfg()
         returns = [0.05] * 10  # only 10 trades, very profitable
         result = evaluate_against_acceptance_criteria(
@@ -614,7 +613,6 @@ class TestClassificationGate:
         assert result["verdict"] == "ALLOWED"
 
     def test_evaluate_full_with_both_gates_returns_real_verdict(self):
-        from paper_engine.statistical_report import evaluate_against_acceptance_criteria
         cfg = self._make_cfg()
         rng = np.random.default_rng(42)
         returns = list(rng.normal(0.005, 0.02, 35))

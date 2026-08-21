@@ -1,5 +1,5 @@
 import pandas as pd
-import numpy as np
+
 
 def calculate_diagnostics(trades, equity_curve, initial_balance=10000.0):
     if not trades:

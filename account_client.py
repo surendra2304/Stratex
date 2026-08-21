@@ -6,6 +6,7 @@
 # It is SEPARATE from ExecutionClient and MarketDataClient.
 # ==============================================================================
 from binance.client import Client
+
 from config import API_KEY, SECRET_KEY, TRADING_MODE
 
 
@@ -52,7 +53,7 @@ class AccountClient:
             if float(b["free"]) > 0
         }
 
-    def get_open_orders(self, symbol: str = None) -> list:
+    def get_open_orders(self, symbol: str | None = None) -> list:
         """Returns exchange-side open orders (read-only query)."""
         if not self.is_available():
             return []

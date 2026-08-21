@@ -15,9 +15,9 @@ import json
 import logging
 import os
 import time
-import urllib.request
 import urllib.error
-from typing import Dict, Any, Optional
+import urllib.request
+from typing import Any
 
 try:
     import config
@@ -30,11 +30,11 @@ except ImportError:
 logger = logging.getLogger("gemini_service")
 
 # Thread-safe in-memory cache
-_AI_CACHE: Dict[str, Dict[str, Any]] = {}
+_AI_CACHE: dict[str, dict[str, Any]] = {}
 _MAX_CACHE_SIZE = 500
 
 class GeminiService:
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, enabled: Optional[bool] = None):
+    def __init__(self, api_key: str | None = None, model: str | None = None, enabled: bool | None = None):
         if api_key is not None:
             self.api_key = api_key
         else:
@@ -47,13 +47,13 @@ class GeminiService:
         )
         self.timeout_seconds = 10
         self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
-        self._last_verified_connected: Optional[bool] = None
+        self._last_verified_connected: bool | None = None
         self._last_connected_check: float = 0.0
 
     def is_configured(self) -> bool:
         return bool(self.api_key and len(self.api_key) > 5)
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """
         Returns safe status metadata without exposing secret keys.
         Distinguishes CONFIGURED from ACTUALLY CONNECTED based on verified reachability.
@@ -87,7 +87,7 @@ class GeminiService:
             }
         }
 
-    def _get_cache(self, cache_key: str) -> Optional[Dict[str, Any]]:
+    def _get_cache(self, cache_key: str) -> dict[str, Any] | None:
         if cache_key in _AI_CACHE:
             entry = _AI_CACHE[cache_key]
             # Expire after 1 hour if timestamp present
@@ -95,7 +95,7 @@ class GeminiService:
                 return entry.get("data")
         return None
 
-    def _set_cache(self, cache_key: str, data: Dict[str, Any]):
+    def _set_cache(self, cache_key: str, data: dict[str, Any]):
         global _AI_CACHE
         if len(_AI_CACHE) >= _MAX_CACHE_SIZE:
             # Simple eviction: drop oldest 20%
@@ -107,7 +107,7 @@ class GeminiService:
             "data": data
         }
 
-    def _call_gemini_api(self, prompt: str) -> Optional[str]:
+    def _call_gemini_api(self, prompt: str) -> str | None:
         """
         Executes REST call to Google Gemini API using secure 'x-goog-api-key' header.
         Never embeds the API key in the URL query string or logs.
@@ -178,7 +178,7 @@ class GeminiService:
                     break
         return None
 
-    def test_connection(self) -> Dict[str, Any]:
+    def test_connection(self) -> dict[str, Any]:
         """Performs a server-side health check with Gemini."""
         if not self.is_configured():
             self._last_verified_connected = False
@@ -209,7 +209,7 @@ class GeminiService:
     # =========================================================================
     # 1. SCANNER / SIGNAL ANALYSIS
     # =========================================================================
-    def analyze_signal(self, signal_context: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze_signal(self, signal_context: dict[str, Any]) -> dict[str, Any]:
         """
         Explains why a scanner signal occurred, strategy alignment, expected edge,
         and gate outcomes without modifying execution decisions.
@@ -279,7 +279,7 @@ Do NOT give trading recommendations or say whether the bot should trade. Provide
     # =========================================================================
     # 2. TRADING JOURNAL / TRADE LIFECYCLE REVIEW
     # =========================================================================
-    def analyze_trade(self, trade_context: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze_trade(self, trade_context: dict[str, Any]) -> dict[str, Any]:
         """
         Reviews a completed trade: execution quality, holding duration, PnL,
         market alignment, and risk assessment without fabricating statistics.
@@ -343,7 +343,7 @@ Provide only valid JSON.
     # =========================================================================
     # 3. QUANTITATIVE PERFORMANCE / ANALYTICS SUMMARY
     # =========================================================================
-    def analyze_performance(self, analytics_context: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze_performance(self, analytics_context: dict[str, Any]) -> dict[str, Any]:
         """
         Synthesizes portfolio performance, win rate, drawdown, and strategy comparisons.
         """
@@ -397,7 +397,7 @@ Provide only valid JSON.
     # =========================================================================
     # 4. SYSTEM DIAGNOSTICS SUMMARY
     # =========================================================================
-    def analyze_system_diagnostics(self, system_context: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze_system_diagnostics(self, system_context: dict[str, Any]) -> dict[str, Any]:
         """
         Analyzes engine health, WebSocket telemetry, scanner throughput, and error rates.
         """
@@ -444,7 +444,7 @@ Provide only valid JSON.
         self._set_cache(cache_key, parsed)
         return parsed
 
-    def _extract_json(self, text: Optional[str]) -> Optional[Dict[str, Any]]:
+    def _extract_json(self, text: str | None) -> dict[str, Any] | None:
         if not text:
             return None
         clean_text = text.strip()
@@ -453,8 +453,7 @@ Provide only valid JSON.
             clean_text = clean_text[7:]
         elif clean_text.startswith("```"):
             clean_text = clean_text[3:]
-        if clean_text.endswith("```"):
-            clean_text = clean_text[:-3]
+        clean_text = clean_text.removesuffix("```")
         clean_text = clean_text.strip()
 
         try:
@@ -471,7 +470,7 @@ Provide only valid JSON.
         return None
 
 # Singleton instance accessor
-_service_instance: Optional[GeminiService] = None
+_service_instance: GeminiService | None = None
 
 def get_gemini_service() -> GeminiService:
     global _service_instance

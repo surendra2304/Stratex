@@ -1,6 +1,5 @@
-import pandas as pd
-import numpy as np
 from statsmodels.tsa.stattools import adfuller
+
 
 def run_pairs_research(df_a, df_b, asset_a="BTCUSDT", asset_b="ETHUSDT"):
     """
@@ -58,13 +57,12 @@ def run_pairs_research(df_a, df_b, asset_a="BTCUSDT", asset_b="ETHUSDT"):
                 gross_pnl_pct += pnl
                 trades += 1
                 in_trade = 0
-        elif in_trade == -1:
-            if z <= 0:
-                # Exit Short
-                pnl = (entry_spread - curr_spread) / entry_spread
-                gross_pnl_pct += pnl
-                trades += 1
-                in_trade = 0
+        elif in_trade == -1 and z <= 0:
+            # Exit Short
+            pnl = (entry_spread - curr_spread) / entry_spread
+            gross_pnl_pct += pnl
+            trades += 1
+            in_trade = 0
                 
     # 6. Cost Evaluation
     # Since it's a pair, every trade involves 4 legs:

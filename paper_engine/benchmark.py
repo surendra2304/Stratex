@@ -10,10 +10,10 @@ Key requirements:
 - Must be reproducible via explicit random seed.
 - Reports: median, p5, p95, fraction beating strategy.
 """
-import math
+
 import numpy as np
 import pandas as pd
-from typing import Dict, Optional
+
 from research_phase9.cost_engine import CostEngine
 
 
@@ -30,8 +30,8 @@ class BenchmarkComparators:
     def buy_and_hold(
         df: pd.DataFrame,
         starting_capital: float,
-        cost_engine: Optional[CostEngine] = None,
-    ) -> Dict[str, float]:
+        cost_engine: CostEngine | None = None,
+    ) -> dict[str, float]:
         """
         Buy-and-Hold benchmark: purchase at first available close, sell at last.
         Applies realistic entry/exit costs using the provided CostEngine.
@@ -58,7 +58,7 @@ class BenchmarkComparators:
         }
 
     @staticmethod
-    def zero_trade_benchmark(starting_capital: float) -> Dict[str, float]:
+    def zero_trade_benchmark(starting_capital: float) -> dict[str, float]:
         """Trivial baseline: doing nothing. Net PnL = 0."""
         return {"net_pnl": 0.0, "return_pct": 0.0}
 
@@ -66,14 +66,14 @@ class BenchmarkComparators:
     def random_entry_monte_carlo(
         df: pd.DataFrame,
         starting_capital: float,
-        cost_engine: Optional[CostEngine] = None,
+        cost_engine: CostEngine | None = None,
         n_trades: int = 10,
         hold_bars: int = 5,
         leverage: float = 1.0,
         iterations: int = 1000,
         random_seed: int = 42,
-        strategy_net_pnl: Optional[float] = None,
-    ) -> Dict[str, float]:
+        strategy_net_pnl: float | None = None,
+    ) -> dict[str, float]:
         """
         Simulated random-entry Monte Carlo benchmark.
 
@@ -192,14 +192,14 @@ class BenchmarkComparators:
         df_a: pd.DataFrame,
         df_b: pd.DataFrame,
         starting_capital: float,
-        cost_engine: Optional[CostEngine] = None,
+        cost_engine: CostEngine | None = None,
         n_pairs: int = 10,
         hold_bars: int = 5,
         leverage: float = 1.0,
         iterations: int = 1000,
         random_seed: int = 42,
-        strategy_net_pnl: Optional[float] = None,
-    ) -> Dict[str, float]:
+        strategy_net_pnl: float | None = None,
+    ) -> dict[str, float]:
         """
         Monte Carlo for two-leg pairs strategies.
         Models entry/exit costs for BOTH Leg A and Leg B independently.
@@ -273,14 +273,14 @@ class BenchmarkComparators:
         perp_df: pd.DataFrame,
         funding_rates: np.ndarray,
         starting_capital: float,
-        cost_engine: Optional[CostEngine] = None,
+        cost_engine: CostEngine | None = None,
         n_entries: int = 10,
         hold_funding_periods: int = 3,
         funding_interval_bars: int = 480,
         iterations: int = 1000,
         random_seed: int = 42,
-        strategy_net_pnl: Optional[float] = None,
-    ) -> Dict[str, float]:
+        strategy_net_pnl: float | None = None,
+    ) -> dict[str, float]:
         """
         Monte Carlo for funding arbitrage.
         Models BOTH spot and perpetual legs plus funding payments.

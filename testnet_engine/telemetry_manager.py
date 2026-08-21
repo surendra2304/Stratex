@@ -1,10 +1,9 @@
-import os
-import json
-import time
 import datetime
-import threading
+import json
 import logging
-from typing import Dict, List, Optional, Any
+import os
+import threading
+import time
 
 logger = logging.getLogger("telemetry_manager")
 
@@ -187,17 +186,17 @@ class TelemetryManager:
         base_dir = kwargs.get("base_dir")
         if base_dir:
             # If a custom base_dir is requested (e.g. unit tests), create a new instance
-            instance = super(TelemetryManager, cls).__new__(cls)
+            instance = super().__new__(cls)
             instance._initialized = False
             return instance
 
         with cls._lock:
             if cls._instance is None:
-                cls._instance = super(TelemetryManager, cls).__new__(cls)
+                cls._instance = super().__new__(cls)
                 cls._instance._initialized = False
             return cls._instance
 
-    def __init__(self, base_dir: Optional[str] = None):
+    def __init__(self, base_dir: str | None = None):
         if getattr(self, "_initialized", False) and base_dir is None:
             return
         with self._lock:
@@ -223,12 +222,12 @@ class TelemetryManager:
                 self.position_history_file = os.getenv("TESTNET_POSITION_HISTORY_FILE", "testnet_position_history.jsonl")
             
             # In-memory indices for rapid query response
-            self._trade_events: Dict[str, dict] = {}
-            self._recent_snapshots: List[dict] = []
-            self._recent_balance_events: List[dict] = []
-            self._recent_signals: List[dict] = []
-            self._recent_execution_events: List[dict] = []
-            self._positions_history: Dict[str, dict] = {}
+            self._trade_events: dict[str, dict] = {}
+            self._recent_snapshots: list[dict] = []
+            self._recent_balance_events: list[dict] = []
+            self._recent_signals: list[dict] = []
+            self._recent_execution_events: list[dict] = []
+            self._positions_history: dict[str, dict] = {}
             
             self._load_persisted_state()
             self._initialized = True
@@ -379,7 +378,7 @@ class TelemetryManager:
             self._append_jsonl(self.trade_events_file, canonical)
             return canonical
 
-    def get_trade_events(self, symbol: Optional[str] = None, status: Optional[str] = None, limit: int = 100) -> List[dict]:
+    def get_trade_events(self, symbol: str | None = None, status: str | None = None, limit: int = 100) -> list[dict]:
         with self._data_lock:
             events = list(self._trade_events.values())
             # Filter out synthetic test records
@@ -426,7 +425,7 @@ class TelemetryManager:
             self._append_jsonl(self.equity_history_file, snap)
             return snap
 
-    def get_equity_timeline(self, time_range: str = "all") -> List[dict]:
+    def get_equity_timeline(self, time_range: str = "all") -> list[dict]:
         """
         Returns equity timeline snapshots filtered by time range:
         '1h', '6h', '24h', '7d', '30d', 'all'
@@ -508,7 +507,7 @@ class TelemetryManager:
             self._append_jsonl(self.balance_events_file, bal_event)
             return bal_event
 
-    def get_balance_events(self, limit: int = 100) -> List[dict]:
+    def get_balance_events(self, limit: int = 100) -> list[dict]:
         with self._data_lock:
             events = []
             if os.path.exists(self.balance_events_file):
@@ -560,7 +559,7 @@ class TelemetryManager:
             self._append_jsonl(self.signals_log_file, sig)
             return sig
 
-    def get_signals_log(self, limit: int = 100, symbol: Optional[str] = None, strategy: Optional[str] = None) -> List[dict]:
+    def get_signals_log(self, limit: int = 100, symbol: str | None = None, strategy: str | None = None) -> list[dict]:
         with self._data_lock:
             signals = []
             if os.path.exists(self.signals_log_file):
@@ -618,7 +617,7 @@ class TelemetryManager:
             self._append_jsonl(self.execution_events_file, evt)
             return evt
 
-    def get_execution_events(self, limit: int = 100) -> List[dict]:
+    def get_execution_events(self, limit: int = 100) -> list[dict]:
         with self._data_lock:
             events = []
             if os.path.exists(self.execution_events_file):
@@ -672,7 +671,7 @@ class TelemetryManager:
             self._append_jsonl(self.position_history_file, canonical_pos)
             return canonical_pos
 
-    def get_positions(self, status: Optional[str] = None) -> List[dict]:
+    def get_positions(self, status: str | None = None) -> list[dict]:
         with self._data_lock:
             positions = list(self._positions_history.values())
             if status and status != "ALL":
@@ -681,7 +680,7 @@ class TelemetryManager:
             return positions
 
     # Query Aliases
-    def query_trades(self, status: Optional[str] = None, symbol: Optional[str] = None, strategy: Optional[str] = None, timeframe: Optional[str] = None, limit: int = 100) -> List[dict]:
+    def query_trades(self, status: str | None = None, symbol: str | None = None, strategy: str | None = None, timeframe: str | None = None, limit: int = 100) -> list[dict]:
         events = self.get_trade_events(symbol=symbol, status=status, limit=limit)
         if strategy:
             events = [e for e in events if e.get("strategy") == strategy]
@@ -689,17 +688,17 @@ class TelemetryManager:
             events = [e for e in events if e.get("timeframe") == timeframe]
         return events
 
-    def query_signals(self, symbol: Optional[str] = None, strategy: Optional[str] = None, limit: int = 100) -> List[dict]:
+    def query_signals(self, symbol: str | None = None, strategy: str | None = None, limit: int = 100) -> list[dict]:
         return self.get_signals_log(limit=limit, symbol=symbol, strategy=strategy)
 
-    def query_positions(self, status: Optional[str] = None) -> List[dict]:
+    def query_positions(self, status: str | None = None) -> list[dict]:
         return self.get_positions(status=status)
 
-    def query_equity_curve(self, time_range: str = "all", limit: int = 500) -> List[dict]:
+    def query_equity_curve(self, time_range: str = "all", limit: int = 500) -> list[dict]:
         timeline = self.get_equity_timeline(time_range=time_range)
         return timeline[-limit:] if limit else timeline
 
-    def query_balance_events(self, limit: int = 100) -> List[dict]:
+    def query_balance_events(self, limit: int = 100) -> list[dict]:
         return self.get_balance_events(limit=limit)
 
     def compute_summary_analytics(self) -> dict:

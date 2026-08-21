@@ -6,9 +6,9 @@ Every component reports OK / DEGRADED / CRITICAL / OFFLINE.
 A CRITICAL or OFFLINE state on market_data or persistence blocks new trades.
 """
 import json
-import os
 import time
 from enum import Enum
+
 from logger import get_logger
 
 logger = get_logger("heartbeat")
@@ -33,8 +33,8 @@ class HeartbeatState:
     def __init__(
         self,
         heartbeat_file: str = "forward_heartbeat.jsonl",
-        filename: str = None,          # alias — used by older tests
-        timeout_seconds: int = None,   # accepted but unused in this impl
+        filename: str | None = None,          # alias — used by older tests
+        timeout_seconds: int | None = None,   # accepted but unused in this impl
     ):
         # Support old callers that pass filename= keyword
         if filename is not None:
@@ -125,7 +125,7 @@ class HeartbeatState:
         if self.timeout_seconds is None:
             return ComponentStatus.HEALTHY
         now = time.time()
-        for component, last in self._last_update.items():
+        for last in self._last_update.values():
             if (now - last) > self.timeout_seconds:
                 return ComponentStatus.OFFLINE
         return ComponentStatus.HEALTHY

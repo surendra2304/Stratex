@@ -1,6 +1,9 @@
-from logger import get_logger
 import datetime
+import math
+
 import config
+from logger import get_logger
+
 logger = get_logger("risk_gate")
 
 class RiskGate:
@@ -81,12 +84,19 @@ class RiskGate:
         # 6. Correlated / Net Directional Exposure
         net_exposure = 0.0
         for p in active_positions.values():
-            val = p.get('quantity', 0) * p.get('entry_price', 0)
-            p_side = str(p.get('side', '')).upper()
-            if p_side in ("LONG", "BUY"):
-                net_exposure += val
-            elif p_side in ("SHORT", "SELL"):
-                net_exposure -= val
+            if not isinstance(p, dict):
+                continue
+            try:
+                qty = float(p.get('quantity', 0))
+                ep = float(p.get('entry_price', 0))
+                val = qty * ep
+                p_side = str(p.get('side', '')).upper()
+                if p_side in ("LONG", "BUY"):
+                    net_exposure += val
+                elif p_side in ("SHORT", "SELL"):
+                    net_exposure -= val
+            except (ValueError, TypeError, Exception):
+                continue
                 
         req_side = str(side).upper()
         if req_side in ("LONG", "BUY"):
@@ -105,7 +115,6 @@ class RiskGate:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_DRAWDOWN_BREACH | DD: {drawdown_pct:.2%} >= {config.MAX_TESTNET_DRAWDOWN_PCT:.2%}")
             return False, "MAX_DRAWDOWN_BREACH", f"Current drawdown {drawdown_pct:.2%} >= {config.MAX_TESTNET_DRAWDOWN_PCT:.2%}"
 
-        # 8. Daily Loss Limit
         daily_loss_pct = abs(self.daily_realized_loss) / current_equity if self.daily_realized_loss < 0 else 0
         if daily_loss_pct >= config.MAX_DAILY_LOSS_PCT:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: DAILY_LOSS_LIMIT | Loss: {daily_loss_pct:.2%} >= {config.MAX_DAILY_LOSS_PCT:.2%}")
@@ -118,15 +127,15 @@ class RiskGate:
         """Update risk limits based on latest trade results."""
         self._check_daily_boundary()
         
+        # Accumulate net realized P&L (used to determine self.daily_realized_loss)
+        self.daily_realized_loss += net_pnl
+        
         if net_pnl < 0:
             self.consecutive_losses += 1
-            self.daily_realized_loss += net_pnl
         elif net_pnl > 0:
             self.consecutive_losses = 0
-            self.daily_realized_loss += net_pnl
             
-        if current_equity > self.peak_equity:
-            self.peak_equity = current_equity
+        self.peak_equity = max(self.peak_equity, current_equity)
 
     def calculate_position_size(self, current_equity, entry_price, sl_price, filters=None, confidence=None, tp_price=None):
         """
@@ -168,9 +177,8 @@ class RiskGate:
         
         # Apply LOT_SIZE stepSize precision
         step_size = filters.get("stepSize", 1.0)
-        import math
         # Floor to nearest step_size
-        precision = max(0, int(round(-math.log10(step_size)))) if step_size < 1 else 0
+        precision = max(0, round(-math.log10(step_size))) if step_size < 1 else 0
         stepped_quantity = math.floor(final_quantity / step_size) * step_size
         stepped_quantity = round(stepped_quantity, precision)
         

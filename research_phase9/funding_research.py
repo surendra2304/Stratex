@@ -1,5 +1,7 @@
 import pandas as pd
+
 from data_client import MarketDataClient
+
 # config not needed for MarketDataClient
 
 def run_funding_arbitrage_research(symbol="BTCUSDT"):
@@ -33,7 +35,7 @@ def run_funding_arbitrage_research(symbol="BTCUSDT"):
         
         # How much funding do we collect?
         total_funding_collected_pct = df['fundingRate'].sum()
-        avg_funding_rate = df['fundingRate'].mean()
+        df['fundingRate'].mean()
         days_represented = (df['fundingTime'].max() - df['fundingTime'].min()).days
         
         if days_represented == 0:

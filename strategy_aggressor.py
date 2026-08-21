@@ -3,8 +3,6 @@
 # ==============================================================================
 
 from collections import namedtuple
-import pandas as pd
-import numpy as np
 
 SignalResult = namedtuple(
     "SignalResult",
@@ -37,7 +35,7 @@ def get_signal(df):
     atr       = float(last.get("atr", last.get("atr_14", close * 0.01)))
     rsi       = float(last.get("rsi", last.get("rsi_14", 50.0)))
     vol_delta = float(last["vol_delta"])
-    vol       = float(last.get("volume", 1.0))
+    float(last.get("volume", 1.0))
     
     # Calculate rolling volume delta stats for z-score
     recent_deltas = df["vol_delta"].tail(20)

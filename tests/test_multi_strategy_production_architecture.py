@@ -3,20 +3,15 @@ tests/test_multi_strategy_production_architecture.py
 Regression test suite for the Multi-Strategy Production Execution Architecture.
 """
 
-import os
-import json
-import pytest
 import numpy as np
 import pandas as pd
-from unittest.mock import MagicMock, patch
 
-from config_strategy import PRODUCTION_STRATEGY_REGISTRY, ADX_EMA_STRATEGY
-from strategy_adx_ema import add_features, get_signal, SignalResult
+from config_strategy import PRODUCTION_STRATEGY_REGISTRY
+from strategy_adx_ema import SignalResult, add_features
 from testnet_engine.profitability_gate import ProfitabilityGate
-from testnet_engine.risk_gate import RiskGate
-from testnet_engine.service import TestnetService
 from testnet_engine.protection import compute_net_pnl
-from execution import ExecutionPolicy
+from testnet_engine.risk_gate import RiskGate
+
 
 class TestProductionStrategyRegistry:
     def test_registry_classifications(self):

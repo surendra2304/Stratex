@@ -3,8 +3,7 @@ tests/test_phase13_duplicate_events.py
 Phase 13.9-13.10: Idempotency and out-of-order event tests.
 """
 import uuid
-import time
-import pytest
+
 from paper_engine.portfolio import PaperPortfolio
 
 
@@ -47,7 +46,6 @@ def test_duplicate_margin_release_idempotent(tmp_path):
     ev_alloc = str(uuid.uuid4())
     ev_rel = str(uuid.uuid4())
     p.allocate_margin(1000.0, ev_alloc)
-    margin_before = p.used_margin
     p.release_margin(1000.0, ev_rel)
     p.release_margin(1000.0, ev_rel)  # duplicate
     assert p.used_margin == 0.0
@@ -110,9 +108,9 @@ def test_out_of_order_events_do_not_double_count(tmp_path):
 def test_signals_deduplication_across_replay():
     """SignalLogger must deduplicate signal IDs on replay."""
     import os
-    import json
-    from paper_engine.signal_logger import SignalLogger
     import tempfile
+
+    from paper_engine.signal_logger import SignalLogger
 
     with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as tmp:
         path = tmp.name

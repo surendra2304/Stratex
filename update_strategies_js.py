@@ -1,4 +1,3 @@
-import sys
 
 with open('static/app.js', 'r', encoding='utf-8') as f:
     content = f.read()

@@ -1,15 +1,16 @@
-import sys
 import os
-import pandas as pd
+import sys
+
 import numpy as np
-from statsmodels.tsa.stattools import adfuller
 import statsmodels.api as sm
+from statsmodels.tsa.stattools import adfuller
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from research_phase7.walk_forward import generate_walk_forward_splits
 from research_phase8.data_resampler import resample_timeframe
 from research_phase9.cost_engine import CostEngine
-from research_phase7.walk_forward import generate_walk_forward_splits
+
 
 def calculate_halflife(spread):
     # Calculates the half-life of mean reversion using Ornstein-Uhlenbeck process

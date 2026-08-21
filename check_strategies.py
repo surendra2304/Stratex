@@ -1,10 +1,10 @@
+import strategy_adx_ema
 import strategy_aggressor
+import strategy_ml
 import strategy_scalper
 import strategy_supertrend
-import strategy_ml
 import strategy_swing
-import strategy_adx_ema
-from data import get_candles, add_indicators
+from data import add_indicators, get_candles
 
 print("Testing Strategy Signatures:")
 for name, mod in [

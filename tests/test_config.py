@@ -1,5 +1,7 @@
 import pytest
+
 import config
+
 
 def test_valid_config():
     """Test that the current config passes validation."""

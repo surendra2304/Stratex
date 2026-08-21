@@ -1,8 +1,7 @@
-import sys
 import os
-import socket
-import atexit
 import signal
+import socket
+import sys
 
 _SOCKET_LOCK = None
 PID_FILE = "bot.pid"
@@ -26,7 +25,7 @@ def acquire_singleton_lock(port=48888):
     _SOCKET_LOCK = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         _SOCKET_LOCK.bind(("127.0.0.1", port))
-    except socket.error as e:
+    except OSError as e:
         print(f"\n[FATAL] Another instance of the trading bot is already running on port {port}!")
         print(f"Aborting to prevent duplicate order submissions. Error: {e}")
         sys.exit(1)

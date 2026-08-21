@@ -9,11 +9,10 @@ Capabilities:
 3. Appends session entries to DIARY.md without altering historical days.
 """
 
-import os
-import sys
 import io
+import os
 import re
-import datetime
+import sys
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 

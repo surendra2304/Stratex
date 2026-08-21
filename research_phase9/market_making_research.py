@@ -1,5 +1,3 @@
-import pandas as pd
-import numpy as np
 
 def run_market_making_baseline(df, maker_fee=0.0002, taker_fee=0.001, spread_capture=0.0002, inventory_limit=3):
     """

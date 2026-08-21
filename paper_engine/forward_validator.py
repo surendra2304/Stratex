@@ -1,12 +1,14 @@
 import json
+import os
 import time
 import uuid
-import os
+
 import pandas as pd
+
 from logger import get_logger
-from paper_engine.portfolio import PaperPortfolio
 from paper_engine.benchmark import BenchmarkComparators
 from paper_engine.daily_report import DailyReportGenerator
+from paper_engine.portfolio import PaperPortfolio
 
 logger = get_logger("forward_validator")
 
@@ -58,7 +60,7 @@ class ForwardValidator:
                 continue
                 
             current_row = window.iloc[-1]
-            ts = current_row['timestamp']
+            current_row['timestamp']
             
             # strategy_func MUST only see 'window' (past data)
             signal = strategy_func(window)

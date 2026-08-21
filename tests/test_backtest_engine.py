@@ -1,9 +1,10 @@
-import pytest
-import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
-from backtest_engine import BacktestEngine, DataValidator
-from metrics import calculate_metrics, calculate_drawdown
+
+import pandas as pd
+
+from backtest_engine import BacktestEngine
+from metrics import calculate_drawdown, calculate_metrics
+
 
 class MockStrategy:
     def __init__(self, signals):
@@ -42,7 +43,7 @@ def test_A_buy_reaches_tp():
     df = create_mock_data(rows)
     strat = MockStrategy([("BUY", 90, 110)])
     engine = BacktestEngine(df, strat, fee_rate=0, slippage_rate=0)
-    trades, equity = engine.run()
+    trades, _equity = engine.run()
     
     assert len(trades) == 1
     assert trades[0]['result'] == 'WIN'
@@ -60,7 +61,7 @@ def test_B_buy_reaches_sl():
     df = create_mock_data(rows)
     strat = MockStrategy([("BUY", 90, 110)])
     engine = BacktestEngine(df, strat, fee_rate=0, slippage_rate=0)
-    trades, equity = engine.run()
+    trades, _equity = engine.run()
     
     assert len(trades) == 1
     assert trades[0]['result'] == 'LOSS'
@@ -76,7 +77,7 @@ def test_C_same_candle_sl_and_tp():
     df = create_mock_data(rows)
     strat = MockStrategy([("BUY", 90, 110)])
     engine = BacktestEngine(df, strat, fee_rate=0, slippage_rate=0, intrabar_resolution="conservative")
-    trades, equity = engine.run()
+    trades, _equity = engine.run()
     
     assert len(trades) == 1
     assert trades[0]['result'] == 'LOSS'
@@ -92,7 +93,7 @@ def test_D_open_trade_remains_open():
     df = create_mock_data(rows)
     strat = MockStrategy([("BUY", 90, 110)])
     engine = BacktestEngine(df, strat, fee_rate=0, slippage_rate=0)
-    trades, equity = engine.run()
+    trades, _equity = engine.run()
     
     assert len(trades) == 1
     assert trades[0]['reason'] == 'TIME_EXIT'
@@ -108,7 +109,7 @@ def test_E_time_exit_pnl():
     df = create_mock_data(rows)
     strat = MockStrategy([("BUY", 90, 110)])
     engine = BacktestEngine(df, strat, fee_rate=0, slippage_rate=0)
-    trades, equity = engine.run()
+    trades, _equity = engine.run()
     
     assert trades[0]['gross_pnl'] == (108.0 - 100.0) * trades[0]['quantity']
 
@@ -123,7 +124,7 @@ def test_F_fee_only_accounting():
     strat = MockStrategy([("BUY", 90, 110)])
     # 0.1% fee
     engine = BacktestEngine(df, strat, fee_rate=0.001, slippage_rate=0, risk_per_trade=0.01)
-    trades, equity = engine.run()
+    trades, _equity = engine.run()
     
     t = trades[0]
     expected_entry_fee = 100.0 * t['quantity'] * 0.001
@@ -143,7 +144,7 @@ def test_G_known_slippage():
     strat = MockStrategy([("BUY", 90, 110)])
     
     engine = BacktestEngine(df, strat, fee_rate=0, slippage_rate=0.01)
-    trades, equity = engine.run()
+    trades, _equity = engine.run()
     
     t = trades[0]
     # Slippage 1% on BUY entry -> 100 * 1.01 = 101.0
@@ -161,7 +162,7 @@ def test_H_known_position_size():
     strat = MockStrategy([("BUY", 90, 110)])
     
     engine = BacktestEngine(df, strat, fee_rate=0, slippage_rate=0, initial_balance=10000, risk_per_trade=0.01)
-    trades, equity = engine.run()
+    trades, _equity = engine.run()
     
     # Balance = 10000. Risk = 1%. Risk amount = 100.
     # Entry = 100. SL = 90. Distance = 10.
@@ -180,7 +181,7 @@ def test_I_consecutive_trades():
     df = create_mock_data(rows)
     strat = MockStrategy([("BUY", 90, 110), ("BUY", 100, 120)])
     engine = BacktestEngine(df, strat, fee_rate=0, slippage_rate=0, initial_balance=10000, risk_per_trade=0.01)
-    trades, equity = engine.run()
+    trades, _equity = engine.run()
     
     assert len(trades) == 2
     

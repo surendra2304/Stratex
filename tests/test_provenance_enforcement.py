@@ -1,7 +1,7 @@
 import json
-import pytest
-import os
-from dashboard import app, _get_trades_data
+
+from dashboard import _get_trades_data, app
+
 
 class TestProvenanceEnforcement:
     """
@@ -48,8 +48,7 @@ class TestProvenanceEnforcement:
             }
         ]
         with open(ledger, "w", encoding="utf-8") as f:
-            for r in records:
-                f.write(json.dumps(r) + "\n")
+            f.writelines(json.dumps(r) + "\n" for r in records)
 
         monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
         
@@ -85,8 +84,7 @@ class TestProvenanceEnforcement:
             }
         ]
         with open(ledger, "w", encoding="utf-8") as f:
-            for r in records:
-                f.write(json.dumps(r) + "\n")
+            f.writelines(json.dumps(r) + "\n" for r in records)
 
         monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
         trades_data = _get_trades_data()
@@ -120,8 +118,7 @@ class TestProvenanceEnforcement:
             }
         ]
         with open(ledger, "w", encoding="utf-8") as f:
-            for r in records:
-                f.write(json.dumps(r) + "\n")
+            f.writelines(json.dumps(r) + "\n" for r in records)
 
         monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
         trades_data = _get_trades_data()

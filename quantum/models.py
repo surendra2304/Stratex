@@ -4,9 +4,17 @@ Encapsulates trainable parameters and provides a ``predict`` method that
 returns a probability score between 0 and 1.
 """
 import numpy as np
-from .config import DEFAULT_QUBIT_COUNT, DEFAULT_CIRCUIT_DEPTH, DEFAULT_SHOTS, USE_PENNYLANE, USE_QISKIT
+
 from .circuits import build_ansatz
+from .config import (
+    DEFAULT_CIRCUIT_DEPTH,
+    DEFAULT_QUBIT_COUNT,
+    DEFAULT_SHOTS,
+    USE_PENNYLANE,
+    USE_QISKIT,
+)
 from .simulator import run_circuit
+
 
 class QuantumModel:
     def __init__(self, params: np.ndarray = None):

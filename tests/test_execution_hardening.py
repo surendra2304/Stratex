@@ -1,13 +1,15 @@
+from unittest.mock import MagicMock
+
 import pytest
-import os
-import json
-import datetime
-from unittest.mock import MagicMock, patch
 from binance.exceptions import BinanceAPIException
 
 import execution
-from execution import place_market_order, OrderState, _load_active_trades, _save_active_trades
-from testnet_engine.service import TestnetService
+from execution import (
+    OrderState,
+    _save_active_trades,
+    place_market_order,
+)
+
 
 class TestExecutionHardening:
     """
@@ -193,10 +195,8 @@ class TestExecutionHardening:
         monkeypatch.setattr("testnet_engine.protection.place_oco_protection", mock_place_oco)
 
         # Service sync exchange state
-        active_trades = []
-        open_orders = []
         account = mock_client.get_account()
         assets = [item for item in account['balances'] if float(item['free']) > 0 or float(item['locked']) > 0]
-        open_symbols_from_assets = set([a['asset'] + "USDT" for a in assets if a['asset'] != "USDT"])
+        open_symbols_from_assets = {a['asset'] + "USDT" for a in assets if a['asset'] != "USDT"}
         
         assert "LINKUSDT" in open_symbols_from_assets

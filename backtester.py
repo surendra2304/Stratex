@@ -1,20 +1,29 @@
-import pandas as pd
 import json
 import os
 from datetime import datetime
-from data_client import MarketDataClient
-from config import TIMEFRAME, ACTIVE_STRATEGY, SYMBOL
-from config import BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE, RISK_PER_TRADE, STARTING_BALANCE, OOS_TRAIN_PCT, OOS_VAL_PCT
-from data import add_indicators
 
-import strategy_scalper as scalper
-import strategy_swing   as swing
-import strategy_ml      as ml
+import pandas as pd
+
 import strategy_aggressor as aggressor
+import strategy_ml as ml
+import strategy_scalper as scalper
 import strategy_supertrend as supertrend
-
+import strategy_swing as swing
 from backtest_engine import BacktestEngine
+from config import (
+    BACKTEST_FEE_RATE,
+    BACKTEST_SLIPPAGE_RATE,
+    OOS_TRAIN_PCT,
+    OOS_VAL_PCT,
+    RISK_PER_TRADE,
+    STARTING_BALANCE,
+    SYMBOL,
+    TIMEFRAME,
+)
+from data import add_indicators
+from data_client import MarketDataClient
 from metrics import calculate_metrics
+
 
 def fetch_historical_data(days=30):
     """Downloads historical candles from Binance."""
@@ -22,7 +31,7 @@ def fetch_historical_data(days=30):
     client = MarketDataClient()
     
     if not client.is_available():
-        print(f"MarketDataClient is explicitly disabled. DATA_UNAVAILABLE.")
+        print("MarketDataClient is explicitly disabled. DATA_UNAVAILABLE.")
         return pd.DataFrame()
         
     start_str = f"{days} days ago UTC"
@@ -147,7 +156,7 @@ def generate_baseline(df):
     os.makedirs('backtest_results', exist_ok=True)
     
     for s_name in strats_to_test:
-        metrics, trades, eq = run_rolling_walk_forward(df, s_name, num_windows=5)
+        metrics, _trades, _eq = run_rolling_walk_forward(df, s_name, num_windows=5)
         
         results[s_name] = metrics
         
@@ -190,8 +199,8 @@ def generate_phase5_reports(df):
     
     os.makedirs('backtest_results/phase5', exist_ok=True)
     
-    from diagnostics import calculate_diagnostics
     from backtest_engine import BacktestEngine
+    from diagnostics import calculate_diagnostics
     
     full_results = {}
     
@@ -317,8 +326,8 @@ def generate_phase5_reports(df):
     print("\nPhase 5 reports successfully generated in `backtest_results/phase5/`!")
 
 if __name__ == "__main__":
-    import sys
     import io
+    import sys
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
     
     data = fetch_historical_data(days=30)

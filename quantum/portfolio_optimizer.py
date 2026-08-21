@@ -4,16 +4,15 @@ All optimization is advisory – the result is a list of selected candidate IDs.
 The optimizer respects hard constraints via penalty terms and falls back to a
 simple classical heuristic when the quantum backend is unavailable or fails.
 """
-import numpy as np
 import logging
-from typing import List, Dict, Any
+from typing import Any
 
-from .config import USE_QISKIT, DEFAULT_SHOTS, SIMULATION_TIMEOUT
+from .config import DEFAULT_SHOTS, USE_QISKIT
 
 logger = logging.getLogger(__name__)
 
 
-def _build_quadratic_program(candidates: List[Dict[str, Any]]) -> "QuadraticProgram":
+def _build_quadratic_program(candidates: list[dict[str, Any]]) -> "QuadraticProgram":
     """Construct a Qiskit :class:`QuadraticProgram` representing the portfolio QUBO.
     Variables are binary selection flags for each candidate.
     The objective balances expected return and risk (and simple transaction cost).
@@ -21,7 +20,7 @@ def _build_quadratic_program(candidates: List[Dict[str, Any]]) -> "QuadraticProg
     """
     try:
         from qiskit_optimization import QuadraticProgram
-    except Exception as e:
+    except Exception:
         raise RuntimeError("Qiskit Optimization package unavailable")
 
     qp = QuadraticProgram()
@@ -71,7 +70,7 @@ def _build_quadratic_program(candidates: List[Dict[str, Any]]) -> "QuadraticProg
     return qp
 
 
-def _solve_with_qaoa(qp) -> List[int]:
+def _solve_with_qaoa(qp) -> list[int]:
     """Solve the QuadraticProgram using QAOA on the Aer simulator.
     Returns a list of selected indices (where variable == 1).
     """
@@ -86,11 +85,11 @@ def _solve_with_qaoa(qp) -> List[int]:
     optimizer = MinimumEigenOptimizer(qaoa)
     result = optimizer.solve(qp)
     # result.x is a list of 0/1 selections
-    selected = [i for i, val in enumerate(result.x) if int(round(val)) == 1]
+    selected = [i for i, val in enumerate(result.x) if round(val) == 1]
     return selected
 
 
-def _fallback_classical(candidates: List[Dict[str, Any]]) -> List[int]:
+def _fallback_classical(candidates: list[dict[str, Any]]) -> list[int]:
     """Simple greedy heuristic: sort by expected_net_edge / risk and pick until limit.
     This is deterministic because it uses a fixed sort key.
     """
@@ -113,7 +112,7 @@ def _fallback_classical(candidates: List[Dict[str, Any]]) -> List[int]:
     return selected
 
 
-def select_opportunities(candidates: List[Dict[str, Any]]) -> List[int]:
+def select_opportunities(candidates: list[dict[str, Any]]) -> list[int]:
     """Public API: return the indices of selected candidates.
     Tries the quantum optimizer first; on any exception or missing backend,
     falls back to the deterministic classical heuristic.

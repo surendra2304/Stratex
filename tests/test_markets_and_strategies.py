@@ -1,7 +1,9 @@
-import os
 import json
+
 import pytest
+
 from dashboard import app
+
 
 @pytest.fixture
 def client():
@@ -83,7 +85,7 @@ def test_strategy_insufficient_data_integrity(client):
     res = client.get('/api/strategy-metrics')
     data = json.loads(res.data)
     
-    for name, s in data["strategies"].items():
+    for s in data["strategies"].values():
         if s["trades"] == 0:
             assert s["win_rate"] is None or s["win_rate"] == 0.0 or s["trades"] == 0
             assert s["avg_trade"] is None

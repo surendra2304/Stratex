@@ -1,4 +1,5 @@
 from binance.client import Client
+
 from logger import get_logger
 
 logger = get_logger("discovery_service")

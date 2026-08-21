@@ -2,7 +2,6 @@ import json
 import os
 import time
 from dataclasses import dataclass
-from typing import Optional, Dict, Set
 
 
 @dataclass
@@ -20,7 +19,7 @@ class Signal:
     strategy_name: str
     action: str  # "ENTRY", "EXIT", "REVERSE"
     reason: str
-    features: Optional[Dict] = None
+    features: dict | None = None
 
 
 class PaperSignalLogger:
@@ -87,7 +86,7 @@ class SignalLogger:
 
     def __init__(self, filename: str = "signals.jsonl"):
         self.filename = filename
-        self._seen_ids: Set[str] = set()
+        self._seen_ids: set[str] = set()
         self._load_seen_ids()
 
     def _load_seen_ids(self):

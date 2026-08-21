@@ -1,9 +1,8 @@
-import pytest
-from testnet_engine.service import TestnetService
-from testnet_engine.market_scanner import MarketScanner
-import pandas as pd
 import datetime
-import config
+
+from testnet_engine.market_scanner import MarketScanner
+from testnet_engine.service import TestnetService
+
 
 def test_market_scanner_multi_tf_isolation():
     # Setup test scanner with callbacks disabled for isolation

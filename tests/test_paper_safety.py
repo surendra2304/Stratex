@@ -1,8 +1,9 @@
-import pytest
+import importlib
 import os
 from unittest.mock import patch
 
-import importlib
+import pytest
+
 
 def reload_modules():
     import config
@@ -18,7 +19,7 @@ def test_paper_mode_execution_block():
     Part 34: PAPER TRADING SAFETY TEST
     Proves that PAPER MODE cannot call create_order, cancel_order, or Binance APIs.
     """
-    config, execution = reload_modules()
+    _config, execution = reload_modules()
     assert execution.get_exchange_client() is None, "Client should not be initialized in PAPER mode"
     
     with pytest.raises(RuntimeError) as excinfo:

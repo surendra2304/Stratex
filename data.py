@@ -1,15 +1,16 @@
-# ==============================================================================
-# DATA.PY - Market Data Module: live OHLCV candle fetching and indicator engine
-# ==============================================================================
 import pandas as pd
+
 from data_client import MarketDataClient
-from config import BASE_URL
+from logger import get_logger
+
+logger = get_logger("data")
+
 
 def get_top_gainers(limit=5):
     """Fetches the top gaining USDT pairs from Binance Testnet in the last 24h."""
     client = MarketDataClient()
     if not client.is_available():
-        print("[DATA] Exchange client disabled. DATA_UNAVAILABLE.")
+        logger.warning("[DATA] Exchange client disabled. DATA_UNAVAILABLE.")
         return []
 
     try:
@@ -17,23 +18,23 @@ def get_top_gainers(limit=5):
         usdt_pairs = [t for t in tickers if t['symbol'].endswith('USDT')]
         sorted_pairs = sorted(usdt_pairs, key=lambda x: float(x['priceChangePercent']), reverse=True)
         top_symbols = [t['symbol'] for t in sorted_pairs[:limit]]
-        print(f"[DATA] Hot Coins Detected: {', '.join(top_symbols)}")
+        logger.info(f"[DATA] Hot Coins Detected: {', '.join(top_symbols)}")
         return top_symbols
     except Exception as e:
-        print(f"[DATA] Error fetching top gainers: {e}")
+        logger.error(f"[DATA] Error fetching top gainers: {e}")
         return []  # DATA_UNAVAILABLE
 
 def get_candles(symbol, interval="15m", limit=300):
     """Fetches the latest candles from Binance Testnet and returns a DataFrame."""
     client = MarketDataClient()
     if not client.is_available():
-        print(f"[DATA] Exchange client disabled. Cannot fetch live candles for {symbol}. DATA_UNAVAILABLE.")
+        logger.warning(f"[DATA] Exchange client disabled. Cannot fetch live candles for {symbol}. DATA_UNAVAILABLE.")
         return pd.DataFrame()
 
     try:
         raw = client.get_klines(symbol=symbol, interval=interval, limit=limit)
         if not raw or len(raw) == 0:
-            print(f"[DATA] Empty candle data returned for {symbol}.")
+            logger.warning(f"[DATA] Empty candle data returned for {symbol}.")
             return pd.DataFrame()
             
         df = pd.DataFrame(raw, columns=[
@@ -59,7 +60,7 @@ def get_candles(symbol, interval="15m", limit=300):
         
         return df
     except Exception as e:
-        print(f"[DATA] Error fetching candles for {symbol}: {e}")
+        logger.error(f"[DATA] Error fetching candles for {symbol}: {e}")
         return pd.DataFrame()
 
 def add_indicators(df):
@@ -80,7 +81,7 @@ def add_indicators(df):
         df.reset_index(drop=True, inplace=True)
         return df
     except Exception as e:
-        print(f"[DATA] Error adding indicators: {e}")
+        logger.error(f"[DATA] Error adding indicators: {e}")
         return pd.DataFrame()
 
 def get_current_price(symbol):
@@ -93,5 +94,5 @@ def get_current_price(symbol):
         ticker = client.get_symbol_ticker(symbol=symbol)
         return float(ticker["price"])
     except Exception as e:
-        print(f"[DATA] Error getting price: {e}")
+        logger.error(f"[DATA] Error getting price: {e}")
         return None

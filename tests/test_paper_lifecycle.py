@@ -1,12 +1,11 @@
-import pytest
-import time
-import uuid
 import os
-from paper_engine.portfolio import PaperPortfolio
+import time
+
 from paper_engine.market_data import MarketDataFeed
+from paper_engine.portfolio import PaperPortfolio
 from paper_engine.simulator import PaperSimulator
 from research_phase9.cost_engine import CostEngine
-from paper_engine.signal_logger import Signal
+
 
 def test_paper_trading_lifecycle():
     """

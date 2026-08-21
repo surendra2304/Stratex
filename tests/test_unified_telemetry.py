@@ -3,20 +3,22 @@ Comprehensive Test Suite for Unified Telemetry & Data Pipelines
 Tests schema validation, atomic ledger persistence, query filters, metrics computation, and API endpoints.
 """
 
-import os
 import json
-import pytest
 import tempfile
+
+import pytest
+
+from dashboard import app
 from testnet_engine.telemetry import (
     TelemetryManager,
-    validate_signal_event,
-    validate_execution_event,
-    validate_trade_event,
-    validate_position_event,
     validate_balance_event,
-    validate_equity_snapshot
+    validate_equity_snapshot,
+    validate_execution_event,
+    validate_position_event,
+    validate_signal_event,
+    validate_trade_event,
 )
-from dashboard import app
+
 
 @pytest.fixture
 def temp_telemetry():

@@ -3,8 +3,6 @@
 # ==============================================================================
 
 from collections import namedtuple
-import pandas as pd
-import numpy as np
 
 SignalResult = namedtuple(
     "SignalResult",
@@ -37,7 +35,7 @@ def get_signal(df):
     close = float(last['close'])
     open_p = float(last['open'])
     low = float(last['low'])
-    high = float(last['high'])
+    float(last['high'])
     
     ema_200 = float(last.get('ema_200', close))
     ema_50  = float(last.get('ema_50', close))

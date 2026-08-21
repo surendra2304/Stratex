@@ -1,12 +1,10 @@
-import pytest
-import os
-import json
 import time
-from paper_engine.portfolio import PaperPortfolio
-from paper_engine.heartbeat import HeartbeatState, ComponentStatus
-from paper_engine.session import SessionState
-from paper_engine.data_monitor import DataMonitor
+
 from paper_engine.alerts import AlertManager
+from paper_engine.data_monitor import DataMonitor
+from paper_engine.heartbeat import ComponentStatus, HeartbeatState
+from paper_engine.session import SessionState
+
 
 def test_phase12_full_acceptance_scenario(tmp_path):
     """
@@ -23,7 +21,7 @@ def test_phase12_full_acceptance_scenario(tmp_path):
     session_file = str(tmp_path / "session.json")
     hb_file = str(tmp_path / "heartbeat.json")
     alerts_file = str(tmp_path / "alerts.json")
-    port_file = str(tmp_path / "portfolio.json")
+    str(tmp_path / "portfolio.json")
     
     # 1. Session start
     session = SessionState(filename=session_file)

@@ -1,18 +1,19 @@
-import sys
-import os
 import json
-import pandas as pd
-import numpy as np
+import os
+import sys
 from datetime import datetime
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from research_phase7.data_loader import download_and_verify_data
-from research_phase7.research_features import build_institutional_features
+from config import BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE
 from research_phase7.barrier_labels import apply_triple_barrier_labels
-from research_phase7.ml_research import feature_ablation_test, calculate_required_gross_edge
-from research_phase7.walk_forward import generate_walk_forward_splits, run_strict_walk_forward
-from config import BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE, SYMBOL
+from research_phase7.data_loader import download_and_verify_data
+from research_phase7.ml_research import (
+    calculate_required_gross_edge,
+    feature_ablation_test,
+)
+from research_phase7.research_features import build_institutional_features
+
 
 def run_phase7_pipeline():
     print("==============================================")
@@ -28,7 +29,7 @@ def run_phase7_pipeline():
         with open('backtest_results/phase7/data_quality_report.md', 'w') as f:
             f.write("# Phase 7: Data Quality Report\n")
             f.write(f"- Dataset size: {len(df)} 1m candles\n")
-            f.write(f"- Contains actual Testnet limitations if under 129,600 candles.\n")
+            f.write("- Contains actual Testnet limitations if under 129,600 candles.\n")
     except Exception as e:
         print(f"Data loading failed: {e}")
         return
@@ -44,8 +45,7 @@ def run_phase7_pipeline():
     label_dist = df['barrier_hit'].value_counts().to_dict()
     with open('backtest_results/phase7/barrier_label_analysis.md', 'w') as f:
         f.write("# Phase 7: Triple Barrier Label Analysis\n\n")
-        for k, v in label_dist.items():
-            f.write(f"- {k}: {v}\n")
+        f.writelines(f"- {k}: {v}\n" for k, v in label_dist.items())
             
     # 4. Feature Ablation
     print("[PHASE 7] Running Feature Ablation matrix (Groups A-E)...")

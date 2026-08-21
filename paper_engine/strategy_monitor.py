@@ -1,5 +1,6 @@
 import time
 
+
 class StrategyMonitor:
     """Monitors signals and strategy evaluation for health."""
     def __init__(self, heartbeat):

@@ -5,21 +5,22 @@ import time
 # Add root directory to python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from paper_engine.portfolio import PaperPortfolio
-from paper_engine.heartbeat import HeartbeatState
-from paper_engine.data_monitor import DataMonitor
-from paper_engine.session import SessionState
 from paper_engine.alerts import AlertManager
+from paper_engine.data_monitor import DataMonitor
+from paper_engine.heartbeat import HeartbeatState
+from paper_engine.portfolio import PaperPortfolio
+from paper_engine.session import SessionState
+
 
 def run_simulation(events=100000):
-    print(f"Starting 100,000 Event Simulation...")
+    print("Starting 100,000 Event Simulation...")
     
     session = SessionState(filename="sim_session.json")
-    sid = session.start_session({"mode": "SIMULATION"})
+    session.start_session({"mode": "SIMULATION"})
     
     hb = HeartbeatState(filename="sim_heartbeat.json")
     dm = DataMonitor(hb)
-    alerts = AlertManager(filename="sim_alerts.json")
+    AlertManager(filename="sim_alerts.json")
     port = PaperPortfolio(filename="sim_portfolio.json")
     
     start_t = time.time()
@@ -61,7 +62,7 @@ def run_simulation(events=100000):
             
     session.stop_session()
     
-    print(f"Simulation Complete!")
+    print("Simulation Complete!")
     print(f"Events Processed: {events}")
     print(f"Data Duplicates Handled: {dm.symbols['BTCUSDT']['duplicates']}")
     print(f"Data Gaps Detected: {dm.symbols['BTCUSDT']['gaps']}")

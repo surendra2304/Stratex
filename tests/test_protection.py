@@ -1,15 +1,16 @@
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, patch
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 
 from testnet_engine.protection import (
-    place_oco_protection,
-    emergency_market_close,
     check_oco_status,
     compute_net_pnl,
+    emergency_market_close,
+    place_oco_protection,
     round_price,
-    round_qty
+    round_qty,
 )
 
 

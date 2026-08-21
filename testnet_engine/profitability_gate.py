@@ -164,7 +164,7 @@ class ProfitabilityGate:
         logger.info(f"  Friction        : {total_friction_pct:.6f}")
         logger.info(f"  Expected Net    : {expected_net_return:.6f} | Threshold: >={min_edge:.5f}")
         logger.info(f"  Decision        : {decision_str}")
-        logger.info(f"---------------------------------------")
+        logger.info("---------------------------------------")
 
         if is_accepted:
             logger.info(f"[PROFITABILITY_ACCEPTED] {symbol} {side} | Expected Net: {expected_net_return:.5f} >= {min_edge:.5f}")

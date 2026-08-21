@@ -3,16 +3,17 @@ scripts/check_health.py
 Production health-check script for the 24/7 Binance Testnet bot.
 """
 
-import sys
-import os
-import json
-import socket
 import datetime
+import json
+import os
+import socket
+import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from execution import get_exchange_client
 import config
+from execution import get_exchange_client
+
 
 def check_health():
     print("==========================================================")
@@ -27,7 +28,7 @@ def check_health():
         sock.bind(("127.0.0.1", 48888))
         sock.close()
         is_running = False
-    except socket.error:
+    except OSError:
         is_running = True
         
     print(f"Daemon Status : {'RUNNING (Port 48888 locked)' if is_running else 'STOPPED (Port 48888 available)'}")

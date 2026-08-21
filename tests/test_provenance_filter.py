@@ -1,7 +1,9 @@
-import os
 import json
+
 import pytest
+
 from dashboard import app
+
 
 @pytest.fixture
 def client():
@@ -23,8 +25,7 @@ def test_provenance_filter_excludes_synthetic_test_records(client, tmp_path, mon
     ]
     
     with open(ledger_file, "w") as f:
-        for r in records:
-            f.write(json.dumps(r) + "\n")
+        f.writelines(json.dumps(r) + "\n" for r in records)
             
     res = client.get("/api/trades")
     assert res.status_code == 200

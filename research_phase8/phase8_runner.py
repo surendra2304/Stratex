@@ -1,13 +1,12 @@
-import sys
-import os
 import json
-from datetime import datetime
+import os
+import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from research_phase8.multi_timeframe_runner import run_multi_timeframe_grid
 from research_phase7.data_loader import download_and_verify_data
-from config import BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE
+from research_phase8.multi_timeframe_runner import run_multi_timeframe_grid
+
 
 def write_reports(results):
     os.makedirs('backtest_results/phase8', exist_ok=True)

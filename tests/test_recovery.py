@@ -1,12 +1,12 @@
-import pytest
-import os
 import json
-import datetime
-from unittest.mock import patch, MagicMock
+import os
+from unittest.mock import MagicMock, patch
 
-from execution import monitor_open_trades, _save_active_trades, _load_active_trades
+import pytest
+
+from execution import _load_active_trades, _save_active_trades, monitor_open_trades
 from testnet_engine.service import TestnetService
-from testnet_engine.protection import emergency_market_close
+
 
 @pytest.fixture
 def clean_env():

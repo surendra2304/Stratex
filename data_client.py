@@ -8,8 +8,8 @@
 #   Do NOT pass API_KEY or SECRET_KEY to this client.
 # ==============================================================================
 from binance.client import Client
-from config import TRADING_MODE
 
+from config import TRADING_MODE
 
 # Approved read-only methods that this adapter may proxy
 _APPROVED_METHODS = frozenset([

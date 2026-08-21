@@ -1,5 +1,6 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 
 def calculate_fractional_difference(series, d, threshold=1e-4):
     """

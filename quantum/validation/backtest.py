@@ -2,10 +2,12 @@
 """Research Backtest Engine for walk-forward fold evaluation."""
 
 import time
-import pandas as pd
-import numpy as np
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
 
 @dataclass
 class TradeRecord:
@@ -29,8 +31,8 @@ class TradeRecord:
 class BacktestResult:
     strategy_name: str
     fold_idx: int
-    trades: List[TradeRecord]
-    equity_curve: List[float]
+    trades: list[TradeRecord]
+    equity_curve: list[float]
     total_trades: int
     win_rate_pct: float
     net_profit: float
@@ -96,9 +98,9 @@ class BacktestRunner:
         df_feat = add_features(df.copy())
         capital = self.initial_capital
         equity_curve = [capital]
-        trades: List[TradeRecord] = []
-        open_trade: Optional[Dict[str, Any]] = None
-        latencies: List[float] = []
+        trades: list[TradeRecord] = []
+        open_trade: dict[str, Any] | None = None
+        latencies: list[float] = []
         
         warmup = 30
         for i in range(warmup, len(df_feat)):

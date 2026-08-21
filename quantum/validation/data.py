@@ -1,12 +1,12 @@
 # quantum/validation/data.py
 """Historical dataset loading, inspection, and verification."""
 
-import os
 import glob
-import pandas as pd
-import numpy as np
+import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+
+import pandas as pd
+
 
 @dataclass
 class DatasetAuditResult:
@@ -90,14 +90,14 @@ def inspect_dataset_file(file_path: str, symbol: str, timeframe: str) -> Dataset
         status=status
     )
 
-def audit_all_datasets(data_dir: str = "data_cache") -> List[DatasetAuditResult]:
+def audit_all_datasets(data_dir: str = "data_cache") -> list[DatasetAuditResult]:
     """Audits all available cache files in the workspace."""
     results = []
     patterns = [os.path.join(data_dir, "*_15m.csv"), os.path.join(data_dir, "*_1m_90d.parquet"), os.path.join(data_dir, "*_1h.csv")]
     files = []
     for pat in patterns:
         files.extend(glob.glob(pat))
-    files = sorted(list(set(files)))
+    files = sorted(set(files))
     
     for f in files:
         base = os.path.basename(f)
@@ -108,7 +108,7 @@ def audit_all_datasets(data_dir: str = "data_cache") -> List[DatasetAuditResult]
         results.append(res)
     return results
 
-def load_benchmark_data(symbol: str = "BTCUSDT", preferred_tf: str = "15m", data_dir: str = "data_cache") -> Tuple[pd.DataFrame, DatasetAuditResult]:
+def load_benchmark_data(symbol: str = "BTCUSDT", preferred_tf: str = "15m", data_dir: str = "data_cache") -> tuple[pd.DataFrame, DatasetAuditResult]:
     """Loads and standardizes historical candle data for benchmarking."""
     # Priority: 1m_90d.parquet resampled or direct 15m.csv
     parquet_path = os.path.join(data_dir, f"{symbol}_1m_90d.parquet")
@@ -165,6 +165,4 @@ def validate_dataset(df: pd.DataFrame) -> bool:
     if df['timestamp'].duplicated().any():
         return False
     invalid_ohlc = df[(df['high'] < df['low']) | (df['open'] > df['high']) | (df['open'] < df['low']) | (df['close'] > df['high']) | (df['close'] < df['low'])]
-    if not invalid_ohlc.empty:
-        return False
-    return True
+    return invalid_ohlc.empty

@@ -1,24 +1,16 @@
-import os
-import sys
-import time
-import json
-import uuid
-import random
 import datetime
+import random
 import threading
-import gc
 import tracemalloc
-import pandas as pd
-import numpy as np
-import pytest
 
-from config import ACTIVE_STRATEGIES, SUPPORTED_TIMEFRAMES, SUPPORTED_STRATEGIES
+import numpy as np
+import pandas as pd
+
+from dashboard import app
+from research_phase9.cost_engine import CostEngine
 from testnet_engine.profitability_gate import ProfitabilityGate
 from testnet_engine.risk_gate import RiskGate
-from testnet_engine.market_scanner import MarketScanner
-from testnet_engine.service import TestnetService
-from research_phase9.cost_engine import CostEngine
-from dashboard import app, _get_trades_data, get_live_account_and_holdings
+
 
 def generate_synthetic_ohlcv(length=250, start_price=50000.0, volatility=0.002):
     """Generates realistic synthetic OHLCV time-series dataframe via vectorized NumPy."""
@@ -66,11 +58,11 @@ def test_long_soak_memory_and_invariants():
     for cycle in range(50):
         for sym in symbols:
             df = generate_synthetic_ohlcv(length=250, start_price=100.0 + random.random() * 50000.0)
-            atr_val = (df['high'] - df['low']).mean()
+            (df['high'] - df['low']).mean()
             price = float(df['close'].iloc[-1])
             
             # Profitability check
-            is_accepted, metrics = prof_gate.evaluate_signal(
+            is_accepted, _metrics = prof_gate.evaluate_signal(
                 symbol=sym,
                 side="BUY",
                 entry_price=price,
@@ -81,7 +73,7 @@ def test_long_soak_memory_and_invariants():
             
             if is_accepted:
                 # Risk gate check (using 0.001 BTC equivalent size within 2% asset limit)
-                passed, reason, msg = risk_gate.evaluate_risk(
+                passed, _reason, _msg = risk_gate.evaluate_risk(
                     symbol=sym,
                     side="LONG",
                     current_equity=10000.0,
@@ -100,10 +92,10 @@ def test_long_soak_memory_and_invariants():
                     }
                     if len(active_positions) >= 4:
                         # Close oldest position to cycle
-                        rem_sym = list(active_positions.keys())[0]
+                        rem_sym = next(iter(active_positions.keys()))
                         del active_positions[rem_sym]
                         
-    current, peak = tracemalloc.get_traced_memory()
+    _current, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
     
     peak_mb = peak / (1024 * 1024)

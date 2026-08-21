@@ -1,7 +1,9 @@
-import pytest
-import os
 import importlib
+import os
 from unittest import mock
+
+import pytest
+
 
 def reload_modules():
     import config

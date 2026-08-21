@@ -1,9 +1,10 @@
-import pytest
 import pandas as pd
+import pytest
+
+import strategy_aggressor
+import strategy_ml
 import strategy_scalper
 import strategy_swing
-import strategy_ml
-import strategy_aggressor
 
 strategies = [
     strategy_scalper,

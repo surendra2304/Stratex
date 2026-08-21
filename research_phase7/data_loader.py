@@ -1,10 +1,13 @@
-import sys
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
+
+from config import SYMBOL, TIMEFRAME
 from data_client import MarketDataClient
-from config import TIMEFRAME, SYMBOL
+
 
 def download_and_verify_data(symbol=SYMBOL, timeframe=TIMEFRAME, days=90, use_cache=True):
     """
@@ -26,7 +29,7 @@ def download_and_verify_data(symbol=SYMBOL, timeframe=TIMEFRAME, days=90, use_ca
     client = MarketDataClient()
     
     if not client.is_available():
-        raise ValueError(f"MarketDataClient is explicitly disabled. DATA_UNAVAILABLE.")
+        raise ValueError("MarketDataClient is explicitly disabled. DATA_UNAVAILABLE.")
         
     start_str = f"{days} days ago UTC"
     raw = client.get_historical_klines(symbol, timeframe, start_str)

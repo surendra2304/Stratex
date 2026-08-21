@@ -74,12 +74,10 @@ def generate_report():
                         total_slippage += float(data.get("slippage", 0.0))
                         
                         current_equity += pnl
-                        if current_equity > peak_equity:
-                            peak_equity = current_equity
+                        peak_equity = max(peak_equity, current_equity)
                         
                         dd = (peak_equity - current_equity) / peak_equity
-                        if dd > max_drawdown:
-                            max_drawdown = dd
+                        max_drawdown = max(max_drawdown, dd)
                 except Exception:
                     pass
                     

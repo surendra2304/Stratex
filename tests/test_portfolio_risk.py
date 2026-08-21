@@ -1,10 +1,11 @@
-import pytest
-import os
 import importlib
+import os
+
+import pytest
 
 import config
 import testnet_engine.risk_gate
-from testnet_engine.risk_gate import RiskGate
+
 
 def reload_modules():
     importlib.reload(config)
@@ -36,7 +37,6 @@ def risk_gate():
 
 def test_position_sizing_lot_size_rounding(risk_gate):
     config.MAX_SINGLE_ASSET_EXPOSURE = 1.0 # Temporarily bypass for this specific test
-    filters = {"stepSize": 0.001, "minNotional": 10.0, "tickSize": 0.01}
     current_equity = 10000.0
     entry = 50000.0
     sl = 49500.0 # $500 risk

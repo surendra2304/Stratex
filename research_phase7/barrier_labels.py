@@ -1,5 +1,5 @@
-import pandas as pd
 import numpy as np
+
 
 def apply_triple_barrier_labels(df, pt_pct, sl_pct, time_limit):
     """
@@ -46,12 +46,7 @@ def apply_triple_barrier_labels(df, pt_pct, sl_pct, time_limit):
                 bars_taken = j
                 break
             # Did we hit LOWER?
-            elif curr_low <= lower_barrier and curr_high < upper_barrier:
-                hit_type = "HIT_LOWER"
-                bars_taken = j
-                break
-            # If both hit in the same candle, assume worst case (LOWER)
-            elif curr_high >= upper_barrier and curr_low <= lower_barrier:
+            elif curr_low <= lower_barrier and curr_high < upper_barrier or curr_high >= upper_barrier and curr_low <= lower_barrier:
                 hit_type = "HIT_LOWER"
                 bars_taken = j
                 break

@@ -1,7 +1,10 @@
-import pytest
 import os
-import execution
 from unittest.mock import patch
+
+import pytest
+
+import execution
+
 
 def test_safety_matrix():
     cases = [
@@ -75,7 +78,7 @@ def test_client_constructor_calls(mock_client):
              patch("execution.LIVE_TRADING_ENABLED", live_en):
              
             try:
-                client = execution.get_exchange_client()
+                execution.get_exchange_client()
             except RuntimeError:
                 pass # expected for disabled modes
                 

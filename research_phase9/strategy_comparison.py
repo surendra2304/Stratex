@@ -1,13 +1,13 @@
-import sys
 import os
-import json
+import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from research_phase7.data_loader import download_and_verify_data
-from research_phase9.market_making_research import run_market_making_baseline
 from research_phase9.funding_research import run_funding_arbitrage_research
+from research_phase9.market_making_research import run_market_making_baseline
 from research_phase9.pairs_research import run_pairs_research
+
 
 def run_strategy_comparison():
     print("==============================================")
@@ -93,7 +93,7 @@ def run_strategy_comparison():
             else:
                 return "D - Reject (Negative Net Expectancy)"
                 
-        f.write(f"1. Directional Taker: D - Reject\n")
+        f.write("1. Directional Taker: D - Reject\n")
         f.write(f"2. Market Making: {grade('MARKET_MAKING')}\n")
         if fund_res['status'] == 'AVAILABLE':
             f.write(f"3. Funding Arbitrage: {grade('FUNDING_ARBITRAGE')}\n")

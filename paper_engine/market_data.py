@@ -1,8 +1,8 @@
-import time
-from datetime import datetime
-import pandas as pd
 import math
-from typing import Dict, Optional, Tuple
+import time
+
+import pandas as pd
+
 
 class DataException(Exception):
     pass
@@ -26,8 +26,8 @@ class MarketDataFeed:
         self.last_received_time: float = 0.0
         self.last_market_time: float = 0.0
         
-        self.current_prices: Dict[str, float] = {}
-        self.current_spreads: Dict[str, Tuple[float, float, str]] = {} # (bid, ask, bbo_source)
+        self.current_prices: dict[str, float] = {}
+        self.current_spreads: dict[str, tuple[float, float, str]] = {} # (bid, ask, bbo_source)
         
     def _validate_data(self, price: float, bid: float, ask: float):
         if math.isnan(price) or math.isinf(price) or price <= 0:
@@ -72,7 +72,7 @@ class MarketDataFeed:
             raise DataException(f"No price available for {symbol}")
         return self.current_prices[symbol]
         
-    def get_bbo(self, symbol: str) -> Tuple[float, float, str]:
+    def get_bbo(self, symbol: str) -> tuple[float, float, str]:
         """
         Gets Best Bid and Offer.
         """

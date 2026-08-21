@@ -12,6 +12,7 @@ Verifies:
 """
 import os
 import re
+
 import pytest
 
 # Pattern that might look like a real Binance API key:
@@ -104,13 +105,14 @@ def test_env_example_contains_only_placeholders():
         if "API_KEY=" in stripped or "SECRET_KEY=" in stripped:
             # Value must be a placeholder
             assert "YOUR_" in stripped or "PLACEHOLDER" in stripped or stripped.endswith('=""'), (
-                f".env.example contains a non-placeholder credential line: <REDACTED>"
+                ".env.example contains a non-placeholder credential line: <REDACTED>"
             )
 
 
 def test_market_data_client_no_credentials():
     """MarketDataClient must not accept or use API_KEY/SECRET_KEY."""
     import inspect
+
     from data_client import MarketDataClient
 
     source = inspect.getsource(MarketDataClient.__init__)
@@ -121,8 +123,9 @@ def test_market_data_client_no_credentials():
 
 def test_market_data_client_no_execution_methods():
     """MarketDataClient must not expose create_order, cancel_order, withdraw."""
-    from data_client import MarketDataClient
     from unittest.mock import patch
+
+    from data_client import MarketDataClient
 
     with patch("data_client.TRADING_MODE", "TESTNET"):
         with patch("binance.client.Client.ping"):
@@ -136,8 +139,9 @@ def test_market_data_client_no_execution_methods():
 
 def test_account_client_no_execution_methods():
     """AccountClient must not expose order execution or withdrawal methods."""
-    from account_client import AccountClient
     from unittest.mock import patch
+
+    from account_client import AccountClient
 
     with patch("account_client.TRADING_MODE", "TESTNET"), \
          patch("account_client.Client"):

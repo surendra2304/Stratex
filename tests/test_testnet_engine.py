@@ -1,7 +1,7 @@
-import pytest
+from research_phase9.cost_engine import CostEngine
 from testnet_engine.profitability_gate import ProfitabilityGate
 from testnet_engine.risk_gate import RiskGate
-from research_phase9.cost_engine import CostEngine
+
 
 class TestTestnetEngine:
 
@@ -33,7 +33,6 @@ class TestTestnetEngine:
         
     def test_risk_gate_daily_loss_limit(self):
         """Test that the risk gate correctly rejects trades when daily loss is breached."""
-        from config import MAX_DAILY_LOSS_PCT
         gate = RiskGate(starting_balance=10000.0)
         
         # Simulate a massive loss beyond the daily limit

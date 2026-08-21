@@ -1,9 +1,11 @@
-import pandas as pd
-import time
 import datetime
 import threading
+import time
+
+import pandas as pd
 from binance import ThreadedWebsocketManager
 from binance.client import Client
+
 from logger import get_logger
 
 logger = get_logger("market_scanner")

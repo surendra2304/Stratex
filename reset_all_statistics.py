@@ -1,6 +1,7 @@
-import os
-import json
 import datetime
+import json
+import os
+
 
 def reset_all():
     now_iso = datetime.datetime.utcnow().isoformat() + "Z"

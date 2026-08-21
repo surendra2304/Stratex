@@ -1,9 +1,10 @@
-import sys
 import os
+import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from research_phase9.cost_engine import CostEngine
+
 
 def test_cost_decoupling():
     """

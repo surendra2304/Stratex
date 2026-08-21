@@ -53,14 +53,12 @@ DO NOT:
   - Skip signal logging for losing or rejected signals
   - Stop early because results look bad
 """
+import datetime
 import json
-import math
 import os
 import sys
 import time
 import uuid
-import datetime
-from typing import Optional
 
 import pandas as pd
 
@@ -98,22 +96,20 @@ FROZEN_MIN_TRADES = 30
 
 # ── Imports ────────────────────────────────────────────────────────────────
 
-from logger import get_logger
 from data_client import MarketDataClient
 from features import add_features
-from strategy_swing import get_signal
-from paper_engine.portfolio import PaperPortfolio
-from paper_engine.signal_logger import SignalLogger
-from paper_engine.kill_switch import is_kill_switch_active
+from logger import get_logger
 from paper_engine.experiment_config import (
     FrozenExperimentConfig,
-    create_experiment,
     register_experiment,
 )
+from paper_engine.kill_switch import is_kill_switch_active
+from paper_engine.portfolio import PaperPortfolio
 from paper_engine.reconciliation import PaperReconciliation
-from paper_engine.heartbeat import HeartbeatState, ComponentStatus
+from paper_engine.signal_logger import SignalLogger
 from paper_engine.statistical_report import can_classify
 from research_phase9.cost_engine import CostEngine
+from strategy_swing import get_signal
 
 logger = get_logger("paper_forward_runner")
 
@@ -205,7 +201,7 @@ def load_or_create_experiment() -> FrozenExperimentConfig:
 # MARKET DATA
 # ══════════════════════════════════════════════════════════════════════════════
 
-def fetch_candles(symbol: str, interval: str, limit: int = 250) -> Optional[pd.DataFrame]:
+def fetch_candles(symbol: str, interval: str, limit: int = 250) -> pd.DataFrame | None:
     """
     Fetches recent OHLCV candles from Binance via MarketDataClient (read-only).
     Returns None on failure — DO NOT substitute synthetic data.
@@ -239,11 +235,11 @@ def log_signal_record(
     timestamp: float,
     strategy: str,
     symbol: str,
-    side: Optional[str],
+    side: str | None,
     confidence: float,
     entry_price: float,
-    sl: Optional[float],
-    tp: Optional[float],
+    sl: float | None,
+    tp: float | None,
     decision: str,
     rejection_reason: str = "",
     data_source: str = "BINANCE_REST",
@@ -358,7 +354,7 @@ def paper_exit_positions(
     last = df.iloc[-1]
     high = last["high"]
     low = last["low"]
-    close = last["close"]
+    last["close"]
 
     for pos_id, pos in list(portfolio.positions.items()):
         if pos["status"] != "OPEN":
@@ -605,7 +601,7 @@ def run():
                 health.set("strategy", "OFFLINE")
                 break
 
-            now = time.time()
+            time.time()
             today_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
             # ── Daily rollover ───────────────────────────────────────────

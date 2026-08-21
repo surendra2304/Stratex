@@ -2,14 +2,12 @@
 tests/test_phase13_adversarial_market_data.py
 Phase 13.5-13.7: Market data adversarial, data gap, and stale data tests.
 """
-import math
 import time
-import pytest
+
 import pandas as pd
-from unittest.mock import patch
+import pytest
 
-from paper_engine.market_data import MarketDataFeed, DataException, DataStaleException, DataGapException
-
+from paper_engine.market_data import DataException, DataStaleException, MarketDataFeed
 
 # ─────────────────────────────────────────────────────────────
 # 13.5 — INVALID PRICE / TICK REJECTION

@@ -1,5 +1,3 @@
-import pandas as pd
-import numpy as np
 
 def calculate_net_expectancy(win_rate, pt_pct, sl_pct, fee_rate, slippage_rate):
     """

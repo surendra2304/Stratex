@@ -15,8 +15,8 @@ import json
 import os
 import time
 import uuid
-from dataclasses import dataclass, field, asdict
-from typing import Dict, List, Optional
+from dataclasses import asdict, dataclass, field
+
 from logger import get_logger
 
 logger = get_logger("experiment_config")
@@ -37,14 +37,14 @@ class FrozenExperimentConfig:
     # Strategy
     strategy_name: str = "UNSPECIFIED"
     strategy_version: str = "1.0"
-    strategy_params: Dict = field(default_factory=dict)
+    strategy_params: dict = field(default_factory=dict)
 
     # Symbol universe — frozen, no additions after start
-    symbols: List[str] = field(default_factory=list)
+    symbols: list[str] = field(default_factory=list)
     timeframe: str = "1m"
 
     # Cost model — must match the actual strategy's CostEngine exactly
-    cost_config: Dict = field(default_factory=dict)
+    cost_config: dict = field(default_factory=dict)
 
     # Position sizing / risk
     starting_capital: float = 10000.0
@@ -76,9 +76,9 @@ class FrozenExperimentConfig:
 
     # Status tracking
     status: str = "NOT_STARTED"  # NOT_STARTED | RUNNING | COMPLETED | ABORTED
-    started_at: Optional[float] = None
-    completed_at: Optional[float] = None
-    abort_reason: Optional[str] = None
+    started_at: float | None = None
+    completed_at: float | None = None
+    abort_reason: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -162,8 +162,8 @@ def _get_git_sha() -> str:
 def create_experiment(
     name: str,
     strategy_name: str,
-    symbols: List[str],
-    strategy_params: Dict,
+    symbols: list[str],
+    strategy_params: dict,
     cost_engine,
     starting_capital: float = 10000.0,
     timeframe: str = "1m",

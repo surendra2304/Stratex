@@ -6,12 +6,12 @@ runs 10,000 bootstrap resamplings, and writes QUANTUM_BENCHMARK_REPORT.md.
 
 import os
 import sys
-import datetime
 
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from quantum.validation import run_full_benchmark, generate_markdown_report
+from quantum.validation import generate_markdown_report, run_full_benchmark
+
 
 def main():
     print("=" * 80)

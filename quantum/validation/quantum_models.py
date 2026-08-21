@@ -1,19 +1,20 @@
 # quantum/validation/quantum_models.py
 """Quantum VQC, Hybrid Classifier, and Quantum-Assisted Portfolio Optimizer."""
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, List, Tuple
-from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
 
 try:
     from features import add_features
 except ImportError:
     from ..features import add_features
 
-from ..config import USE_PENNYLANE, USE_QISKIT, DEFAULT_QUBIT_COUNT, DEFAULT_CIRCUIT_DEPTH
-from ..models import QuantumModel
+from ..config import USE_PENNYLANE, USE_QISKIT
+
 
 class QuantumVQCModel:
     """
@@ -99,7 +100,7 @@ class QuantumVQCModel:
         self.params = best_params
         self.is_trained = True
 
-    def generate_signal(self, window_df: pd.DataFrame) -> Dict[str, Any]:
+    def generate_signal(self, window_df: pd.DataFrame) -> dict[str, Any]:
         if not self.is_trained or len(window_df) < 30:
             return {"signal": "HOLD", "confidence": 0.0, "entry": 0.0, "sl": 0.0, "tp": 0.0}
             
@@ -171,7 +172,7 @@ class HybridQuantumClassifier:
             self.head.fit(X_scaled, y_arr)
             self.is_trained = True
 
-    def generate_signal(self, window_df: pd.DataFrame) -> Dict[str, Any]:
+    def generate_signal(self, window_df: pd.DataFrame) -> dict[str, Any]:
         if not self.is_trained or len(window_df) < 30:
             return {"signal": "HOLD", "confidence": 0.0, "entry": 0.0, "sl": 0.0, "tp": 0.0}
             
@@ -210,7 +211,7 @@ class QuantumPortfolioOptimizer:
         self.name = "Quantum_Portfolio_Optimizer"
         self.backend_used = "QUBO_QAOA_Simulator" if USE_QISKIT else "QUBO_Exact_Statevector_Fallback"
         
-    def select_best_opportunities(self, candidate_signals: List[Dict[str, Any]], max_slots: int = 1) -> List[Dict[str, Any]]:
+    def select_best_opportunities(self, candidate_signals: list[dict[str, Any]], max_slots: int = 1) -> list[dict[str, Any]]:
         """
         Solves QUBO for optimal opportunity subset based on expected net edge, volatility penalty, and correlation.
         """

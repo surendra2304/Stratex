@@ -1,13 +1,15 @@
-import pytest
-import pandas as pd
-import numpy as np
-import sys
 import os
+import sys
+
+import numpy as np
+import pandas as pd
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from research_phase9.cost_engine import CostEngine
 from research_phase10.funding_engine import FundingEngine
 from research_phase10.pairs_engine import PairsEngine
-from research_phase9.cost_engine import CostEngine
+
 
 def test_funding_no_overlap():
     """

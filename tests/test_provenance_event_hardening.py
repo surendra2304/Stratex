@@ -1,7 +1,7 @@
-import os
 import json
-import pytest
+
 from dashboard import _get_trades_data
+
 
 class TestProvenanceEventHardening:
     """
@@ -27,8 +27,7 @@ class TestProvenanceEventHardening:
             {"symbol": "BTCUSDT", "source": "BINANCE_EXECUTION", "provenance": "BINANCE_EXECUTION", "net_pnl": -5.0, "exit_order_id": "1001"}
         ]
         with open(ledger, "w") as f:
-            for r in fake_records:
-                f.write(json.dumps(r) + "\n")
+            f.writelines(json.dumps(r) + "\n" for r in fake_records)
                 
         monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
         data = _get_trades_data()
@@ -45,8 +44,7 @@ class TestProvenanceEventHardening:
             {"symbol": "BTCUSDT", "source": "BINANCE_EXECUTION", "provenance": "BINANCE_EXECUTION", "net_pnl": -10.0, "exit_order_id": "3001"}
         ]
         with open(ledger, "w") as f:
-            for r in records:
-                f.write(json.dumps(r) + "\n")
+            f.writelines(json.dumps(r) + "\n" for r in records)
                 
         monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
         data = _get_trades_data()
@@ -61,8 +59,7 @@ class TestProvenanceEventHardening:
             {"symbol": "BTCUSDT", "source": "BINANCE_EXECUTION", "net_pnl": 15.0, "exit_order_id": "4001", "timestamp": "2026-08-18T10:00:00Z"}
         ]
         with open(ledger, "w") as f:
-            for r in records:
-                f.write(json.dumps(r) + "\n")
+            f.writelines(json.dumps(r) + "\n" for r in records)
                 
         monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
         data = _get_trades_data()
@@ -77,8 +74,7 @@ class TestProvenanceEventHardening:
             {"symbol": "ETHUSDT", "source": "BINANCE_EXECUTION", "net_pnl": -2.5, "entry_order_id": "5001", "exit_order_id": "5002"}
         ]
         with open(ledger, "w") as f:
-            for r in records:
-                f.write(json.dumps(r) + "\n")
+            f.writelines(json.dumps(r) + "\n" for r in records)
                 
         monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
         data = _get_trades_data()
@@ -93,8 +89,7 @@ class TestProvenanceEventHardening:
             {"symbol": "LINKUSDT", "source": "BINANCE_EXECUTION", "net_pnl": 4.0, "exit_order_id": "6001", "action": "CLOSED_BUY"}
         ]
         with open(ledger, "w") as f:
-            for r in records:
-                f.write(json.dumps(r) + "\n")
+            f.writelines(json.dumps(r) + "\n" for r in records)
                 
         monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
         data = _get_trades_data()
@@ -109,8 +104,7 @@ class TestProvenanceEventHardening:
             {"symbol": "BTCUSDT", "source": "BINANCE_EXECUTION", "action": "CLOSED_BUY", "status": "CLOSED", "exit_order_id": "7001", "net_pnl": -1.0}
         ]
         with open(ledger, "w") as f:
-            for r in records:
-                f.write(json.dumps(r) + "\n")
+            f.writelines(json.dumps(r) + "\n" for r in records)
                 
         monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
         data = _get_trades_data()
@@ -133,8 +127,7 @@ class TestProvenanceEventHardening:
             }
         ]
         with open(ledger, "w") as f:
-            for r in records:
-                f.write(json.dumps(r) + "\n")
+            f.writelines(json.dumps(r) + "\n" for r in records)
                 
         monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
         data = _get_trades_data()
@@ -150,8 +143,7 @@ class TestProvenanceEventHardening:
             {"symbol": "PORTALUSDT", "source": "BINANCE_EXECUTION", "exit_order_id": "9002", "net_pnl": -0.5, "quantity": 10.0}
         ]
         with open(ledger, "w") as f:
-            for r in records:
-                f.write(json.dumps(r) + "\n")
+            f.writelines(json.dumps(r) + "\n" for r in records)
                 
         monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
         data = _get_trades_data()

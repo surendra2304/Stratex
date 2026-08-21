@@ -2,11 +2,12 @@
 # LOGGER.PY - Trade Logger: saves every trade to a CSV for performance analysis
 # ==============================================================================
 import csv
-import os
 import json
 import logging
-from logging.handlers import RotatingFileHandler
+import os
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
+
 from config import TRADING_MODE
 
 # --- Trade CSV Logging (Unbounded) ---

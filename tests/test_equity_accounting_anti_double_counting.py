@@ -1,7 +1,5 @@
-import pytest
 import json
-import os
-import sys
+
 
 def test_accounting_case_1_clean_start():
     """
@@ -31,7 +29,6 @@ def test_accounting_case_2_crypto_purchase_and_realized_pnl_not_added():
     """
     cash = 9800.0
     crypto_market_value = 200.0
-    realized_pnl = 200.0
     
     # Realized PNL is a performance metric, NOT an additional asset on top of cash + crypto.
     total_equity = cash + crypto_market_value
@@ -127,8 +124,9 @@ def test_unmanaged_faucet_tokens_not_counted_in_active_equity(monkeypatch, tmp_p
     with locked == 0 and NOT in active positions are excluded from
     active_trade_holdings_value, preventing $19k inflation.
     """
-    import dashboard
     from unittest.mock import MagicMock
+
+    import dashboard
     
     port_file = tmp_path / "testnet_portfolio.json"
     port_data = {

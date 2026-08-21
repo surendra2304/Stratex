@@ -1,9 +1,15 @@
 import json
 import os
 import time
-import uuid
-from typing import Dict, List, Optional
-from paper_engine.config import STARTING_PAPER_CAPITAL, MAX_PORTFOLIO_EXPOSURE, MAX_SIMULTANEOUS_POSITIONS, MAX_DAILY_LOSS, MAX_DRAWDOWN_PCT
+
+from paper_engine.config import (
+    MAX_DAILY_LOSS,
+    MAX_DRAWDOWN_PCT,
+    MAX_PORTFOLIO_EXPOSURE,
+    MAX_SIMULTANEOUS_POSITIONS,
+    STARTING_PAPER_CAPITAL,
+)
+
 
 class PaperPortfolio:
     """
@@ -23,7 +29,7 @@ class PaperPortfolio:
         self.cumulative_spread = 0.0
         self.cumulative_funding = 0.0
         
-        self.positions: Dict[str, dict] = {} # position_id -> details
+        self.positions: dict[str, dict] = {} # position_id -> details
         self.processed_event_ids = set()
         
         self.peak_equity = STARTING_PAPER_CAPITAL
@@ -41,16 +47,16 @@ class PaperPortfolio:
     def _get_day_start(self, ts):
         return int(ts) // 86400 * 86400
 
-    def get_equity(self, current_market_prices: Dict[str, float]) -> float:
+    def get_equity(self, current_market_prices: dict[str, float]) -> float:
         """
         Equity = Cash + Unrealized PnL
         """
         unrealized = self.get_unrealized_pnl(current_market_prices)
         return self.cash + unrealized
 
-    def get_unrealized_pnl(self, current_market_prices: Dict[str, float]) -> float:
+    def get_unrealized_pnl(self, current_market_prices: dict[str, float]) -> float:
         unrealized = 0.0
-        for pos_id, pos in self.positions.items():
+        for pos in self.positions.values():
             if pos['status'] in ["OPEN", "OPENING", "REDUCING"]:
                 sym = pos['symbol']
                 if sym in current_market_prices:
@@ -122,7 +128,7 @@ class PaperPortfolio:
         }
         self._save()
 
-    def close_position(self, pos_id: str, exit_price: float, exit_fee: float = 0.0, exit_time: Optional[float] = None, funding_pnl: float = 0.0):
+    def close_position(self, pos_id: str, exit_price: float, exit_fee: float = 0.0, exit_time: float | None = None, funding_pnl: float = 0.0):
         if pos_id in self.positions:
             pos = self.positions[pos_id]
             pos['status'] = "CLOSED"
@@ -169,7 +175,7 @@ class PaperPortfolio:
         with open(self.ledger_file, "a") as f:
             f.write(json.dumps(trade_record) + "\n")
             
-    def record_equity_snapshot(self, timestamp: float, current_market_prices: Dict[str, float]):
+    def record_equity_snapshot(self, timestamp: float, current_market_prices: dict[str, float]):
         """Persist the equity curve to a JSONL file"""
         import json
         eq = self.get_equity(current_market_prices)
@@ -217,7 +223,6 @@ class PaperPortfolio:
             
     def get_max_drawdown(self) -> float:
         """Calculate Max Drawdown by reading the persisted equity curve."""
-        import json
         if not os.path.exists(self.equity_file):
             return 0.0
             
@@ -228,13 +233,11 @@ class PaperPortfolio:
                 for line in f:
                     record = json.loads(line)
                     eq = record.get("equity", 0.0)
-                    if eq > peak:
-                        peak = eq
+                    peak = max(peak, eq)
                     if peak > 0:
                         dd = (peak - eq) / peak
-                        if dd > max_dd:
-                            max_dd = dd
-        except:
+                        max_dd = max(max_dd, dd)
+        except Exception:
             pass
         return max_dd
 

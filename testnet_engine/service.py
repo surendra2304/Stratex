@@ -1,19 +1,22 @@
-import sys
-import os
-import time
-import json
-import uuid
 import datetime
-import threading
-import queue
 import importlib
-import config
-from config import TRADING_MODE, ACTIVE_STRATEGIES
-from logger import get_logger
-from data import add_indicators
+import json
+import os
+import queue
+import sys
+import threading
+import time
+import uuid
 
-from execution import place_market_order, get_exchange_client
+import pandas as pd
+
 from binance.exceptions import BinanceAPIException
+
+import config
+from config import ACTIVE_STRATEGIES, TRADING_MODE
+from data import add_indicators
+from execution import _load_active_trades, get_exchange_client, place_market_order
+from logger import get_logger
 from paper_engine.exceptions import ZeroFillError
 from research_phase9.cost_engine import CostEngine
 from testnet_engine.discovery import SymbolDiscoveryService
@@ -130,7 +133,6 @@ class TestnetService:
         
         # State
         self.current_equity = self.starting_equity
-        self.service_start_time = datetime.datetime.utcnow().isoformat() + "Z"
         self.active_positions = {} # Keep track of open OCOs per symbol
         self.symbol_filters = {}
         self.last_evaluation = {}
@@ -183,7 +185,7 @@ class TestnetService:
             "sell_predictions": 0,
             "TOTAL_CANDLES": 0,
             "strategy_metrics": {
-                s: {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0} for s in ACTIVE_STRATEGIES.keys()
+                s: {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0} for s in ACTIVE_STRATEGIES
             },
             "timeframe_metrics": {}
         }
@@ -206,7 +208,7 @@ class TestnetService:
                     state = json.load(f)
                     if "scanner_stats" in state:
                         saved_stats = state["scanner_stats"]
-                        for k in self.stats.keys():
+                        for k in self.stats:
                             if k in saved_stats and isinstance(saved_stats[k], (int, float)):
                                 self.stats[k] = saved_stats[k]
             except Exception as e:
@@ -271,7 +273,7 @@ class TestnetService:
             open_orders = self.client.get_open_orders()
             # Find any non-USDT balances
             assets = [item for item in account['balances'] if float(item['free']) > 0 or float(item['locked']) > 0]
-            open_symbols_from_assets = set([a['asset'] + "USDT" for a in assets if a['asset'] != "USDT"])
+            open_symbols_from_assets = {a['asset'] + "USDT" for a in assets if a['asset'] != "USDT"}
             
             from execution import _load_active_trades
             try:
@@ -280,8 +282,8 @@ class TestnetService:
                 logger.error(f"[RECONCILIATION] Failed to load active trades: {e}")
                 active_trades = []
                 
-            local_symbols = set([t['symbol'] for t in active_trades])
-            protected_symbols = set([o['symbol'] for o in open_orders])
+            local_symbols = {t['symbol'] for t in active_trades}
+            protected_symbols = {o['symbol'] for o in open_orders}
             
             # 1. Cancel any floating OCOs (orders open, but no position balance)
             floating_ocos = protected_symbols - open_symbols_from_assets
@@ -293,7 +295,7 @@ class TestnetService:
                         if o.get('orderListId', -1) > 0:
                             try:
                                 self.client.cancel_order(symbol=sym, orderId=o['orderId'])
-                            except Exception as e:
+                            except Exception:
                                 pass
 
             # 2. Reconstruct missing local state for open, protected positions
@@ -366,13 +368,16 @@ class TestnetService:
 
             # 3. Ensure assets we manage have an open OCO or limit order protecting them
             unprotected = open_symbols_from_assets - protected_symbols - floating_ocos
-            managed_symbols = set([t['symbol'] for t in active_trades if t.get('status') == 'OPEN'])
+            managed_symbols = {t['symbol'] for t in active_trades if t.get('status') == 'OPEN'}
             managed_unprotected = [s for s in managed_symbols if s not in protected_symbols and s not in floating_ocos]
             
             # Crash Recovery: Attempt to place missing OCO protection for unmanaged/unprotected open assets
             if unprotected and not os.environ.get("PYTEST_CURRENT_TEST"):
                 from execution import _save_active_trades
-                from testnet_engine.protection import place_oco_protection, emergency_market_close
+                from testnet_engine.protection import (
+                    emergency_market_close,
+                    place_oco_protection,
+                )
                 for sym in list(unprotected):
                     try:
                         logger.info(f"[RECOVERY] 🛡️ Unprotected position detected after restart for {sym}. Attempting safe OCO restoration...")
@@ -471,6 +476,8 @@ class TestnetService:
                 
         state = {
             "initial_deposit": self.initial_deposit,
+            "current_equity": getattr(self, "current_equity", 10000.0),
+            "starting_equity": getattr(self, "starting_equity", 10000.0),
             "service_start_time": getattr(self, 'service_start_time', datetime.datetime.utcnow().isoformat() + "Z"),
             "safety_halt": getattr(self, 'safety_halt', False),
             "cash": self.current_equity,
@@ -487,18 +494,33 @@ class TestnetService:
                 "symbols": self.scanner.symbols if hasattr(self, 'scanner') else [],
                 "last_market_update": last_m,
                 "last_evaluation": self.last_evaluation
-            }
+            },
+            "funnel": {
+                "candles_evaluated": self.stats.get("CANDLES", self.stats.get("TOTAL_CANDLES", 0)),
+                "strategies_evaluated": self.stats.get("STRATEGIES_EVALUATED", self.stats.get("strategy_evaluations", 0)),
+                "signals_generated": self.stats.get("SIGNALS_GENERATED", self.stats.get("TOTAL_SIGNALS", 0)),
+                "profitability_accepted": self.stats.get("PROFITABILITY_ACCEPTED", 0),
+                "profitability_rejected": self.stats.get("PROFITABILITY_REJECTED", 0),
+                "risk_accepted": self.stats.get("RISK_ACCEPTED", 0),
+                "risk_rejected": self.stats.get("RISK_REJECTED", 0),
+                "execution_eligible": self.stats.get("EXECUTION_ELIGIBLE", self.stats.get("QUALIFIED", 0)),
+                "execution_rejected": self.stats.get("EXECUTION_REJECTED", 0),
+                "orders_submitted": self.stats.get("ORDERS_SUBMITTED", 0),
+                "orders_filled": self.stats.get("ORDERS_FILLED", 0),
+                "orders_failed": self.stats.get("ORDERS_FAILED", 0)
+            },
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         }
         try:
             tmp_file = TESTNET_PORTFOLIO_FILE + ".tmp"
-            with open(tmp_file, "w") as f:
+            with open(tmp_file, "w", encoding="utf-8") as f:
                 def convert_keys(obj):
                     if isinstance(obj, dict):
                         return {str(k) if isinstance(k, tuple) else k: convert_keys(v) for k, v in obj.items()}
                     elif isinstance(obj, list):
                         return [convert_keys(i) for i in obj]
                     return obj
-                json.dump(convert_keys(state), f)
+                json.dump(convert_keys(state), f, indent=2)
             os.replace(tmp_file, TESTNET_PORTFOLIO_FILE)
             
             # Record periodic equity history snapshot (at most once every 60s)
@@ -545,21 +567,21 @@ class TestnetService:
         except Exception:
             pass
 
+        df = add_indicators(df)
+        if df.empty:
+            return
+
+        current_price = df['close'].iloc[-1]
+        logger.info(f"[FEATURES_READY] {symbol} {tf} | Rows: {len(df)} | Current Price: {current_price}")
+
         with self.lock:
             try:
                 self.stats["TOTAL_CANDLES"] += 1
-                df = add_indicators(df)
-                if df.empty:
-                    return
-                    
-                current_price = df['close'].iloc[-1]
-                logger.info(f"[FEATURES_READY] {symbol} {tf} | Rows: {len(df)} | Current Price: {current_price}")
-                
                 self.last_evaluation[symbol] = datetime.datetime.utcnow().isoformat() + "Z"
                 
                 if tf not in self.strategies:
                     return
-                    
+                
                 for strat_name, strat_mod in self.strategies[tf]:
                     self.stats["strategy_evaluations"] += 1
                     
@@ -637,7 +659,7 @@ class TestnetService:
                     self.stats["strategy_metrics"][strat_name][side] = self.stats["strategy_metrics"][strat_name].get(side, 0) + 1
                     self.stats["timeframe_metrics"][tf][side] = self.stats["timeframe_metrics"][tf].get(side, 0) + 1
 
-                    candle_timestamp = df.index[-1]
+                    candle_timestamp = df['timestamp'].iloc[-1]
                     deterministic_str = f"{symbol}_{strat_name}_{side}_{candle_timestamp}"
                     signal_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, deterministic_str))
 
@@ -808,7 +830,7 @@ class TestnetService:
                         continue
                         
                     # Risk Gate
-                    passed_risk, r_reason, r_details = self.risk_gate.evaluate_risk(
+                    passed_risk, r_reason, _r_details = self.risk_gate.evaluate_risk(
                         symbol, side, self.current_equity, self.active_positions, qty, current_price, data_health
                     )
                     
@@ -1166,38 +1188,7 @@ class TestnetService:
         except Exception:
             pass
 
-    def _save_state(self):
-        """Persists current engine stats, scanner stats, and active positions to TESTNET_PORTFOLIO_FILE."""
-        try:
-            port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
-            data = {
-                "initial_deposit": getattr(self, "initial_deposit", 10000.0),
-                "current_equity": getattr(self, "current_equity", 10000.0),
-                "starting_equity": getattr(self, "starting_equity", 10000.0),
-                "positions": getattr(self, "active_positions", {}),
-                "scanner_stats": getattr(self, "stats", {}),
-                "funnel": {
-                    "candles_evaluated": self.stats.get("CANDLES", self.stats.get("TOTAL_CANDLES", 0)),
-                    "strategies_evaluated": self.stats.get("STRATEGIES_EVALUATED", self.stats.get("strategy_evaluations", 0)),
-                    "signals_generated": self.stats.get("SIGNALS_GENERATED", self.stats.get("TOTAL_SIGNALS", 0)),
-                    "profitability_accepted": self.stats.get("PROFITABILITY_ACCEPTED", 0),
-                    "profitability_rejected": self.stats.get("PROFITABILITY_REJECTED", 0),
-                    "risk_accepted": self.stats.get("RISK_ACCEPTED", 0),
-                    "risk_rejected": self.stats.get("RISK_REJECTED", 0),
-                    "execution_eligible": self.stats.get("EXECUTION_ELIGIBLE", self.stats.get("QUALIFIED", 0)),
-                    "execution_rejected": self.stats.get("EXECUTION_REJECTED", 0),
-                    "orders_submitted": self.stats.get("ORDERS_SUBMITTED", 0),
-                    "orders_filled": self.stats.get("ORDERS_FILLED", 0),
-                    "orders_failed": self.stats.get("ORDERS_FAILED", 0)
-                },
-                "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-            }
-            tmp_file = port_file + ".tmp"
-            with open(tmp_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-            os.replace(tmp_file, port_file)
-        except Exception as e:
-            logger.error(f"[SERVICE] Error saving state: {e}")
+
 
     def position_monitor_loop(self):
         """Continuously reconciles active positions against Binance."""
@@ -1211,7 +1202,7 @@ class TestnetService:
                     actual_binance_balance = float(usdt_balance['free']) + float(usdt_balance['locked'])
                     
                 # 2. Reconcile Positions
-                from execution import monitor_open_trades, _load_active_trades
+                from execution import monitor_open_trades
                 # This queries Binance for OCO status and updates active_trades.json and ledger
                 monitor_open_trades()
                 
@@ -1238,7 +1229,6 @@ class TestnetService:
                 used_margin = sum(float(t.get('quantity', 0.0)) * float(t.get('entry_price', 0.0)) for t in active_open_positions)
                 actual_binance_total = actual_binance_balance + used_margin
                 
-                import config
                 tolerance = getattr(config, "RECONCILIATION_TOLERANCE", 25.0)
                 mismatch = abs(self.local_portfolio_balance - actual_binance_total)
                 
@@ -1388,9 +1378,9 @@ class TestnetService:
                         if not line.strip(): continue
                         try:
                             record = json.loads(line)
-                            if "exit_order_id" in record and record["exit_order_id"]:
+                            if record.get("exit_order_id"):
                                 existing_exit_ids.add(str(record["exit_order_id"]))
-                            elif "exit_client_id" in record and record["exit_client_id"]:
+                            elif record.get("exit_client_id"):
                                 existing_exit_ids.add(str(record["exit_client_id"]))
                         except:
                             pass
@@ -1481,7 +1471,13 @@ class TestnetService:
                                 logger.error(f"[TELEMETRY] Failed to record closed trade: {te_err}")
                     
             # 2. Update Risk bounds mathematically
-            self.risk_gate.daily_realized_loss = sum(t['net_pnl'] for t in completed_trades)
+            # Filter completed_trades by today's date for daily loss (C-05 fix)
+            today_str = datetime.datetime.utcnow().date().isoformat()
+            todays_pnl = sum(
+                t['net_pnl'] for t in completed_trades
+                if t.get('exit_timestamp', t.get('timestamp', '')).startswith(today_str)
+            )
+            self.risk_gate.daily_realized_loss = todays_pnl
             self.total_reconciled_fees = total_fees
             self.total_reconciled_pnl = total_gross_pnl - total_fees
             
@@ -1490,10 +1486,8 @@ class TestnetService:
 
     def _check_degradation(self):
         """Phase 5: Automatically switch to OBSERVE-ONLY if strategy degrades."""
-        import config
         window = getattr(config, "DEGRADATION_WINDOW", 20)
         min_win_rate = getattr(config, "MIN_WIN_RATE_THRESHOLD", 0.35)
-        max_pred_err = getattr(config, "MAX_PREDICTION_ERROR", 0.02)
         
         if not hasattr(self, 'ledger_file'):
             self.ledger_file = TESTNET_LEDGER_FILE
@@ -1503,15 +1497,17 @@ class TestnetService:
             
         closed_trades = []
         try:
-            with open(self.ledger_file, 'r') as f:
+            with open(self.ledger_file, 'r', encoding="utf-8") as f:
                 for line in f:
                     if not line.strip(): continue
                     try:
                         record = json.loads(line)
                         if "CLOSE" in record.get("action", ""):
                             closed_trades.append(record)
-                    except: pass
-        except: return
+                    except Exception:
+                        pass
+        except Exception:
+            return
         
         if len(closed_trades) < window:
             return
@@ -1561,9 +1557,9 @@ class TestnetService:
                 "mode": "TESTNET",
                 "binance_connected": self.client is not None,
                 "websocket_connected": hasattr(self, 'scanner') and bool(self.scanner),
-                "strategy": list(ACTIVE_STRATEGIES.keys())[0] if ACTIVE_STRATEGIES else "adx_ema",
+                "strategy": next(iter(ACTIVE_STRATEGIES.keys())) if ACTIVE_STRATEGIES else "adx_ema",
                 "strategies": list(ACTIVE_STRATEGIES.keys()),
-                "timeframes": list(set(tf for tfs in ACTIVE_STRATEGIES.values() for tf in (tfs if isinstance(tfs, list) else [tfs]))),
+                "timeframes": list({tf for tfs in ACTIVE_STRATEGIES.values() for tf in (tfs if isinstance(tfs, list) else [tfs])}),
                 "symbols": symbols,
                 "symbol_count": len(symbols),
                 "last_market_update": last_m_update,
@@ -1597,7 +1593,7 @@ class TestnetService:
                 self._write_heartbeat(status="RUNNING", worker_alive=True)
                 now_ts = time.time()
                 if now_ts - last_log_time >= 60:
-                    tfs = list(set(tf for tfs in ACTIVE_STRATEGIES.values() for tf in (tfs if isinstance(tfs, list) else [tfs])))
+                    tfs = list({tf for tfs in ACTIVE_STRATEGIES.values() for tf in (tfs if isinstance(tfs, list) else [tfs])})
                     logger.info(f"[ENGINE_HEARTBEAT] PID={os.getpid()} | Status=RUNNING | Strategies={len(ACTIVE_STRATEGIES)} | Timeframes={','.join(tfs)} | Symbols={len(self.symbol_filters)}")
                     last_log_time = now_ts
             except Exception as e:
@@ -1624,28 +1620,13 @@ class TestnetService:
                     "strategy_metrics": self.stats.get("strategy_metrics", {}),
                     "timeframe_metrics": self.stats.get("timeframe_metrics", {}),
                 }
-                # Atomic append
-                tmp_path = progress_file + ".tmp"
-                with open(tmp_path, "a") as f:
+                # Direct append (no atomic replace needed for append-only JSONL)
+                with open(progress_file, "a", encoding="utf-8") as f:
                     f.write(json.dumps(report) + "\n")
-                os.replace(tmp_path, progress_file)
                 logger.info(f"[PROGRESS] Total:{report['total_signals']} BUY:{report['buy_signals']} SELL:{report['sell_signals']} Equity:{report['current_equity']:.2f}")
             except Exception as e:
                 logger.error(f"[SERVICE] Progress report loop error: {e}")
             time.sleep(60)
-
-        """Periodic heartbeat writer (runs every 5 seconds)."""
-        last_log_time = 0
-        while True:
-            try:
-                self._write_heartbeat(status="RUNNING", worker_alive=True)
-                now_ts = time.time()
-                if now_ts - last_log_time >= 60:
-                    tfs = list(set(tf for tfs in ACTIVE_STRATEGIES.values() for tf in (tfs if isinstance(tfs, list) else [tfs])))
-                    logger.info(f"[ENGINE_HEARTBEAT] PID={os.getpid()} | Status=RUNNING | Strategies={len(ACTIVE_STRATEGIES)} | Timeframes={','.join(tfs)} | Symbols={len(self.symbol_filters)}")
-            except Exception as e:
-                logger.error(f"[SERVICE] Heartbeat loop error: {e}")
-            time.sleep(5)
 
     def run(self):
         # 1. Discover Symbols
@@ -1657,8 +1638,8 @@ class TestnetService:
         # 2. Train ML Strategy (if enabled)
         if "ml" in ACTIVE_STRATEGIES:
             try:
+                from data import add_indicators, get_candles
                 from strategy_ml import train
-                from data import get_candles, add_indicators
                 logger.info("[SERVICE] Pre-training ML strategy on BTCUSDT...")
                 ml_tf = ACTIVE_STRATEGIES["ml"][0] if isinstance(ACTIVE_STRATEGIES["ml"], list) else ACTIVE_STRATEGIES["ml"]
                 all_df = add_indicators(get_candles("BTCUSDT", ml_tf, 2500))

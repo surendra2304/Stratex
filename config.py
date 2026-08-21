@@ -7,6 +7,7 @@
 # ==============================================================================
 
 import os
+
 from dotenv import load_dotenv
 
 # We no longer need utf-16le fallback since the file is now standard utf-8
@@ -38,7 +39,7 @@ SYMBOL = "BTCUSDT"
 
 # --- Risk Management ---
 TRADE_QTY = 0.001           # BTC quantity per trade (small for safety)
-MAX_OPEN_TRADES = 20        # Allow more concurrent trades during testing
+MAX_OPEN_TRADES = 30        # Increased concurrent trades for profitability
 TOP_COINS_LIMIT = 20  # Increase number of top trending coins to scan
 TARGET_TRADE_COUNT = 100  # Minimum trades to generate within the window
 TARGET_TRADE_WINDOW_HOURS = 3  # Hours within which to achieve target
@@ -60,12 +61,14 @@ ACTIVE_STRATEGIES = {
     "supertrend": ["5m", "15m", "30m", "1h"],
     "ml": ["5m", "15m", "30m"],
     "swing": ["15m", "30m", "1h", "2h", "4h"],
-    "adx_ema": ["15m", "30m", "1h", "4h"]
+    "adx_ema": ["15m", "30m", "1h", "4h"],
+    "hybrid": ["5m", "15m", "30m", "1h"],
+    "bollinger": ["15m", "30m", "1h"],
+    "breakout_vol": ["1m", "5m", "15m"]
 }
 
-# Backward-compatibility alias for legacy tests/modules
-ACTIVE_STRATEGY = list(ACTIVE_STRATEGIES.keys())[0]
-_first_tf = list(ACTIVE_STRATEGIES.values())[0]
+ACTIVE_STRATEGY = next(iter(ACTIVE_STRATEGIES.keys()))
+_first_tf = next(iter(ACTIVE_STRATEGIES.values()))
 TIMEFRAME = _first_tf[0] if isinstance(_first_tf, list) else _first_tf
 
 # Trading Config
@@ -77,6 +80,7 @@ MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.05"))        #
 MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.02"))   # 2% max per single asset
 MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.04")) # 4% max net directional exposure
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))            # Allow up to 5 concurrent positions
+VOLATILITY_BUFFER = 0.2  # Scale down positions during high volatility
 MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.02"))          # 2% daily loss limit
 MAX_TESTNET_DRAWDOWN_PCT = float(os.getenv("MAX_TESTNET_DRAWDOWN_PCT", "0.05"))    # 5% drawdown tolerance
 RECONCILIATION_TOLERANCE = float(os.getenv("RECONCILIATION_TOLERANCE", "5.0"))     # 5 USDT tolerance
@@ -97,7 +101,7 @@ OOS_TRAIN_PCT = 0.60               # Walk-forward train %
 OOS_VAL_PCT = 0.20                 # Walk-forward validation %
 INTRABAR_RESOLUTION = "conservative" # "conservative" or "optimistic"
 
-SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema", "fast1m", "fast5m"]
+SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema", "fast1m", "fast5m", "hybrid", "bollinger", "breakout_vol"]
 SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"]
 VALID_MODES = ["PAPER", "TESTNET"]
 
@@ -123,24 +127,20 @@ def validate_config():
                 raise ValueError(f"Configuration Error: Invalid TIMEFRAME '{tf}' for strategy '{strategy}'. Supported: {SUPPORTED_TIMEFRAMES}")
 
     if TRADING_MODE not in VALID_MODES:
-        raise ValueError(f"Configuration Error: Invalid TRADING_MODE '{TRADING_MODE}'.")
-
-    if TRADING_MODE == "LIVE":
-        print("WARNING: TRADING_MODE IS SET TO LIVE. REAL MONEY AT RISK.")
+        raise ValueError(f"Configuration Error: Invalid TRADING_MODE '{TRADING_MODE}'. Only {VALID_MODES} are supported.")
 
     if not isinstance(TRADE_QTY, (int, float)) or TRADE_QTY <= 0:
-        raise ValueError(f"Configuration Error: TRADE_QTY must be a positive number.")
+        raise ValueError("Configuration Error: TRADE_QTY must be a positive number.")
 
     if not isinstance(TOP_COINS_LIMIT, int) or TOP_COINS_LIMIT <= 0:
-        raise ValueError(f"Configuration Error: TOP_COINS_LIMIT must be a positive integer.")
+        raise ValueError("Configuration Error: TOP_COINS_LIMIT must be a positive integer.")
 
     # For non-PAPER modes, credentials must be set (but not hardcoded here)
-    if TRADING_MODE in ["TESTNET", "LIVE"]:
-        if not API_KEY or not SECRET_KEY:
-            raise ValueError(
-                "Configuration Error: API_KEY and SECRET_KEY must be set via "
-                "environment variables or .env file for TESTNET/LIVE mode."
-            )
+    if TRADING_MODE in ["TESTNET", "LIVE"] and (not API_KEY or not SECRET_KEY):
+        raise ValueError(
+            "Configuration Error: API_KEY and SECRET_KEY must be set via "
+            "environment variables or .env file for TESTNET/LIVE mode."
+        )
 
 # Validate immediately upon import
 validate_config()

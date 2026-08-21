@@ -4,18 +4,19 @@ Evaluates candidate strategies with strict Binance Spot Taker friction (31 bps r
 Chronological split: 60% Train, 20% Val, 20% OOS.
 """
 
-import sys
-import os
 import json
+import os
+import sys
+
 import numpy as np
 import pandas as pd
-from datetime import datetime
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from binance.client import Client
-from research_phase9.cost_engine import CostEngine
+
 from data import add_indicators
+from research_phase9.cost_engine import CostEngine
 
 _data_cache = {}
 
@@ -179,11 +180,9 @@ def compute_metrics(trades):
     max_dd = 0.0
     for r in net_returns:
         equity *= (1.0 + r)
-        if equity > peak:
-            peak = equity
+        peak = max(peak, equity)
         dd = (peak - equity) / peak
-        if dd > max_dd:
-            max_dd = dd
+        max_dd = max(max_dd, dd)
             
     net_pnl_pct = equity - 1.0
     avg_trade = np.mean(net_returns) if net_returns else 0.0
@@ -200,10 +199,10 @@ def compute_metrics(trades):
 
 def main():
     import strategy_adx_ema
+    import strategy_aggressor
+    import strategy_scalper
     import strategy_supertrend
     import strategy_swing
-    import strategy_scalper
-    import strategy_aggressor
     
     cost_engine = CostEngine.get_binance_taker_config()
     

@@ -1,10 +1,10 @@
 # quantum/validation/splits.py
 """Chronological walk-forward split generation with anti-leakage guards."""
 
-import pandas as pd
-import numpy as np
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+
+import pandas as pd
+
 
 @dataclass
 class WalkForwardFold:
@@ -29,7 +29,7 @@ def generate_walk_forward_splits(
     val_days: float = 15.0,
     test_days: float = 15.0,
     allow_proportional_fallback: bool = False
-) -> Tuple[List[WalkForwardFold], Optional[str]]:
+) -> tuple[list[WalkForwardFold], str | None]:
     """
     Generates strict chronological walk-forward folds.
     If the dataset has >= 90 days, standard time-delta splits are generated.
@@ -46,7 +46,7 @@ def generate_walk_forward_splits(
     end_ts = df['timestamp'].max()
     span_days = (end_ts - start_ts).total_seconds() / 86400.0
     
-    folds: List[WalkForwardFold] = []
+    folds: list[WalkForwardFold] = []
     
     # Check if we have sufficient calendar span for 90d window
     required_days = train_days + val_days + test_days

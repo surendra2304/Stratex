@@ -2,13 +2,12 @@
 tests/test_phase13_stress.py
 Phase 13.20-13.21: Long-run stress tests and property-based accounting tests.
 """
-import uuid
-import time
-import math
 import random
-import pytest
-from paper_engine.portfolio import PaperPortfolio
+import uuid
 
+import pytest
+
+from paper_engine.portfolio import PaperPortfolio
 
 # ─────────────────────────────────────────────────────────────
 # 13.20 — RESOURCE STRESS: 100K events
@@ -44,14 +43,14 @@ def test_100k_events_no_memory_unbounded_growth():
     tracemalloc.start()
 
     p = PaperPortfolio(filename="stress_test_p.json")
-    rng = random.Random(42)
+    random.Random(42)
     import os
 
     n = 10_000
     for _ in range(n):
         p.processed_event_ids.add(str(uuid.uuid4()))
 
-    current, peak = tracemalloc.get_traced_memory()
+    _current, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
     # Clean up
@@ -133,7 +132,7 @@ def test_property_same_seed_produces_same_result(tmp_path):
     # we test that the sum of applied PnLs is reproducible given the same rng seed
     rng = random.Random(77)
     pnls = [rng.uniform(-100, 200) for _ in range(50)]
-    total = sum(pnls)
+    sum(pnls)
 
     p1 = PaperPortfolio(filename=str(tmp_path / "r1.json"))
     p2 = PaperPortfolio(filename=str(tmp_path / "r2.json"))

@@ -1,16 +1,26 @@
+import datetime
 import json
+import math
 import os
 import shutil
-import math
-import datetime
 import time
+from enum import Enum
+
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
-from config import API_KEY, SECRET_KEY, TRADE_QTY, TRADING_MODE, PAPER_SAFE_MODE, TESTNET_ENABLED, LIVE_TRADING_ENABLED
-from logger import log_trade, get_logger
+
+from config import (
+    API_KEY,
+    LIVE_TRADING_ENABLED,
+    PAPER_SAFE_MODE,
+    SECRET_KEY,
+    TESTNET_ENABLED,
+    TRADE_QTY,
+    TRADING_MODE,
+)
+from logger import get_logger, log_trade
 from paper_engine.exceptions import StateCorruptionError, ZeroFillError
-from enum import Enum
-from testnet_engine.protection import place_oco_protection, emergency_market_close
+from testnet_engine.protection import emergency_market_close, place_oco_protection
 
 sys_logger = get_logger("execution")
 ACTIVE_TRADES_FILE = os.getenv("ACTIVE_TRADES_FILE", "active_trades.json")
@@ -389,8 +399,13 @@ def monitor_open_trades():
     if TRADING_MODE == "PAPER":
         return
 
-    from testnet_engine.protection import check_oco_status, compute_net_pnl, LEDGER_WRITE_LOCK
     import datetime
+
+    from testnet_engine.protection import (
+        LEDGER_WRITE_LOCK,
+        check_oco_status,
+        compute_net_pnl,
+    )
 
     try:
         active = _load_active_trades()
@@ -418,7 +433,6 @@ def monitor_open_trades():
                 close_price = result["close_avg_price"]   # actual average fill price
                 close_qty   = result["close_qty"]
                 tp_filled   = result["tp_filled"]
-                sl_filled   = result["sl_filled"]
                 outcome     = "WIN" if tp_filled else "LOSS"
 
                 entry_price = float(t.get("entry_price", 0))
@@ -578,7 +592,7 @@ def monitor_open_trades():
                         sys_logger.critical(f"[MONITOR] OCO {oco_id} missing but balance > 0! Attempting emergency close.")
                         from testnet_engine.protection import emergency_market_close
                         emergency_market_close(client, t["symbol"], t["side"], float(t["quantity"]))
-                except Exception as balance_err:
+                except Exception:
                     pass
                 
                 sys_logger.warning(

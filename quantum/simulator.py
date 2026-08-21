@@ -4,8 +4,8 @@ Supports PennyLane and Qiskit Aer. If neither backend is available,
 returns a deterministic fallback result.
 """
 import time
-import numpy as np
-from .config import USE_PENNYLANE, USE_QISKIT, SIMULATION_TIMEOUT, DEFAULT_SHOTS
+
+from .config import DEFAULT_SHOTS, SIMULATION_TIMEOUT, USE_PENNYLANE, USE_QISKIT
 
 if USE_PENNYLANE:
     import pennylane as qml
@@ -29,7 +29,7 @@ def run_circuit(circuit, shots: int = DEFAULT_SHOTS):
     * If no backend is available, returns a dummy object with ``get_counts``
       yielding a uniform distribution.
     """
-    start = time.time()
+    time.time()
     if USE_PENNYLANE and callable(circuit):
         # PennyLane QNode expects parameters; we pass the stored params via closure
         exp_val = circuit()

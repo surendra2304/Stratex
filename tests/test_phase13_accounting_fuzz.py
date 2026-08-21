@@ -6,12 +6,10 @@ Invariant:
     equity = cash + unrealized_pnl
     realized_pnl is ALREADY reflected in cash (cash = starting + sum(realized_pnl events))
 """
-import uuid
-import time
 import json
-import math
 import random
-import pytest
+import uuid
+
 from paper_engine.portfolio import PaperPortfolio
 
 
@@ -181,7 +179,7 @@ def test_ledger_net_pnl_reconciles_with_portfolio(tmp_path):
     with open(ledger_path) as f:
         records = [json.loads(l) for l in f if l.strip()]
 
-    ledger_net_pnl = sum(r["net_pnl"] for r in records)
+    sum(r["net_pnl"] for r in records)
     # Also apply realized PnL events that close_position generates
     # Note: close_position writes to ledger but does NOT call add_realized_pnl —
     # that must be called explicitly by the simulator. Here we just verify ledger consistency.

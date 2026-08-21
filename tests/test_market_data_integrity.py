@@ -1,11 +1,12 @@
-import pytest
-import json
-import pandas as pd
 import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pandas as pd
+
 from dashboard import app
 from data import get_candles as fetch_candles
 from testnet_engine.service import TestnetService
+
 
 class TestMarketDataIntegrity:
     """

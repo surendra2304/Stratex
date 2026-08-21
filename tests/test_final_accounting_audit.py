@@ -1,10 +1,12 @@
-import os
-import json
-import pytest
 import datetime
+import json
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from dashboard import app
 from testnet_engine.service import TestnetService
+
 
 @pytest.fixture
 def client():
@@ -23,8 +25,7 @@ def test_a_synthetic_test_record_excluded_from_dashboard_and_trade_count(client,
         {"timestamp": "2026-08-14T11:00:35Z", "symbol": "BTCUSDT", "strategy": "RECOVERED", "source": "RECOVERY_FROM_BINANCE", "action": "CLOSED_LOSS", "quantity": 0.001, "entry_price": 63317.87, "exit_price": 63350.0, "pnl": -0.0321, "net_pnl": -0.0321, "entry_order_id": "2920255", "exit_order_id": "2920974"}
     ]
     with open(ledger_file, "w") as f:
-        for r in records:
-            f.write(json.dumps(r) + "\n")
+        f.writelines(json.dumps(r) + "\n" for r in records)
             
     res = client.get("/api/trades")
     assert res.status_code == 200
@@ -50,8 +51,7 @@ def test_b_c_synthetic_record_excluded_from_daily_risk_and_realized_pnl(tmp_path
         {"timestamp": f"{today_utc}T13:00:00Z", "symbol": "BTCUSDT", "strategy": "ADX_EMA", "source": "BINANCE_EXECUTION", "action": "CLOSE_WIN", "quantity": 0.001, "entry_price": 63000.0, "exit_price": 63100.0, "pnl": 0.10, "net_pnl": 0.10, "entry_order_id": "9991", "exit_order_id": "9992"}
     ]
     with open(ledger_file, "w") as f:
-        for r in records:
-            f.write(json.dumps(r) + "\n")
+        f.writelines(json.dumps(r) + "\n" for r in records)
             
     mock_client = MagicMock()
     mock_client.get_account.return_value = {'balances': [{'asset': 'USDT', 'free': '10000.0', 'locked': '0.0'}]}
@@ -177,8 +177,7 @@ def test_h_i_j_daily_equity_high_low_utc_filtering(client, tmp_path, monkeypatch
         {"timestamp": f"{today_utc}T15:00:00Z", "equity": 10200.0, "balance": 10200.0}
     ]
     with open(hist_file, "w") as f:
-        for s in snaps:
-            f.write(json.dumps(s) + "\n")
+        f.writelines(json.dumps(s) + "\n" for s in snaps)
             
     mock_client = MagicMock()
     mock_client.get_account.return_value = {'balances': [{'asset': 'USDT', 'free': '10000.0', 'locked': '0.0'}]}
@@ -226,7 +225,7 @@ def test_k_l_no_duplicate_recovery_accounting(tmp_path, monkeypatch):
         
         # Verify ledger has exactly 1 trade (no duplicate appended)
         with open(ledger_file, "r") as f:
-            lines = [l for l in f.readlines() if l.strip()]
+            lines = [l for l in f if l.strip()]
         assert len(lines) == 1
         record = json.loads(lines[0])
         assert record["source"] == "RECOVERY_FROM_BINANCE"
@@ -255,8 +254,7 @@ def test_m_dashboard_pnl_and_authoritative_accounting_reconcile(client, tmp_path
         {"timestamp": "2026-08-14T11:00:00Z", "symbol": "BTCUSDT", "strategy": "ADX_EMA", "source": "BINANCE_EXECUTION", "action": "CLOSE_WIN", "quantity": 0.001, "entry_price": 60000.0, "exit_price": 61500.0, "pnl": 1.50, "net_pnl": 1.50, "entry_order_id": "111", "exit_order_id": "222"}
     ]
     with open(ledger_file, "w") as f:
-        for r in records:
-            f.write(json.dumps(r) + "\n")
+        f.writelines(json.dumps(r) + "\n" for r in records)
             
     mock_client = MagicMock()
     mock_client.get_account.return_value = {'balances': [{'asset': 'USDT', 'free': '10001.50', 'locked': '0.0'}]}
@@ -285,8 +283,7 @@ def test_duplicate_exit_order_id_deduplication(client, tmp_path, monkeypatch):
         {"timestamp": f"{today_utc}T10:00:01Z", "symbol": "BTCUSDT", "strategy": "ADX_EMA", "source": "BINANCE_EXECUTION", "action": "CLOSE_WIN", "quantity": 0.001, "entry_price": 60000.0, "exit_price": 61000.0, "pnl": 1.00, "net_pnl": 1.00, "entry_order_id": "1001", "exit_order_id": "2001"}
     ]
     with open(ledger_file, "w") as f:
-        for r in records:
-            f.write(json.dumps(r) + "\n")
+        f.writelines(json.dumps(r) + "\n" for r in records)
             
     res_trades = client.get("/api/trades").get_json()
     assert res_trades["total_trades"] == 1
@@ -316,8 +313,7 @@ def test_original_plus_recovery_representation_deduplication(client, tmp_path, m
         {"timestamp": f"{today_utc}T09:00:00Z", "symbol": "BTCUSDT", "strategy": "RECOVERED", "source": "RECOVERY_FROM_BINANCE", "action": "CLOSE_WIN", "quantity": 0.001, "entry_price": 60000.0, "exit_price": 61500.0, "pnl": 1.50, "net_pnl": 1.50, "entry_order_id": "3001", "exit_order_id": "4001"}
     ]
     with open(ledger_file, "w") as f:
-        for r in records:
-            f.write(json.dumps(r) + "\n")
+        f.writelines(json.dumps(r) + "\n" for r in records)
             
     res_trades = client.get("/api/trades").get_json()
     assert res_trades["total_trades"] == 1
@@ -338,8 +334,7 @@ def test_synthetic_test_record_zero_influence_on_all_metrics(client, tmp_path, m
         {"timestamp": "2026-08-14T11:00:00Z", "symbol": "BTCUSDT", "strategy": "ADX_EMA", "source": "BINANCE_EXECUTION", "action": "CLOSE_WIN", "quantity": 0.001, "entry_price": 60000.0, "exit_price": 62000.0, "pnl": 2.00, "net_pnl": 2.00, "entry_order_id": "7001", "exit_order_id": "7002"}
     ]
     with open(ledger_file, "w") as f:
-        for r in records:
-            f.write(json.dumps(r) + "\n")
+        f.writelines(json.dumps(r) + "\n" for r in records)
             
     res_trades = client.get("/api/trades").get_json()
     assert res_trades["net_pnl"] == 2.00

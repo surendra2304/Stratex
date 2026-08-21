@@ -1,9 +1,11 @@
 # quantum/validation/metrics.py
 """Financial and performance metric calculations."""
 
-import numpy as np
 from dataclasses import dataclass
-from typing import List, Any
+from typing import Any
+
+import numpy as np
+
 
 @dataclass
 class PerformanceMetrics:
@@ -25,7 +27,7 @@ class PerformanceMetrics:
     total_slippage: float
     turnover: float
 
-def calculate_performance_metrics(trades: List[Any], equity_curve: List[float], initial_capital: float = 10000.0) -> PerformanceMetrics:
+def calculate_performance_metrics(trades: list[Any], equity_curve: list[float], initial_capital: float = 10000.0) -> PerformanceMetrics:
     total_trades = len(trades)
     if total_trades == 0:
         return PerformanceMetrics(

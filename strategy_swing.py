@@ -3,8 +3,6 @@
 # ==============================================================================
 
 from collections import namedtuple
-import pandas as pd
-import numpy as np
 
 SignalResult = namedtuple(
     "SignalResult",
@@ -56,7 +54,7 @@ def get_signal(df):
         return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     # 2. Strong Trend Momentum Expansion (MACD above signal line and histogram accelerating)
-    strong_uptrend = (close > ema_50) and (ema_50 > ema_200)
+    strong_uptrend = (close > ema_50 > ema_200)
     hist_expanding = (macd_hist > prev_hist) and (macd_hist > 0)
     if strong_uptrend and hist_expanding and rel_vol > 1.1 and close > open_p:
         sl = close - (atr * 2.0)

@@ -4,12 +4,13 @@ Phase 13.16-13.19: Corruption, crash, disk failure, and network failure tests.
 """
 import json
 import os
-import uuid
 import time
-import math
+import uuid
+
 import pytest
+
+from paper_engine.exceptions import PersistenceError, StateCorruptionError
 from paper_engine.portfolio import PaperPortfolio
-from paper_engine.exceptions import StateCorruptionError, PersistenceError
 
 
 def _write_corrupt_portfolio(path: str, content: str):
@@ -162,9 +163,10 @@ def test_market_data_client_network_failure_returns_none(monkeypatch):
         mock_instance.get_ticker.side_effect = ConnectionError("Network down")
         mock_cls.return_value = mock_instance
 
-        from data_client import MarketDataClient
         # Reimport to get fresh instance with mock
-        import importlib, data_client
+        import importlib
+
+        import data_client
         importlib.reload(data_client)
 
         # In real runtime the exception would propagate — callers must handle it
@@ -182,7 +184,7 @@ def test_stale_data_prevents_new_decisions():
     When market data feed is stale, get_price must raise DataStaleException
     — no trading decision should be made on stale data.
     """
-    from paper_engine.market_data import MarketDataFeed, DataStaleException
+    from paper_engine.market_data import DataStaleException, MarketDataFeed
 
     f = MarketDataFeed(max_stale_seconds=1)
     f.push_tick("BTCUSDT", 50000.0, 49990.0, 50010.0, time.time() - 100)

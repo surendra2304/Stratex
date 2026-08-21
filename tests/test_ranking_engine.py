@@ -1,8 +1,10 @@
-import pytest
 import time
+
 import pandas as pd
-import datetime
+import pytest
+
 from testnet_engine.service import TestnetService
+
 
 @pytest.fixture
 def ranking_service(mocker):

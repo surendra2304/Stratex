@@ -20,9 +20,8 @@ Every significance claim must include:
   - Explicit INCONCLUSIVE label when sample size is too small
 """
 import math
-import json
 import time
-from typing import List, Optional, Dict
+
 import numpy as np
 
 # Minimum trades required for any statistical inference
@@ -31,7 +30,7 @@ MIN_TRADES_FOR_INFERENCE = 30
 MIN_TRADES_FOR_SHARPE = 50
 
 
-def compute_trade_stats(trade_returns: List[float]) -> Dict:
+def compute_trade_stats(trade_returns: list[float]) -> dict:
     """
     Compute descriptive statistics for a list of per-trade returns (as fractions).
     Returns all metrics; marks unreliable ones with INSUFFICIENT_SAMPLE.
@@ -82,7 +81,7 @@ def compute_trade_stats(trade_returns: List[float]) -> Dict:
     }
 
 
-def t_test_positive_expectancy(trade_returns: List[float]) -> Dict:
+def t_test_positive_expectancy(trade_returns: list[float]) -> dict:
     """
     One-sample t-test: H0 = mean return <= 0, H1 = mean return > 0.
 
@@ -149,19 +148,17 @@ def t_test_positive_expectancy(trade_returns: List[float]) -> Dict:
     return result
 
 
-def compute_max_drawdown(equity_curve: List[float]) -> float:
+def compute_max_drawdown(equity_curve: list[float]) -> float:
     """Compute maximum drawdown from a list of equity values."""
     if len(equity_curve) < 2:
         return 0.0
     peak = equity_curve[0]
     max_dd = 0.0
     for eq in equity_curve:
-        if eq > peak:
-            peak = eq
+        peak = max(peak, eq)
         if peak > 0:
             dd = (peak - eq) / peak
-            if dd > max_dd:
-                max_dd = dd
+            max_dd = max(max_dd, dd)
     return max_dd
 
 
@@ -214,10 +211,10 @@ def can_classify(
 
 def evaluate_against_acceptance_criteria(
     config,  # FrozenExperimentConfig
-    trade_returns: List[float],
-    equity_curve: List[float],
-    benchmark_result: Dict,
-) -> Dict:
+    trade_returns: list[float],
+    equity_curve: list[float],
+    benchmark_result: dict,
+) -> dict:
     """
     Evaluate forward experiment results against pre-registered acceptance criteria.
 

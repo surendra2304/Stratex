@@ -1,22 +1,18 @@
-import pytest
-import os
-import importlib
-import time
 import datetime
-from unittest.mock import patch, MagicMock
+import importlib
+import os
+from unittest.mock import MagicMock, patch
 
 import config
 import execution
-from testnet_engine.service import TestnetService
-from testnet_engine.market_scanner import MarketScanner
-from testnet_engine.risk_gate import RiskGate
+
 
 def reload_modules():
     importlib.reload(config)
     importlib.reload(execution)
-    import testnet_engine.service
     import testnet_engine.market_scanner
     import testnet_engine.risk_gate
+    import testnet_engine.service
     importlib.reload(testnet_engine.service)
     importlib.reload(testnet_engine.market_scanner)
     importlib.reload(testnet_engine.risk_gate)
@@ -24,7 +20,7 @@ def reload_modules():
 
 @patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"})
 def test_chaos_daily_risk_reset():
-    svc, msc, rsg = reload_modules()
+    _svc, _msc, rsg = reload_modules()
     gate = rsg.RiskGate(starting_balance=10000.0)
     
     # Simulate a loss today
@@ -43,7 +39,7 @@ def test_chaos_daily_risk_reset():
 
 @patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE", "TESTNET_PORTFOLIO_FILE": "nonexistent_portfolio.json", "TESTNET_LEDGER_FILE": "nonexistent_ledger.jsonl"})
 def test_chaos_data_staleness_blocks_entries():
-    svc, msc, rsg = reload_modules()
+    svc, _msc, _rsg = reload_modules()
     
     with patch("testnet_engine.service.get_exchange_client") as mock_get_client:
         mock_client = MagicMock()
@@ -64,7 +60,7 @@ def test_chaos_data_staleness_blocks_entries():
 
 @patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"})
 def test_chaos_ws_reconnect_logic():
-    svc, msc, rsg = reload_modules()
+    _svc, msc, _rsg = reload_modules()
     
     with patch("testnet_engine.market_scanner.ThreadedWebsocketManager") as mock_twm_class, \
          patch("testnet_engine.market_scanner.Client") as mock_client_class:
@@ -111,7 +107,7 @@ def test_chaos_ws_reconnect_logic():
         
 @patch.dict(os.environ, {"TRADING_MODE": "TESTNET", "TESTNET_ENABLED": "True", "LIVE_TRADING_ENABLED": "False", "PAPER_SAFE_MODE": "False", "API_KEY": "dummy", "SECRET_KEY": "dummy", "TESTNET_ONLY": "TRUE"})
 def test_atomic_save_state():
-    svc, msc, rsg = reload_modules()
+    svc, _msc, _rsg = reload_modules()
     
     with patch("testnet_engine.service.get_exchange_client") as mock_get_client:
         mock_client = MagicMock()

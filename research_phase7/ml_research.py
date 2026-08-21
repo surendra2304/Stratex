@@ -1,9 +1,17 @@
-import pandas as pd
+import functools
+import operator
+
 import numpy as np
 import xgboost as xgb
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score, average_precision_score
+from sklearn.metrics import (
+    average_precision_score,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 from sklearn.preprocessing import StandardScaler
+
 
 def evaluate_classification(model, X_val, y_val):
     """
@@ -47,7 +55,7 @@ def feature_ablation_test(df, y_col='long_label'):
         "A+C": groups["A_Tech"] + groups["C_Volume_CVD"],
         "A+D": groups["A_Tech"] + groups["D_Volatility"],
         "A+E": groups["A_Tech"] + groups["E_FracDiff"],
-        "ALL": sum(groups.values(), [])
+        "ALL": functools.reduce(operator.iadd, groups.values(), [])
     }
     
     train_size = int(len(df) * 0.7)

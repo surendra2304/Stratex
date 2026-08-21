@@ -1,16 +1,19 @@
-import os
-import threading
-import time
 import csv
-import sys
+import datetime
 import io
 import json
-import datetime
-from flask import Flask, jsonify, send_from_directory, request
+import os
+import sys
+
+import threading
+import time
+
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-from data import get_candles as fetch_candles
+
 import config
 from config import ACTIVE_STRATEGIES, TRADING_MODE
+from data import get_candles as fetch_candles
 from logger import get_logger
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace') if __name__ == '__main__' else sys.stdout
@@ -23,6 +26,7 @@ CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}, r"/health": {"orig
 
 # Register Quantum advisory blueprint (research only, no execution)
 from quantum_endpoint import quantum_bp
+
 app.register_blueprint(quantum_bp, url_prefix='/api/quantum')
 
 LOG_FILE = "trade_log.csv"
@@ -53,7 +57,7 @@ def get_candles():
     Strictly prohibits data fabrication: if Binance is unavailable, returns DATA_UNAVAILABLE.
     """
     symbol = request.args.get('symbol', 'BTCUSDT')
-    tf = request.args.get('tf', '15m')
+    tf = request.args.get('tf') or request.args.get('timeframe') or '15m'
     limit = int(request.args.get('limit', 300))
     
     try:
@@ -178,7 +182,7 @@ def get_engine_health_data():
             "healthy": False,
             "worker_alive": False,
             "heartbeat_age_seconds": None,
-            "reason": f"READ_ERROR: {str(e)}",
+            "reason": f"READ_ERROR: {e!s}",
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         }
 
@@ -218,8 +222,8 @@ def get_live_account_and_holdings(force_refresh=False):
         if not force_refresh and _holdings_cache and (time.time() - _holdings_cache_ts < 2.0):
             return _holdings_cache
             
-        from execution import get_exchange_client
         from data_client import MarketDataClient
+        from execution import get_exchange_client
         
         usdt_free = 0.0
         usdt_locked = 0.0
@@ -369,7 +373,6 @@ def api_open_orders():
 @app.route('/api/status')
 def get_status():
     """Unified authoritative status and portfolio calculation."""
-    from data_client import MarketDataClient
     import config
     
     account_holdings = get_live_account_and_holdings()
@@ -811,7 +814,7 @@ def get_scanner():
         
     # Read live opportunities log (last 15 minutes)
     opps = []
-    now_dt = datetime.datetime.utcnow()
+    datetime.datetime.utcnow()
     if os.path.exists("testnet_opportunity_log.jsonl"):
         try:
             with open("testnet_opportunity_log.jsonl", "r") as f:
@@ -1136,7 +1139,7 @@ def api_account():
             with open(port_file, "r") as f:
                 p_data = json.load(f)
                 open_positions = {k: v for k, v in p_data.get("positions", {}).items() if isinstance(v, dict) and v.get("status") == "OPEN"}
-                for sym, pos in open_positions.items():
+                for pos in open_positions.values():
                     unrealized_pnl += float(pos.get("unrealized_pnl", 0.0))
         except Exception:
             pass
@@ -1640,11 +1643,9 @@ def api_strategy_metrics():
             max_dd = 0.0
             for p in pnls:
                 cum += p
-                if cum > peak:
-                    peak = cum
+                peak = max(peak, cum)
                 dd = peak - cum
-                if dd > max_dd:
-                    max_dd = dd
+                max_dd = max(max_dd, dd)
             data["drawdown"] = round(max_dd, 4)
         else:
             data["win_rate"] = None
@@ -1736,14 +1737,12 @@ def api_risk():
     port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
     open_positions = {}
     mdd = 0.0
-    realized = 0.0
     if os.path.exists(port_file):
         try:
             with open(port_file, "r") as f:
                 port = json.load(f)
                 open_positions = {k: v for k, v in port.get("positions", {}).items() if isinstance(v, dict) and v.get("status") == "OPEN"}
                 mdd = float(port.get("max_drawdown", 0.0)) * 100
-                realized = float(port.get("realized_pnl", 0.0))
         except Exception:
             pass
             
@@ -1914,7 +1913,7 @@ def api_analytics():
         try:
             with open(port_file_path, "r") as _pf:
                 _pd = json.load(_pf)
-                for _sym, _pos in _pd.get("positions", {}).items():
+                for _pos in _pd.get("positions", {}).values():
                     if isinstance(_pos, dict) and _pos.get("status", "OPEN") == "OPEN":
                         unrealized_pnl += float(_pos.get("unrealized_pnl", 0.0))
         except Exception:
@@ -2455,11 +2454,6 @@ def api_risk_events():
 
     # 2. Execution-level risk failures (order_failed)
     exec_events = telemetry.get_execution_events(limit=500)
-    risk_codes = {
-        "POSITION_LIMIT", "RISK_REJECTED", "MAX_EXPOSURE_EXCEEDED",
-        "DAILY_LOSS_EXCEEDED", "DRAWDOWN_LIMIT", "SAFETY_HALT",
-        "LOCAL_ORDER_BLOCKED"
-    }
     for e in exec_events:
         if e.get("event_type") == "order_failed":
             err_code = e.get("error_code", "")
@@ -2707,6 +2701,7 @@ def api_config():
                     if val < 1 or val > 20:
                         return jsonify({"status": "ERROR", "error": "max_open_trades must be between 1 and 20"}), 400
                     config.MAX_OPEN_TRADES = val
+                    config.MAX_OPEN_POSITIONS = val
                 except (ValueError, TypeError):
                     return jsonify({"status": "ERROR", "error": "max_open_trades must be an integer"}), 400
 

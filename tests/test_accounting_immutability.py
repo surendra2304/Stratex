@@ -1,9 +1,8 @@
-import pytest
-import os
 import json
-import datetime
-from testnet_engine.protection import compute_net_pnl
+
 from dashboard import _get_trades_data
+from testnet_engine.protection import compute_net_pnl
+
 
 class TestAccountingImmutability:
     """
@@ -114,7 +113,6 @@ class TestAccountingImmutability:
         ]
         
         # Bot manages only active open positions: LINKUSDT
-        bot_managed_assets = {"LINK"}
         
         usdt_cash = float(wallet_balances[0]["free"])
         managed_crypto_value = 23.24 * 10.0  # $232.40

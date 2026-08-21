@@ -3,14 +3,25 @@
 All operations are read‑only and never touch the execution engine.
 """
 import time
-from .config import DEFAULT_QUBIT_COUNT, DEFAULT_CIRCUIT_DEPTH, DEFAULT_SHOTS, USE_PENNYLANE, USE_QISKIT
+
+from .config import (
+    DEFAULT_CIRCUIT_DEPTH,
+    DEFAULT_QUBIT_COUNT,
+    DEFAULT_SHOTS,
+    USE_PENNYLANE,
+    USE_QISKIT,
+)
 from .features import extract_feature_vector
 from .models import QuantumModel
 from .schemas import QuantumResultSchema
+
 try:
     from data import get_candles  # existing market data fetcher
 except ImportError:
-    from ..data import get_candles
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from data import get_candles
 
 class QuantumService:
     def __init__(self):

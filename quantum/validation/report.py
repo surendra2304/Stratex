@@ -2,7 +2,9 @@
 """Automated Markdown Report Generator for QUANTUM_BENCHMARK_REPORT.md."""
 
 import datetime
+
 from .benchmark import BenchmarkRunResult
+
 
 def generate_markdown_report(result: BenchmarkRunResult) -> str:
     now_str = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -14,9 +16,9 @@ def generate_markdown_report(result: BenchmarkRunResult) -> str:
     lines.append("# QUANTUM BENCHMARK REPORT — WALK-FORWARD PROFITABILITY VALIDATION")
     lines.append("")
     lines.append(f"**Execution Timestamp:** {now_str}  ")
-    lines.append(f"**Benchmark Engine:** `quantum/validation`  ")
+    lines.append("**Benchmark Engine:** `quantum/validation`  ")
     lines.append(f"**Benchmark Execution Time:** {result.execution_time_sec:.2f} seconds  ")
-    lines.append(f"**Production Trading Authority:** ZERO (RESEARCH / ADVISORY ONLY)  ")
+    lines.append("**Production Trading Authority:** ZERO (RESEARCH / ADVISORY ONLY)  ")
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -113,7 +115,7 @@ def generate_markdown_report(result: BenchmarkRunResult) -> str:
     lines.append("## 9. CONCLUSION")
     lines.append("")
     lines.append(f"**Final Verdict:** **{result.quantum_verdict}**  ")
-    lines.append(f"**Operational Status:** **RESEARCH / ADVISORY ONLY**  ")
+    lines.append("**Operational Status:** **RESEARCH / ADVISORY ONLY**  ")
     lines.append("The quantum research subsystem remains completely isolated from the live/testnet trading execution engine.")
     lines.append("")
     

@@ -1,14 +1,14 @@
-import pytest
 import pandas as pd
+
 from testnet_engine.discovery import SymbolDiscoveryService
 from testnet_engine.market_scanner import MarketScanner
 from testnet_engine.risk_gate import RiskGate
+
 
 class TestMultiAssetEngine:
 
     def test_risk_gate_multi_asset_exposure(self):
         """Test that RiskGate correctly rejects multi-asset trades exceeding max portfolio exposure."""
-        from config import MAX_TESTNET_EXPOSURE, MAX_OPEN_POSITIONS
         import config
         config.MAX_NET_DIRECTIONAL_EXPOSURE = 0.10
         
@@ -27,7 +27,7 @@ class TestMultiAssetEngine:
         # Test Cap
         # The trade wants 1.0 BTC at $50k. Risk is $100.
         filters = {"stepSize": 0.01, "minNotional": 10.0}
-        qty = gate.calculate_position_size(10000.0, 50000.0, 49900.0, filters)
+        gate.calculate_position_size(10000.0, 50000.0, 49900.0, filters)
         
         # Let's test the rejection
         active_high = {

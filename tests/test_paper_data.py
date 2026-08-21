@@ -1,7 +1,9 @@
-import pytest
 import time
-import pandas as pd
-from paper_engine.market_data import MarketDataFeed, DataStaleException, DataException
+
+import pytest
+
+from paper_engine.market_data import DataException, DataStaleException, MarketDataFeed
+
 
 def test_paper_market_data_stale():
     """

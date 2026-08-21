@@ -2,6 +2,7 @@ import json
 import os
 import time
 
+
 class AlertManager:
     """Manages system alerts with deduplication and resolution."""
     def __init__(self, filename="alerts.json"):

@@ -1,11 +1,11 @@
 import os
-import time
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 import xgboost as xgb
-from sklearn.preprocessing import StandardScaler
-from sklearn import metrics
 from binance.client import Client
+from sklearn.preprocessing import StandardScaler
+
 from features import add_features
 
 # Configurations

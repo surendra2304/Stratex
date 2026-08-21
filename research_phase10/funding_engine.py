@@ -1,5 +1,3 @@
-import pandas as pd
-import numpy as np
 
 class FundingEngine:
     """
@@ -28,7 +26,6 @@ class FundingEngine:
         current_capital = starting_capital
         
         in_position = False
-        entry_idx = -1
         entry_time = None
         spot_entry = 0
         perp_entry = 0
@@ -48,7 +45,6 @@ class FundingEngine:
                     continue # Missing data, skip
                     
                 in_position = True
-                entry_idx = i
                 epochs_held = 0
                 accumulated_funding_pct = 0.0
                 

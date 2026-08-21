@@ -2,6 +2,7 @@ import os
 import shutil
 import time
 
+
 class BackupManager:
     """Creates rolling backups of critical state files."""
     def __init__(self, backup_dir="backups", max_backups=5):

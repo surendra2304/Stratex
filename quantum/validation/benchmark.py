@@ -2,26 +2,31 @@
 """Master Walk-Forward Quantum vs Classical Benchmark Orchestrator."""
 
 import time
-import pandas as pd
-import numpy as np
 from dataclasses import dataclass
-from typing import Dict, List, Any, Optional
+from typing import Any
 
-from .data import load_benchmark_data, DatasetAuditResult
-from .splits import generate_walk_forward_splits, WalkForwardFold
-from .baselines import ClassicalRuleBasedStrategy, ClassicalMLStrategy
-from .quantum_models import QuantumVQCModel, HybridQuantumClassifier, QuantumPortfolioOptimizer
-from .backtest import BacktestRunner, BacktestResult
-from .bootstrap import run_paired_bootstrap, BootstrapResult
+import numpy as np
+
+from .backtest import BacktestResult, BacktestRunner
+from .baselines import ClassicalMLStrategy, ClassicalRuleBasedStrategy
+from .bootstrap import BootstrapResult, run_paired_bootstrap
+from .data import DatasetAuditResult, load_benchmark_data
+from .quantum_models import (
+    HybridQuantumClassifier,
+    QuantumPortfolioOptimizer,
+    QuantumVQCModel,
+)
+from .splits import WalkForwardFold, generate_walk_forward_splits
+
 
 @dataclass
 class BenchmarkRunResult:
     dataset_audit: DatasetAuditResult
     n_folds: int
-    folds: List[WalkForwardFold]
-    fold_results: Dict[int, Dict[str, BacktestResult]]
-    aggregate_results: Dict[str, Dict[str, Any]]
-    bootstrap_results: Dict[str, BootstrapResult]
+    folds: list[WalkForwardFold]
+    fold_results: dict[int, dict[str, BacktestResult]]
+    aggregate_results: dict[str, dict[str, Any]]
+    bootstrap_results: dict[str, BootstrapResult]
     quantum_verdict: str
     verdict_rationale: str
     execution_time_sec: float
@@ -70,8 +75,8 @@ def run_full_benchmark(
 
     runner = BacktestRunner(initial_capital=10000.0, fee_rate=0.001, slippage_rate=0.0005)
     
-    fold_results: Dict[int, Dict[str, BacktestResult]] = {}
-    strategy_returns: Dict[str, List[float]] = {
+    fold_results: dict[int, dict[str, BacktestResult]] = {}
+    strategy_returns: dict[str, list[float]] = {
         "Classical_Rule_Based": [],
         "Classical_ML_Baseline": [],
         "Pure_Quantum_VQC": [],
@@ -118,7 +123,7 @@ def run_full_benchmark(
         strategy_returns["Quantum_Portfolio_Optimizer"].extend([t.net_return_pct for t in res_opt.trades] if res_opt.trades else [0.0])
 
     # 3. Aggregate Performance Across All Folds
-    aggregate_results: Dict[str, Dict[str, Any]] = {}
+    aggregate_results: dict[str, dict[str, Any]] = {}
     strat_keys = [
         "Classical_Rule_Based", "Classical_ML_Baseline", "Pure_Quantum_VQC",
         "Hybrid_Quantum_Classical", "Quantum_Portfolio_Optimizer"

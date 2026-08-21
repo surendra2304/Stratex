@@ -12,8 +12,9 @@ Validated OOS statistics (used as structural expectancy priors by ProfitabilityG
 """
 
 from collections import namedtuple
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 
 # ------------------------------------------------------------------
 # Signal metadata — carried through execution pipeline

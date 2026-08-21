@@ -1,6 +1,7 @@
-import pytest
 import pandas as pd
+
 from data import add_indicators
+
 
 def test_add_indicators_empty_df():
     """Test that add_indicators safely handles an empty DataFrame."""

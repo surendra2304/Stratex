@@ -17,7 +17,11 @@ services:
         value: "TRUE"
       - key: PAPER_SAFE_MODE
         value: "FALSE"
+      - key: LIVE_TRADING_ENABLED
+        value: "False"
       - key: API_KEY
         sync: false
       - key: SECRET_KEY
+        sync: false
+      - key: GEMINI_API_KEY
         sync: false

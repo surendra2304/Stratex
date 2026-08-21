@@ -4009,12 +4009,13 @@ async function renderModalCandleChart(sym, tf, entry, sl, tp, exit, side) {
     
     try {
         const resp = await apiClient.get(`/api/candles?symbol=${sym || 'BTCUSDT'}&timeframe=${tf || '15m'}&limit=40`);
-        if (resp && resp.candles && Array.isArray(resp.candles) && resp.candles.length > 0) {
-            labels = resp.candles.map(c => {
-                const d = new Date(c.time || c.timestamp || Date.now());
+        const candleList = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.candles) ? resp.candles : []);
+        if (candleList.length > 0) {
+            labels = candleList.map(c => {
+                const d = new Date((c.time && c.time < 10000000000 ? c.time * 1000 : c.time) || c.timestamp || Date.now());
                 return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
             });
-            priceData = resp.candles.map(c => Number(c.close || c.price || 0));
+            priceData = candleList.map(c => Number(c.close || c.price || 0));
         }
     } catch (err) {
         console.warn("Candle fetch for modal fallback:", err);
@@ -6055,7 +6056,7 @@ function closeInspectorDrawer() {
         drawer.style.display = 'none';
     }
     
-    // Safely destroy chart instance to prevent duplicate canvases or memory leaks
+    // Safely destroy chart instances to prevent duplicate canvases or memory leaks
     if (modalChartInst) {
         try {
             modalChartInst.destroy();
@@ -6063,6 +6064,14 @@ function closeInspectorDrawer() {
             console.warn("Error destroying modalChartInst:", e);
         }
         modalChartInst = null;
+    }
+    if (window.modalChartInstance) {
+        try {
+            window.modalChartInstance.destroy();
+        } catch (e) {
+            console.warn("Error destroying modalChartInstance:", e);
+        }
+        window.modalChartInstance = null;
     }
     currentModalItem = null;
 }

@@ -1,18 +1,20 @@
 # tests/test_quantum_validation.py
 """Comprehensive unit and integration tests for the Quantum Validation Framework."""
 
-import pytest
 import numpy as np
 import pandas as pd
 
-from quantum.validation.data import validate_dataset, inspect_dataset_file, load_benchmark_data
-from quantum.validation.splits import generate_walk_forward_splits, WalkForwardFold
-from quantum.validation.baselines import ClassicalRuleBasedStrategy, ClassicalMLStrategy
-from quantum.validation.quantum_models import QuantumVQCModel, HybridQuantumClassifier, QuantumPortfolioOptimizer
-from quantum.validation.backtest import BacktestRunner, TradeRecord
-from quantum.validation.metrics import calculate_performance_metrics
+from quantum.validation.backtest import BacktestRunner
+from quantum.validation.baselines import ClassicalMLStrategy, ClassicalRuleBasedStrategy
 from quantum.validation.bootstrap import run_paired_bootstrap
-from quantum.validation.benchmark import run_full_benchmark
+from quantum.validation.data import validate_dataset
+from quantum.validation.quantum_models import (
+    HybridQuantumClassifier,
+    QuantumPortfolioOptimizer,
+    QuantumVQCModel,
+)
+from quantum.validation.splits import generate_walk_forward_splits
+
 
 def _create_synthetic_ohlcv(n_bars: int = 200) -> pd.DataFrame:
     """Generates synthetic OHLCV dataframe for deterministic testing."""
@@ -112,7 +114,11 @@ def test_bootstrap_statistics():
 
 def test_execution_isolation_safety():
     """Verify that the quantum validation module does not expose any order execution hooks."""
-    from quantum.validation import QuantumVQCModel, HybridQuantumClassifier, QuantumPortfolioOptimizer
+    from quantum.validation import (
+        HybridQuantumClassifier,
+        QuantumPortfolioOptimizer,
+        QuantumVQCModel,
+    )
     vqc = QuantumVQCModel()
     hybrid = HybridQuantumClassifier()
     opt = QuantumPortfolioOptimizer()

@@ -1,14 +1,16 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-import os
-from unittest.mock import patch, MagicMock
+
 from data_client import MarketDataClient
+
 
 def test_market_data_client_no_execution_methods():
     """
     Proves that MarketDataClient does not expose execution capabilities
     and accurately raises AttributeError when attempted.
     """
-    with patch("data_client.Client") as mock_client_class:
+    with patch("data_client.Client"):
         # We need TRADING_MODE != PAPER to allow initialization
         with patch("data_client.TRADING_MODE", "RESEARCH"):
             client = MarketDataClient()

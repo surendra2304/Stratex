@@ -9,13 +9,12 @@ Covers:
 6. Invariant confirmation: Engine execution and risk parameters are unaffected by Gemini state
 """
 
-import os
 import unittest
-from unittest.mock import patch, MagicMock
-import urllib.error
+from unittest.mock import patch
 
-from gemini_service import GeminiService, get_gemini_service
 import config
+from gemini_service import GeminiService
+
 
 class TestGeminiService(unittest.TestCase):
 

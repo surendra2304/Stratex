@@ -1,11 +1,12 @@
 # quantum/validation/baselines.py
 """Classical Baseline Strategies (Rule-based and Classical ML)."""
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, Optional, Tuple
-from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.preprocessing import StandardScaler
 
 try:
     from features import add_features
@@ -26,9 +27,8 @@ class ClassicalRuleBasedStrategy:
         
     def fit(self, train_df: pd.DataFrame):
         """Rule-based strategy has fixed quantitative rules; fit is deterministic."""
-        pass
         
-    def generate_signal(self, window_df: pd.DataFrame) -> Dict[str, Any]:
+    def generate_signal(self, window_df: pd.DataFrame) -> dict[str, Any]:
         """Evaluates latest candle for buy/sell signal and risk boundaries."""
         if len(window_df) < 30:
             return {"signal": "HOLD", "confidence": 0.0, "entry": 0.0, "sl": 0.0, "tp": 0.0}
@@ -90,7 +90,7 @@ class ClassicalMLStrategy:
         ]
         self.is_trained = False
         
-    def _create_dataset(self, df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
+    def _create_dataset(self, df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
         df_feat = add_features(df.copy())
         # Labels: Triple barrier
         closes = df_feat['close'].values
@@ -127,7 +127,7 @@ class ClassicalMLStrategy:
         else:
             self.is_trained = False
             
-    def generate_signal(self, window_df: pd.DataFrame) -> Dict[str, Any]:
+    def generate_signal(self, window_df: pd.DataFrame) -> dict[str, Any]:
         if not self.is_trained or len(window_df) < 50:
             return {"signal": "HOLD", "confidence": 0.0, "entry": 0.0, "sl": 0.0, "tp": 0.0}
             

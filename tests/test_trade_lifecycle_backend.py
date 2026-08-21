@@ -6,8 +6,9 @@ and full TelemetryManager round-trip.
 
 import json
 import tempfile
-import datetime
+
 import pytest
+
 from dashboard import app
 from testnet_engine.telemetry_manager import TelemetryManager
 

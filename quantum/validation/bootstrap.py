@@ -1,9 +1,10 @@
 # quantum/validation/bootstrap.py
 """Paired and independent bootstrap resampling with 10,000 samples for rigorous statistical hypothesis testing."""
 
-import numpy as np
 from dataclasses import dataclass
-from typing import List, Dict, Any, Tuple
+
+import numpy as np
+
 
 @dataclass
 class BootstrapResult:
@@ -20,8 +21,8 @@ class BootstrapResult:
     random_seed: int = 42
 
 def run_paired_bootstrap(
-    returns_quantum: List[float],
-    returns_classical: List[float],
+    returns_quantum: list[float],
+    returns_classical: list[float],
     comparison_name: str = "Quantum_vs_Classical",
     n_iterations: int = 10000,
     seed: int = 42

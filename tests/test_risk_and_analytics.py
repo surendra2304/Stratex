@@ -1,6 +1,9 @@
 import json
+
 import pytest
+
 from dashboard import app
+
 
 @pytest.fixture
 def client():

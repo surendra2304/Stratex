@@ -1,23 +1,27 @@
-import sys
-import os
 import json
-import pandas as pd
+import os
+import sys
+
 import numpy as np
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from research_phase8.data_resampler import resample_timeframe
-from research_phase8.config_timeframes import TIMEFRAME_CONFIGS
-from research_phase8.economic_evaluator import calculate_net_expectancy, calculate_timeframe_economics
-from research_phase7.research_features import build_institutional_features
+import xgboost as xgb
+from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.preprocessing import StandardScaler
+
+from config import BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE
 from research_phase7.barrier_labels import apply_triple_barrier_labels
 from research_phase7.ml_research import feature_ablation_test
+from research_phase7.research_features import build_institutional_features
 from research_phase7.walk_forward import generate_walk_forward_splits
+from research_phase8.config_timeframes import TIMEFRAME_CONFIGS
+from research_phase8.data_resampler import resample_timeframe
+from research_phase8.economic_evaluator import (
+    calculate_net_expectancy,
+    calculate_timeframe_economics,
+)
 
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import roc_auc_score, average_precision_score
-import xgboost as xgb
-from config import BACKTEST_FEE_RATE, BACKTEST_SLIPPAGE_RATE
 
 def run_multi_timeframe_grid(df_1m):
     """

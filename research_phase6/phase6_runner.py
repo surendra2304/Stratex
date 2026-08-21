@@ -1,27 +1,24 @@
-import sys
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
 import pandas as pd
-import numpy as np
-import json
-from datetime import datetime
 
-from config import STARTING_BALANCE, RISK_PER_TRADE, SYMBOL
-from data import add_indicators
-from backtester import fetch_historical_data
-from regime import classify_regimes
-from backtest_engine import BacktestEngine
-from metrics import calculate_metrics
-from diagnostics import calculate_diagnostics
-
-import strategy_scalper as scalper
-import strategy_swing as swing
 import strategy_aggressor as aggressor
 import strategy_ml as ml
-from research_phase6.orchestrator import StrategyOrchestrator
-from research_phase6.ml_research import run_ml_comparison, run_probability_calibration
+import strategy_scalper as scalper
+import strategy_swing as swing
+from backtest_engine import BacktestEngine
+from backtester import fetch_historical_data
+from config import RISK_PER_TRADE, STARTING_BALANCE, SYMBOL
+from data import add_indicators
+from metrics import calculate_metrics
+from regime import classify_regimes
+from research_phase6.ml_research import run_ml_comparison
 from research_phase6.monte_carlo import run_monte_carlo
+from research_phase6.orchestrator import StrategyOrchestrator
 
 # Phase 6 Configuration
 FEE_RATE = 0.001
@@ -109,7 +106,7 @@ def optimize_aggressor_tp(df):
         test_end = total_bars if w == NUM_WINDOWS - 1 else start_idx + train_size + val_size + test_step
         if start_idx + train_size >= total_bars: break
         
-        train_df = df.iloc[start_idx : start_idx+train_size].copy()
+        df.iloc[start_idx : start_idx+train_size].copy()
         val_df = df.iloc[start_idx+train_size : start_idx+train_size+val_size].copy()
         test_df = df.iloc[start_idx+train_size+val_size : test_end].copy()
         
@@ -148,8 +145,7 @@ def optimize_aggressor_tp(df):
     
     with open('backtest_results/phase6/optimization_report.md', 'w') as f:
         f.write("# Phase 6: Robust Optimization (Aggressor TP)\n\n")
-        for fold, data in optimization_log.items():
-            f.write(f"### {fold}\nSelected TP: {data['best_tp']}\n\n")
+        f.writelines(f"### {fold}\nSelected TP: {data['best_tp']}\n\n" for fold, data in optimization_log.items())
         f.write("### Final Out-of-Sample Performance\n")
         f.write(f"- Total OOS Trades: {metrics['total_trades']}\n")
         f.write(f"- Final OOS Net PnL: ${metrics['net_pnl']:.2f}\n")

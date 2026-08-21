@@ -5,8 +5,6 @@ Lightweight, testable versions of PairsSimulator and FundingSimulator
 for use in Phase 13 adversarial tests. These are NOT the live simulators.
 They track state deterministically without requiring a full portfolio/feed setup.
 """
-import uuid
-from typing import Dict, Set
 
 
 class PairsSimulator:
@@ -16,7 +14,7 @@ class PairsSimulator:
     """
 
     def __init__(self):
-        self._pairs: Dict[str, dict] = {}
+        self._pairs: dict[str, dict] = {}
 
     def record_leg_fill(
         self,
@@ -72,8 +70,8 @@ class FundingSimulator:
     """
 
     def __init__(self):
-        self._arbs: Dict[str, dict] = {}
-        self._applied_funding_events: Dict[str, Set[str]] = {}
+        self._arbs: dict[str, dict] = {}
+        self._applied_funding_events: dict[str, set[str]] = {}
 
     def _ensure(self, arb_id: str):
         if arb_id not in self._arbs:

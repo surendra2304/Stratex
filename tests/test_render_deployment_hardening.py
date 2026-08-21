@@ -1,14 +1,12 @@
-import pytest
-import os
 import json
-import signal
-import sys
-from unittest.mock import MagicMock, patch
+import os
+
+import pytest
 import yaml
 
-import dashboard
-from dashboard import get_engine_health_data, app
 import config
+from dashboard import app, get_engine_health_data
+
 
 class TestRenderDeploymentHardening:
     """

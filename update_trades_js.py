@@ -1,5 +1,3 @@
-import sys
-import re
 
 with open('static/app.js', 'r', encoding='utf-8') as f:
     content = f.read()

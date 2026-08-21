@@ -2,14 +2,15 @@
 # STRATEGY_ML.PY - Calibrated Probabilistic ML Prediction Engine (XGBoost)
 # ==============================================================================
 
-import pandas as pd
-import numpy as np
-import xgboost as xgb
-from sklearn.preprocessing import StandardScaler
-import pickle
 import logging
 import os
+import pickle
 from collections import namedtuple
+
+import numpy as np
+import pandas as pd
+import xgboost as xgb
+from sklearn.preprocessing import StandardScaler
 
 SignalResult = namedtuple(
     "SignalResult",

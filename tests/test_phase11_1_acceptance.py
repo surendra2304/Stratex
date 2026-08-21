@@ -1,15 +1,16 @@
-import pytest
-import time
-import os
-import json
 import math
-from paper_engine.portfolio import PaperPortfolio
-from paper_engine.market_data import MarketDataFeed, DataException, DataStaleException
-from paper_engine.simulator import PaperSimulator
+import os
+import time
+
+import pytest
+
 from paper_engine.funding_simulator import FundingPaperSimulator
-from paper_engine.pairs_simulator import PairsPaperSimulator
-from research_phase9.cost_engine import CostEngine
 from paper_engine.heartbeat import HeartbeatState
+from paper_engine.market_data import DataException, MarketDataFeed
+from paper_engine.portfolio import PaperPortfolio
+from paper_engine.simulator import PaperSimulator
+from research_phase9.cost_engine import CostEngine
+
 
 def test_phase11_1_acceptance():
     """

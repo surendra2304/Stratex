@@ -1,12 +1,14 @@
-import pytest
-import os
-import json
 import importlib
+import json
+import os
+
+import pytest
 
 import config
 import testnet_engine.service
-from testnet_engine.profitability_gate import ProfitabilityGate
 from research_phase9.cost_engine import CostEngine
+from testnet_engine.profitability_gate import ProfitabilityGate
+
 
 def reload_modules():
     importlib.reload(config)
@@ -30,7 +32,7 @@ def quality_service(tmp_path):
     config.DEGRADATION_WINDOW = 5
     config.MIN_WIN_RATE_THRESHOLD = 0.40
     
-    import unittest.mock as mock
+    from unittest import mock
     with mock.patch("testnet_engine.service.get_exchange_client") as mock_get_client:
         mock_client = mock.MagicMock()
         mock_get_client.return_value = mock_client
@@ -72,8 +74,7 @@ def test_degradation_trigger_observe_only(quality_service):
     # Simulate 5 trades: 4 losses, 1 win -> 20% win rate
     # Window is 5. Threshold is 40%.
     with open(ledger_path, "w") as f:
-        for i in range(4):
-            f.write(json.dumps({"action": "CLOSE_LOSS", "pnl": -10.0}) + "\n")
+        f.writelines(json.dumps({"action": "CLOSE_LOSS", "pnl": -10.0}) + "\n" for i in range(4))
         f.write(json.dumps({"action": "CLOSE_WIN", "pnl": 20.0}) + "\n")
         
     assert service.observe_only is False
@@ -87,10 +88,8 @@ def test_degradation_safe_win_rate(quality_service):
     
     # Simulate 5 trades: 2 losses, 3 wins -> 60% win rate
     with open(ledger_path, "w") as f:
-        for i in range(2):
-            f.write(json.dumps({"action": "CLOSE_LOSS", "pnl": -10.0}) + "\n")
-        for i in range(3):
-            f.write(json.dumps({"action": "CLOSE_WIN", "pnl": 20.0}) + "\n")
+        f.writelines(json.dumps({"action": "CLOSE_LOSS", "pnl": -10.0}) + "\n" for i in range(2))
+        f.writelines(json.dumps({"action": "CLOSE_WIN", "pnl": 20.0}) + "\n" for i in range(3))
             
     assert service.observe_only is False
     

@@ -2,12 +2,13 @@
 tests/test_phase13_paper_execution.py
 Phase 13.11-13.13: Paper execution failure, pairs unhedged, funding failure tests.
 """
-import uuid
-import time
 import math
+import uuid
+
 import pytest
+
 from paper_engine.portfolio import PaperPortfolio
-from paper_engine.testing_simulators import PairsSimulator, FundingSimulator
+from paper_engine.testing_simulators import FundingSimulator, PairsSimulator
 
 
 def _portfolio(tmp_path):

@@ -5,7 +5,9 @@ Phase 13.8: Signal adversarial tests — every invalid signal must be rejected.
 import math
 import time
 import uuid
+
 import pytest
+
 from paper_engine.signal_logger import SignalLogger
 
 
@@ -120,7 +122,8 @@ def test_missing_field_rejected(field):
 # ─── Duplicate signal IDs ───────────────────────────────────
 def test_duplicate_signal_id_rejected():
     """SignalLogger must not write a duplicate signal_id twice."""
-    import os, json
+    import json
+    import os
     log_path = "test_signal_log_dup.jsonl"
     try:
         logger = SignalLogger(log_path)

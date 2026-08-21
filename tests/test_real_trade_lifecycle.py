@@ -1,13 +1,10 @@
-import pytest
 import json
 import uuid
-import datetime
-import pandas as pd
-from unittest.mock import MagicMock, patch
-from dashboard import app, _get_trades_data
-from testnet_engine.service import TestnetService
-from testnet_engine.profitability_gate import ProfitabilityGate, CostEngine
+
+from dashboard import _get_trades_data
+from testnet_engine.profitability_gate import CostEngine, ProfitabilityGate
 from testnet_engine.risk_gate import RiskGate
+
 
 class TestRealTradeLifecycle:
     """
@@ -114,7 +111,7 @@ class TestRealTradeLifecycle:
         risk_gate = RiskGate(starting_balance=10000.0)
         
         # 1. Normal order -> ACCEPTED
-        passed, reason, _ = risk_gate.evaluate_risk(
+        passed, _reason, _ = risk_gate.evaluate_risk(
             symbol="BTCUSDT",
             side="BUY",
             current_equity=10000.0,

@@ -1,5 +1,5 @@
 import numpy as np
-import pandas as pd
+
 
 def run_monte_carlo(trades, initial_balance=10000.0, iterations=10000, ruin_level=0.5):
     """

@@ -1,14 +1,16 @@
-import sys
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pandas as pd
 import numpy as np
 import xgboost as xgb
 from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import precision_score, recall_score, roc_auc_score
+from sklearn.preprocessing import StandardScaler
+
 from strategy_ml import MLStrategy
+
 
 def run_ml_comparison(train_df, val_df):
     """Part 11: Compare simple Logistic Regression against XGBoost."""

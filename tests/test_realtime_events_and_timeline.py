@@ -2,6 +2,7 @@
 Unit Tests for Real-time Trade and Account Event Telemetry and Balance Timeline.
 """
 import pytest
+
 from dashboard import app
 
 

@@ -3,8 +3,6 @@
 # ==============================================================================
 
 from collections import namedtuple
-import pandas as pd
-import numpy as np
 
 SignalResult = namedtuple(
     "SignalResult",
@@ -38,7 +36,7 @@ def get_signal(df):
     low       = float(last["low"])
     high      = float(last["high"])
     prev_close= float(prev["close"])
-    prev_low  = float(prev["low"])
+    float(prev["low"])
 
     bb_upper  = float(last.get("bb_upper", close * 1.02))
     bb_lower  = float(last.get("bb_lower", close * 0.98))

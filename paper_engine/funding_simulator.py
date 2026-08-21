@@ -1,10 +1,11 @@
 import time
 import uuid
-from typing import Dict
-from paper_engine.simulator import PaperSimulator
-from paper_engine.portfolio import PaperPortfolio
+
 from paper_engine.market_data import MarketDataFeed
+from paper_engine.portfolio import PaperPortfolio
+from paper_engine.simulator import PaperSimulator
 from research_phase9.cost_engine import CostEngine
+
 
 class FundingPaperSimulator(PaperSimulator):
     """
@@ -13,7 +14,7 @@ class FundingPaperSimulator(PaperSimulator):
     """
     def __init__(self, portfolio: PaperPortfolio, market_data: MarketDataFeed, cost_engine: CostEngine):
         super().__init__(portfolio, market_data, cost_engine)
-        self.funding_trades: Dict[str, dict] = {}
+        self.funding_trades: dict[str, dict] = {}
         
     def submit_funding_arbitrage(self, symbol: str, spot_quantity: float, perp_quantity: float, signal_time: float) -> str:
         """

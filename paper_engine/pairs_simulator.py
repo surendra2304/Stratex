@@ -1,10 +1,11 @@
 import time
 import uuid
-from typing import Dict
-from paper_engine.simulator import PaperSimulator
+
+from paper_engine.market_data import MarketDataFeed
 from paper_engine.portfolio import PaperPortfolio
-from paper_engine.market_data import MarketDataFeed, DataException
+from paper_engine.simulator import PaperSimulator
 from research_phase9.cost_engine import CostEngine
+
 
 class PairsPaperSimulator(PaperSimulator):
     """
@@ -12,7 +13,7 @@ class PairsPaperSimulator(PaperSimulator):
     """
     def __init__(self, portfolio: PaperPortfolio, market_data: MarketDataFeed, cost_engine: CostEngine):
         super().__init__(portfolio, market_data, cost_engine)
-        self.pair_trades: Dict[str, dict] = {}
+        self.pair_trades: dict[str, dict] = {}
         
     def submit_pair_order(self, symbol_a: str, symbol_b: str, direction_a: str, quantity_a: float, quantity_b: float, signal_time: float) -> str:
         """
@@ -26,7 +27,7 @@ class PairsPaperSimulator(PaperSimulator):
         try:
             order_a_id = self.submit_market_order(symbol_a, direction_a, quantity_a, signal_time)
             leg_a_status = "FILLED"
-        except Exception as e:
+        except Exception:
             order_a_id = None
             leg_a_status = "FAILED"
             
@@ -37,7 +38,7 @@ class PairsPaperSimulator(PaperSimulator):
         try:
             order_b_id = self.submit_market_order(symbol_b, direction_b, quantity_b, signal_time)
             leg_b_status = "FILLED"
-        except Exception as e:
+        except Exception:
             order_b_id = None
             leg_b_status = "FAILED"
             

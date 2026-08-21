@@ -1,22 +1,22 @@
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.abspath("."))
-import json
-import time
 import datetime
-import pandas as pd
+import json
+
 import numpy as np
 
+import strategy_adx_ema
 import strategy_aggressor
+import strategy_ml
 import strategy_scalper
 import strategy_supertrend
-import strategy_ml
 import strategy_swing
-import strategy_adx_ema
-
-from data import get_candles, add_indicators
-from testnet_engine.profitability_gate import ProfitabilityGate, CostEngine
+from data import add_indicators, get_candles
+from testnet_engine.profitability_gate import CostEngine, ProfitabilityGate
 from testnet_engine.risk_gate import RiskGate
+
 
 def run_multi_strategy_audit():
     print("==================================================")
@@ -84,7 +84,7 @@ def run_multi_strategy_audit():
         for i in range(warmup, len(df_ind)):
             current_slice = df_ind.iloc[:i+1].copy()
             current_price = float(current_slice['close'].iloc[-1])
-            candle_time = current_slice['timestamp'].iloc[-1]
+            current_slice['timestamp'].iloc[-1]
 
             for s_name, s_mod in strategies.items():
                 m = matrix[(s_name, tf)]
@@ -129,7 +129,7 @@ def run_multi_strategy_audit():
 
                     # Risk Gate
                     qty = 0.001 if "BTC" in sym else 1.0
-                    passed_r, r_reason, _ = risk_gate.evaluate_risk(
+                    passed_r, _r_reason, _ = risk_gate.evaluate_risk(
                         symbol=sym,
                         side=side,
                         current_equity=10000.0,
@@ -146,7 +146,7 @@ def run_multi_strategy_audit():
                     m["risk_accepted"] += 1
                     m["execution_eligible"] += 1
 
-                except Exception as e:
+                except Exception:
                     m["exceptions"] += 1
 
     print("\n==================================================")

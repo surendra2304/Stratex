@@ -9,10 +9,9 @@ CRITICAL CONTRACT:
 - Any mismatch → RECONCILIATION_ERROR → new trades blocked until investigated.
 """
 import json
-import math
 import os
 import time
-from typing import List, Dict, Optional
+
 from logger import get_logger
 from paper_engine.portfolio import PaperPortfolio
 
@@ -60,14 +59,14 @@ class PaperReconciliation:
     Checks for duplicate trade IDs and duplicate signal IDs in the ledger.
     """
 
-    def __init__(self, ledger_file: str, reconciliation_file: Optional[str] = None):
+    def __init__(self, ledger_file: str, reconciliation_file: str | None = None):
         self.ledger_file = ledger_file
         self.reconciliation_file = (
             reconciliation_file
             or os.getenv("FORWARD_RECONCILIATION_FILE", "forward_reconciliation.jsonl")
         )
 
-    def _read_ledger(self) -> List[Dict]:
+    def _read_ledger(self) -> list[dict]:
         if not os.path.exists(self.ledger_file):
             return []
         records = []
@@ -127,7 +126,7 @@ class PaperReconciliation:
         return True
 
 
-def _write_reconciliation_record(ok: bool, detail: str, filename: Optional[str] = None):
+def _write_reconciliation_record(ok: bool, detail: str, filename: str | None = None):
     out_file = filename or os.getenv("FORWARD_RECONCILIATION_FILE", "forward_reconciliation.jsonl")
     record = {
         "reconciled_at": time.time(),

@@ -10,11 +10,11 @@ CRITICAL CONTRACT:
 - The kill switch may stop new signals immediately.
 - Existing positions are closed using realistic costs (taker fees + slippage + spread).
 """
-import os
 import json
+import os
 import time
 import uuid
-from typing import Optional
+
 from logger import get_logger
 from research_phase9.cost_engine import CostEngine
 
@@ -27,8 +27,8 @@ KILL_SWITCH_LOCK_FILE = "KILL_SWITCH_ACTIVE.lock"
 def trigger_kill_switch(
     reason: str,
     portfolio=None,
-    current_market_prices: Optional[dict] = None,
-    cost_engine: Optional[CostEngine] = None,
+    current_market_prices: dict | None = None,
+    cost_engine: CostEngine | None = None,
 ) -> dict:
     """
     Triggers the emergency halt mechanism.

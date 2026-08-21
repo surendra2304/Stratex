@@ -1,5 +1,3 @@
-import pandas as pd
-import numpy as np
 
 def resample_timeframe(df_1m, target_tf):
     """

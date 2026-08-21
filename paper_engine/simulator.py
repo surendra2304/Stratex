@@ -1,8 +1,8 @@
 import time
 import uuid
-from typing import Dict, Tuple, Optional
+
 from paper_engine.config import LATENCY_MODEL, LIMIT_FILL_MODEL
-from paper_engine.market_data import MarketDataFeed, DataException
+from paper_engine.market_data import DataException, MarketDataFeed
 from paper_engine.portfolio import PaperPortfolio
 from research_phase9.cost_engine import CostEngine
 
@@ -26,7 +26,7 @@ class PaperSimulator:
         self.market_data = market_data
         self.cost_engine = cost_engine
         
-        self.orders: Dict[str, dict] = {}
+        self.orders: dict[str, dict] = {}
         
     def submit_market_order(self, symbol: str, direction: str, quantity: float, signal_time: float) -> str:
         """
@@ -129,14 +129,10 @@ class PaperSimulator:
             lp = order['limit_price']
             
             if LIMIT_FILL_MODEL == "OPTIMISTIC":
-                if order['direction'] == "BUY" and ask <= lp:
-                    fill = True
-                elif order['direction'] == "SELL" and bid >= lp:
+                if order['direction'] == "BUY" and ask <= lp or order['direction'] == "SELL" and bid >= lp:
                     fill = True
             elif LIMIT_FILL_MODEL == "CONSERVATIVE":
-                if order['direction'] == "BUY" and ask < lp:
-                    fill = True
-                elif order['direction'] == "SELL" and bid > lp:
+                if order['direction'] == "BUY" and ask < lp or order['direction'] == "SELL" and bid > lp:
                     fill = True
                     
             if fill:

@@ -1,9 +1,11 @@
-import pytest
-from unittest.mock import patch, mock_open, MagicMock
-import execution
-import json
 import math
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+import execution
 from paper_engine.exceptions import StateCorruptionError
+
 
 def test_get_open_orders():
     """Test that local counting of open trades works based on active_trades.json."""

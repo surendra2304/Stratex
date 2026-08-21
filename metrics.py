@@ -1,5 +1,6 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 
 def calculate_drawdown(equity_df):
     """Calculates peak, drawdown, and max drawdown from an equity curve DataFrame."""
@@ -62,7 +63,7 @@ def calculate_metrics(trade_history, equity_df, initial_balance):
         
     expectancy = trades['net_pnl'].mean() if not trades.empty else 0.0
     
-    max_dd, max_dd_pct = calculate_drawdown(equity_df)
+    _max_dd, max_dd_pct = calculate_drawdown(equity_df)
     
     # Calculate Sharpe / Sortino 
     if not equity_df.empty:

@@ -1,7 +1,8 @@
 import pandas as pd
-import numpy as np
+
 from config import STARTING_BALANCE, SYMBOL
 from metrics import calculate_metrics
+
 
 def generate_walk_forward_splits(df, num_windows=5, train_pct=0.50, val_pct=0.25):
     """
