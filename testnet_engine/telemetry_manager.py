@@ -742,7 +742,7 @@ class TelemetryManager:
             loss_pnl = abs(sum(float(t.get("net_pnl", 0.0)) for t in losses))
             
             win_rate = (len(wins) / len(trades)) * 100.0 if trades else 0.0
-            profit_factor = (win_pnl / loss_pnl) if loss_pnl > 0 else (999.0 if win_pnl > 0 else 0.0)
+            profit_factor = (win_pnl / loss_pnl) if loss_pnl > 0 else (None if win_pnl > 0 else 0.0)
             avg_win = (win_pnl / len(wins)) if wins else 0.0
             avg_loss = (loss_pnl / len(losses)) if losses else 0.0
             payoff_ratio = (avg_win / avg_loss) if avg_loss > 0 else 0.0

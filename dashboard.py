@@ -1655,7 +1655,7 @@ def api_strategy_metrics():
         pnls = trade_pnls.get(st, [])
         if tr_count > 0:
             data["win_rate"] = round((data["wins"] / tr_count) * 100, 2)
-            data["profit_factor"] = round((data["gross_profit"] / data["gross_loss"]), 2) if data["gross_loss"] > 0 else (999.0 if data["gross_profit"] > 0 else None)
+            data["profit_factor"] = round((data["gross_profit"] / data["gross_loss"]), 2) if data["gross_loss"] > 0 else (None if data["gross_profit"] > 0 else None)
             data["avg_trade"] = round(data["net_pnl"] / tr_count, 4)
             data["best_trade"] = round(max(pnls), 4) if pnls else None
             data["worst_trade"] = round(min(pnls), 4) if pnls else None
@@ -1921,7 +1921,7 @@ def api_analytics():
     win_count = len(wins)
     loss_count = len(losses)
     win_rate = round((win_count / total) * 100, 2) if total > 0 else None
-    pf = round(gross_win / gross_loss, 2) if gross_loss > 0 else (999.0 if gross_win > 0 else None)
+    pf = round(gross_win / gross_loss, 2) if gross_loss > 0 else (None if gross_win > 0 else None)
     avg_trade = round(net_pnl / total, 4) if total > 0 else None
     avg_win = round(gross_win / win_count, 4) if win_count > 0 else None
     avg_loss = round(gross_loss / loss_count, 4) if loss_count > 0 else None

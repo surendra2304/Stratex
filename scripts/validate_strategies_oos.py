@@ -172,7 +172,7 @@ def compute_metrics(trades):
     win_rate = len(wins) / total_trades if total_trades > 0 else 0.0
     gross_gain = sum(wins) if wins else 0.0
     gross_loss = abs(sum(losses)) if losses else 0.0
-    profit_factor = (gross_gain / gross_loss) if gross_loss > 0 else (99.0 if gross_gain > 0 else 0.0)
+    profit_factor = (gross_gain / gross_loss) if gross_loss > 0 else (float('inf') if gross_gain > 0 else 0.0)
     
     # Cumulative equity curve
     equity = 1.0

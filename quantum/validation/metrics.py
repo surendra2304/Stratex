@@ -49,7 +49,7 @@ def calculate_performance_metrics(trades: list[Any], equity_curve: list[float], 
     
     gross_profit = float(sum(wins))
     gross_loss = float(abs(sum(losses)))
-    profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (99.0 if gross_profit > 0 else 0.0)
+    profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (float('inf') if gross_profit > 0 else 0.0)
     
     net_profit = float(sum(pnls))
     net_return_pct = (net_profit / initial_capital) * 100.0

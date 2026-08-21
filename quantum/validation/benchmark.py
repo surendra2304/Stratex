@@ -142,7 +142,7 @@ def run_full_benchmark(
         total_slippage = sum(t.slippage for t in all_trades)
         
         win_rate = (len(wins) / total_trades * 100.0) if total_trades > 0 else 0.0
-        profit_factor = (sum(wins) / abs(sum(losses))) if losses and abs(sum(losses)) > 0 else (99.0 if wins else 0.0)
+        profit_factor = (sum(wins) / abs(sum(losses))) if losses and abs(sum(losses)) > 0 else (float('inf') if wins else 0.0)
         net_return_pct = (net_profit / (10000.0 * len(folds))) * 100.0 if folds else 0.0
         
         # Max drawdown across fold runs
