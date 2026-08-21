@@ -1,8 +1,8 @@
 [
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290081",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290619",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_15m.csv",
     "dataset_hash": "6f12e2e79ccd491380acb38b03a1c9077d8752ed456a1c839ede50ac57f2aaac",
     "strategy": "strategy_adx_ema",
@@ -41,9 +41,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290082",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290620",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_15m.csv",
     "dataset_hash": "6f12e2e79ccd491380acb38b03a1c9077d8752ed456a1c839ede50ac57f2aaac",
     "strategy": "strategy_supertrend",
@@ -82,9 +82,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290082",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290620",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_15m.csv",
     "dataset_hash": "6f12e2e79ccd491380acb38b03a1c9077d8752ed456a1c839ede50ac57f2aaac",
     "strategy": "strategy_swing",
@@ -123,9 +123,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290082",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290620",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_15m.csv",
     "dataset_hash": "6f12e2e79ccd491380acb38b03a1c9077d8752ed456a1c839ede50ac57f2aaac",
     "strategy": "strategy_scalper",
@@ -164,9 +164,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290082",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290621",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_15m.csv",
     "dataset_hash": "6f12e2e79ccd491380acb38b03a1c9077d8752ed456a1c839ede50ac57f2aaac",
     "strategy": "strategy_aggressor",
@@ -205,9 +205,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290083",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290621",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_15m.csv",
     "dataset_hash": "6f12e2e79ccd491380acb38b03a1c9077d8752ed456a1c839ede50ac57f2aaac",
     "strategy": "strategy_bollinger",
@@ -246,9 +246,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290083",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290622",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_15m.csv",
     "dataset_hash": "6f12e2e79ccd491380acb38b03a1c9077d8752ed456a1c839ede50ac57f2aaac",
     "strategy": "strategy_breakout_vol",
@@ -287,9 +287,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290096",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290638",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_15m.csv",
     "dataset_hash": "6f12e2e79ccd491380acb38b03a1c9077d8752ed456a1c839ede50ac57f2aaac",
     "strategy": "strategy_hybrid",
@@ -328,9 +328,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290096",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290638",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1d.csv",
     "dataset_hash": "b119a93fe6b0834789a363fef6c5b873675a98ab15de442cca9918de1a8b911d",
     "strategy": "strategy_adx_ema",
@@ -369,9 +369,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290096",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290638",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1d.csv",
     "dataset_hash": "b119a93fe6b0834789a363fef6c5b873675a98ab15de442cca9918de1a8b911d",
     "strategy": "strategy_supertrend",
@@ -410,9 +410,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290096",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290638",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1d.csv",
     "dataset_hash": "b119a93fe6b0834789a363fef6c5b873675a98ab15de442cca9918de1a8b911d",
     "strategy": "strategy_swing",
@@ -451,9 +451,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290096",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290638",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1d.csv",
     "dataset_hash": "b119a93fe6b0834789a363fef6c5b873675a98ab15de442cca9918de1a8b911d",
     "strategy": "strategy_scalper",
@@ -492,9 +492,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290096",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290638",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1d.csv",
     "dataset_hash": "b119a93fe6b0834789a363fef6c5b873675a98ab15de442cca9918de1a8b911d",
     "strategy": "strategy_aggressor",
@@ -533,9 +533,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290096",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290639",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1d.csv",
     "dataset_hash": "b119a93fe6b0834789a363fef6c5b873675a98ab15de442cca9918de1a8b911d",
     "strategy": "strategy_bollinger",
@@ -574,9 +574,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290096",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290639",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1d.csv",
     "dataset_hash": "b119a93fe6b0834789a363fef6c5b873675a98ab15de442cca9918de1a8b911d",
     "strategy": "strategy_breakout_vol",
@@ -615,9 +615,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290096",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290639",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1d.csv",
     "dataset_hash": "b119a93fe6b0834789a363fef6c5b873675a98ab15de442cca9918de1a8b911d",
     "strategy": "strategy_hybrid",
@@ -656,9 +656,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290097",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290639",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1h.csv",
     "dataset_hash": "200f3e56221bfb54f13f1aeebf875c727c4fa8dc560b51d65439a38b1ed9d0bc",
     "strategy": "strategy_adx_ema",
@@ -697,9 +697,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290097",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290639",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1h.csv",
     "dataset_hash": "200f3e56221bfb54f13f1aeebf875c727c4fa8dc560b51d65439a38b1ed9d0bc",
     "strategy": "strategy_supertrend",
@@ -738,9 +738,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290097",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290639",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1h.csv",
     "dataset_hash": "200f3e56221bfb54f13f1aeebf875c727c4fa8dc560b51d65439a38b1ed9d0bc",
     "strategy": "strategy_swing",
@@ -779,9 +779,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290097",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290639",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1h.csv",
     "dataset_hash": "200f3e56221bfb54f13f1aeebf875c727c4fa8dc560b51d65439a38b1ed9d0bc",
     "strategy": "strategy_scalper",
@@ -820,9 +820,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290097",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290639",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1h.csv",
     "dataset_hash": "200f3e56221bfb54f13f1aeebf875c727c4fa8dc560b51d65439a38b1ed9d0bc",
     "strategy": "strategy_aggressor",
@@ -861,9 +861,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290097",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290639",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1h.csv",
     "dataset_hash": "200f3e56221bfb54f13f1aeebf875c727c4fa8dc560b51d65439a38b1ed9d0bc",
     "strategy": "strategy_bollinger",
@@ -902,9 +902,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290097",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290640",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1h.csv",
     "dataset_hash": "200f3e56221bfb54f13f1aeebf875c727c4fa8dc560b51d65439a38b1ed9d0bc",
     "strategy": "strategy_breakout_vol",
@@ -943,9 +943,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290098",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290641",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1h.csv",
     "dataset_hash": "200f3e56221bfb54f13f1aeebf875c727c4fa8dc560b51d65439a38b1ed9d0bc",
     "strategy": "strategy_hybrid",
@@ -984,9 +984,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290102",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290644",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1m.csv",
     "dataset_hash": "6c0147fde833e7845ee629f9ceaa8d36e845103935d98aa5c39dff6649ec06d6",
     "strategy": "strategy_adx_ema",
@@ -1025,9 +1025,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290102",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290644",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1m.csv",
     "dataset_hash": "6c0147fde833e7845ee629f9ceaa8d36e845103935d98aa5c39dff6649ec06d6",
     "strategy": "strategy_supertrend",
@@ -1066,9 +1066,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290103",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290645",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1m.csv",
     "dataset_hash": "6c0147fde833e7845ee629f9ceaa8d36e845103935d98aa5c39dff6649ec06d6",
     "strategy": "strategy_swing",
@@ -1107,9 +1107,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290103",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290645",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1m.csv",
     "dataset_hash": "6c0147fde833e7845ee629f9ceaa8d36e845103935d98aa5c39dff6649ec06d6",
     "strategy": "strategy_scalper",
@@ -1148,9 +1148,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290103",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290645",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1m.csv",
     "dataset_hash": "6c0147fde833e7845ee629f9ceaa8d36e845103935d98aa5c39dff6649ec06d6",
     "strategy": "strategy_aggressor",
@@ -1189,9 +1189,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290104",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290645",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1m.csv",
     "dataset_hash": "6c0147fde833e7845ee629f9ceaa8d36e845103935d98aa5c39dff6649ec06d6",
     "strategy": "strategy_bollinger",
@@ -1230,9 +1230,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290104",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290646",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1m.csv",
     "dataset_hash": "6c0147fde833e7845ee629f9ceaa8d36e845103935d98aa5c39dff6649ec06d6",
     "strategy": "strategy_breakout_vol",
@@ -1271,9 +1271,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290116",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290659",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_1m.csv",
     "dataset_hash": "6c0147fde833e7845ee629f9ceaa8d36e845103935d98aa5c39dff6649ec06d6",
     "strategy": "strategy_hybrid",
@@ -1312,9 +1312,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290116",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290659",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_4h.csv",
     "dataset_hash": "0a66a91698251f41600ec14267938ef75184ff180d3b3cbdb02b037490d51c1b",
     "strategy": "strategy_adx_ema",
@@ -1353,9 +1353,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290116",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290659",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_4h.csv",
     "dataset_hash": "0a66a91698251f41600ec14267938ef75184ff180d3b3cbdb02b037490d51c1b",
     "strategy": "strategy_supertrend",
@@ -1394,9 +1394,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290116",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290659",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_4h.csv",
     "dataset_hash": "0a66a91698251f41600ec14267938ef75184ff180d3b3cbdb02b037490d51c1b",
     "strategy": "strategy_swing",
@@ -1435,9 +1435,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290116",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290659",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_4h.csv",
     "dataset_hash": "0a66a91698251f41600ec14267938ef75184ff180d3b3cbdb02b037490d51c1b",
     "strategy": "strategy_scalper",
@@ -1476,9 +1476,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290116",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290659",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_4h.csv",
     "dataset_hash": "0a66a91698251f41600ec14267938ef75184ff180d3b3cbdb02b037490d51c1b",
     "strategy": "strategy_aggressor",
@@ -1517,9 +1517,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290116",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290659",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_4h.csv",
     "dataset_hash": "0a66a91698251f41600ec14267938ef75184ff180d3b3cbdb02b037490d51c1b",
     "strategy": "strategy_bollinger",
@@ -1558,9 +1558,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290116",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290659",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_4h.csv",
     "dataset_hash": "0a66a91698251f41600ec14267938ef75184ff180d3b3cbdb02b037490d51c1b",
     "strategy": "strategy_breakout_vol",
@@ -1599,9 +1599,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290116",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290659",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ADAUSDT_4h.csv",
     "dataset_hash": "0a66a91698251f41600ec14267938ef75184ff180d3b3cbdb02b037490d51c1b",
     "strategy": "strategy_hybrid",
@@ -1640,9 +1640,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290119",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290663",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_15m.csv",
     "dataset_hash": "24063fd31692e01072cae3d93700a6955b6e8f4d02fa6b645baea54a476721ce",
     "strategy": "strategy_adx_ema",
@@ -1681,9 +1681,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290119",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290663",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_15m.csv",
     "dataset_hash": "24063fd31692e01072cae3d93700a6955b6e8f4d02fa6b645baea54a476721ce",
     "strategy": "strategy_supertrend",
@@ -1722,9 +1722,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290120",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290663",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_15m.csv",
     "dataset_hash": "24063fd31692e01072cae3d93700a6955b6e8f4d02fa6b645baea54a476721ce",
     "strategy": "strategy_swing",
@@ -1763,9 +1763,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290120",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290664",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_15m.csv",
     "dataset_hash": "24063fd31692e01072cae3d93700a6955b6e8f4d02fa6b645baea54a476721ce",
     "strategy": "strategy_scalper",
@@ -1804,9 +1804,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290120",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290664",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_15m.csv",
     "dataset_hash": "24063fd31692e01072cae3d93700a6955b6e8f4d02fa6b645baea54a476721ce",
     "strategy": "strategy_aggressor",
@@ -1845,9 +1845,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290120",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290664",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_15m.csv",
     "dataset_hash": "24063fd31692e01072cae3d93700a6955b6e8f4d02fa6b645baea54a476721ce",
     "strategy": "strategy_bollinger",
@@ -1886,9 +1886,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290121",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290665",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_15m.csv",
     "dataset_hash": "24063fd31692e01072cae3d93700a6955b6e8f4d02fa6b645baea54a476721ce",
     "strategy": "strategy_breakout_vol",
@@ -1927,9 +1927,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290130",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290676",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_15m.csv",
     "dataset_hash": "24063fd31692e01072cae3d93700a6955b6e8f4d02fa6b645baea54a476721ce",
     "strategy": "strategy_hybrid",
@@ -1968,9 +1968,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290130",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290676",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1d.csv",
     "dataset_hash": "ecc3246028df44cb438726b8cd82b953692fef5acd2073136f175461d8965748",
     "strategy": "strategy_adx_ema",
@@ -2009,9 +2009,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290130",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290676",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1d.csv",
     "dataset_hash": "ecc3246028df44cb438726b8cd82b953692fef5acd2073136f175461d8965748",
     "strategy": "strategy_supertrend",
@@ -2050,9 +2050,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290130",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290676",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1d.csv",
     "dataset_hash": "ecc3246028df44cb438726b8cd82b953692fef5acd2073136f175461d8965748",
     "strategy": "strategy_swing",
@@ -2091,9 +2091,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290130",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290676",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1d.csv",
     "dataset_hash": "ecc3246028df44cb438726b8cd82b953692fef5acd2073136f175461d8965748",
     "strategy": "strategy_scalper",
@@ -2132,9 +2132,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290130",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290676",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1d.csv",
     "dataset_hash": "ecc3246028df44cb438726b8cd82b953692fef5acd2073136f175461d8965748",
     "strategy": "strategy_aggressor",
@@ -2173,9 +2173,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290131",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290676",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1d.csv",
     "dataset_hash": "ecc3246028df44cb438726b8cd82b953692fef5acd2073136f175461d8965748",
     "strategy": "strategy_bollinger",
@@ -2214,9 +2214,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290131",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290676",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1d.csv",
     "dataset_hash": "ecc3246028df44cb438726b8cd82b953692fef5acd2073136f175461d8965748",
     "strategy": "strategy_breakout_vol",
@@ -2255,9 +2255,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290131",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290676",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1d.csv",
     "dataset_hash": "ecc3246028df44cb438726b8cd82b953692fef5acd2073136f175461d8965748",
     "strategy": "strategy_hybrid",
@@ -2296,9 +2296,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290131",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290676",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1h.csv",
     "dataset_hash": "327c189981946afe01c1573d5ae1d3f9858546b3e270c04e8eab20d56dc52df5",
     "strategy": "strategy_adx_ema",
@@ -2337,9 +2337,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290131",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290677",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1h.csv",
     "dataset_hash": "327c189981946afe01c1573d5ae1d3f9858546b3e270c04e8eab20d56dc52df5",
     "strategy": "strategy_supertrend",
@@ -2378,9 +2378,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290131",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290677",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1h.csv",
     "dataset_hash": "327c189981946afe01c1573d5ae1d3f9858546b3e270c04e8eab20d56dc52df5",
     "strategy": "strategy_swing",
@@ -2419,9 +2419,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290131",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290677",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1h.csv",
     "dataset_hash": "327c189981946afe01c1573d5ae1d3f9858546b3e270c04e8eab20d56dc52df5",
     "strategy": "strategy_scalper",
@@ -2460,9 +2460,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290131",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290677",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1h.csv",
     "dataset_hash": "327c189981946afe01c1573d5ae1d3f9858546b3e270c04e8eab20d56dc52df5",
     "strategy": "strategy_aggressor",
@@ -2501,9 +2501,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290131",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290677",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1h.csv",
     "dataset_hash": "327c189981946afe01c1573d5ae1d3f9858546b3e270c04e8eab20d56dc52df5",
     "strategy": "strategy_bollinger",
@@ -2542,9 +2542,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290131",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290677",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1h.csv",
     "dataset_hash": "327c189981946afe01c1573d5ae1d3f9858546b3e270c04e8eab20d56dc52df5",
     "strategy": "strategy_breakout_vol",
@@ -2583,9 +2583,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290132",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290678",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1h.csv",
     "dataset_hash": "327c189981946afe01c1573d5ae1d3f9858546b3e270c04e8eab20d56dc52df5",
     "strategy": "strategy_hybrid",
@@ -2624,9 +2624,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290137",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290684",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1m.csv",
     "dataset_hash": "b18413b6a77a333085daf0680f3cc97d270acbe2561e868a4b9a59db60457042",
     "strategy": "strategy_adx_ema",
@@ -2665,9 +2665,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290138",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290684",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1m.csv",
     "dataset_hash": "b18413b6a77a333085daf0680f3cc97d270acbe2561e868a4b9a59db60457042",
     "strategy": "strategy_supertrend",
@@ -2706,9 +2706,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290138",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290685",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1m.csv",
     "dataset_hash": "b18413b6a77a333085daf0680f3cc97d270acbe2561e868a4b9a59db60457042",
     "strategy": "strategy_swing",
@@ -2747,9 +2747,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290138",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290685",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1m.csv",
     "dataset_hash": "b18413b6a77a333085daf0680f3cc97d270acbe2561e868a4b9a59db60457042",
     "strategy": "strategy_scalper",
@@ -2788,9 +2788,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290139",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290686",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1m.csv",
     "dataset_hash": "b18413b6a77a333085daf0680f3cc97d270acbe2561e868a4b9a59db60457042",
     "strategy": "strategy_aggressor",
@@ -2829,9 +2829,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290139",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290686",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1m.csv",
     "dataset_hash": "b18413b6a77a333085daf0680f3cc97d270acbe2561e868a4b9a59db60457042",
     "strategy": "strategy_bollinger",
@@ -2870,9 +2870,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290139",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290687",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1m.csv",
     "dataset_hash": "b18413b6a77a333085daf0680f3cc97d270acbe2561e868a4b9a59db60457042",
     "strategy": "strategy_breakout_vol",
@@ -2911,9 +2911,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290154",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290701",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_1m.csv",
     "dataset_hash": "b18413b6a77a333085daf0680f3cc97d270acbe2561e868a4b9a59db60457042",
     "strategy": "strategy_hybrid",
@@ -2952,9 +2952,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290154",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290701",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_4h.csv",
     "dataset_hash": "bc92c889c11e4969c69493105b701976868164a472cee1712e0fce6ee33584f7",
     "strategy": "strategy_adx_ema",
@@ -2993,9 +2993,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290154",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290701",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_4h.csv",
     "dataset_hash": "bc92c889c11e4969c69493105b701976868164a472cee1712e0fce6ee33584f7",
     "strategy": "strategy_supertrend",
@@ -3034,9 +3034,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290154",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290701",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_4h.csv",
     "dataset_hash": "bc92c889c11e4969c69493105b701976868164a472cee1712e0fce6ee33584f7",
     "strategy": "strategy_swing",
@@ -3075,9 +3075,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290154",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290701",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_4h.csv",
     "dataset_hash": "bc92c889c11e4969c69493105b701976868164a472cee1712e0fce6ee33584f7",
     "strategy": "strategy_scalper",
@@ -3116,9 +3116,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290154",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290702",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_4h.csv",
     "dataset_hash": "bc92c889c11e4969c69493105b701976868164a472cee1712e0fce6ee33584f7",
     "strategy": "strategy_aggressor",
@@ -3157,9 +3157,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290154",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290702",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_4h.csv",
     "dataset_hash": "bc92c889c11e4969c69493105b701976868164a472cee1712e0fce6ee33584f7",
     "strategy": "strategy_bollinger",
@@ -3198,9 +3198,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290154",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290702",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_4h.csv",
     "dataset_hash": "bc92c889c11e4969c69493105b701976868164a472cee1712e0fce6ee33584f7",
     "strategy": "strategy_breakout_vol",
@@ -3239,9 +3239,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290154",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290702",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BNBUSDT_4h.csv",
     "dataset_hash": "bc92c889c11e4969c69493105b701976868164a472cee1712e0fce6ee33584f7",
     "strategy": "strategy_hybrid",
@@ -3280,9 +3280,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290159",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290706",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_15m.csv",
     "dataset_hash": "d300efde38bcc9c6fee8fe2d0ac842feb730130bde97c7c40cce13db8f90208a",
     "strategy": "strategy_adx_ema",
@@ -3321,9 +3321,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290160",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290707",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_15m.csv",
     "dataset_hash": "d300efde38bcc9c6fee8fe2d0ac842feb730130bde97c7c40cce13db8f90208a",
     "strategy": "strategy_supertrend",
@@ -3362,9 +3362,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290160",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290707",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_15m.csv",
     "dataset_hash": "d300efde38bcc9c6fee8fe2d0ac842feb730130bde97c7c40cce13db8f90208a",
     "strategy": "strategy_swing",
@@ -3403,9 +3403,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290160",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290707",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_15m.csv",
     "dataset_hash": "d300efde38bcc9c6fee8fe2d0ac842feb730130bde97c7c40cce13db8f90208a",
     "strategy": "strategy_scalper",
@@ -3444,9 +3444,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290160",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290708",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_15m.csv",
     "dataset_hash": "d300efde38bcc9c6fee8fe2d0ac842feb730130bde97c7c40cce13db8f90208a",
     "strategy": "strategy_aggressor",
@@ -3485,9 +3485,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290161",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290708",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_15m.csv",
     "dataset_hash": "d300efde38bcc9c6fee8fe2d0ac842feb730130bde97c7c40cce13db8f90208a",
     "strategy": "strategy_bollinger",
@@ -3526,9 +3526,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290161",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290708",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_15m.csv",
     "dataset_hash": "d300efde38bcc9c6fee8fe2d0ac842feb730130bde97c7c40cce13db8f90208a",
     "strategy": "strategy_breakout_vol",
@@ -3567,9 +3567,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290173",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290720",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_15m.csv",
     "dataset_hash": "d300efde38bcc9c6fee8fe2d0ac842feb730130bde97c7c40cce13db8f90208a",
     "strategy": "strategy_hybrid",
@@ -3608,9 +3608,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290173",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290720",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1d.csv",
     "dataset_hash": "5e76edf82bc44a298eb5cb84cbd40dbbe1ae1c9a426f803f97dbc95268b964a1",
     "strategy": "strategy_adx_ema",
@@ -3649,9 +3649,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290173",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290720",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1d.csv",
     "dataset_hash": "5e76edf82bc44a298eb5cb84cbd40dbbe1ae1c9a426f803f97dbc95268b964a1",
     "strategy": "strategy_supertrend",
@@ -3690,9 +3690,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290173",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290720",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1d.csv",
     "dataset_hash": "5e76edf82bc44a298eb5cb84cbd40dbbe1ae1c9a426f803f97dbc95268b964a1",
     "strategy": "strategy_swing",
@@ -3731,9 +3731,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290173",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290720",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1d.csv",
     "dataset_hash": "5e76edf82bc44a298eb5cb84cbd40dbbe1ae1c9a426f803f97dbc95268b964a1",
     "strategy": "strategy_scalper",
@@ -3772,9 +3772,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290173",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290720",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1d.csv",
     "dataset_hash": "5e76edf82bc44a298eb5cb84cbd40dbbe1ae1c9a426f803f97dbc95268b964a1",
     "strategy": "strategy_aggressor",
@@ -3813,9 +3813,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290173",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290720",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1d.csv",
     "dataset_hash": "5e76edf82bc44a298eb5cb84cbd40dbbe1ae1c9a426f803f97dbc95268b964a1",
     "strategy": "strategy_bollinger",
@@ -3854,9 +3854,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290173",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290720",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1d.csv",
     "dataset_hash": "5e76edf82bc44a298eb5cb84cbd40dbbe1ae1c9a426f803f97dbc95268b964a1",
     "strategy": "strategy_breakout_vol",
@@ -3895,9 +3895,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290173",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290720",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1d.csv",
     "dataset_hash": "5e76edf82bc44a298eb5cb84cbd40dbbe1ae1c9a426f803f97dbc95268b964a1",
     "strategy": "strategy_hybrid",
@@ -3936,9 +3936,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290174",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290720",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1h.csv",
     "dataset_hash": "2ded7e75674380d8205a100f0a8bd39e48d645d7279115ec456c2bcecd316471",
     "strategy": "strategy_adx_ema",
@@ -3977,9 +3977,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290174",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290720",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1h.csv",
     "dataset_hash": "2ded7e75674380d8205a100f0a8bd39e48d645d7279115ec456c2bcecd316471",
     "strategy": "strategy_supertrend",
@@ -4018,9 +4018,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290174",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290721",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1h.csv",
     "dataset_hash": "2ded7e75674380d8205a100f0a8bd39e48d645d7279115ec456c2bcecd316471",
     "strategy": "strategy_swing",
@@ -4059,9 +4059,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290174",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290721",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1h.csv",
     "dataset_hash": "2ded7e75674380d8205a100f0a8bd39e48d645d7279115ec456c2bcecd316471",
     "strategy": "strategy_scalper",
@@ -4100,9 +4100,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290174",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290721",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1h.csv",
     "dataset_hash": "2ded7e75674380d8205a100f0a8bd39e48d645d7279115ec456c2bcecd316471",
     "strategy": "strategy_aggressor",
@@ -4141,9 +4141,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290174",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290721",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1h.csv",
     "dataset_hash": "2ded7e75674380d8205a100f0a8bd39e48d645d7279115ec456c2bcecd316471",
     "strategy": "strategy_bollinger",
@@ -4182,9 +4182,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290174",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290721",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1h.csv",
     "dataset_hash": "2ded7e75674380d8205a100f0a8bd39e48d645d7279115ec456c2bcecd316471",
     "strategy": "strategy_breakout_vol",
@@ -4223,9 +4223,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290176",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290722",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1h.csv",
     "dataset_hash": "2ded7e75674380d8205a100f0a8bd39e48d645d7279115ec456c2bcecd316471",
     "strategy": "strategy_hybrid",
@@ -4264,9 +4264,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290181",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290728",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1m.csv",
     "dataset_hash": "1c643fb669803e040c189d5c21c7cd2af894beffeb956de887e6c8208db4a540",
     "strategy": "strategy_adx_ema",
@@ -4305,9 +4305,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290182",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290728",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1m.csv",
     "dataset_hash": "1c643fb669803e040c189d5c21c7cd2af894beffeb956de887e6c8208db4a540",
     "strategy": "strategy_supertrend",
@@ -4346,9 +4346,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290182",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290729",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1m.csv",
     "dataset_hash": "1c643fb669803e040c189d5c21c7cd2af894beffeb956de887e6c8208db4a540",
     "strategy": "strategy_swing",
@@ -4387,9 +4387,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290182",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290729",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1m.csv",
     "dataset_hash": "1c643fb669803e040c189d5c21c7cd2af894beffeb956de887e6c8208db4a540",
     "strategy": "strategy_scalper",
@@ -4428,9 +4428,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290183",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290730",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1m.csv",
     "dataset_hash": "1c643fb669803e040c189d5c21c7cd2af894beffeb956de887e6c8208db4a540",
     "strategy": "strategy_aggressor",
@@ -4469,9 +4469,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290183",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290730",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1m.csv",
     "dataset_hash": "1c643fb669803e040c189d5c21c7cd2af894beffeb956de887e6c8208db4a540",
     "strategy": "strategy_bollinger",
@@ -4510,9 +4510,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290184",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290731",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1m.csv",
     "dataset_hash": "1c643fb669803e040c189d5c21c7cd2af894beffeb956de887e6c8208db4a540",
     "strategy": "strategy_breakout_vol",
@@ -4551,9 +4551,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290199",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290744",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_1m.csv",
     "dataset_hash": "1c643fb669803e040c189d5c21c7cd2af894beffeb956de887e6c8208db4a540",
     "strategy": "strategy_hybrid",
@@ -4592,9 +4592,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290199",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290744",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_4h.csv",
     "dataset_hash": "e56ce7484c5060bd1747278c9b8dc4a8c45ccefc2ce22710b2566f56004f5ee3",
     "strategy": "strategy_adx_ema",
@@ -4633,9 +4633,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290199",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290744",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_4h.csv",
     "dataset_hash": "e56ce7484c5060bd1747278c9b8dc4a8c45ccefc2ce22710b2566f56004f5ee3",
     "strategy": "strategy_supertrend",
@@ -4674,9 +4674,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290199",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290744",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_4h.csv",
     "dataset_hash": "e56ce7484c5060bd1747278c9b8dc4a8c45ccefc2ce22710b2566f56004f5ee3",
     "strategy": "strategy_swing",
@@ -4715,9 +4715,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290199",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290744",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_4h.csv",
     "dataset_hash": "e56ce7484c5060bd1747278c9b8dc4a8c45ccefc2ce22710b2566f56004f5ee3",
     "strategy": "strategy_scalper",
@@ -4756,9 +4756,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290199",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290744",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_4h.csv",
     "dataset_hash": "e56ce7484c5060bd1747278c9b8dc4a8c45ccefc2ce22710b2566f56004f5ee3",
     "strategy": "strategy_aggressor",
@@ -4797,9 +4797,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290199",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290744",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_4h.csv",
     "dataset_hash": "e56ce7484c5060bd1747278c9b8dc4a8c45ccefc2ce22710b2566f56004f5ee3",
     "strategy": "strategy_bollinger",
@@ -4838,9 +4838,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290199",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290744",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_4h.csv",
     "dataset_hash": "e56ce7484c5060bd1747278c9b8dc4a8c45ccefc2ce22710b2566f56004f5ee3",
     "strategy": "strategy_breakout_vol",
@@ -4879,9 +4879,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290199",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290744",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\BTCUSDT_4h.csv",
     "dataset_hash": "e56ce7484c5060bd1747278c9b8dc4a8c45ccefc2ce22710b2566f56004f5ee3",
     "strategy": "strategy_hybrid",
@@ -4920,9 +4920,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290203",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290748",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_15m.csv",
     "dataset_hash": "939fbeca1999d7213b3b40abdd13028b33008ef457b7f4ab056c054130b58526",
     "strategy": "strategy_adx_ema",
@@ -4961,9 +4961,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290203",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290749",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_15m.csv",
     "dataset_hash": "939fbeca1999d7213b3b40abdd13028b33008ef457b7f4ab056c054130b58526",
     "strategy": "strategy_supertrend",
@@ -5002,9 +5002,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290203",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290749",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_15m.csv",
     "dataset_hash": "939fbeca1999d7213b3b40abdd13028b33008ef457b7f4ab056c054130b58526",
     "strategy": "strategy_swing",
@@ -5043,9 +5043,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290204",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290749",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_15m.csv",
     "dataset_hash": "939fbeca1999d7213b3b40abdd13028b33008ef457b7f4ab056c054130b58526",
     "strategy": "strategy_scalper",
@@ -5084,9 +5084,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290204",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290749",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_15m.csv",
     "dataset_hash": "939fbeca1999d7213b3b40abdd13028b33008ef457b7f4ab056c054130b58526",
     "strategy": "strategy_aggressor",
@@ -5125,9 +5125,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290204",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290749",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_15m.csv",
     "dataset_hash": "939fbeca1999d7213b3b40abdd13028b33008ef457b7f4ab056c054130b58526",
     "strategy": "strategy_bollinger",
@@ -5166,9 +5166,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290204",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290750",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_15m.csv",
     "dataset_hash": "939fbeca1999d7213b3b40abdd13028b33008ef457b7f4ab056c054130b58526",
     "strategy": "strategy_breakout_vol",
@@ -5207,9 +5207,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290216",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290762",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_15m.csv",
     "dataset_hash": "939fbeca1999d7213b3b40abdd13028b33008ef457b7f4ab056c054130b58526",
     "strategy": "strategy_hybrid",
@@ -5248,9 +5248,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290216",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290762",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1d.csv",
     "dataset_hash": "bbb6dc6e9ab85f9b54d51fd8b74a1bf0f96b3cf64e623f7e01b773751ab46432",
     "strategy": "strategy_adx_ema",
@@ -5289,9 +5289,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290216",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290762",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1d.csv",
     "dataset_hash": "bbb6dc6e9ab85f9b54d51fd8b74a1bf0f96b3cf64e623f7e01b773751ab46432",
     "strategy": "strategy_supertrend",
@@ -5330,9 +5330,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290216",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290762",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1d.csv",
     "dataset_hash": "bbb6dc6e9ab85f9b54d51fd8b74a1bf0f96b3cf64e623f7e01b773751ab46432",
     "strategy": "strategy_swing",
@@ -5371,9 +5371,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290216",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290762",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1d.csv",
     "dataset_hash": "bbb6dc6e9ab85f9b54d51fd8b74a1bf0f96b3cf64e623f7e01b773751ab46432",
     "strategy": "strategy_scalper",
@@ -5412,9 +5412,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290216",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290762",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1d.csv",
     "dataset_hash": "bbb6dc6e9ab85f9b54d51fd8b74a1bf0f96b3cf64e623f7e01b773751ab46432",
     "strategy": "strategy_aggressor",
@@ -5453,9 +5453,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290216",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290762",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1d.csv",
     "dataset_hash": "bbb6dc6e9ab85f9b54d51fd8b74a1bf0f96b3cf64e623f7e01b773751ab46432",
     "strategy": "strategy_bollinger",
@@ -5494,9 +5494,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290216",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290762",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1d.csv",
     "dataset_hash": "bbb6dc6e9ab85f9b54d51fd8b74a1bf0f96b3cf64e623f7e01b773751ab46432",
     "strategy": "strategy_breakout_vol",
@@ -5535,9 +5535,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290216",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290762",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1d.csv",
     "dataset_hash": "bbb6dc6e9ab85f9b54d51fd8b74a1bf0f96b3cf64e623f7e01b773751ab46432",
     "strategy": "strategy_hybrid",
@@ -5576,9 +5576,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290217",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290763",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1h.csv",
     "dataset_hash": "d912e267a5907ba46287b5458335dc1b03518fc27eeaf31b6c020110f883032a",
     "strategy": "strategy_adx_ema",
@@ -5617,9 +5617,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290217",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290763",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1h.csv",
     "dataset_hash": "d912e267a5907ba46287b5458335dc1b03518fc27eeaf31b6c020110f883032a",
     "strategy": "strategy_supertrend",
@@ -5658,9 +5658,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290217",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290763",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1h.csv",
     "dataset_hash": "d912e267a5907ba46287b5458335dc1b03518fc27eeaf31b6c020110f883032a",
     "strategy": "strategy_swing",
@@ -5699,9 +5699,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290217",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290763",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1h.csv",
     "dataset_hash": "d912e267a5907ba46287b5458335dc1b03518fc27eeaf31b6c020110f883032a",
     "strategy": "strategy_scalper",
@@ -5740,9 +5740,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290217",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290763",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1h.csv",
     "dataset_hash": "d912e267a5907ba46287b5458335dc1b03518fc27eeaf31b6c020110f883032a",
     "strategy": "strategy_aggressor",
@@ -5781,9 +5781,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290217",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290763",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1h.csv",
     "dataset_hash": "d912e267a5907ba46287b5458335dc1b03518fc27eeaf31b6c020110f883032a",
     "strategy": "strategy_bollinger",
@@ -5822,9 +5822,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290217",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290763",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1h.csv",
     "dataset_hash": "d912e267a5907ba46287b5458335dc1b03518fc27eeaf31b6c020110f883032a",
     "strategy": "strategy_breakout_vol",
@@ -5863,9 +5863,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290218",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290765",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1h.csv",
     "dataset_hash": "d912e267a5907ba46287b5458335dc1b03518fc27eeaf31b6c020110f883032a",
     "strategy": "strategy_hybrid",
@@ -5904,9 +5904,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290223",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290770",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1m.csv",
     "dataset_hash": "efb8d0c3b93f0e39881e2ea8301c428a6b79c6ab94dd5496d857040ffc067e13",
     "strategy": "strategy_adx_ema",
@@ -5945,9 +5945,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290224",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290770",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1m.csv",
     "dataset_hash": "efb8d0c3b93f0e39881e2ea8301c428a6b79c6ab94dd5496d857040ffc067e13",
     "strategy": "strategy_supertrend",
@@ -5986,9 +5986,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290224",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290770",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1m.csv",
     "dataset_hash": "efb8d0c3b93f0e39881e2ea8301c428a6b79c6ab94dd5496d857040ffc067e13",
     "strategy": "strategy_swing",
@@ -6027,9 +6027,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290224",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290770",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1m.csv",
     "dataset_hash": "efb8d0c3b93f0e39881e2ea8301c428a6b79c6ab94dd5496d857040ffc067e13",
     "strategy": "strategy_scalper",
@@ -6068,9 +6068,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290225",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290771",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1m.csv",
     "dataset_hash": "efb8d0c3b93f0e39881e2ea8301c428a6b79c6ab94dd5496d857040ffc067e13",
     "strategy": "strategy_aggressor",
@@ -6109,9 +6109,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290225",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290771",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1m.csv",
     "dataset_hash": "efb8d0c3b93f0e39881e2ea8301c428a6b79c6ab94dd5496d857040ffc067e13",
     "strategy": "strategy_bollinger",
@@ -6150,9 +6150,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290225",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290772",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1m.csv",
     "dataset_hash": "efb8d0c3b93f0e39881e2ea8301c428a6b79c6ab94dd5496d857040ffc067e13",
     "strategy": "strategy_breakout_vol",
@@ -6191,9 +6191,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290237",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290783",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_1m.csv",
     "dataset_hash": "efb8d0c3b93f0e39881e2ea8301c428a6b79c6ab94dd5496d857040ffc067e13",
     "strategy": "strategy_hybrid",
@@ -6232,9 +6232,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290237",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290783",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_4h.csv",
     "dataset_hash": "073cd257744599b2303466fe2af8f8e52a08f6c5ec002057487457b4d4540dea",
     "strategy": "strategy_adx_ema",
@@ -6273,9 +6273,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290237",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290783",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_4h.csv",
     "dataset_hash": "073cd257744599b2303466fe2af8f8e52a08f6c5ec002057487457b4d4540dea",
     "strategy": "strategy_supertrend",
@@ -6314,9 +6314,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290237",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290784",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_4h.csv",
     "dataset_hash": "073cd257744599b2303466fe2af8f8e52a08f6c5ec002057487457b4d4540dea",
     "strategy": "strategy_swing",
@@ -6355,9 +6355,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290237",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290784",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_4h.csv",
     "dataset_hash": "073cd257744599b2303466fe2af8f8e52a08f6c5ec002057487457b4d4540dea",
     "strategy": "strategy_scalper",
@@ -6396,9 +6396,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290237",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290784",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_4h.csv",
     "dataset_hash": "073cd257744599b2303466fe2af8f8e52a08f6c5ec002057487457b4d4540dea",
     "strategy": "strategy_aggressor",
@@ -6437,9 +6437,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290237",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290784",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_4h.csv",
     "dataset_hash": "073cd257744599b2303466fe2af8f8e52a08f6c5ec002057487457b4d4540dea",
     "strategy": "strategy_bollinger",
@@ -6478,9 +6478,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290237",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290784",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_4h.csv",
     "dataset_hash": "073cd257744599b2303466fe2af8f8e52a08f6c5ec002057487457b4d4540dea",
     "strategy": "strategy_breakout_vol",
@@ -6519,9 +6519,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290237",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290784",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\ETHUSDT_4h.csv",
     "dataset_hash": "073cd257744599b2303466fe2af8f8e52a08f6c5ec002057487457b4d4540dea",
     "strategy": "strategy_hybrid",
@@ -6560,9 +6560,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290241",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290787",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_15m.csv",
     "dataset_hash": "b80a1f190fe4a028d1987741ddb48a1df1a6604d1740bdb6cf276352a1b717f7",
     "strategy": "strategy_adx_ema",
@@ -6601,9 +6601,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290241",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290787",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_15m.csv",
     "dataset_hash": "b80a1f190fe4a028d1987741ddb48a1df1a6604d1740bdb6cf276352a1b717f7",
     "strategy": "strategy_supertrend",
@@ -6642,9 +6642,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290241",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290787",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_15m.csv",
     "dataset_hash": "b80a1f190fe4a028d1987741ddb48a1df1a6604d1740bdb6cf276352a1b717f7",
     "strategy": "strategy_swing",
@@ -6683,9 +6683,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290241",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290788",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_15m.csv",
     "dataset_hash": "b80a1f190fe4a028d1987741ddb48a1df1a6604d1740bdb6cf276352a1b717f7",
     "strategy": "strategy_scalper",
@@ -6724,9 +6724,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290242",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290788",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_15m.csv",
     "dataset_hash": "b80a1f190fe4a028d1987741ddb48a1df1a6604d1740bdb6cf276352a1b717f7",
     "strategy": "strategy_aggressor",
@@ -6765,9 +6765,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290242",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290788",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_15m.csv",
     "dataset_hash": "b80a1f190fe4a028d1987741ddb48a1df1a6604d1740bdb6cf276352a1b717f7",
     "strategy": "strategy_bollinger",
@@ -6806,9 +6806,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290243",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290789",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_15m.csv",
     "dataset_hash": "b80a1f190fe4a028d1987741ddb48a1df1a6604d1740bdb6cf276352a1b717f7",
     "strategy": "strategy_breakout_vol",
@@ -6847,9 +6847,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290248",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290794",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_15m.csv",
     "dataset_hash": "b80a1f190fe4a028d1987741ddb48a1df1a6604d1740bdb6cf276352a1b717f7",
     "strategy": "strategy_hybrid",
@@ -6888,9 +6888,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290248",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290794",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1d.csv",
     "dataset_hash": "665d060f29a4b8b5cd46989551b2ec78e2ebb6b98bb338854b9152282441c8d0",
     "strategy": "strategy_adx_ema",
@@ -6929,9 +6929,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290248",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290794",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1d.csv",
     "dataset_hash": "665d060f29a4b8b5cd46989551b2ec78e2ebb6b98bb338854b9152282441c8d0",
     "strategy": "strategy_supertrend",
@@ -6970,9 +6970,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290249",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290794",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1d.csv",
     "dataset_hash": "665d060f29a4b8b5cd46989551b2ec78e2ebb6b98bb338854b9152282441c8d0",
     "strategy": "strategy_swing",
@@ -7011,9 +7011,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290249",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290795",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1d.csv",
     "dataset_hash": "665d060f29a4b8b5cd46989551b2ec78e2ebb6b98bb338854b9152282441c8d0",
     "strategy": "strategy_scalper",
@@ -7052,9 +7052,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290249",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290795",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1d.csv",
     "dataset_hash": "665d060f29a4b8b5cd46989551b2ec78e2ebb6b98bb338854b9152282441c8d0",
     "strategy": "strategy_aggressor",
@@ -7093,9 +7093,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290249",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290795",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1d.csv",
     "dataset_hash": "665d060f29a4b8b5cd46989551b2ec78e2ebb6b98bb338854b9152282441c8d0",
     "strategy": "strategy_bollinger",
@@ -7134,9 +7134,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290249",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290795",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1d.csv",
     "dataset_hash": "665d060f29a4b8b5cd46989551b2ec78e2ebb6b98bb338854b9152282441c8d0",
     "strategy": "strategy_breakout_vol",
@@ -7175,9 +7175,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290249",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290795",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1d.csv",
     "dataset_hash": "665d060f29a4b8b5cd46989551b2ec78e2ebb6b98bb338854b9152282441c8d0",
     "strategy": "strategy_hybrid",
@@ -7216,9 +7216,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290249",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290795",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1h.csv",
     "dataset_hash": "6acc2abcca535636056bde841b903b3868aff1827c69e6a39d4708f15e290bd5",
     "strategy": "strategy_adx_ema",
@@ -7257,9 +7257,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290249",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290795",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1h.csv",
     "dataset_hash": "6acc2abcca535636056bde841b903b3868aff1827c69e6a39d4708f15e290bd5",
     "strategy": "strategy_supertrend",
@@ -7298,9 +7298,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290249",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290795",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1h.csv",
     "dataset_hash": "6acc2abcca535636056bde841b903b3868aff1827c69e6a39d4708f15e290bd5",
     "strategy": "strategy_swing",
@@ -7339,9 +7339,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290249",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290795",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1h.csv",
     "dataset_hash": "6acc2abcca535636056bde841b903b3868aff1827c69e6a39d4708f15e290bd5",
     "strategy": "strategy_scalper",
@@ -7380,9 +7380,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290249",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290795",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1h.csv",
     "dataset_hash": "6acc2abcca535636056bde841b903b3868aff1827c69e6a39d4708f15e290bd5",
     "strategy": "strategy_aggressor",
@@ -7421,9 +7421,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290249",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290795",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1h.csv",
     "dataset_hash": "6acc2abcca535636056bde841b903b3868aff1827c69e6a39d4708f15e290bd5",
     "strategy": "strategy_bollinger",
@@ -7462,9 +7462,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290249",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290795",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1h.csv",
     "dataset_hash": "6acc2abcca535636056bde841b903b3868aff1827c69e6a39d4708f15e290bd5",
     "strategy": "strategy_breakout_vol",
@@ -7503,9 +7503,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290250",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290796",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1h.csv",
     "dataset_hash": "6acc2abcca535636056bde841b903b3868aff1827c69e6a39d4708f15e290bd5",
     "strategy": "strategy_hybrid",
@@ -7544,9 +7544,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290254",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290800",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1m.csv",
     "dataset_hash": "2b24376ffdfff749965cf2d664640821d80eb66933c440e5be2be879a0acb597",
     "strategy": "strategy_adx_ema",
@@ -7585,9 +7585,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290255",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290800",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1m.csv",
     "dataset_hash": "2b24376ffdfff749965cf2d664640821d80eb66933c440e5be2be879a0acb597",
     "strategy": "strategy_supertrend",
@@ -7626,9 +7626,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290255",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290801",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1m.csv",
     "dataset_hash": "2b24376ffdfff749965cf2d664640821d80eb66933c440e5be2be879a0acb597",
     "strategy": "strategy_swing",
@@ -7667,9 +7667,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290255",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290801",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1m.csv",
     "dataset_hash": "2b24376ffdfff749965cf2d664640821d80eb66933c440e5be2be879a0acb597",
     "strategy": "strategy_scalper",
@@ -7708,9 +7708,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290256",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290801",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1m.csv",
     "dataset_hash": "2b24376ffdfff749965cf2d664640821d80eb66933c440e5be2be879a0acb597",
     "strategy": "strategy_aggressor",
@@ -7749,9 +7749,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290256",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290802",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1m.csv",
     "dataset_hash": "2b24376ffdfff749965cf2d664640821d80eb66933c440e5be2be879a0acb597",
     "strategy": "strategy_bollinger",
@@ -7790,9 +7790,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290256",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290802",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1m.csv",
     "dataset_hash": "2b24376ffdfff749965cf2d664640821d80eb66933c440e5be2be879a0acb597",
     "strategy": "strategy_breakout_vol",
@@ -7831,9 +7831,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290272",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290812",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_1m.csv",
     "dataset_hash": "2b24376ffdfff749965cf2d664640821d80eb66933c440e5be2be879a0acb597",
     "strategy": "strategy_hybrid",
@@ -7872,9 +7872,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290272",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290812",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_4h.csv",
     "dataset_hash": "b7084bb7eb2ac08b380a986270d98ff7cb62127bab07a9e6eb59286c680ce8fe",
     "strategy": "strategy_adx_ema",
@@ -7913,9 +7913,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290272",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290812",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_4h.csv",
     "dataset_hash": "b7084bb7eb2ac08b380a986270d98ff7cb62127bab07a9e6eb59286c680ce8fe",
     "strategy": "strategy_supertrend",
@@ -7954,9 +7954,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290272",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290812",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_4h.csv",
     "dataset_hash": "b7084bb7eb2ac08b380a986270d98ff7cb62127bab07a9e6eb59286c680ce8fe",
     "strategy": "strategy_swing",
@@ -7995,9 +7995,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290272",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290812",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_4h.csv",
     "dataset_hash": "b7084bb7eb2ac08b380a986270d98ff7cb62127bab07a9e6eb59286c680ce8fe",
     "strategy": "strategy_scalper",
@@ -8036,9 +8036,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290272",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290813",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_4h.csv",
     "dataset_hash": "b7084bb7eb2ac08b380a986270d98ff7cb62127bab07a9e6eb59286c680ce8fe",
     "strategy": "strategy_aggressor",
@@ -8077,9 +8077,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290272",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290813",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_4h.csv",
     "dataset_hash": "b7084bb7eb2ac08b380a986270d98ff7cb62127bab07a9e6eb59286c680ce8fe",
     "strategy": "strategy_bollinger",
@@ -8118,9 +8118,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290272",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290813",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_4h.csv",
     "dataset_hash": "b7084bb7eb2ac08b380a986270d98ff7cb62127bab07a9e6eb59286c680ce8fe",
     "strategy": "strategy_breakout_vol",
@@ -8159,9 +8159,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290272",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290813",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\LINKUSDT_4h.csv",
     "dataset_hash": "b7084bb7eb2ac08b380a986270d98ff7cb62127bab07a9e6eb59286c680ce8fe",
     "strategy": "strategy_hybrid",
@@ -8200,9 +8200,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290275",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290815",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_15m.csv",
     "dataset_hash": "b1792d2a055ef9fdf33605732c96a517cb348a8ffe26659c2fcaff12b3e1fb6b",
     "strategy": "strategy_adx_ema",
@@ -8241,9 +8241,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290275",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290815",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_15m.csv",
     "dataset_hash": "b1792d2a055ef9fdf33605732c96a517cb348a8ffe26659c2fcaff12b3e1fb6b",
     "strategy": "strategy_supertrend",
@@ -8282,9 +8282,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290275",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290815",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_15m.csv",
     "dataset_hash": "b1792d2a055ef9fdf33605732c96a517cb348a8ffe26659c2fcaff12b3e1fb6b",
     "strategy": "strategy_swing",
@@ -8323,9 +8323,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290276",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290815",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_15m.csv",
     "dataset_hash": "b1792d2a055ef9fdf33605732c96a517cb348a8ffe26659c2fcaff12b3e1fb6b",
     "strategy": "strategy_scalper",
@@ -8364,9 +8364,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290276",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290815",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_15m.csv",
     "dataset_hash": "b1792d2a055ef9fdf33605732c96a517cb348a8ffe26659c2fcaff12b3e1fb6b",
     "strategy": "strategy_aggressor",
@@ -8405,9 +8405,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290276",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290816",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_15m.csv",
     "dataset_hash": "b1792d2a055ef9fdf33605732c96a517cb348a8ffe26659c2fcaff12b3e1fb6b",
     "strategy": "strategy_bollinger",
@@ -8446,9 +8446,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290277",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290816",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_15m.csv",
     "dataset_hash": "b1792d2a055ef9fdf33605732c96a517cb348a8ffe26659c2fcaff12b3e1fb6b",
     "strategy": "strategy_breakout_vol",
@@ -8487,9 +8487,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290286",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290822",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_15m.csv",
     "dataset_hash": "b1792d2a055ef9fdf33605732c96a517cb348a8ffe26659c2fcaff12b3e1fb6b",
     "strategy": "strategy_hybrid",
@@ -8528,9 +8528,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290286",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290822",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1d.csv",
     "dataset_hash": "095b2f00c8ad0b5f6e6fd913db62ea9419baba8627b1e7963ff04917c906c38e",
     "strategy": "strategy_adx_ema",
@@ -8569,9 +8569,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290286",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290822",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1d.csv",
     "dataset_hash": "095b2f00c8ad0b5f6e6fd913db62ea9419baba8627b1e7963ff04917c906c38e",
     "strategy": "strategy_supertrend",
@@ -8610,9 +8610,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290286",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290822",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1d.csv",
     "dataset_hash": "095b2f00c8ad0b5f6e6fd913db62ea9419baba8627b1e7963ff04917c906c38e",
     "strategy": "strategy_swing",
@@ -8651,9 +8651,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290286",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290822",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1d.csv",
     "dataset_hash": "095b2f00c8ad0b5f6e6fd913db62ea9419baba8627b1e7963ff04917c906c38e",
     "strategy": "strategy_scalper",
@@ -8692,9 +8692,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290286",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290822",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1d.csv",
     "dataset_hash": "095b2f00c8ad0b5f6e6fd913db62ea9419baba8627b1e7963ff04917c906c38e",
     "strategy": "strategy_aggressor",
@@ -8733,9 +8733,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290286",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290822",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1d.csv",
     "dataset_hash": "095b2f00c8ad0b5f6e6fd913db62ea9419baba8627b1e7963ff04917c906c38e",
     "strategy": "strategy_bollinger",
@@ -8774,9 +8774,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290286",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290822",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1d.csv",
     "dataset_hash": "095b2f00c8ad0b5f6e6fd913db62ea9419baba8627b1e7963ff04917c906c38e",
     "strategy": "strategy_breakout_vol",
@@ -8815,9 +8815,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290287",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290822",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1d.csv",
     "dataset_hash": "095b2f00c8ad0b5f6e6fd913db62ea9419baba8627b1e7963ff04917c906c38e",
     "strategy": "strategy_hybrid",
@@ -8856,9 +8856,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290287",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290822",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1h.csv",
     "dataset_hash": "8f1c0c3daf023a35e8d36685909dc4188eced6b4a2ad5fbb9233d953f90e3630",
     "strategy": "strategy_adx_ema",
@@ -8897,9 +8897,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290287",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290822",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1h.csv",
     "dataset_hash": "8f1c0c3daf023a35e8d36685909dc4188eced6b4a2ad5fbb9233d953f90e3630",
     "strategy": "strategy_supertrend",
@@ -8938,9 +8938,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290287",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290822",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1h.csv",
     "dataset_hash": "8f1c0c3daf023a35e8d36685909dc4188eced6b4a2ad5fbb9233d953f90e3630",
     "strategy": "strategy_swing",
@@ -8979,9 +8979,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290287",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290822",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1h.csv",
     "dataset_hash": "8f1c0c3daf023a35e8d36685909dc4188eced6b4a2ad5fbb9233d953f90e3630",
     "strategy": "strategy_scalper",
@@ -9020,9 +9020,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290287",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290823",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1h.csv",
     "dataset_hash": "8f1c0c3daf023a35e8d36685909dc4188eced6b4a2ad5fbb9233d953f90e3630",
     "strategy": "strategy_aggressor",
@@ -9061,9 +9061,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290287",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290823",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1h.csv",
     "dataset_hash": "8f1c0c3daf023a35e8d36685909dc4188eced6b4a2ad5fbb9233d953f90e3630",
     "strategy": "strategy_bollinger",
@@ -9102,9 +9102,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290287",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290823",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1h.csv",
     "dataset_hash": "8f1c0c3daf023a35e8d36685909dc4188eced6b4a2ad5fbb9233d953f90e3630",
     "strategy": "strategy_breakout_vol",
@@ -9143,9 +9143,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290288",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290823",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1h.csv",
     "dataset_hash": "8f1c0c3daf023a35e8d36685909dc4188eced6b4a2ad5fbb9233d953f90e3630",
     "strategy": "strategy_hybrid",
@@ -9184,9 +9184,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290293",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290827",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1m.csv",
     "dataset_hash": "029040191d76a33250269afd484fab187ddd232226a5bb1315be330a636ff310",
     "strategy": "strategy_adx_ema",
@@ -9225,9 +9225,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290293",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290827",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1m.csv",
     "dataset_hash": "029040191d76a33250269afd484fab187ddd232226a5bb1315be330a636ff310",
     "strategy": "strategy_supertrend",
@@ -9266,9 +9266,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290294",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290828",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1m.csv",
     "dataset_hash": "029040191d76a33250269afd484fab187ddd232226a5bb1315be330a636ff310",
     "strategy": "strategy_swing",
@@ -9307,9 +9307,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290294",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290828",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1m.csv",
     "dataset_hash": "029040191d76a33250269afd484fab187ddd232226a5bb1315be330a636ff310",
     "strategy": "strategy_scalper",
@@ -9348,9 +9348,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290294",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290828",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1m.csv",
     "dataset_hash": "029040191d76a33250269afd484fab187ddd232226a5bb1315be330a636ff310",
     "strategy": "strategy_aggressor",
@@ -9389,9 +9389,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290294",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290829",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1m.csv",
     "dataset_hash": "029040191d76a33250269afd484fab187ddd232226a5bb1315be330a636ff310",
     "strategy": "strategy_bollinger",
@@ -9430,9 +9430,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290295",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290829",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1m.csv",
     "dataset_hash": "029040191d76a33250269afd484fab187ddd232226a5bb1315be330a636ff310",
     "strategy": "strategy_breakout_vol",
@@ -9471,9 +9471,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290307",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290840",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_1m.csv",
     "dataset_hash": "029040191d76a33250269afd484fab187ddd232226a5bb1315be330a636ff310",
     "strategy": "strategy_hybrid",
@@ -9512,9 +9512,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290307",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_adx_ema_1787290840",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_4h.csv",
     "dataset_hash": "5e08cf64f56a67b28b237bc9be40057e4890182d3afdddab5b8776c801f833fe",
     "strategy": "strategy_adx_ema",
@@ -9553,9 +9553,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290307",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_supertrend_1787290840",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_4h.csv",
     "dataset_hash": "5e08cf64f56a67b28b237bc9be40057e4890182d3afdddab5b8776c801f833fe",
     "strategy": "strategy_supertrend",
@@ -9594,9 +9594,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290307",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_swing_1787290840",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_4h.csv",
     "dataset_hash": "5e08cf64f56a67b28b237bc9be40057e4890182d3afdddab5b8776c801f833fe",
     "strategy": "strategy_swing",
@@ -9635,9 +9635,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290307",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_scalper_1787290840",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_4h.csv",
     "dataset_hash": "5e08cf64f56a67b28b237bc9be40057e4890182d3afdddab5b8776c801f833fe",
     "strategy": "strategy_scalper",
@@ -9676,9 +9676,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290308",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_aggressor_1787290840",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_4h.csv",
     "dataset_hash": "5e08cf64f56a67b28b237bc9be40057e4890182d3afdddab5b8776c801f833fe",
     "strategy": "strategy_aggressor",
@@ -9717,9 +9717,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290308",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_bollinger_1787290840",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_4h.csv",
     "dataset_hash": "5e08cf64f56a67b28b237bc9be40057e4890182d3afdddab5b8776c801f833fe",
     "strategy": "strategy_bollinger",
@@ -9758,9 +9758,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290308",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_breakout_vol_1787290840",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_4h.csv",
     "dataset_hash": "5e08cf64f56a67b28b237bc9be40057e4890182d3afdddab5b8776c801f833fe",
     "strategy": "strategy_breakout_vol",
@@ -9799,9 +9799,9 @@
     }
   },
   {
-    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290308",
+    "experiment_id": "rigorous_authoritative_research_matrix_strategy_hybrid_1787290840",
     "git_commit": "60d9dcb",
-    "timestamp": "2026-08-21T10:57:57.587743",
+    "timestamp": "2026-08-21T11:06:53.248102",
     "dataset_path": "data_cache\\SOLUSDT_4h.csv",
     "dataset_hash": "5e08cf64f56a67b28b237bc9be40057e4890182d3afdddab5b8776c801f833fe",
     "strategy": "strategy_hybrid",

@@ -71,7 +71,8 @@ class PaperPortfolio:
                 sym = pos['symbol']
                 if sym in current_market_prices:
                     current_price = current_market_prices[sym]
-                    if pos['direction'] in ["LONG", "BUY"]:
+                    direction = pos.get('direction') or pos.get('side', 'LONG')
+                    if str(direction).upper() in ["LONG", "BUY"]:
                         unrealized += (current_price - pos['entry_price']) * pos['quantity']
                     else:
                         unrealized += (pos['entry_price'] - current_price) * pos['quantity']
