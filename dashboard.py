@@ -56,9 +56,24 @@ def get_candles():
     Fetches live Binance OHLCV candles for chart.
     Strictly prohibits data fabrication: if Binance is unavailable, returns DATA_UNAVAILABLE.
     """
-    symbol = request.args.get('symbol', 'BTCUSDT')
-    tf = request.args.get('tf') or request.args.get('timeframe') or '15m'
-    limit = int(request.args.get('limit', 300))
+    raw_sym = request.args.get('symbol', 'BTCUSDT')
+    symbol = str(raw_sym).upper().strip() if raw_sym else 'BTCUSDT'
+    raw_tf = request.args.get('tf') or request.args.get('timeframe') or '15m'
+    tf = str(raw_tf).lower().strip()
+    try:
+        limit = min(1000, max(1, int(request.args.get('limit', 300))))
+    except (ValueError, TypeError):
+        limit = 300
+
+    supported_tfs = getattr(config, "SUPPORTED_TIMEFRAMES", ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"])
+    if tf not in supported_tfs:
+        return jsonify({
+            "status": "ERROR",
+            "error": f"Invalid timeframe '{tf}'. Supported: {supported_tfs}",
+            "symbol": symbol,
+            "timeframe": tf,
+            "candles": []
+        }), 400
     
     try:
         df = fetch_candles(symbol, tf, limit)
@@ -458,20 +473,26 @@ def get_status():
         except Exception as e:
             logger.error(f"Failed to process testnet portfolio: {e}")
 
+    today_utc_str = datetime.datetime.utcnow().date().isoformat()
+    today_realized_pnl = 0.0
     try:
         trades_data = _get_trades_data()
         if trades_data:
             if trades_data.get("positions"):
                 realized_pnl = float(trades_data.get("net_pnl", 0.0))
                 fees = float(sum(t.get("fees", 0.0) for t in trades_data.get("positions", [])))
+                for t in trades_data.get("positions", []):
+                    t_ts = t.get("exit_timestamp", t.get("timestamp", ""))
+                    if t_ts and t_ts.startswith(today_utc_str):
+                        today_realized_pnl += float(t.get("net_pnl", t.get("pnl", 0.0)))
             elif "net_pnl" in trades_data and float(trades_data.get("net_pnl", 0.0)) != 0.0:
                 realized_pnl = float(trades_data.get("net_pnl", 0.0))
+                today_realized_pnl = realized_pnl
     except Exception as td_err:
         logger.error(f"Failed to load trades data: {td_err}")
 
     # Read today's equity history for High / Low calculation
     hist_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
-    today_utc_str = datetime.datetime.utcnow().date().isoformat()
     today_equities = []
     if os.path.exists(hist_file):
         try:
@@ -537,8 +558,9 @@ def get_status():
         "total_crypto_value": round(account_holdings["total_crypto_value"], 2),
         "holdings": account_holdings["holdings"],
         "realized_pnl": round(realized_pnl, 4),
+        "today_realized_pnl": round(today_realized_pnl, 4),
         "unrealized_pnl": round(unrealized_pnl, 4),
-        "today_pnl": round(realized_pnl + unrealized_pnl, 4),
+        "today_pnl": round(today_realized_pnl + unrealized_pnl, 4),
         "fees": round(fees, 4),
         "funding": funding,
         "used_margin": round(crypto_trade_val, 2),
@@ -2690,10 +2712,12 @@ def api_config():
                 return jsonify({"status": "ERROR", "error": "Invalid request payload. Expected JSON object."}), 400
                 
             # Block any attempt to enable live trading or change trading mode to LIVE
-            if "live_trading_enabled" in data and bool(data["live_trading_enabled"]):
-                return jsonify({"status": "ERROR", "error": "SECURITY FORBIDDEN: Live trading is permanently disabled by design."}), 403
-            if "trading_mode" in data and str(data["trading_mode"]).upper() == "LIVE":
-                return jsonify({"status": "ERROR", "error": "SECURITY FORBIDDEN: Live trading is permanently disabled by design."}), 403
+            for k, v in data.items():
+                k_lower = str(k).lower()
+                if ("live_trading" in k_lower or "live_enabled" in k_lower) and bool(v):
+                    return jsonify({"status": "ERROR", "error": "SECURITY FORBIDDEN: Live trading is permanently disabled by design."}), 403
+                if k_lower == "trading_mode" and str(v).upper() == "LIVE":
+                    return jsonify({"status": "ERROR", "error": "SECURITY FORBIDDEN: Live trading is permanently disabled by design."}), 403
 
             if "max_open_trades" in data:
                 try:

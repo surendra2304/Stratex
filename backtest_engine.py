@@ -168,8 +168,16 @@ class BacktestEngine:
                         best_signal = res[0]
                         best_sl = res[1]
                         best_tp = res[2]
-                        if len(res) > 3:
+                        if hasattr(res, "confidence"):
+                            pending_conf = res.confidence
+                        elif hasattr(res, "win_rate_prior"):
+                            pending_conf = res.win_rate_prior
+                        elif len(res) == 4:
                             pending_conf = res[3]
+                        elif len(res) > 4:
+                            pending_conf = res[4]
+                        else:
+                            pending_conf = None
                         source_strat = strat.__name__.split('_')[-1]
                         break
                 

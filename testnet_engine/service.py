@@ -39,8 +39,10 @@ class TestnetService:
         if TRADING_MODE != "TESTNET":
             raise RuntimeError(f"CRITICAL ERROR: Refusing to start TestnetService because TRADING_MODE={TRADING_MODE}. Must be TESTNET.")
             
-        if os.getenv("TESTNET_ONLY", "FALSE").upper() != "TRUE":
-            raise RuntimeError("CRITICAL ERROR: TESTNET_ONLY=TRUE is required to run the Testnet execution mode safely.")
+        testnet_is_only = os.getenv("TESTNET_ONLY", "").upper() == "TRUE"
+        testnet_is_enabled = getattr(config, "TESTNET_ENABLED", False) or os.getenv("TESTNET_ENABLED", "False").lower() == "true"
+        if not (testnet_is_only or testnet_is_enabled):
+            raise RuntimeError("CRITICAL ERROR: TESTNET_ENABLED=True or TESTNET_ONLY=TRUE is required to run the Testnet execution mode safely.")
             
         if os.getenv("RESET_REVIEW_STATE", "FALSE").upper() == "TRUE":
             logger.warning("[RESET] RESET_REVIEW_STATE=TRUE detected. Wiping local review telemetry...")
@@ -1274,6 +1276,23 @@ class TestnetService:
             from config_strategy import ADX_EMA_STRATEGY
             strategy_assets = ADX_EMA_STRATEGY.get("OOS_VALIDATED_ASSETS", ["BTCUSDT"])
             symbols_to_check = set(list(self.active_positions.keys()) + strategy_assets)
+            
+            # Include all symbols from active scanner if available
+            if hasattr(self, 'scanner') and getattr(self.scanner, 'symbols', None):
+                symbols_to_check.update(self.scanner.symbols)
+                
+            # Include symbols from existing ledger file
+            ledger_file = os.getenv("TESTNET_LEDGER_FILE", TESTNET_LEDGER_FILE)
+            if os.path.exists(ledger_file):
+                try:
+                    with open(ledger_file, "r") as lf:
+                        for line in lf:
+                            if not line.strip(): continue
+                            rec = json.loads(line)
+                            if rec.get("symbol"):
+                                symbols_to_check.add(rec["symbol"])
+                except Exception:
+                    pass
 
             all_filled_orders = []
             all_trades_by_order = {}
@@ -1312,7 +1331,18 @@ class TestnetService:
                     quote_qty = float(o['cummulativeQuoteQty'])
                     avg_price = quote_qty / qty if qty > 0 else 0.0
                     
-                    order_fees = sum(float(f['commission']) for f in all_trades_by_order.get(oid, []))
+                    order_trades = all_trades_by_order.get(oid, [])
+                    order_fees = 0.0
+                    for tr in order_trades:
+                        comm = float(tr.get('commission', 0.0))
+                        asset = str(tr.get('commissionAsset', 'USDT')).upper()
+                        if asset == 'USDT':
+                            order_fees += comm
+                        elif asset in sym:
+                            order_fees += comm * avg_price
+                        else:
+                            # Standard testnet fee rate for other assets
+                            order_fees += (avg_price * qty * 0.00075) / max(1, len(order_trades))
                     total_fees += order_fees
                     
                     if current_position_qty == 0.0:
@@ -1369,7 +1399,6 @@ class TestnetService:
                                 current_position_side = None
 
             # 1. Append missing trades to the ledger (do not overwrite)
-            import os
             ledger_file = os.getenv("TESTNET_LEDGER_FILE", TESTNET_LEDGER_FILE)
             existing_exit_ids = set()
             if os.path.exists(ledger_file):

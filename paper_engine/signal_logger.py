@@ -44,7 +44,7 @@ class PaperSignalLogger:
             "strategy": signal.strategy_name,
             "direction": signal.direction,
             "action": signal.action,
-            "confidence": signal.confidence,
+            "confidence": getattr(signal, 'confidence', getattr(signal, 'win_rate_prior', 0.5)),
             "reference_price": signal.reference_price,
             "reason": signal.reason,
             "features": signal.features or {},

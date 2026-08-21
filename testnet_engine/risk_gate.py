@@ -31,6 +31,25 @@ class RiskGate:
         """
         self._check_daily_boundary()
         
+        # 0. Capital / Equity Guard
+        try:
+            c_eq = float(current_equity)
+            if c_eq <= 0 or math.isnan(c_eq) or math.isinf(c_eq):
+                logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: INSUFFICIENT_EQUITY | Equity: {current_equity}")
+                return False, "INSUFFICIENT_EQUITY", f"Current equity (${c_eq:.2f}) is zero or negative."
+        except (ValueError, TypeError):
+            return False, "INSUFFICIENT_EQUITY", "Invalid equity value passed to risk evaluation."
+
+        # 0b. Numerical input sanity validation
+        try:
+            p_qty = float(proposed_qty)
+            e_price = float(entry_price)
+            if p_qty <= 0 or e_price <= 0 or math.isnan(p_qty) or math.isnan(e_price) or math.isinf(p_qty) or math.isinf(e_price):
+                logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: INVALID_INPUT | Qty: {proposed_qty}, Price: {entry_price}")
+                return False, "INVALID_INPUT", f"Price or quantity is non-positive or NaN/Inf."
+        except (ValueError, TypeError):
+            return False, "INVALID_INPUT", "Invalid numeric value passed to risk evaluation."
+
         # 1. Data Health Check
         if data_health_status != "OK":
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: DATA_DEGRADED | Status: {data_health_status}")
@@ -110,7 +129,7 @@ class RiskGate:
             return False, "MAX_CORRELATION_EXPOSURE", f"Net directional {net_directional_pct:.2%} exceeds {config.MAX_NET_DIRECTIONAL_EXPOSURE:.2%}"
 
         # 7. Drawdown Limit
-        drawdown_pct = (self.peak_equity - current_equity) / self.peak_equity
+        drawdown_pct = (self.peak_equity - current_equity) / self.peak_equity if self.peak_equity > 0 else 0.0
         if drawdown_pct >= config.MAX_TESTNET_DRAWDOWN_PCT:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_DRAWDOWN_BREACH | DD: {drawdown_pct:.2%} >= {config.MAX_TESTNET_DRAWDOWN_PCT:.2%}")
             return False, "MAX_DRAWDOWN_BREACH", f"Current drawdown {drawdown_pct:.2%} >= {config.MAX_TESTNET_DRAWDOWN_PCT:.2%}"

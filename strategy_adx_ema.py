@@ -19,10 +19,10 @@ import pandas as pd
 # ------------------------------------------------------------------
 # Signal metadata — carried through execution pipeline
 # ------------------------------------------------------------------
-SignalResult = namedtuple(
-    "SignalResult",
-    ["side", "sl", "tp", "strategy_type", "win_rate_prior", "rr_ratio"]
-)
+class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_type", "win_rate_prior", "rr_ratio"])):
+    @property
+    def confidence(self):
+        return self.win_rate_prior
 
 # Structural parameters frozen from OOS validation
 _STRATEGY_TYPE       = "RULE_BASED"

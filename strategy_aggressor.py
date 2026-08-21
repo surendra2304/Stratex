@@ -4,10 +4,10 @@
 
 from collections import namedtuple
 
-SignalResult = namedtuple(
-    "SignalResult",
-    ["side", "sl", "tp", "strategy_type", "win_rate_prior", "rr_ratio"]
-)
+class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_type", "win_rate_prior", "rr_ratio"])):
+    @property
+    def confidence(self):
+        return self.win_rate_prior
 
 _STRATEGY_TYPE = "RULE_BASED"
 _OOS_WIN_RATE_PRIOR = 0.50  # 50% Win rate with order flow momentum confirmation
@@ -24,11 +24,18 @@ def get_signal(df):
     if df is None or len(df) < 20:
         return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
-    last = df.iloc[-1]
-
     # Required columns check
+    if 'vol_delta' not in df.columns or 'rsi_14' not in df.columns:
+        try:
+            import features
+            df = features.add_features(df)
+        except Exception:
+            return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+
     if 'vol_delta' not in df.columns:
         return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+
+    last = df.iloc[-1]
 
     close     = float(last["close"])
     open_p    = float(last["open"])

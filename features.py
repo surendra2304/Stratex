@@ -93,16 +93,19 @@ def add_features(df):
                 ub_arr[i] = ub_arr[i-1]
                 
     df['supertrend'] = supertrend
-    df['st_upper'] = final_upperband
-    df['st_lower'] = final_lowerband
+    df['st_upper'] = ub_arr
+    df['st_lower'] = lb_arr
     
     # --- Volume Features ---
     df['vol_sma_20'] = df['volume'].rolling(window=20).mean()
     df['rel_volume'] = df['volume'] / (df['vol_sma_20'] + 1e-9)
     
-    # Provided from data fetching
-    if 'vol_delta' in df.columns:
-        df['delta_sma_20'] = df['vol_delta'].rolling(window=20).mean()
-        df['rel_vol_delta'] = df['vol_delta'] / (df['vol_sma_20'] + 1e-9)
+    # Volume delta (buy/sell flow proxy if not directly provided)
+    if 'vol_delta' not in df.columns:
+        hl_range = df['high'] - df['low'] + 1e-9
+        df['vol_delta'] = df['volume'] * ((df['close'] - df['open']) / hl_range)
+
+    df['delta_sma_20'] = df['vol_delta'].rolling(window=20).mean()
+    df['rel_vol_delta'] = df['vol_delta'] / (df['vol_sma_20'] + 1e-9)
         
     return df

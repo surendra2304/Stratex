@@ -110,5 +110,5 @@ def calculate_metrics(trade_history, equity_df, initial_balance):
         "largest_win": wins['net_pnl'].max() if not wins.empty else 0.0,
         "largest_loss": losses['net_pnl'].min() if not losses.empty else 0.0,
         "average_r": avg_r,
-        "avg_holding_time": trades['holding_time'].mean() if not trades.empty else 0.0
+        "avg_holding_time": float(trades['holding_time'].mean()) if not trades.empty and 'holding_time' in trades.columns else 0.0
     }

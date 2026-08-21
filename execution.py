@@ -9,6 +9,7 @@ from enum import Enum
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 
+import config
 from config import (
     API_KEY,
     LIVE_TRADING_ENABLED,
@@ -438,8 +439,8 @@ def monitor_open_trades():
                 entry_price = float(t.get("entry_price", 0))
                 entry_qty   = float(t.get("quantity", close_qty))
                 entry_fee   = float(t.get("entry_fee", 0.0))
-                # Estimate exit fee at 0.1% of exit notional if not provided
-                exit_fee    = close_price * close_qty * 0.001
+                fee_rate    = getattr(config, "BACKTEST_FEE_RATE", 0.001)
+                exit_fee    = close_price * close_qty * fee_rate
 
                 gross_pnl, net_pnl = compute_net_pnl(
                     t["side"], entry_qty, entry_price, entry_fee,
@@ -518,7 +519,7 @@ def monitor_open_trades():
                     )
                     ec_qty = float(ec.get("executedQty", 0))
                     ec_price = float(ec.get("cummulativeQuoteQty", 0)) / ec_qty if ec_qty > 0 else 0
-                    ec_fee = ec_qty * ec_price * 0.001
+                    ec_fee = ec_qty * ec_price * getattr(config, "BACKTEST_FEE_RATE", 0.001)
                     
                     # Calculate PnL accurately
                     gross_pnl, net_pnl = compute_net_pnl(

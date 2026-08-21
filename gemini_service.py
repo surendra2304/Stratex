@@ -347,7 +347,8 @@ Provide only valid JSON.
         """
         Synthesizes portfolio performance, win rate, drawdown, and strategy comparisons.
         """
-        cache_key = f"perf_{analytics_context.get('timeframe', 'ALL')}_{int(time.time() // 300)}"
+        ctx_str = json.dumps(analytics_context, sort_keys=True)
+        cache_key = f"perf_{hash(ctx_str)}_{int(time.time() // 300)}"
         cached = self._get_cache(cache_key)
         if cached:
             return cached
@@ -401,7 +402,8 @@ Provide only valid JSON.
         """
         Analyzes engine health, WebSocket telemetry, scanner throughput, and error rates.
         """
-        cache_key = f"sys_{int(time.time() // 180)}"
+        ctx_str = json.dumps(system_context, sort_keys=True)
+        cache_key = f"sys_{hash(ctx_str)}_{int(time.time() // 180)}"
         cached = self._get_cache(cache_key)
         if cached:
             return cached

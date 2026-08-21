@@ -12,10 +12,10 @@ import pandas as pd
 import xgboost as xgb
 from sklearn.preprocessing import StandardScaler
 
-SignalResult = namedtuple(
-    "SignalResult",
-    ["side", "sl", "tp", "strategy_type", "confidence", "rr_ratio"]
-)
+class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_type", "confidence", "rr_ratio"])):
+    @property
+    def win_rate_prior(self):
+        return self.confidence
 
 logger = logging.getLogger("strategy_ml")
 
@@ -59,12 +59,12 @@ class MLStrategy:
     def _create_labels(self, df):
         """
         Creates asymmetric binary labels using a barrier simulation.
-        TP = 1.5%, SL = 0.5% (3:1 RR), Horizon = 72 (6 hours on 5m)
+        TP = 1.5%, SL = 0.5% (3:1 RR), Horizon dynamically scaled.
         """
         df = df.copy()
         upper_pct = 0.015
         lower_pct = -0.005
-        horizon = 72
+        horizon = min(72, max(5, int(len(df) * 0.1))) if len(df) < 500 else 72
         
         targets_buy = np.zeros(len(df))
         targets_sell = np.zeros(len(df))
@@ -108,8 +108,19 @@ class MLStrategy:
         df['target_sell'] = targets_sell
         return df
         
-    def train(self, train_df, val_df):
-        """Fits dual models (BUY and SELL) on training set."""
+    def train(self, train_df, val_df=None):
+        """Fits dual models (BUY and SELL) on training set with chronological validation."""
+        import features
+        if 'returns' not in train_df.columns:
+            train_df = features.add_features(train_df)
+        
+        if val_df is None:
+            split_idx = int(len(train_df) * 0.8)
+            val_df = train_df.iloc[split_idx:].copy()
+            train_df = train_df.iloc[:split_idx].copy()
+        elif 'returns' not in val_df.columns:
+            val_df = features.add_features(val_df)
+
         train_df = self._create_labels(train_df.copy()).dropna(subset=self.features + ['target_buy', 'target_sell'])
         val_df = self._create_labels(val_df.copy()).dropna(subset=self.features + ['target_buy', 'target_sell'])
         
@@ -180,6 +191,14 @@ class MLStrategy:
         if len(df) < 20:
             return SignalResult(None, None, None, "PROBABILISTIC", None, None)
             
+        # Ensure features are computed
+        if any(f not in df.columns for f in self.features):
+            try:
+                import features
+                df = features.add_features(df)
+            except Exception:
+                pass
+
         last_bar = df.iloc[-1:]
         
         # Check if we have all features
@@ -194,7 +213,12 @@ class MLStrategy:
         prob_sell = float(self.model_sell.predict_proba(X_test_scaled)[0][1]) if self.model_sell is not None else 0.0
         
         close = float(last_bar['close'].iloc[0])
-        atr = float(last_bar.get('atr_14', last_bar.get('atr', close * 0.01)).iloc[0])
+        if 'atr_14' in last_bar.columns and not pd.isna(last_bar['atr_14'].iloc[0]):
+            atr = float(last_bar['atr_14'].iloc[0])
+        elif 'atr' in last_bar.columns and not pd.isna(last_bar['atr'].iloc[0]):
+            atr = float(last_bar['atr'].iloc[0])
+        else:
+            atr = close * 0.01
         
         # Volatility-adjusted 2.5x ATR TP and 1.2x ATR SL (RR = 2.08)
         if prob_buy >= 0.52:
