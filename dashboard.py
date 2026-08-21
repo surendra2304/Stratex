@@ -38,6 +38,36 @@ def add_header(response):
     response.headers['Expires'] = '0'
     return response
 
+def safe_int_param(param_name: str, default: int = 100, min_val: int = 1, max_val: int = 1000) -> int:
+    """Safely extracts and validates an integer query parameter from Flask request.args.
+    Never raises unhandled exceptions. Falls back to default if missing, invalid, or malformed.
+    Clamps within [min_val, max_val]."""
+    raw = request.args.get(param_name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        val = int(float(str(raw).strip()))
+        return max(min_val, min(max_val, val))
+    except (ValueError, TypeError, OverflowError):
+        return default
+
+
+def safe_float_param(param_name: str, default: float = 0.0, min_val: float = None, max_val: float = None) -> float:
+    """Safely extracts and validates a float query parameter from Flask request.args."""
+    raw = request.args.get(param_name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        val = float(str(raw).strip())
+        if min_val is not None:
+            val = max(min_val, val)
+        if max_val is not None:
+            val = min(max_val, val)
+        return val
+    except (ValueError, TypeError, OverflowError):
+        return default
+
+
 @app.route('/')
 def serve_index():
     return send_from_directory('static', 'index.html')
@@ -60,10 +90,7 @@ def get_candles():
     symbol = str(raw_sym).upper().strip() if raw_sym else 'BTCUSDT'
     raw_tf = request.args.get('tf') or request.args.get('timeframe') or '15m'
     tf = str(raw_tf).lower().strip()
-    try:
-        limit = min(1000, max(1, int(request.args.get('limit', 300))))
-    except (ValueError, TypeError):
-        limit = 300
+    limit = safe_int_param('limit', default=300, min_val=1, max_val=1000)
 
     supported_tfs = getattr(config, "SUPPORTED_TIMEFRAMES", ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"])
     if tf not in supported_tfs:
@@ -1335,7 +1362,7 @@ def api_trade_events():
     from testnet_engine.telemetry_manager import get_telemetry_manager
     symbol = request.args.get("symbol")
     status = request.args.get("status")
-    limit = int(request.args.get("limit", 100))
+    limit = safe_int_param("limit", default=100, min_val=1, max_val=1000)
     telemetry = get_telemetry_manager()
     events = telemetry.get_trade_events(symbol=symbol, status=status, limit=limit)
     return jsonify({
@@ -1395,7 +1422,7 @@ def api_positions():
 def api_signals():
     """Returns strategy signal decision logs for terminal telemetry."""
     from testnet_engine.telemetry_manager import get_telemetry_manager
-    limit = int(request.args.get("limit", 100))
+    limit = safe_int_param("limit", default=100, min_val=1, max_val=1000)
     symbol = request.args.get("symbol")
     strategy = request.args.get("strategy")
     telemetry = get_telemetry_manager()
@@ -2211,7 +2238,7 @@ def api_activity():
     try:
         from testnet_engine.telemetry_manager import get_telemetry_manager
         tm = get_telemetry_manager()
-        limit = int(request.args.get('limit', 100))
+        limit = safe_int_param('limit', default=100, min_val=1, max_val=1000)
         
         events = []
         account_holdings = get_live_account_and_holdings()
@@ -2414,7 +2441,7 @@ def api_activity():
 def api_balance_events():
     """Returns chronological audit log of balance transitions."""
     from testnet_engine.telemetry_manager import get_telemetry_manager
-    limit = int(request.args.get("limit", 100))
+    limit = safe_int_param('limit', default=100, min_val=1, max_val=1000)
     telemetry = get_telemetry_manager()
     events = telemetry.get_balance_events(limit=limit)
     return jsonify({
@@ -2436,7 +2463,7 @@ def api_risk_events():
     Supports ?limit=N and ?symbol=SYM query params.
     """
     from testnet_engine.telemetry_manager import get_telemetry_manager
-    limit = int(request.args.get("limit", 100))
+    limit = safe_int_param("limit", default=100, min_val=1, max_val=1000)
     symbol_filter = request.args.get("symbol")
     telemetry = get_telemetry_manager()
 
@@ -2523,7 +2550,7 @@ def api_system_events():
     Supports ?limit=N query param.
     """
     from testnet_engine.telemetry_manager import get_telemetry_manager
-    limit = int(request.args.get("limit", 100))
+    limit = safe_int_param("limit", default=100, min_val=1, max_val=1000)
     telemetry = get_telemetry_manager()
 
     system_events = []
@@ -2599,7 +2626,7 @@ def api_telemetry_trades():
         strategy = request.args.get('strategy')
         timeframe = request.args.get('timeframe')
         status = request.args.get('status')
-        limit = int(request.args.get('limit', 100))
+        limit = safe_int_param('limit', default=100, min_val=1, max_val=1000)
         
         trades = tm.query_trades(status=status, symbol=symbol, strategy=strategy, timeframe=timeframe, limit=limit)
         return jsonify({
@@ -2618,7 +2645,7 @@ def api_telemetry_signals():
         from testnet_engine.telemetry import get_telemetry_manager
         tm = get_telemetry_manager()
         symbol = request.args.get('symbol')
-        limit = int(request.args.get('limit', 100))
+        limit = safe_int_param('limit', default=100, min_val=1, max_val=1000)
         signals = tm.query_signals(symbol=symbol, limit=limit)
         return jsonify({
             "status": "OK",
@@ -2652,7 +2679,7 @@ def api_telemetry_equity_curve():
     try:
         from testnet_engine.telemetry import get_telemetry_manager
         tm = get_telemetry_manager()
-        limit = int(request.args.get('limit', 500))
+        limit = safe_int_param('limit', default=500, min_val=1, max_val=2000)
         curve = tm.query_equity_curve(limit=limit)
         return jsonify({
             "status": "OK",
@@ -2669,7 +2696,7 @@ def api_telemetry_balance_events():
     try:
         from testnet_engine.telemetry import get_telemetry_manager
         tm = get_telemetry_manager()
-        limit = int(request.args.get('limit', 100))
+        limit = safe_int_param('limit', default=100, min_val=1, max_val=1000)
         events = tm.query_balance_events(limit=limit)
         return jsonify({
             "status": "OK",
