@@ -127,6 +127,7 @@ class BacktestEngine:
                         }
                         
                         self.balance -= fee
+                        self.equity = self.balance  # sync equity with balance after fee deduction
                         self.open_trades.append(trade)
                 
                 # Strict state reset after execution attempt (Part 2)

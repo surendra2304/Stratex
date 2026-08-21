@@ -42,7 +42,6 @@ def get_signal(df):
     close = float(last['close'])
     open_p = float(last['open'])
     low = float(last['low'])
-    float(last['high'])
     
     ema_200 = float(last.get('ema_200', close))
     ema_50  = float(last.get('ema_50', close))

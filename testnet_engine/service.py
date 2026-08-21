@@ -27,6 +27,9 @@ from testnet_engine.telemetry_manager import get_telemetry_manager
 
 logger = get_logger("service")
 
+_TF_SECONDS = {"1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "2h": 7200, "4h": 14400, "6h": 21600, "8h": 28800, "12h": 43200, "1d": 86400}
+_COOLDOWN_SECONDS = float(os.getenv("SIGNAL_COOLDOWN_SECONDS", "300"))  # 5 minutes default
+
 TESTNET_LEDGER_FILE = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
 TESTNET_OPPORTUNITY_LOG = os.getenv("TESTNET_OPPORTUNITY_LOG", "testnet_opportunity_log.jsonl")
 TESTNET_PORTFOLIO_FILE = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
@@ -254,7 +257,10 @@ class TestnetService:
                                 continue
                             seen_exit_ids.add(exit_id)
 
-                        if "CLOSE" in record.get("action", ""):
+                        action_str = str(record.get("action", "")).upper()
+                        status_str = str(record.get("status", "")).upper()
+                        event_type_str = str(record.get("event_type", "")).upper()
+                        if "CLOSE" in action_str or status_str == "CLOSED" or "CLOSE" in event_type_str:
                             # Parse date from timestamp
                             trade_date = record.get("timestamp", "").split("T")[0]
                             if trade_date == today_str:
@@ -482,7 +488,7 @@ class TestnetService:
             "starting_equity": getattr(self, "starting_equity", 10000.0),
             "service_start_time": getattr(self, 'service_start_time', datetime.datetime.utcnow().isoformat() + "Z"),
             "safety_halt": getattr(self, 'safety_halt', False),
-            "cash": self.current_equity,
+            "cash": max(0.0, self.current_equity - sum(p.get('quantity', 0) * p.get('entry_price', 0) for p in self.active_positions.values() if isinstance(p, dict))),
             "equity": self.current_equity,
             "realized_pnl": getattr(self, 'total_reconciled_pnl', self.risk_gate.daily_realized_loss),
             "used_margin": sum([p.get('quantity', 0) * p.get('entry_price', 0) for p in self.active_positions.values()]),
@@ -562,7 +568,7 @@ class TestnetService:
                 age_sec = (datetime.datetime.utcnow() - last_ts.to_pydatetime()).total_seconds()
             else:
                 age_sec = 0
-            max_allowed_age = 300 * 3 if "5m" in tf else (900 * 3 if "15m" in tf else 3600 * 4)
+            max_allowed_age = _TF_SECONDS.get(tf, 3600) * 3
             if age_sec > max_allowed_age and age_sec > 0:
                 logger.warning(f"[STRATEGY_SKIPPED] reason=STALE_MARKET_DATA symbol={symbol} tf={tf} age={age_sec:.1f}s")
                 return
@@ -771,9 +777,9 @@ class TestnetService:
                 strategy_name = candidate.get("strategy", "adx_ema")
                 
                 with self.lock:
-                    # Enforce per-symbol cooldown (5 seconds for high-frequency testing)
+                    # Enforce per-symbol cooldown
                     now_ts = datetime.datetime.utcnow().timestamp()
-                    if symbol in self.cooldowns and now_ts - self.cooldowns[symbol] < 5:
+                    if symbol in self.cooldowns and now_ts - self.cooldowns[symbol] < _COOLDOWN_SECONDS:
                         self.stats["COOLDOWN_REJECTED"] += 1
                         self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "ON_COOLDOWN")
                         continue
@@ -887,7 +893,9 @@ class TestnetService:
                         order_res = place_market_order(strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp, client_order_id=signal_id)
                         if order_res:
                             self.stats["ORDERS_SUBMITTED"] += 1
-                            self.stats["ORDERS_FILLED"] += 1
+                            order_status = str(order_res.get("status", "")).upper()
+                            if order_status in ("FILLED", "PARTIALLY_FILLED") or order_res.get("_executed_qty", 0) > 0:
+                                self.stats["ORDERS_FILLED"] += 1
                             if strategy_name in self.stats["strategy_metrics"]:
                                 self.stats["strategy_metrics"][strategy_name]["executed"] += 1
                             if tf in self.stats["timeframe_metrics"]:

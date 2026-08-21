@@ -198,8 +198,10 @@ def test_paper_portfolio_margin_and_equity_preservation(tmp_path):
     portfolio.add_position("pos_btc", "BTCUSDT", "BUY", 50000.0, 0.04)
     
     # Price increases 10% to 55,000: unrealized PnL = (55000 - 50000) * 0.04 = $200
+    # Correct equity = cash + used_margin + unrealized = 8000 + 2000 + 200 = $10200
+    # (The $2000 margin deducted from cash is returned via used_margin in get_equity)
     eq_in_profit = portfolio.get_equity({"BTCUSDT": 55000.0})
-    assert eq_in_profit == 8200.0
+    assert eq_in_profit == 10200.0
 
     # Close position at 55,000 with $2 fee: net PnL = $198
     portfolio.close_position("pos_btc", 55000.0, exit_fee=2.0)

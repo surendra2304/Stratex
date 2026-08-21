@@ -52,10 +52,17 @@ class PaperPortfolio:
 
     def get_equity(self, current_market_prices: dict[str, float]) -> float:
         """
-        Equity = Cash + Unrealized PnL
+        Equity = Cash + Used Margin + Unrealized PnL
+
+        When positions are opened via allocate_margin(), the full notional is
+        deducted from cash and tracked in used_margin. The correct equity
+        formula adds used_margin back so that (cash + used_margin) represents
+        the true capital base, and unrealized_pnl captures the P&L change
+        since entry. Without this correction, equity is understated by the
+        total open position notional for the entire duration of every trade.
         """
         unrealized = self.get_unrealized_pnl(current_market_prices)
-        return self.cash + unrealized
+        return self.cash + self.used_margin + unrealized
 
     def get_unrealized_pnl(self, current_market_prices: dict[str, float]) -> float:
         unrealized = 0.0

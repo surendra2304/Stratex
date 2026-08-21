@@ -107,11 +107,13 @@ def test_property_equity_equals_cash_plus_unrealized(tmp_path):
         elif op == "price_move":
             prices["BTCUSDT"] *= rng.uniform(0.99, 1.01)
 
-        # Assert invariant every step
+        # Assert invariant every step: equity = cash + used_margin + unrealized
+        # When allocate_margin() is used, the full notional is deducted from cash
+        # and tracked in used_margin. get_equity() adds it back.
         equity = p.get_equity(prices)
         unrealized = p.get_unrealized_pnl(prices)
-        expected = p.cash + unrealized
-        assert abs(equity - expected) < 1e-9, f"Invariant broken at trial {trial}: equity={equity}, cash+unreal={expected}"
+        expected = p.cash + p.used_margin + unrealized
+        assert abs(equity - expected) < 1e-9, f"Invariant broken at trial {trial}: equity={equity}, cash+used_margin+unreal={expected}"
 
 
 def test_property_same_seed_produces_same_result(tmp_path):

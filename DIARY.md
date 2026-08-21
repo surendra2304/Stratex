@@ -226,6 +226,9 @@ TESTNET ONLY
 
 ## Work Completed
 - **Engine & Risk Hardening**: Cleaned dead heartbeat loop, merged duplicate state saving methods, fixed today-only daily loss calculation in `service.py`, reduced lock scope during feature extraction, and enforced deterministic UUID5 signal identifier signing.
+- **Stale Market Data & Order Lifecycle Fixes**: Replaced brittle ternary stale-candle age with authoritative `_TF_SECONDS` mapping (3× timeframe limit for all supported intervals); fixed `ORDERS_FILLED` to increment solely upon exchange execution confirmation instead of pre-submission; made signal cooldown configurable via `SIGNAL_COOLDOWN_SECONDS`; hardened `_restore_daily_risk_state` to match `CLOSE` across action, status, and event_type strings.
+- **Accounting & Margin Invariant Remediation**: Fixed critical paper engine `get_equity()` bug to correctly compute $\text{Equity} = \text{Cash} + \text{Used Margin} + \text{Unrealized PnL}$ preserving capital base across active trade lifecycles; synchronized `BacktestEngine.equity` after trade fee deductions.
+- **Quantitative & Features Pipeline**: Fixed RSI NaN propagation on zero downward movement windows (`loss == 0`) with proper division-by-zero substitution; guarded `rel_volume` and `vol_delta` moving averages against NaN propagation in early bars.
 - **Frontend & API Alignment**: Hardened Chart.js memory destruction in `closeInspectorDrawer()`, unified `/api/candles` parameter support (`tf` and `timeframe`), enabled dual JSON format candle parsing, and synchronized `MAX_OPEN_POSITIONS` with `MAX_OPEN_TRADES` in dynamic config endpoints.
 - **Research & Validation Pipeline**: Verified strict chronological OOS validation and absence of lookahead bias in feature computation across all strategies.
 - **Security & Advisory Isolation**: Verified zero leaked credentials across all files/templates, confirmed permanent live trading lockout (`LIVE_TRADING_ENABLED = False`), and verified that Gemini AI and Quantum research modules remain strictly advisory-only with zero execution authority.
@@ -233,11 +236,12 @@ TESTNET ONLY
 
 ## Verification
 - Syntax & Compile: `node -c static/app.js` (PASS) | `python -m py_compile` across all modules (PASS).
-- Complete Pytest Suite: **436 passed / 436 tests (100% across two consecutive runs)**.
+- Complete Pytest Suite: **486 passed / 486 tests (100% across two consecutive runs)**.
 - Chaos, Corruption & Fuzz Suite: **38 passed (100% SUCCESS)**.
 - Security & Credentials Suite: **21 passed (100% SUCCESS)**.
 - Deployment & Supervisor Suite: **9 passed (100% SUCCESS)**.
 - Quantum Validation Suite: **7 passed (100% SUCCESS)**.
-- Accounting Invariant: $\text{Total Equity} = \text{USDT Cash} + \text{Crypto Market Value}$ verified across all fuzz & lifecycle tests.
+- Accounting Invariant: $\text{Total Equity} = \text{USDT Cash} + \text{Used Margin} + \text{Unrealized PnL}$ verified across all fuzz, lifecycle, and stress tests.
 - Status: **Zero CRITICAL or HIGH defects remaining. Production Ready.**
+
 

@@ -18,10 +18,17 @@ def _portfolio(tmp_path, name="p.json"):
 
 
 def _equity_invariant(p: PaperPortfolio, prices: dict, tolerance: float = 1e-9) -> bool:
-    """equity = cash + unrealized_pnl. Returns True if invariant holds."""
+    """equity = cash + used_margin + unrealized_pnl.
+
+    When positions are opened via allocate_margin(notional), the full
+    notional is deducted from cash and tracked in used_margin. get_equity()
+    now returns cash + used_margin + unrealized_pnl so that the capital
+    base is not understated during the lifetime of a trade.
+    Returns True if the invariant holds.
+    """
     equity = p.get_equity(prices)
     unrealized = p.get_unrealized_pnl(prices)
-    computed = p.cash + unrealized
+    computed = p.cash + p.used_margin + unrealized
     return abs(equity - computed) < tolerance
 
 

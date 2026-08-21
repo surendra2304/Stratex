@@ -35,8 +35,9 @@ def add_features(df):
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / loss
-    df['rsi_14'] = 100 - (100 / (1 + rs))
+    rs = gain / loss.replace(0, np.nan)  # NaN where loss=0 (no downward movement)
+    df['rsi_14'] = np.where(loss == 0, 100.0, 100 - (100 / (1 + rs)))
+    df['rsi_14'] = pd.Series(df['rsi_14'], index=df.index)
     
     ema_12 = df['close'].ewm(span=12, adjust=False).mean()
     ema_26 = df['close'].ewm(span=26, adjust=False).mean()
@@ -98,14 +99,14 @@ def add_features(df):
     
     # --- Volume Features ---
     df['vol_sma_20'] = df['volume'].rolling(window=20).mean()
-    df['rel_volume'] = df['volume'] / (df['vol_sma_20'] + 1e-9)
+    df['rel_volume'] = df['volume'] / (df['vol_sma_20'].fillna(df['volume'].expanding().mean()).add(1e-9))
     
     # Volume delta (buy/sell flow proxy if not directly provided)
     if 'vol_delta' not in df.columns:
         hl_range = df['high'] - df['low'] + 1e-9
         df['vol_delta'] = df['volume'] * ((df['close'] - df['open']) / hl_range)
 
-    df['delta_sma_20'] = df['vol_delta'].rolling(window=20).mean()
-    df['rel_vol_delta'] = df['vol_delta'] / (df['vol_sma_20'] + 1e-9)
+    df['delta_sma_20'] = df['vol_delta'].rolling(window=20).mean().fillna(0.0)
+    df['rel_vol_delta'] = df['vol_delta'] / (df['vol_sma_20'].fillna(df['volume'].expanding().mean()).add(1e-9))
         
     return df
