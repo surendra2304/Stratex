@@ -322,3 +322,25 @@ TESTNET ONLY
 - Complete Pytest Suite: **529 passed / 529 tests (100% across two consecutive runs in 54.90s and 54.31s)**.
 - Study reproducibility: `python research/upgrade_2026_08/expansion_study.py` (Studies A/B/C) and `param_study.py` (base grids).
 - End-of-Day State: Balance: $11,609.29 USDT baseline | Engine: V2-spot rev3 deployed (crossover + qualified retest, 7 assets, 4h, BTC-regime gated) | Expected forward cadence: ~4 trades/month.
+
+---
+
+# DAY 9 (continued, part 2) — 2026-08-22: Frontend Interactivity Restoration
+## Objectives
+- Full frontend contract audit and repair: dead buttons, missing handlers, and dashboard truthfulness after operator reported non-functional UI.
+
+## Work Completed
+- **Frontend Contract Audit**: Cross-referenced every inline `onclick` in `index.html` (51 handlers) against `app.js` — **17 functions referenced by the UI did not exist anywhere** (changeMarketSymbol, changeMarketTimeframe, toggleMarketDropdown, changeModalTimeframe, setChartType, applyChartDrawing, saveSettings, resetSettings, fetchRiskData, fetchSystemData, fetchAnalyticsData, fetchPositionsV2, fetchStrategiesV2, toggleSoundAlerts, toggleNotificationDropdown, toggleMarketsFullscreen, playAudioAlert). Root cause: the redesigned HTML (rewrite_*.py generators) and app.js were built against different function-name contracts. Additionally the frontend consumed only 9 of 52 backend routes.
+- **ui-compat.js (new, 9.2 KB)**: Implements every missing handler — markets symbol/timeframe switching, dropdowns, fullscreen, chart type switching, horizontal/channel drawings (persisted datasets re-applied after chart rebuild), inspector modal timeframe switching, view refresh buttons mapped onto the existing fetch*ViewData layer, settings save (validated POST /api/settings) and reset, sound toggle with localStorage persistence, notification summary, audio alerts.
+- **Strategy Status Truthfulness**: `/api/strategy-metrics` reported all 6 strategies ACTIVE from raw config. Now derives status from the engine heartbeat (governance-loaded set), with a 5-minute freshness guard so stale heartbeat artifacts (e.g. chaos-test leftovers) cannot misreport. Strategy table badge now reflects real status instead of hardcoded ACTIVE.
+- **Verification Against Live Deployment**: audited the *served* files from Render — 51/51 inline handlers bound, ui-compat.js 200, Chart.js CDN referenced, all 10 views present.
+
+## Bug Fixes
+- Bug #46: 17 UI handler functions referenced by index.html never existed — every markets/settings/risk/system/analytics/positions/strategies control was dead on click.
+- Bug #47: `/api/strategy-metrics` reported DISABLED strategies as ACTIVE from raw config instead of engine-loaded truth (with stale-heartbeat artifact risk; freshness guard added).
+- Bug #48: Strategy table badge hardcoded "ACTIVE" regardless of actual status.
+
+## Verification
+- Complete Pytest Suite: **529 passed / 529 tests (100% across two consecutive runs in 47.39s and 49.42s)**.
+- Local dashboard smoke test: all UI-consumed endpoints HTTP 200; `/ui-compat.js` served.
+- Live deployment audit: 51/51 handlers bound; fix deployed and verified on Render.
