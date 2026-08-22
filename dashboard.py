@@ -198,11 +198,19 @@ def get_engine_health_data():
         is_healthy = worker_alive and age <= 90 and (pid_alive or pid is None)
         engine_status = "ONLINE" if is_healthy else "OFFLINE"
         
+        # Upgrade 3: supervised paper-runner status (additive, never affects engine_status)
+        try:
+            from paper_runner_supervisor import get_status as paper_status
+            _paper = paper_status()
+        except Exception:
+            _paper = {"paper_runner_status": "UNKNOWN"}
+
         return {
             "engine_status": engine_status,
             "healthy": is_healthy,
             "worker_alive": worker_alive,
             "heartbeat_age_seconds": round(age, 2),
+            **_paper,
             "pid": pid,
             "pid_alive": pid_alive,
             "binance_connected": hb.get("binance_connected", True),
@@ -219,12 +227,18 @@ def get_engine_health_data():
             "timestamp": hb_ts_str or (datetime.datetime.utcnow().isoformat() + "Z")
         }
     except Exception as e:
+        try:
+            from paper_runner_supervisor import get_status as paper_status
+            _paper = paper_status()
+        except Exception:
+            _paper = {"paper_runner_status": "UNKNOWN"}
         return {
             "engine_status": "OFFLINE",
             "healthy": False,
             "worker_alive": False,
             "heartbeat_age_seconds": None,
             "reason": f"READ_ERROR: {e!s}",
+            **_paper,
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         }
 
@@ -2934,6 +2948,14 @@ def api_ai_system_analysis():
 def serve_static(path):
     return send_from_directory('static', path)
 
+
+# Upgrade 3: supervise the paper forward runner inside the dashboard process
+# (guarded — never in pytest; disable with SUPERVISE_PAPER_RUNNER=0).
+try:
+    from paper_runner_supervisor import start_supervised_runner
+    start_supervised_runner()
+except Exception as _paper_err:
+    print(f"[DASHBOARD] paper runner supervisor unavailable: {_paper_err}")
 
 if __name__ == '__main__':
     print("🚀 Starting Unified Live Trading Dashboard...")
