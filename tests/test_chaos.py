@@ -30,7 +30,10 @@ def test_chaos_daily_risk_reset():
     # Fast forward the UTC clock by 1 day
     with patch("testnet_engine.risk_gate.datetime") as mock_dt:
         future_date = datetime.datetime.utcnow() + datetime.timedelta(days=1)
+        # RiskGate uses explicit-UTC now(timezone.utc); mock both spellings
         mock_dt.datetime.utcnow.return_value = future_date
+        mock_dt.datetime.now.return_value = future_date
+        mock_dt.timezone.utc = datetime.timezone.utc
         
         gate.evaluate_risk("BTCUSDT", "LONG", 9500.0, {}, 0.1, 50000.0, "OK")
         
