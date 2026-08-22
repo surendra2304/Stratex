@@ -1,8 +1,8 @@
 {
     "market_data": "OK",
-    "strategy": "OK",
+    "strategy": "DEGRADED",
     "portfolio": "OK",
     "persistence": "OK",
     "reconciliation": "OK",
-    "last_update": 1786826119.024642
+    "last_update": 1787416346.7110882
 }

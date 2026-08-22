@@ -105,6 +105,14 @@ def test_restart_recovery_missing_protection_safety_halt():
         
         # Binance says we have NO open OCO orders! (Unprotected)
         mock_client.get_open_orders.return_value = []
+
+        # Genuine ENGINE holding: post-baseline entry trade exists (baseline-scope
+        # reconciliation ignores faucet residue with no post-baseline history).
+        import time as _time
+        mock_client.get_my_trades.return_value = [
+            {"orderId": 50, "price": "50000", "qty": "1.0", "isBuyer": True,
+             "time": int(_time.time() * 1000)}
+        ]
         
         service = TestnetService_dynamic()
         

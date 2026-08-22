@@ -290,6 +290,16 @@ def get_live_account_and_holdings(force_refresh=False):
         # Identify genuine active bot assets from the portfolio state
         port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
         active_bot_assets = set()
+
+        # GOVERNANCE-SCOPED valuation: the testnet wallet carries hundreds of
+        # faucet airdrops; only OOS-validated assets may ever count as engine
+        # positions/active market value (a stray locked junk coin otherwise
+        # inflates equity by tens of thousands of dollars).
+        try:
+            from config_strategy import ADX_EMA_STRATEGY_V2
+            validated_bases = {s[:-4] for s in ADX_EMA_STRATEGY_V2.get("OOS_VALIDATED_ASSETS", [])}
+        except Exception:
+            validated_bases = set()
         if os.path.exists(port_file):
             try:
                 with open(port_file, "r") as pf:
@@ -334,10 +344,12 @@ def get_live_account_and_holdings(force_refresh=False):
                     usd_val = total_qty
                     
                 if usd_val > 0.05:
-                    # A holding is a genuine active bot trade ONLY if locked in an exchange order (e.g. OCO)
-                    # or recorded as an open position in the local portfolio state.
-                    # Unmanaged faucet airdrops with locked == 0 are classified as unmanaged holdings.
-                    is_bot_trade = (asset in active_bot_assets) or (locked > 0)
+                    # A holding is a genuine active bot trade ONLY if it is a VALIDATED
+                    # asset AND (locked in an exchange order (e.g. OCO) or recorded as
+                    # an open position in the local portfolio state).
+                    # Unmanaged faucet airdrops — even when locked by stray orders —
+                    # are classified as unmanaged holdings and never valued as engine equity.
+                    is_bot_trade = (asset in validated_bases) and (asset in active_bot_assets)
                     h_info = {
                         "asset": asset,
                         "symbol": pair if price > 0 else asset,

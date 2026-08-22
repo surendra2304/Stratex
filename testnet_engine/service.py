@@ -330,9 +330,14 @@ class TestnetService:
         """Phase 2: Reconcile local active_trades with Binance open orders and balances."""
         try:
             open_orders = self.client.get_open_orders()
-            # Find any non-USDT balances
+            # Find any non-USDT balances — GOVERNANCE-SCOPED: the testnet wallet holds
+            # hundreds of faucet airdrop coins; only OOS-validated assets may be
+            # adopted, protected, or counted as engine positions. Junk balances and
+            # their stray orders are treated as floating and cancelled.
+            validated = governance_validated_assets(self.strategies)
             assets = [item for item in account['balances'] if float(item['free']) > 0 or float(item['locked']) > 0]
-            open_symbols_from_assets = {a['asset'] + "USDT" for a in assets if a['asset'] != "USDT"}
+            open_symbols_from_assets = {a['asset'] + "USDT" for a in assets
+                                        if a['asset'] != "USDT" and (a['asset'] + "USDT") in validated}
             
             from execution import _load_active_trades
             try:
@@ -343,9 +348,39 @@ class TestnetService:
                 
             local_symbols = {t['symbol'] for t in active_trades}
             protected_symbols = {o['symbol'] for o in open_orders}
-            
-            # 1. Cancel any floating OCOs (orders open, but no position balance)
-            floating_ocos = protected_symbols - open_symbols_from_assets
+
+            # BASELINE SCOPE: a statistics reset marks the start of forward
+            # measurement. Holdings whose entire trade history predates the
+            # baseline are testnet-faucet residue (e.g. 0.98 BTC airdrop),
+            # NOT engine positions — they must never be adopted, protected,
+            # or valued as equity. Their stray OCOs are floating and cancelled.
+            baseline_ms = None
+            try:
+                if os.path.exists(os.getenv("TESTNET_BASELINE_FILE", "testnet_baseline.json")):
+                    with open(os.getenv("TESTNET_BASELINE_FILE", "testnet_baseline.json"), "r") as bf:
+                        _bl = json.load(bf)
+                    _iso = _bl.get("reset_timestamp", "")
+                    if _iso:
+                        baseline_ms = datetime.datetime.fromisoformat(_iso.replace("Z", "+00:00")).timestamp() * 1000
+            except Exception:
+                baseline_ms = None
+            engine_symbols = open_symbols_from_assets
+            if baseline_ms:
+                engine_symbols = set()
+                for sym in open_symbols_from_assets:
+                    try:
+                        trades = self.client.get_my_trades(symbol=sym, limit=100)
+                        # Trades without a timestamp count as post-baseline (fail-open;
+                        # real Binance payloads always carry 'time').
+                        if any(t.get('time', float('inf')) >= baseline_ms for t in trades):
+                            engine_symbols.add(sym)
+                    except Exception:
+                        engine_symbols.add(sym)  # fail-safe: treat as engine-managed
+                logger.info(f"[RECONCILIATION] Baseline scope: {len(engine_symbols)} of {len(open_symbols_from_assets)} "
+                            f"validated holdings have post-baseline history (faucet residue ignored)")
+
+            # 1. Cancel any floating OCOs (orders open, but no engine position)
+            floating_ocos = protected_symbols - engine_symbols
             if floating_ocos:
                 for sym in floating_ocos:
                     logger.warning(f"[RECOVERY] 🚨 Floating OCO detected without position for {sym}. Cancelling to prevent accidental entry.")
@@ -358,7 +393,7 @@ class TestnetService:
                                 pass
 
             # 2. Reconstruct missing local state for open, protected positions
-            missing_local_but_has_position_and_oco = protected_symbols.intersection(open_symbols_from_assets) - local_symbols
+            missing_local_but_has_position_and_oco = protected_symbols.intersection(engine_symbols) - local_symbols
             if missing_local_but_has_position_and_oco:
                 from execution import _save_active_trades
                 for sym in missing_local_but_has_position_and_oco:
@@ -426,7 +461,7 @@ class TestnetService:
                 _save_active_trades(active_trades)
 
             # 3. Ensure assets we manage have an open OCO or limit order protecting them
-            unprotected = open_symbols_from_assets - protected_symbols - floating_ocos
+            unprotected = engine_symbols - protected_symbols - floating_ocos
             managed_symbols = {t['symbol'] for t in active_trades if t.get('status') == 'OPEN'}
             managed_unprotected = [s for s in managed_symbols if s not in protected_symbols and s not in floating_ocos]
             
@@ -1485,7 +1520,11 @@ class TestnetService:
         try:
             from config_strategy import ADX_EMA_STRATEGY
             strategy_assets = ADX_EMA_STRATEGY.get("OOS_VALIDATED_ASSETS", ["BTCUSDT"])
-            symbols_to_check = set(list(self.active_positions.keys()) + strategy_assets)
+            # GOVERNANCE-SCOPED rebuild: never import trade history for assets the
+            # registry has not validated (testnet faucet coins carry stress-era
+            # trades that would contaminate a freshly-reset ledger).
+            validated = governance_validated_assets(self.strategies) | set(strategy_assets)
+            symbols_to_check = set(list(self.active_positions.keys()) + strategy_assets) & validated
             
             # Include all symbols from active scanner if available
             if hasattr(self, 'scanner') and getattr(self.scanner, 'symbols', None):
@@ -1504,6 +1543,20 @@ class TestnetService:
                 except Exception:
                     pass
 
+            # Baseline cutoff: a statistics reset (testnet_baseline.json) defines the
+            # forward-measurement start; exchange history before it is archived in
+            # backup/ and must never be re-imported into the live ledger.
+            baseline_ts = None
+            try:
+                if os.path.exists(os.getenv("TESTNET_BASELINE_FILE", "testnet_baseline.json")):
+                    with open(os.getenv("TESTNET_BASELINE_FILE", "testnet_baseline.json"), "r") as bf:
+                        _bl = json.load(bf)
+                    _bl_iso = _bl.get("reset_timestamp", "")
+                    if _bl_iso:
+                        baseline_ts = datetime.datetime.fromisoformat(_bl_iso.replace("Z", "+00:00")).timestamp() * 1000
+            except Exception:
+                baseline_ts = None
+
             all_filled_orders = []
             all_trades_by_order = {}
 
@@ -1511,9 +1564,15 @@ class TestnetService:
             for sym in symbols_to_check:
                 try:
                     orders = self.client.get_all_orders(symbol=sym, limit=500)
+                    if baseline_ts:
+                        # Orders without a timestamp count as post-baseline (fail-open;
+                        # real Binance payloads always carry 'time').
+                        orders = [o for o in orders if o.get('time', float('inf')) >= baseline_ts]
                     all_filled_orders.extend([o for o in orders if o['status'] == 'FILLED'])
                     
                     trades = self.client.get_my_trades(symbol=sym, limit=500)
+                    if baseline_ts:
+                        trades = [t for t in trades if t.get('time', float('inf')) >= baseline_ts]
                     for t in trades:
                         oid = str(t['orderId'])
                         if oid not in all_trades_by_order:

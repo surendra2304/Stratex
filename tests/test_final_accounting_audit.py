@@ -216,6 +216,9 @@ def test_k_l_no_duplicate_recovery_accounting(tmp_path, monkeypatch):
         {"id": 102, "orderId": 2002, "symbol": "BTCUSDT", "commission": "0.0"}
     ]
     
+    # Baseline cutoff disabled for this test (epoch-timestamped fixtures):
+    # it verifies duplicate-prevention, not baseline scoping.
+    monkeypatch.setenv("TESTNET_BASELINE_FILE", str(tmp_path / "nonexistent_baseline.json"))
     with patch("testnet_engine.service.get_exchange_client", return_value=mock_client), \
          patch("execution.get_exchange_client", return_value=mock_client):
         service = TestnetService()
