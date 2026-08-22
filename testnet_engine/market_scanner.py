@@ -37,14 +37,66 @@ class MarketScanner:
         self._health_thread = None
         
     def _fetch_historical_candles(self, symbol, tf):
-        """Initializes the cache with 250 historical candles via REST."""
+        """Initializes the cache with 250 historical candles via REST.
+
+        Binance TESTNET caps klines at ~101 per request (production returns
+        1000), so a single limit=250 call silently yields a 101-bar cache —
+        too short for a correctly warmed EMA200/ADX. Paginate backwards until
+        the target depth is reached or the symbol history is exhausted.
+        """
+        TARGET_BARS = 250
         try:
-            klines = self.client.get_klines(symbol=symbol, interval=tf, limit=250)
+            klines = []
+            end_id = None
+            for _ in range(6):  # hard cap: 6 pages ≈ 600 bars max
+                params = {"symbol": symbol, "interval": tf, "limit": 250}
+                if end_id is not None:
+                    params["endTime"] = end_id
+                page = self.client.get_klines(**params)
+                if not page:
+                    break
+                klines = page + klines if end_id is not None else page
+                if len(page) < 2 or (end_id is None and len(klines) >= TARGET_BARS):
+                    break
+                end_id = page[0][0] - 1
+                if len(klines) >= TARGET_BARS:
+                    break
+            if not klines:
+                logger.error(f"[SCANNER] No historical data for {symbol} ({tf})")
+                return
+            if len(klines) < TARGET_BARS:
+                # Binance TESTNET keeps only ~2-3 weeks of history — too short to
+                # warm EMA200/ADX. Seed older bars from PRODUCTION public klines
+                # (no credentials required). Only indicator warm-up uses these;
+                # the newest bars (entries/SL/TP) remain testnet data.
+                try:
+                    prod_client = Client("", "", testnet=False)
+                    first_ts = klines[0][0]
+                    need = TARGET_BARS - len(klines)
+                    seed = prod_client.get_klines(
+                        symbol=symbol, interval=tf,
+                        limit=min(need + 50, 1000), endTime=first_ts - 1
+                    )
+                    if seed:
+                        klines = seed[-need:] + klines
+                        logger.info(
+                            f"[SCANNER] {symbol} {tf}: warm-seeded {min(len(seed), need)} bars "
+                            f"from production history (testnet holds only {len(klines) - min(len(seed), need)})"
+                        )
+                except Exception as seed_err:
+                    logger.warning(f"[SCANNER] {symbol} {tf}: production warm-seed unavailable ({seed_err}) — indicators partially warmed")
+            if len(klines) < TARGET_BARS:
+                logger.warning(
+                    f"[SCANNER] {symbol} {tf}: only {len(klines)} bars available "
+                    f"(target {TARGET_BARS}) — indicators will be partially warmed"
+                )
             df = pd.DataFrame(klines, columns=[
                 'timestamp', 'open', 'high', 'low', 'close', 'volume',
                 'close_time', 'quote_asset_volume', 'number_of_trades',
                 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
             ])
+            # Deduplicate in case pages overlap, oldest -> newest
+            df = df.drop_duplicates(subset=['timestamp']).sort_values('timestamp').reset_index(drop=True)
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             df['close_time'] = pd.to_datetime(df['close_time'], unit='ms')
             for col in ['open', 'high', 'low', 'close', 'volume', 'taker_buy_base_asset_volume']:

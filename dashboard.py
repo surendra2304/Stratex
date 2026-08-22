@@ -2770,28 +2770,50 @@ def api_config():
                 if k_lower == "trading_mode" and str(v).upper() == "LIVE":
                     return jsonify({"status": "ERROR", "error": "SECURITY FORBIDDEN: Live trading is permanently disabled by design."}), 403
 
-            if "max_open_trades" in data:
-                try:
-                    val = int(data["max_open_trades"])
-                    if val < 1 or val > 20:
-                        return jsonify({"status": "ERROR", "error": "max_open_trades must be between 1 and 20"}), 400
-                    config.MAX_OPEN_TRADES = val
-                    config.MAX_OPEN_POSITIONS = val
-                except (ValueError, TypeError):
-                    return jsonify({"status": "ERROR", "error": "max_open_trades must be an integer"}), 400
+            # Whitelisted runtime knobs. Unknown keys are REJECTED (not silently
+            # ignored) so a "success" response always means something was applied.
+            # Note: these are in-memory runtime overrides and reset on restart.
+            SETTINGS_WHITELIST = {
+                "max_open_trades":       ("MAX_OPEN_TRADES",            int,   1, 20,   True),
+                "max_open_positions":    ("MAX_OPEN_POSITIONS",         int,   1, 20,   False),
+                "max_trades_per_day":    ("TARGET_TRADE_COUNT",         int,   1, 200,  False),
+                "risk_per_trade":        ("MAX_TESTNET_RISK_PER_TRADE", float, 0.0001, 0.02, False),
+                "max_portfolio_risk":    ("MAX_TESTNET_EXPOSURE",       float, 0.001, 0.5,  False),
+                "max_portfolio_exposure":("MAX_TESTNET_EXPOSURE",       float, 0.001, 0.5,  False),
+                "max_single_asset":      ("MAX_SINGLE_ASSET_EXPOSURE",  float, 0.001, 0.2,  False),
+                "max_drawdown":          ("MAX_TESTNET_DRAWDOWN_PCT",   float, 0.005, 0.30, False),
+                "daily_loss_limit_pct":  ("MAX_DAILY_LOSS_PCT",         float, 0.001, 0.10, False),
+                "min_expected_edge":     ("MINIMUM_EXPECTED_EDGE",      float, 0.0,  0.01, False),
+            }
 
-            if "max_trades_per_day" in data:
+            unknown = [k for k in data if k not in SETTINGS_WHITELIST]
+            if unknown:
+                return jsonify({
+                    "status": "ERROR",
+                    "error": "Unknown or read-only setting(s): " + ", ".join(sorted(unknown)),
+                    "supported": sorted(SETTINGS_WHITELIST.keys()),
+                }), 400
+
+            applied = []
+            for key in data:
+                attr, caster, lo, hi, mirror_positions = SETTINGS_WHITELIST[key]
                 try:
-                    val = int(data["max_trades_per_day"])
-                    if val < 1 or val > 200:
-                        return jsonify({"status": "ERROR", "error": "max_trades_per_day must be between 1 and 200"}), 400
-                    config.TARGET_TRADE_COUNT = val
+                    val = caster(data[key])
+                    if isinstance(val, float) and (val != val or val in (float("inf"), float("-inf"))):
+                        raise ValueError
                 except (ValueError, TypeError):
-                    return jsonify({"status": "ERROR", "error": "max_trades_per_day must be an integer"}), 400
+                    return jsonify({"status": "ERROR", "error": f"{key} must be a valid {caster.__name__}"}), 400
+                if val < lo or val > hi:
+                    return jsonify({"status": "ERROR", "error": f"{key} must be between {lo} and {hi}"}), 400
+                setattr(config, attr, val)
+                if mirror_positions:
+                    config.MAX_OPEN_POSITIONS = val
+                applied.append(key)
 
             return jsonify({
                 "status": "success",
-                "message": "Configuration updated successfully",
+                "message": f"Runtime configuration updated: {', '.join(applied)} (applies until restart)",
+                "applied": applied,
                 "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
             })
             

@@ -39,10 +39,10 @@ SYMBOL = "BTCUSDT"
 
 # --- Risk Management ---
 TRADE_QTY = 0.001           # BTC quantity per trade (small for safety)
-MAX_OPEN_TRADES = 30        # Increased concurrent trades for profitability
+MAX_OPEN_TRADES = 5         # Aligned with MAX_OPEN_POSITIONS (risk gate enforces 5)
 TOP_COINS_LIMIT = 20  # Increase number of top trending coins to scan
-TARGET_TRADE_COUNT = 100  # Minimum trades to generate within the window
-TARGET_TRADE_WINDOW_HOURS = 3  # Hours within which to achieve target
+TARGET_TRADE_COUNT = 30   # Aligned with the 30-trade statistical validation gate
+TARGET_TRADE_WINDOW_HOURS = 720  # 30-day forward validation window (stress-test remnant fixed)
 LONG_ONLY = True            # Binance Spot default
 
 # -------------------------------------------------------------------

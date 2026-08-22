@@ -344,3 +344,26 @@ TESTNET ONLY
 - Complete Pytest Suite: **529 passed / 529 tests (100% across two consecutive runs in 47.39s and 49.42s)**.
 - Local dashboard smoke test: all UI-consumed endpoints HTTP 200; `/ui-compat.js` served.
 - Live deployment audit: 51/51 handlers bound; fix deployed and verified on Render.
+
+---
+
+# DAY 9 (continued, part 3) — 2026-08-22: A-to-Z System Audit
+## Objectives
+- Full-stack end-to-end verification: all API routes, security rejections, static analysis, engine signal pipeline on live data, and data-integrity invariants.
+
+## Work Completed
+- **Route Sweep**: Exercised 42 GET + 5 POST routes against a live local dashboard — all 200; live-trading enable correctly 403.
+- **Settings API Hardened**: POST /api/settings silently ignored unknown keys while returning "success" — the UI Save button persisted almost nothing. Replaced with a 10-key validated whitelist (typed, range-checked, NaN/Inf-rejected, unknown keys → 400 with supported list). UI saveSettings now maps only supported knobs.
+- **Stress-Test Remnants Reverted**: MAX_OPEN_TRADES 30→5 (aligned with the actual risk gate), TARGET_TRADE_COUNT 100→30 and window 3h→720h (aligned with the 30-trade/30-day statistical gate); MINIMUM_EXPECTED_EDGE added to config (was only a getattr default).
+- **CRITICAL: Indicator Warm-Up Deficit Found and Fixed**: Binance TESTNET retains only ~17 days (~101 bars) of 4h history. The scanner's "250-bar" cache was silently 101 bars — EMA200/ADX computed on a truncated window, degrading every signal versus the validated backtest. Fixed with (a) backwards pagination in scanner and data.get_candles, and (b) production-history warm-seeding: older bars are fetched from Binance production public klines (no credentials) to fill the EMA200 warm-up, while the newest bars (entries/SL/TP) remain testnet data. Verified: cache 101→249 bars, EMA200 properly seeded, signal path executes on live warmed data.
+- **Data Integrity**: portfolio invariants hold (cash=equity=$11,609.29, 0 positions); all ledgers valid JSONL; heartbeat schema complete.
+
+## Bug Fixes
+- Bug #49: Settings POST silently accepted-and-ignored unknown keys (false "success" to operator).
+- Bug #50: Scanner cache held only 101 of 250 intended bars — EMA200 trend filter operating on under-warmed data since deployment (testnet history cap). Fixed via pagination + production warm-seeding.
+- Bug #51: MAX_OPEN_TRADES/TARGET_TRADE_COUNT left at stress-test values (30 / 100-in-3h), contradicting the enforced 5-position risk gate and the 30-trade validation narrative.
+
+## Verification
+- Complete Pytest Suite: **529 passed / 529 tests (100% across two consecutive runs)**.
+- Route sweep: 47/47 endpoints correct status codes incl. security rejections (403 live-trading, 400 invalid/negative/out-of-range/unknown settings).
+- Warm-seed verified live: BTCUSDT 4h cache 249 bars; EMA200=65,551 vs close=77,274 (regime risk-on), ADX=62.6.

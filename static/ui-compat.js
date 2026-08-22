@@ -109,23 +109,30 @@ function fetchAnalyticsData(){ if (typeof fetchAnalyticsViewData === 'function')
 /* ── Settings persistence ──────────────────────────────────────────────── */
 
 async function saveSettings() {
-    const numericIds = ['set-max-open','set-max-day','set-max-sym','set-max-strat','set-cd-trade','set-cd-sym',
-        'set-risk-trade','set-risk-port','set-exp-port','set-max-dd','set-daily-loss','set-max-pos',
-        'set-min-net','set-min-edge','set-prof-gate','set-prof-buf','set-min-rr','set-max-dur',
-        'set-def-sl','set-def-tp','set-exec-sl','set-exec-tp','set-exec-retry'];
+    // Map UI inputs onto the whitelisted runtime knobs the API actually
+    // persists (see SETTINGS_WHITELIST in dashboard.py). Other controls are
+    // display-only; sending them would be rejected by the API.
+    const mapping = {
+        'set-max-open':     ['max_open_positions', parseInt],
+        'set-max-day':      ['max_trades_per_day', parseInt],
+        'set-risk-trade':   ['risk_per_trade', parseFloat],
+        'set-risk-port':    ['max_portfolio_risk', parseFloat],
+        'set-exp-port':     ['max_portfolio_exposure', parseFloat],
+        'set-max-dd':       ['max_drawdown', parseFloat],
+        'set-daily-loss':   ['daily_loss_limit_pct', parseFloat],
+        'set-min-edge':     ['min_expected_edge', parseFloat],
+    };
     const payload = {};
-    for (const id of numericIds) {
+    for (const [id, [key, cast]] of Object.entries(mapping)) {
         const el = document.getElementById(id);
         if (!el) continue;
-        const v = parseFloat(el.value);
-        if (!isNaN(v)) payload[id.replace(/^set-/, '').replace(/-/g, '_')] = v;
+        const v = cast(el.value);
+        if (!isNaN(v)) payload[key] = v;
     }
-    ['set-manual-trade','set-dup-prot','set-safe-halt','set-fee-mod','set-trail-stop','set-break-even',
-     'set-part-close','set-auto-close','set-glob-notif','set-glob-sound','set-gemini-enabled'].forEach(id => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        payload[id.replace(/^set-/, '').replace(/-/g, '_')] = el.type === 'checkbox' ? el.checked : el.value;
-    });
+    if (Object.keys(payload).length === 0) {
+        showToast('No runtime-adjustable settings in this panel', 'info');
+        return;
+    }
     try {
         const res = await fetch('/api/settings', {
             method: 'POST',

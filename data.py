@@ -32,16 +32,31 @@ def get_candles(symbol, interval="15m", limit=300):
         return pd.DataFrame()
 
     try:
-        raw = client.get_klines(symbol=symbol, interval=interval, limit=limit)
+        # Binance TESTNET caps klines at ~101 per request; paginate backwards
+        # until the requested depth is reached or history is exhausted.
+        raw = []
+        end_id = None
+        for _ in range(8):
+            params = {"symbol": symbol, "interval": interval, "limit": min(limit, 1000)}
+            if end_id is not None:
+                params["endTime"] = end_id
+            page = client.get_klines(**params)
+            if not page:
+                break
+            raw = page + raw if end_id is not None else page
+            if len(page) < 2 or len(raw) >= limit:
+                break
+            end_id = page[0][0] - 1
         if not raw or len(raw) == 0:
             logger.warning(f"[DATA] Empty candle data returned for {symbol}.")
             return pd.DataFrame()
-            
+
         df = pd.DataFrame(raw, columns=[
             "timestamp", "open", "high", "low", "close", "volume",
             "close_time", "quote_volume", "trades", "taker_buy_base",
             "taker_buy_quote", "ignore"
         ])
+        df = df.drop_duplicates(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
         df = df[["timestamp", "open", "high", "low", "close", "volume", "taker_buy_base", "close_time"]].copy()
         
         # Safe numeric conversion
