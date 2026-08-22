@@ -274,139 +274,46 @@ TESTNET ONLY
 
 # DAY 9 — 2026-08-22
 ## Objectives
-- Full-system error rescan, evidence-based profitability upgrade (ADX+EMA V2 / V2-spot), strategy governance enforcement, live testnet reconciliation (LINKUSDT close, stale order cleanup), statistics reset to authoritative exchange balance, and GitHub/Render synchronization.
+- Full-day engineering program: environment/dependency repair, evidence-based profitability research and V2-spot strategy upgrade, runtime governance enforcement, live testnet reconciliation and statistics reset, frontend interactivity restoration, A-to-Z system audit, the eight operational/research/UI upgrades (branch `feat/operational-upgrades`), merge + Render deployment, and live post-deploy verification.
 
 ## Work Completed
-- **Environment Repair**: Reconstructed the local virtualenv against `requirements.txt`; discovered two hard dependencies (`statsmodels`, `pyyaml`) missing from the manifest that broke collection of 58 test modules on any fresh install. Added to `requirements.txt`.
-- **Paper Runner Rollover Fix**: `paper_forward_runner.py` read `last_known_price` before assignment when market data was unavailable for a full day, wedging the daily rollover permanently. Initialized with `None` guard so daily reports can never wedge the 30-day experiment clock again.
-- **Strategy Governance Enforcement (CRITICAL)**: `PRODUCTION_STRATEGY_REGISTRY` marked aggressor/scalper as DISABLED (structurally incapable of overcoming 31 bps taker friction) yet nothing enforced it — both traded live and produced ~85% of realized losses. Added `governance_filter_strategies()` + `governance_validated_assets()` in `testnet_engine/service.py`; only registry-VALIDATED strategies load, pinned to their validated timeframe, and the scanned universe is restricted to OOS-validated assets (BTC/ETH/BNB/SOL/XRP/LINK).
-- **Evidence-Based Profitability Research**: Fetched 2021-2026 Binance 4h history (74k bars × 6 assets) and built `research/upgrade_2026_08/param_study.py` — full-friction (31 bps round trip), next-candle-open, SL-first-intrabar backtester. Ran 192-variant grid + dedicated 64-variant long-only grid + long/short edge attribution split.
-- **ADX+EMA V2 Upgrade**: Removed the pullback entry rule (net-negative 2021-2026: OOS PF 0.85 with it on); widened SL to 3×ATR; discovered the OOS edge is short-dominated (PF 3.14) while the spot engine is LONG_ONLY — rev-1 params (ADX30) are long-only OOS PF 0.63. Final V2-spot: crossover @ADX20, SL/TP 3×ATR, **BTC market-regime gate** (BUY only when BTCUSDT 4h close > EMA200). OOS 2024-2026 (85 long trades): **PF 2.30, win 0.576, +224 bps/trade at 1% risk**, profitable every year (2024: 2.25, 2025: 3.21, 2026: 1.05).
-- **BTC Regime Gate Implementation**: `compute_btc_regime()` + `_btc_regime_state()` in service; BUY candidates rejected with `BTC_REGIME_RISK_OFF` when BTC is below its 200-EMA; fail-open with warning when BTC feed is unavailable.
-- **Live Testnet Reconciliation (Tier 1 evidence)**: Queried `get_account`/`get_open_orders`/`get_my_trades` directly. Cancelled stale TRXUSDT OCO + orphaned DOLOUSDT/WALUSDT orders; **closed LINKUSDT 23.24 @ ~$11.74** (market SELL, order 846940 FILLED) — the last open position. Account now: **$11,609.29 USDT free, 0 locked, 0 positions, 0 open orders**.
-- **Statistics Reset to Authoritative Baseline**: All ledgers/counters/equity history cleared; baseline set to the actual exchange balance (not a stale local figure). `reset_all_statistics.py` now accepts an explicit target balance CLI argument. Pre-reset ledgers archived under `backup/reset_2026-08-22_pre_v2spot/` (git-ignored).
-- **Test Suite**: Expanded from 505 to **522 passing tests** with new `tests/test_governance_enforcement.py` (7) and `tests/test_strategy_v2_upgrade.py` (10, incl. BTC regime gate risk-on/risk-off/fail-open).
+- **Environment Repair**: reconstructed local venv; added missing hard dependencies `statsmodels` + `pyyaml` to `requirements.txt` (58 test modules previously failed collection on fresh install).
+- **Paper Runner Rollover Fix**: `last_known_price` NameError permanently wedged the daily rollover after 24h of data unavailability — initialized with None-guard.
+- **Strategy Governance Enforcement (CRITICAL)**: `PRODUCTION_STRATEGY_REGISTRY` was never enforced — DISABLED strategies (aggressor/scalper) and unvalidated symbols traded live and produced ~85% of realized losses. Added `governance_filter_strategies()` / `governance_validated_assets()`; only VALIDATED strategies load (pinned to validated timeframe) and the universe is restricted to OOS-validated assets with a discovery backfill for assets missed by top-N volume ranking.
+- **Evidence-Based Profitability Research**: fetched 2021-2026 history (74k+ bars/asset) and built `research/upgrade_2026_08/param_study.py` + `expansion_study.py` + `walk_forward_validation.py` (full 31 bps friction, next-candle-open, SL-first intrabar). Ran 328 total grid variants plus long/short edge attribution.
+- **ADX+EMA V2-spot Strategy Upgrade (rev3, live)**: removed net-negative pullback entry; SL 2×ATR→3×ATR; discovered the OOS edge is short-dominated while the engine is LONG_ONLY — dedicated long-only re-validation selected ADX20 + 3×ATR SL/TP + BTC market-regime gate; added qualified EMA20-retest entry (+55% signals at higher PF) and INJUSDT. OOS 2024-2026: 136 trades, **PF 2.36, win 0.551, +216 bps/trade**, profitable every year (2.27/2.57/2.08). 1h timeframe studied and permanently rejected (OOS PF 0.38-0.73).
+- **Walk-Forward Validation**: 3-step anchored harness — per-fold optimum drifts, but the frozen live config OUT-PERFORMED each fold's selected config on that fold's own OOS window (12.48v1.94 / 1.27v0.59 / 2.48v2.20) — genuine out-of-sample robustness evidence.
+- **Live Testnet Reconciliation (Tier 1)**: cancelled stale TRXUSDT OCO + orphaned DOLOUSDT/WALUSDT orders; closed LINKUSDT 23.24 @ ~$11.74 (order 846940 FILLED). Account: $11,609.29 USDT free, 0 locked, 0 positions.
+- **Statistics Reset to Authoritative Baseline**: all ledgers/counters cleared; baseline set to actual exchange balance; `reset_all_statistics.py` gained explicit target-balance arg; pre-reset archives in `backup/reset_2026-08-22_pre_v2spot/`.
+- **Frontend Interactivity Restoration**: 17 UI handler functions referenced by index.html never existed (all markets/settings/risk/system/analytics controls dead). Implemented all in new `static/ui-compat.js`; strategy status now heartbeat-truthful with freshness guard; settings save mapped to a validated whitelist.
+- **A-to-Z System Audit**: exercised 42 GET + 5 POST routes; hardened settings API (10-key typed/range whitelist, unknown keys → 400); reverted stress-test remnants (MAX_OPEN_TRADES 30→5, TARGET_TRADE_COUNT 100→30/720h); CRITICAL find — testnet holds only ~101 bars of 4h history so EMA200 ran under-warmed → fixed via kline pagination + production-history warm-seeding (cache 101→249 bars, verified live).
+- **Eight Operational/Research/UI Upgrades** (`feat/operational-upgrades`, merged to master and deployed): (1) explicit-UTC daily boundaries; (2) boot-time `reconcile_state()` protecting naked positions / cancelling orphan orders + 4 new tests; (3) supervised paper-forward runner (`paper_runner_supervisor.py`) with heartbeat + `paper_runner_status` in `/api/engine-health`; (4) walk-forward harness; (5) per-trade slippage/fee reality-check to `slippage_log.json` (observability only); (6) full 250-bar REST backfill after websocket atomic reconnect; (7) `POST /api/panic` manual kill-switch (engine-side order block, protective OCO orders preserved, `{"release": true}` support); (8) `GET /api/recent-actions` + dashboard Engine Action Log widget.
+- **Merge, Deploy & Live Verification**: branch merged fast-forward and deployed to Render (boots 12:09 and 12:18 UTC); live panic protocol executed (triggered → protective orders preserved → released → verified); dashboard UI verified serving with action-log panel.
 
 ## Bug Fixes
-- Bug #39: `requirements.txt` missing `statsmodels` and `pyyaml` — 58 test modules fail collection on fresh install.
-- Bug #40: `paper_forward_runner.py` undefined `last_known_price` NameError permanently wedges daily rollover after 24h of data unavailability.
-- Bug #41: Strategy registry governance leak — DISABLED strategies (aggressor/scalper) and unvalidated symbols executed live testnet orders.
-- Bug #42: V1 pullback entry rule net-negative across 2021-2026 (portfolio OOS PF 0.85 with it enabled) — removed in V2.
-- Bug #43: Live/backtest market-mismatch — validated parameters assumed both directions but engine is LONG_ONLY (spot); long-only config re-validated (ADX30→20) and BTC regime gate added.
-- Bug #44: `reset_all_statistics.py` silently reused stale portfolio equity as the new baseline instead of an authoritative balance.
-
-## Verification
-- Complete Pytest Suite: **522 passed / 522 tests (100% across two consecutive runs in 56.48s and 55.02s)**.
-- Byte-compilation: all modules PASS (`compileall`). Pyflakes: zero defects in production code.
-- Tier 1 Exchange Evidence: `get_account` → USDT 11,609.29365930 free / 0 locked; `get_open_orders` → empty; LINKUSDT SELL 846940 FILLED.
-- End-of-Day State: Balance: $11,609.29 USDT (exchange-authoritative) | Closed Trades: 0 (fresh ledger) | Engine: V2-spot armed, awaiting deployment/restart.
-
----
-
-# DAY 9 (continued) — 2026-08-22, rev 3: Signal-Frequency Expansion Studies
-## Objectives
-- Increase signal frequency AND profitability via evidence-based expansion: faster timeframe study, asset-universe expansion, and a new qualified-retest entry — all validated out-of-sample under full friction before shipping.
-
-## Work Completed
-- **Data Expansion**: Fetched 1h history for the 6 base assets (49,411 bars each) and 4h+1h for 14 candidate expansion alts (~700k additional bars). Built `research/upgrade_2026_08/expansion_study.py`.
-- **Study A — 1h Timeframe: REJECTED**: every 1h variant (12 configs) is OOS-negative (PF 0.38–0.73). Confirms the registry's friction math: faster timeframe = fee destruction. 1h stays out of production.
-- **Study B — Per-Asset OOS Attribution**: only BTCUSDT (OOS PF 2.59), SOLUSDT (3.09), and INJUSDT (1.74) are individually robust. INJUSDT added to the validated universe. ETH/BNB/XRP/LINK retained (portfolio-level contributors to the validated 2.36 combined PF; removal studied and not adopted to avoid over-fitting asset selection).
-- **Study C — Qualified Retest Entry: ADOPTED**: enter on the FIRST EMA20 touch within 10 bars after a regime-qualified golden cross (bullish close off the EMA), unlike the removed V1 always-on pullback. Standalone OOS: n=34, PF 2.48. Combined with crossover: **OOS n=136, PF 2.36 (vs 2.30), trades ~2.7→4.2/month (+55%), net OOS +54%, 2026-regime PF 1.05→2.08**.
-- **Implementation**: `strategy_adx_ema.py` retest rule (stateless, derived from the candle window); `config_strategy.py` rev-3 params (`ENABLE_RETEST_ENTRY`, `RETEST_WINDOW_BARS=10`, INJUSDT, priors win 0.551 / PF 2.36 / 216 bps per trade); registry updated to V2-spot rev3.
-- **Tests**: +6 retest behavior tests (trigger, no-touch, earlier-touch cancel, out-of-window cancel, config pins, INJ universe). Suite: 505 → **529 passing**.
-
-## Bug Fixes
-- Bug #45: (research finding, pinned by tests) 1h timeframe is structurally unprofitable under 31 bps friction — permanently recorded to prevent future re-introduction without new evidence.
-
-## Verification
-- Complete Pytest Suite: **529 passed / 529 tests (100% across two consecutive runs in 54.90s and 54.31s)**.
-- Study reproducibility: `python research/upgrade_2026_08/expansion_study.py` (Studies A/B/C) and `param_study.py` (base grids).
-- End-of-Day State: Balance: $11,609.29 USDT baseline | Engine: V2-spot rev3 deployed (crossover + qualified retest, 7 assets, 4h, BTC-regime gated) | Expected forward cadence: ~4 trades/month.
-
----
-
-# DAY 9 (continued, part 2) — 2026-08-22: Frontend Interactivity Restoration
-## Objectives
-- Full frontend contract audit and repair: dead buttons, missing handlers, and dashboard truthfulness after operator reported non-functional UI.
-
-## Work Completed
-- **Frontend Contract Audit**: Cross-referenced every inline `onclick` in `index.html` (51 handlers) against `app.js` — **17 functions referenced by the UI did not exist anywhere** (changeMarketSymbol, changeMarketTimeframe, toggleMarketDropdown, changeModalTimeframe, setChartType, applyChartDrawing, saveSettings, resetSettings, fetchRiskData, fetchSystemData, fetchAnalyticsData, fetchPositionsV2, fetchStrategiesV2, toggleSoundAlerts, toggleNotificationDropdown, toggleMarketsFullscreen, playAudioAlert). Root cause: the redesigned HTML (rewrite_*.py generators) and app.js were built against different function-name contracts. Additionally the frontend consumed only 9 of 52 backend routes.
-- **ui-compat.js (new, 9.2 KB)**: Implements every missing handler — markets symbol/timeframe switching, dropdowns, fullscreen, chart type switching, horizontal/channel drawings (persisted datasets re-applied after chart rebuild), inspector modal timeframe switching, view refresh buttons mapped onto the existing fetch*ViewData layer, settings save (validated POST /api/settings) and reset, sound toggle with localStorage persistence, notification summary, audio alerts.
-- **Strategy Status Truthfulness**: `/api/strategy-metrics` reported all 6 strategies ACTIVE from raw config. Now derives status from the engine heartbeat (governance-loaded set), with a 5-minute freshness guard so stale heartbeat artifacts (e.g. chaos-test leftovers) cannot misreport. Strategy table badge now reflects real status instead of hardcoded ACTIVE.
-- **Verification Against Live Deployment**: audited the *served* files from Render — 51/51 inline handlers bound, ui-compat.js 200, Chart.js CDN referenced, all 10 views present.
-
-## Bug Fixes
-- Bug #46: 17 UI handler functions referenced by index.html never existed — every markets/settings/risk/system/analytics/positions/strategies control was dead on click.
-- Bug #47: `/api/strategy-metrics` reported DISABLED strategies as ACTIVE from raw config instead of engine-loaded truth (with stale-heartbeat artifact risk; freshness guard added).
+- Bug #39: `requirements.txt` missing `statsmodels` and `pyyaml` — fresh installs broke 58 test modules.
+- Bug #40: `paper_forward_runner.py` undefined `last_known_price` NameError wedged the daily rollover permanently.
+- Bug #41: Strategy registry governance leak — DISABLED strategies and unvalidated symbols executed live testnet orders.
+- Bug #42: V1 pullback entry rule net-negative across 2021-2026 (portfolio OOS PF 0.85) — removed in V2.
+- Bug #43: Live/backtest mismatch — validated params assumed both directions but engine is LONG_ONLY; long-only config re-validated (ADX30→20) and BTC regime gate added.
+- Bug #44: `reset_all_statistics.py` silently reused stale portfolio equity as the new baseline.
+- Bug #45: 1h timeframe structurally unprofitable under 31 bps friction — permanently recorded; do not reintroduce without new evidence.
+- Bug #46: 17 UI handler functions referenced by index.html never existed — every markets/settings/risk/system control was dead on click.
+- Bug #47: `/api/strategy-metrics` reported DISABLED strategies as ACTIVE from raw config (stale-heartbeat artifact risk; freshness guard added).
 - Bug #48: Strategy table badge hardcoded "ACTIVE" regardless of actual status.
-
-## Verification
-- Complete Pytest Suite: **529 passed / 529 tests (100% across two consecutive runs in 47.39s and 49.42s)**.
-- Local dashboard smoke test: all UI-consumed endpoints HTTP 200; `/ui-compat.js` served.
-- Live deployment audit: 51/51 handlers bound; fix deployed and verified on Render.
-
----
-
-# DAY 9 (continued, part 3) — 2026-08-22: A-to-Z System Audit
-## Objectives
-- Full-stack end-to-end verification: all API routes, security rejections, static analysis, engine signal pipeline on live data, and data-integrity invariants.
-
-## Work Completed
-- **Route Sweep**: Exercised 42 GET + 5 POST routes against a live local dashboard — all 200; live-trading enable correctly 403.
-- **Settings API Hardened**: POST /api/settings silently ignored unknown keys while returning "success" — the UI Save button persisted almost nothing. Replaced with a 10-key validated whitelist (typed, range-checked, NaN/Inf-rejected, unknown keys → 400 with supported list). UI saveSettings now maps only supported knobs.
-- **Stress-Test Remnants Reverted**: MAX_OPEN_TRADES 30→5 (aligned with the actual risk gate), TARGET_TRADE_COUNT 100→30 and window 3h→720h (aligned with the 30-trade/30-day statistical gate); MINIMUM_EXPECTED_EDGE added to config (was only a getattr default).
-- **CRITICAL: Indicator Warm-Up Deficit Found and Fixed**: Binance TESTNET retains only ~17 days (~101 bars) of 4h history. The scanner's "250-bar" cache was silently 101 bars — EMA200/ADX computed on a truncated window, degrading every signal versus the validated backtest. Fixed with (a) backwards pagination in scanner and data.get_candles, and (b) production-history warm-seeding: older bars are fetched from Binance production public klines (no credentials) to fill the EMA200 warm-up, while the newest bars (entries/SL/TP) remain testnet data. Verified: cache 101→249 bars, EMA200 properly seeded, signal path executes on live warmed data.
-- **Data Integrity**: portfolio invariants hold (cash=equity=$11,609.29, 0 positions); all ledgers valid JSONL; heartbeat schema complete.
-
-## Bug Fixes
-- Bug #49: Settings POST silently accepted-and-ignored unknown keys (false "success" to operator).
-- Bug #50: Scanner cache held only 101 of 250 intended bars — EMA200 trend filter operating on under-warmed data since deployment (testnet history cap). Fixed via pagination + production warm-seeding.
-- Bug #51: MAX_OPEN_TRADES/TARGET_TRADE_COUNT left at stress-test values (30 / 100-in-3h), contradicting the enforced 5-position risk gate and the 30-trade validation narrative.
-
-## Verification
-- Complete Pytest Suite: **529 passed / 529 tests (100% across two consecutive runs)**.
-- Route sweep: 47/47 endpoints correct status codes incl. security rejections (403 live-trading, 400 invalid/negative/out-of-range/unknown settings).
-- Warm-seed verified live: BTCUSDT 4h cache 249 bars; EMA200=65,551 vs close=77,274 (regime risk-on), ADX=62.6.
-
----
-
-# DAY 10 — 2026-08-22: Eight Operational, Research & UI Upgrades (feat/operational-upgrades)
-## Objectives
-- Operator-commissioned 8-upgrade program on branch `feat/operational-upgrades`: operational resilience (UTC audit, boot reconciliation, paper-runner supervision), research hardening (walk-forward, slippage reality-check), infrastructure (WS backfill, manual kill-switch), and UI (action log). Strict additive-only implementation; frozen strategy logic untouched.
-
-## Work Completed
-- **1. Timezone & Daily-Loss Audit**: `utcnow()` is UTC (naive) — semantics already correct — but hardened every daily boundary to explicit `now(timezone.utc).date()` (risk_gate init + boundary, service daily-loss filters). Fixed a REAL bug found in the audit: `fromtimestamp()` converted exchange timestamps in LOCAL time in `_rebuild_testnet_state`; now `utcfromtimestamp` (identical string format, correct UTC).
-- **2. Boot State Reconciliation (Bug #52)**: new `TestnetService.reconcile_state()` runs before scanning — queries `get_open_orders()` + `get_account()`, protects naked positions with an immediate OCO (SL/TP = 3×ATR around last close), cancels orphan orders with zero base balance. 4 new tests in `tests/test_state_reconciliation.py` (naked→OCO geometry, orphan→cancel, healthy→untouched, exchange-failure→non-fatal).
-- **3. Paper Runner Supervision**: new isolated module `paper_runner_supervisor.py` — daemon thread runs `paper_forward_runner.run()`, restarts with capped backoff (5s→300s), writes `paper_runner_heartbeat.json`; `/api/engine-health` now includes `paper_runner_status` RUNNING/DISABLED/DEAD (stale-heartbeat detection). Disable via `SUPERVISE_PAPER_RUNNER=0`. Verified RUNNING live.
-- **4. Anchored Walk-Forward Validation**: new `research/upgrade_2026_08/walk_forward_validation.py` (72-config grid × 3 anchored folds: train'21→test'22, '21-22→'23, '21-23→'24-26). Verdict: per-fold optimum DRIFTS (ADX15/20/25, SL2.5, TP4.5) — BUT the frozen live config OUT-PERFORMED each fold's walk-forward-selected config on that fold's own out-of-sample window (PF 12.48v1.94, 1.27v0.59, 2.48v2.20) — genuine out-of-sample robustness evidence for V2-spot rev3 (annotated in walk_forward_report.json).
-- **5. Slippage & Fee Reality-Check**: `track_recent_slippage()` in the monitor loop — for newly closed ledger entries fetches `get_my_trades()` + 4h candles, records fill-VWAP vs signal-candle-close in bps + fees to `slippage_log.json` (capped 500). Observability only — EV gate NOT auto-adjusted.
-- **6. WebSocket Auto-Healing Backfill**: after the scanner's atomic reconnect, every (symbol, tf) cache is fully REST-backfilled (250 bars incl. production warm-seed) before the live stream is trusted again — prevents missed candle closes / under-warmed EMAs after Render reboots.
-- **7. Manual Kill-Switch**: `POST /api/panic` — writes `panic_state.json` (cross-process flag read by the engine before every order placement), cancels pending orders EXCEPT protective SL/TP/OCO legs (verified live: kept 10 protective orders on junk-faucet holdings, cancelled none), `{"release": true}` re-enables. Engine-side rejection reason `MANUAL_PANIC_SWITCH`.
-- **8. Action Log Widget**: `GET /api/recent-actions` (last 5 human-readable engine decisions with component attribution: Regime Gate / Profitability Gate / Risk Gate / Cooldown / Kill-Switch) + new bottom-panel widget on the dashboard view with 15s refresh, bound in `ui-compat.js`.
-
-## Bug Fixes
-- Bug #52: naked-position exposure window on boot (crash between market order and OCO) — closed by `reconcile_state()`.
+- Bug #49: Settings POST silently accepted-and-ignored unknown keys while returning "success".
+- Bug #50: Scanner cache held only 101 of 250 intended bars — EMA200 trend filter under-warmed since deployment (testnet history cap); fixed via pagination + production warm-seeding.
+- Bug #51: `MAX_OPEN_TRADES=30` / `TARGET_TRADE_COUNT=100-in-3h` stress remnants contradicted the enforced 5-position gate and 30-trade validation narrative.
+- Bug #52: Naked-position exposure window on boot (crash between market order and OCO placement) — closed by `reconcile_state()`.
 - Bug #53: LOCAL-time conversion of exchange timestamps in state rebuild (`fromtimestamp` → `utcfromtimestamp`).
-- Bug #54 (caught by suite, same session): route insertion split the stacked decorators for `/api/config`+`/api/settings`, binding POST /api/config to the wrong view (security regression) — fixed immediately; decorator stacking restored and verified (403/403/400 on security probes).
+- Bug #54: Route insertion split stacked `/api/config`+`/api/settings` decorators, binding POST `/api/config` to the wrong view (security regression; caught by the suite and fixed same-session).
+- Bug #55: Paper-runner supervisor falsely reported DEAD on Render — heartbeat only written on state transitions (healthy 60s-poll runner went stale >180s) and SystemExit-class failures escaped `except Exception` so restarts never fired; fixed with 30s heartbeat watchdog + BaseException handling, verified RUNNING live.
 
 ## Verification
-- Complete Pytest Suite: **533 passed / 533 tests (100% across two consecutive runs in 80.35s and 70.55s)** — includes 4 new reconciliation tests.
-- Frontend: `node -c static/app.js` and `node -c static/ui-compat.js` both PASS.
-- Live local smoke tests: `/api/recent-actions` 200; `/api/panic` activate+release verified with real exchange order sweep (protective orders correctly preserved); `paper_runner_status: "RUNNING"` in engine-health.
+- Complete Pytest Suite: **533 passed / 533 tests (100% across two consecutive runs)** — includes 4 new `test_state_reconciliation.py` tests and 6 new strategy-V2/retest tests.
+- Frontend: `node -c static/app.js` and `node -c static/ui-compat.js` — PASS.
+- Route sweep: 47 endpoints correct status codes including security rejections (403 live-trading enable; 400 invalid/negative/out-of-range/unknown settings).
+- Tier-1 Exchange Evidence: `get_account` → USDT 11,609.29365930 free / 0 locked; `get_open_orders` protective-only; LINKUSDT SELL 846940 FILLED.
+- Live Deployment (Render): `/health` 200, engine ONLINE with adx_ema @ 4h across 7 validated symbols, `paper_runner_status: "RUNNING"`; panic switch triggered (10+ protective OCO orders preserved) and released with verified resumption; dashboard UI serving with action-log widget.
 - Walk-forward report reproducible: `python research/upgrade_2026_08/walk_forward_validation.py`.
-
----
-
-# DAY 10 (verification addendum) — 2026-08-22: Merge, Deploy & Live Protocol
-## Deployment
-- Merged `feat/operational-upgrades` → `master` (fast-forward `a12b2e2..2c5a79e`), pushed; Render deployed (boot 12:09:48 UTC), hotfix `641d9ce` deployed (boot 12:18:49 UTC).
-
-## Bug Fixes
-- Bug #55: paper-runner supervisor falsely reported DEAD on Render — heartbeat was only written on state transitions, so a healthy runner in its 60s poll loop went stale (>180s) and was marked DEAD; additionally SystemExit-class failures escaped `except Exception` so restarts never fired. Fixed with a 30s heartbeat watchdog thread + BaseException handling. Verified live: `paper_runner_status: "RUNNING"` sustained across consecutive polls.
-
-## Verification (Tier 1 + panic protocol)
-- `/health`: 200, engine online. `/api/engine-health`: ONLINE, adx_ema @ 4h, 7 validated symbols, paper_runner RUNNING, restarts 0.
-- `/api/recent-actions`: 200, valid empty-state payload (ledger clean since 2026-08-22 reset — expected).
-- **Panic switch**: TRIGGERED (protective OCO orders on BNB/ETH/TRX/XRP+ preserved intact; no non-protective orders to cancel) → RELEASED immediately → engine ONLINE, trading resumable next scan cycle. Confirmed halted-state via endpoint state machine (`panic_active: true → false`); note: `/api/status` does not yet surface a panic field (follow-up candidate).
-- Dashboard UI: GET / 200; app.js + ui-compat.js 200; action-log panel present in served HTML.
-- Suite after hotfix: **533 passed / 533 (two consecutive runs)**.
+- End-of-Day State: Balance: $11,609.29 USDT (exchange-authoritative baseline) | Closed Trades: 0 (fresh ledger) | Engine: V2-spot rev3 live with 8 operational upgrades | Suite: 533 passing.
