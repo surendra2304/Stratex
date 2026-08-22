@@ -1270,6 +1270,107 @@ class TestnetService:
 
 
 
+
+    # ------------------------------------------------------------------
+    # Upgrade 5: Slippage & fee reality-check (observability only — the
+    # profitability gate is NOT auto-adjusted; we gather data first).
+    # ------------------------------------------------------------------
+    SLIPPAGE_LOG_FILE = os.getenv("SLIPPAGE_LOG_FILE", "slippage_log.json")
+    SLIPPAGE_LOG_MAX = 500
+
+    def track_recent_slippage(self, max_records=5):
+        """Compare execution fill prices with the signal 4h candle close.
+
+        For the most recent closed-ledger entries not yet logged, fetch
+        c.get_my_trades() and the 4h candles, and record per-trade slippage
+        in bps: (entry_fill - signal_candle_close) / close * 1e4 (long side).
+        Appends to slippage_log.json (capped). Pure observability.
+        """
+        try:
+            logged = []
+            done_ids = set()
+            if os.path.exists(self.SLIPPAGE_LOG_FILE):
+                try:
+                    with open(self.SLIPPAGE_LOG_FILE, "r", encoding="utf-8") as f:
+                        logged = json.load(f)
+                    done_ids = {r.get("trade_id") for r in logged}
+                except Exception:
+                    logged = []
+            recent = []
+            if os.path.exists(TESTNET_LEDGER_FILE):
+                with open(TESTNET_LEDGER_FILE, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip():
+                            try:
+                                recent.append(json.loads(line))
+                            except Exception:
+                                pass
+            todo = [r for r in recent[-50:] if r.get("trade_id") not in done_ids][-max_records:]
+            if not todo:
+                return logged
+            for rec in todo:
+                sym = rec.get("symbol")
+                entry_ts = rec.get("entry_timestamp", "")
+                entry_price = float(rec.get("entry_price", 0.0) or 0.0)
+                if not sym or entry_price <= 0:
+                    continue
+                # Signal candle close: last 4h close strictly before entry time
+                signal_close = None
+                try:
+                    from data import get_candles
+                    df = get_candles(sym, "4h", 80)
+                    if df is not None and not df.empty and entry_ts:
+                        entry_dt = datetime.datetime.fromisoformat(entry_ts.replace("Z", ""))
+                        mask = df["timestamp"] < pd.Timestamp(entry_dt)
+                        if mask.any():
+                            signal_close = float(df.loc[mask, "close"].iloc[-1])
+                except Exception as e:
+                    logger.debug(f"[SLIPPAGE] candle lookup failed for {sym}: {e}")
+                # Actual fills from the exchange
+                fills_qty, fills_quote, n_fills, fees = 0.0, 0.0, 0, 0.0
+                try:
+                    trades = self.client.get_my_trades(symbol=sym, limit=50)
+                    ets = entry_ts[:19]
+                    for t in trades:
+                        tts = datetime.datetime.utcfromtimestamp(t["time"] / 1000).isoformat()[:19]
+                        if not entry_ts or tts >= ets:
+                            if t.get("isBuyer"):
+                                fills_qty += float(t["qty"])
+                                fills_quote += float(t["quoteQty"])
+                                fees += float(t.get("commission", 0.0))
+                                n_fills += 1
+                except Exception as e:
+                    logger.debug(f"[SLIPPAGE] get_my_trades failed for {sym}: {e}")
+                vwap = (fills_quote / fills_qty) if fills_qty > 0 else entry_price
+                slippage_bps = (
+                    round((vwap - signal_close) / signal_close * 1e4, 2)
+                    if signal_close else None
+                )
+                logged.append({
+                    "trade_id": rec.get("trade_id"),
+                    "symbol": sym,
+                    "entry_timestamp": entry_ts,
+                    "signal_candle_close": signal_close,
+                    "vwap_fill": round(vwap, 8),
+                    "slippage_bps": slippage_bps,
+                    "maker_fee_paid": round(fees, 8),
+                    "fills": n_fills,
+                    "logged_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                })
+                logger.info(
+                    f"[SLIPPAGE] {sym} fill_vwap={vwap:.6f} vs signal_close="
+                    f"{signal_close} -> {slippage_bps} bps (data-gathering only)"
+                )
+            logged = logged[-self.SLIPPAGE_LOG_MAX:]
+            tmp = self.SLIPPAGE_LOG_FILE + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(logged, f, indent=2)
+            os.replace(tmp, self.SLIPPAGE_LOG_FILE)
+            return logged
+        except Exception as e:
+            logger.error(f"[SLIPPAGE] tracking failed: {e}")
+            return []
+
     def position_monitor_loop(self):
         """Continuously reconciles active positions against Binance."""
         while True:
@@ -1285,6 +1386,13 @@ class TestnetService:
                 from execution import monitor_open_trades
                 # This queries Binance for OCO status and updates active_trades.json and ledger
                 monitor_open_trades()
+
+                # Upgrade 5: slippage/fee reality-check for newly closed trades
+                if not os.environ.get("PYTEST_CURRENT_TEST"):
+                    try:
+                        self.track_recent_slippage(max_records=2)
+                    except Exception as sl_err:
+                        logger.debug(f"[SLIPPAGE] cycle skipped: {sl_err}")
                 
                 # 3. Calculate total reconstructable PnL from the Ledger (with strict provenance)
                 total_reconstructable_pnl = 0.0
