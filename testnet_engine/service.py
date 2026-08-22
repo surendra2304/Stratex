@@ -276,7 +276,7 @@ class TestnetService:
             ledger_file = os.getenv("TESTNET_LEDGER_FILE", TESTNET_LEDGER_FILE)
             if not os.path.exists(ledger_file):
                 return
-            today_str = datetime.datetime.utcnow().date().isoformat()
+            today_str = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
             daily_loss = 0.0
             seen_exit_ids = set()
             
@@ -1460,9 +1460,9 @@ class TestnetService:
                                     "net_pnl": gross_pnl - (entry['fees'] * (match_qty / entry['qty'])) - (order_fees * (match_qty / qty)),
                                     "pnl": gross_pnl - (entry['fees'] * (match_qty / entry['qty'])) - (order_fees * (match_qty / qty)),
                                     "fees": (entry['fees'] * (match_qty / entry['qty'])) + (order_fees * (match_qty / qty)),
-                                    "entry_timestamp": datetime.datetime.fromtimestamp(entry['time']/1000).isoformat() + "Z",
-                                    "exit_timestamp": datetime.datetime.fromtimestamp(o['time']/1000).isoformat() + "Z",
-                                    "timestamp": datetime.datetime.fromtimestamp(o['time']/1000).isoformat() + "Z",
+                                    "entry_timestamp": datetime.datetime.utcfromtimestamp(entry['time']/1000).isoformat() + "Z",
+                                    "exit_timestamp": datetime.datetime.utcfromtimestamp(o['time']/1000).isoformat() + "Z",
+                                    "timestamp": datetime.datetime.utcfromtimestamp(o['time']/1000).isoformat() + "Z",
                                     "action": f"CLOSED_{'WIN' if gross_pnl > 0 else 'LOSS'}",
                                     "quantity": match_qty
                                 })
@@ -1579,7 +1579,7 @@ class TestnetService:
                     
             # 2. Update Risk bounds mathematically
             # Filter completed_trades by today's date for daily loss (C-05 fix)
-            today_str = datetime.datetime.utcnow().date().isoformat()
+            today_str = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
             todays_pnl = sum(
                 t['net_pnl'] for t in completed_trades
                 if t.get('exit_timestamp', t.get('timestamp', '')).startswith(today_str)

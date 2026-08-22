@@ -15,10 +15,10 @@ class RiskGate:
         # State tracking for limits
         self.daily_realized_loss = 0.0
         self.peak_equity = starting_balance
-        self.current_trading_day = datetime.datetime.utcnow().date()
+        self.current_trading_day = datetime.datetime.now(datetime.timezone.utc).date()
 
     def _check_daily_boundary(self):
-        today = datetime.datetime.utcnow().date()
+        today = datetime.datetime.now(datetime.timezone.utc).date()
         if today != self.current_trading_day:
             logger.info(f"[RISKGATE] 🌅 Crossing UTC Daily Boundary ({self.current_trading_day} -> {today}). Resetting daily PnL.")
             self.daily_realized_loss = 0.0
