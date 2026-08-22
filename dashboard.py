@@ -1558,6 +1558,27 @@ def api_strategy_metrics():
         "adx_ema": ["5m", "15m", "1h", "4h"]
     }
 
+    # Authoritative activity source: the engine heartbeat reports what the
+    # governance gate ACTUALLY loaded (VALIDATED strategies only). The config
+    # above lists every candidate; a strategy not in the heartbeat is DISABLED.
+    hb_strategies, hb_timeframes = None, None
+    hb_file = os.getenv("TESTNET_HEARTBEAT_FILE", "testnet_heartbeat.json")
+    if os.path.exists(hb_file):
+        try:
+            with open(hb_file, "r") as f:
+                hb = json.load(f)
+            hb_fresh = False
+            try:
+                hb_ts = datetime.datetime.fromisoformat(hb.get("timestamp", "").replace("Z", "+00:00"))
+                hb_fresh = (datetime.datetime.now(datetime.timezone.utc) - hb_ts).total_seconds() < 300
+            except Exception:
+                pass
+            if hb_fresh and isinstance(hb.get("strategies"), list) and hb["strategies"]:
+                hb_strategies = [s.lower() for s in hb["strategies"]]
+                hb_timeframes = set(hb.get("timeframes") or [])
+        except Exception:
+            pass
+
     # Load scanner stats from portfolio if available
     port_stats = {}
     port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
@@ -1574,7 +1595,7 @@ def api_strategy_metrics():
         p_stat = port_stats.get(sk, {})
         strats[sk] = {
             "name": sk.upper(),
-            "status": "ACTIVE",
+            "status": ("ACTIVE" if (hb_strategies is None or sk in hb_strategies) else "DISABLED"),
             "timeframes": strategy_timeframe_config.get(sk, ["5m"]),
             "evaluations": p_stat.get("evaluations", p_stat.get("HOLD", 0) + p_stat.get("signals", 0)),
             "BUY": p_stat.get("BUY", 0),
@@ -1739,6 +1760,9 @@ def api_strategy_metrics():
             pair_wr = round((pair_wins / len(pair_trades)) * 100, 1) if pair_trades else None
 
             is_configured = tf in strategy_timeframe_config.get(sk, [])
+            if hb_strategies is not None:
+                # Heartbeat truth: active only if the engine actually loaded this strategy+tf
+                is_configured = sk in hb_strategies and tf in (hb_timeframes or set())
             matrix[sk][tf] = {
                 "active": is_configured,
                 "signals": len(pair_signals),

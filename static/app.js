@@ -912,7 +912,7 @@ async function fetchStrategiesData() {
         return `
             <tr class="clickable-row" onclick="inspectStrategy('${s.name.toLowerCase()}')">
                 <td><strong class="text-primary">${s.name}</strong></td>
-                <td><span class="badge badge-accepted">ACTIVE</span></td>
+                <td><span class="badge ${s.status === 'ACTIVE' ? 'badge-accepted' : 'badge-rejected'}">${s.status || 'UNKNOWN'}</span></td>
                 <td><span class="text-secondary" style="font-family:var(--font-mono); font-size:11px;">${(s.timeframes || ['5m']).join(', ')}</span></td>
                 <td class="num">${s.evaluations || 0}</td>
                 <td class="num">${(s.BUY || 0) + (s.SELL || 0)}</td>
