@@ -57,6 +57,18 @@ def _write_heartbeat(status, error=None):
         logger.error(f"[PAPER_SUPERVISOR] heartbeat write failed: {e}")
 
 
+def _heartbeat_watchdog(stop_event):
+    """Write a RUNNING heartbeat every 30s while the runner thread is alive.
+
+    Without this, the heartbeat only updates on state transitions and a
+    healthy runner in its 60s poll loop looks DEAD once the heartbeat goes
+    stale (>180s) — a monitoring false-negative observed on Render.
+    """
+    while not stop_event.wait(30):
+        if _state["alive"]:
+            _write_heartbeat("RUNNING")
+
+
 def _supervise():
     backoff = 5
     while True:
@@ -68,7 +80,7 @@ def _supervise():
             runner_run()  # blocks for the lifetime of the experiment
             # A clean return means the experiment ended (e.g., kill switch)
             logger.warning("[PAPER_SUPERVISOR] paper runner returned; restarting in case of restartable exit")
-        except Exception as e:
+        except BaseException as e:  # incl. SystemExit — otherwise restarts never happen
             _state["last_error"] = f"{type(e).__name__}: {e}"
             logger.error(f"[PAPER_SUPERVISOR] paper runner DIED: {e}\n{traceback.format_exc()}")
         finally:
@@ -97,6 +109,13 @@ def start_supervised_runner(force=False):
         t = threading.Thread(target=_supervise, name="paper-runner-supervisor", daemon=True)
         _state["thread"] = t
         t.start()
+        # Periodic heartbeat so a healthy polling runner is never marked DEAD by staleness
+        if _state.get("watchdog_thread") is None or not _state["watchdog_thread"].is_alive():
+            wd = threading.Thread(target=_heartbeat_watchdog,
+                                  args=(threading.Event(),),
+                                  name="paper-runner-heartbeat", daemon=True)
+            _state["watchdog_thread"] = wd
+            wd.start()
         logger.info("[PAPER_SUPERVISOR] Supervised paper runner thread started")
         return True
 
