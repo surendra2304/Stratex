@@ -300,3 +300,25 @@ TESTNET ONLY
 - Byte-compilation: all modules PASS (`compileall`). Pyflakes: zero defects in production code.
 - Tier 1 Exchange Evidence: `get_account` → USDT 11,609.29365930 free / 0 locked; `get_open_orders` → empty; LINKUSDT SELL 846940 FILLED.
 - End-of-Day State: Balance: $11,609.29 USDT (exchange-authoritative) | Closed Trades: 0 (fresh ledger) | Engine: V2-spot armed, awaiting deployment/restart.
+
+---
+
+# DAY 9 (continued) — 2026-08-22, rev 3: Signal-Frequency Expansion Studies
+## Objectives
+- Increase signal frequency AND profitability via evidence-based expansion: faster timeframe study, asset-universe expansion, and a new qualified-retest entry — all validated out-of-sample under full friction before shipping.
+
+## Work Completed
+- **Data Expansion**: Fetched 1h history for the 6 base assets (49,411 bars each) and 4h+1h for 14 candidate expansion alts (~700k additional bars). Built `research/upgrade_2026_08/expansion_study.py`.
+- **Study A — 1h Timeframe: REJECTED**: every 1h variant (12 configs) is OOS-negative (PF 0.38–0.73). Confirms the registry's friction math: faster timeframe = fee destruction. 1h stays out of production.
+- **Study B — Per-Asset OOS Attribution**: only BTCUSDT (OOS PF 2.59), SOLUSDT (3.09), and INJUSDT (1.74) are individually robust. INJUSDT added to the validated universe. ETH/BNB/XRP/LINK retained (portfolio-level contributors to the validated 2.36 combined PF; removal studied and not adopted to avoid over-fitting asset selection).
+- **Study C — Qualified Retest Entry: ADOPTED**: enter on the FIRST EMA20 touch within 10 bars after a regime-qualified golden cross (bullish close off the EMA), unlike the removed V1 always-on pullback. Standalone OOS: n=34, PF 2.48. Combined with crossover: **OOS n=136, PF 2.36 (vs 2.30), trades ~2.7→4.2/month (+55%), net OOS +54%, 2026-regime PF 1.05→2.08**.
+- **Implementation**: `strategy_adx_ema.py` retest rule (stateless, derived from the candle window); `config_strategy.py` rev-3 params (`ENABLE_RETEST_ENTRY`, `RETEST_WINDOW_BARS=10`, INJUSDT, priors win 0.551 / PF 2.36 / 216 bps per trade); registry updated to V2-spot rev3.
+- **Tests**: +6 retest behavior tests (trigger, no-touch, earlier-touch cancel, out-of-window cancel, config pins, INJ universe). Suite: 505 → **529 passing**.
+
+## Bug Fixes
+- Bug #45: (research finding, pinned by tests) 1h timeframe is structurally unprofitable under 31 bps friction — permanently recorded to prevent future re-introduction without new evidence.
+
+## Verification
+- Complete Pytest Suite: **529 passed / 529 tests (100% across two consecutive runs in 54.90s and 54.31s)**.
+- Study reproducibility: `python research/upgrade_2026_08/expansion_study.py` (Studies A/B/C) and `param_study.py` (base grids).
+- End-of-Day State: Balance: $11,609.29 USDT baseline | Engine: V2-spot rev3 deployed (crossover + qualified retest, 7 assets, 4h, BTC-regime gated) | Expected forward cadence: ~4 trades/month.

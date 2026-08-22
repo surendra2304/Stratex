@@ -115,3 +115,76 @@ class TestV2SignalBehavior:
         assert stype == "RULE_BASED"
         assert prior == ADX_EMA_STRATEGY_V2["OOS_WIN_RATE_PRIOR"]
         assert rr == ADX_EMA_STRATEGY_V2["RISK_REWARD_RATIO"]
+
+
+class TestRetestEntryRev3:
+    """Qualified retest: first EMA20 touch within 10 bars after a qualified
+    golden cross, bullish close off it -> BUY. Study C evidence:
+    research/upgrade_2026_08/expansion_study.py (OOS PF 2.48 standalone)."""
+
+    def _retest_df(self, touched_now=True, cross_bars_ago=3, touched_between=False, adx=30.0):
+        import numpy as np
+        n = 260
+        close = np.full(n, 100.0)
+        # sustained ramp so EMA20>EMA50>EMA200 and close>EMA200 hold at the end
+        ramp = np.linspace(100.0, 130.0, 40)
+        close[-40:] = ramp
+        df = pd.DataFrame({
+            "open": close * 0.999,
+            "high": close * 1.005,
+            "low": close * 0.997,
+            "close": close,
+            "volume": 1000.0,
+        }, index=pd.date_range("2024-01-01", periods=n, freq="4h"))
+        df = add_features(df)
+        li = len(df) - 1
+        # Force the golden cross exactly `cross_bars_ago` bars back
+        k = li - cross_bars_ago
+        df.iloc[k, df.columns.get_loc("ema_20")] = df.iloc[k]["ema_50"] * 1.001
+        df.iloc[k - 1, df.columns.get_loc("ema_20")] = df.iloc[k - 1]["ema_50"] * 0.999
+        # Keep EMA20 above EMA50 from cross to now
+        for j in range(k + 1, li):
+            e = df.iloc[j]
+            if e["ema_20"] <= e["ema_50"]:
+                df.iloc[j, df.columns.get_loc("ema_20")] = e["ema_50"] * 1.001
+            if touched_between is False:
+                # ensure NO touch between cross and now
+                if e["low"] <= e["ema_20"] * 1.002:
+                    df.iloc[j, df.columns.get_loc("low")] = e["ema_20"] * 1.003
+            elif j == k + 1:
+                # force exactly one explicit touch right after the cross
+                df.iloc[j, df.columns.get_loc("low")] = e["ema_20"] * 0.999
+        df.loc[df.index[-1], "adx"] = adx
+        df.loc[df.index[k], "adx"] = adx
+        # Last bar: dip into EMA20 but close bullish above it
+        if touched_now:
+            lastrow = df.iloc[-1]
+            df.iloc[-1, df.columns.get_loc("low")] = lastrow["ema_20"] * 0.999
+            df.iloc[-1, df.columns.get_loc("close")] = lastrow["ema_20"] * 1.001
+            df.iloc[-1, df.columns.get_loc("open")] = lastrow["ema_20"] * 0.9995
+        return df
+
+    def test_retest_triggers_buy(self):
+        sig = get_signal(self._retest_df())
+        assert sig.side == "BUY"
+        last = self._retest_df().iloc[-1]
+        assert sig.sl == pytest.approx(last["close"] - 3.0 * last["atr_adx_ema"], rel=1e-6)
+
+    def test_no_touch_no_retest(self):
+        sig = get_signal(self._retest_df(touched_now=False))
+        assert sig.side is None
+
+    def test_earlier_touch_cancels_retest(self):
+        sig = get_signal(self._retest_df(touched_between=True))
+        assert sig.side is None
+
+    def test_cross_outside_window_cancels_retest(self):
+        sig = get_signal(self._retest_df(cross_bars_ago=15))
+        assert sig.side is None
+
+    def test_retest_config_enabled(self):
+        assert ADX_EMA_STRATEGY_V2["ENABLE_RETEST_ENTRY"] is True
+        assert ADX_EMA_STRATEGY_V2["RETEST_WINDOW_BARS"] == 10
+
+    def test_inj_in_validated_universe(self):
+        assert "INJUSDT" in ADX_EMA_STRATEGY_V2["OOS_VALIDATED_ASSETS"]
