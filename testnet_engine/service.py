@@ -1755,7 +1755,112 @@ class TestnetService:
                 logger.error(f"[SERVICE] Progress report loop error: {e}")
             time.sleep(60)
 
+    def reconcile_state(self):
+        """Boot-time authoritative reconciliation (upgrade 2, Bug #52 class).
+
+        Runs BEFORE scanning begins. Compares exchange truth (open orders +
+        account balances) with local expectations and repairs drift:
+          - Position (base-asset balance > 0) without protective orders
+            -> immediately place OCO protection at SL=3xATR / TP=3xATR.
+          - Protective orders on a symbol with zero base balance (orphan OCO)
+            -> cancel.
+        All actions are logged; failures never block engine boot.
+        Returns a dict summary (also used by tests).
+        """
+        summary = {"checked_symbols": 0, "naked_positions_protected": [],
+                   "orphan_orders_cancelled": [], "errors": []}
+        try:
+            from testnet_engine.protection import place_oco_protection
+            open_orders = self.client.get_open_orders()
+            account = self.client.get_account()
+        except Exception as e:
+            summary["errors"].append(f"exchange_query_failed: {e}")
+            logger.error(f"[RECONCILE] Cannot query exchange state: {e}")
+            return summary
+
+        # Balances by asset (free + locked), ignoring dust
+        balances = {}
+        for b in account.get("balances", []):
+            total = float(b.get("free", 0.0)) + float(b.get("locked", 0.0))
+            if total > 0.0:
+                balances[b["asset"]] = total
+
+        # Orders grouped by symbol
+        orders_by_symbol = {}
+        for o in open_orders:
+            orders_by_symbol.setdefault(o["symbol"], []).append(o)
+
+        # Candidate symbols: validated assets with a base-asset balance OR resting orders
+        validated_assets = governance_validated_assets(self.strategies)
+        candidates = set()
+        for sym in validated_assets:
+            base = sym[:-4] if sym.endswith("USDT") else sym
+            if balances.get(base, 0.0) > 0.0 or sym in orders_by_symbol:
+                candidates.add(sym)
+        summary["checked_symbols"] = len(candidates)
+
+        for sym in sorted(candidates):
+            base = sym[:-4] if sym.endswith("USDT") else sym
+            held_qty = balances.get(base, 0.0)
+            resting = orders_by_symbol.get(sym, [])
+
+            if held_qty > 0.0 and not resting:
+                # Naked position: protect it at 3xATR SL / 3xATR TP around last price
+                try:
+                    import pandas as _pd
+                    from data import get_candles
+                    from strategy_adx_ema import add_features, compute_atr
+                    df = get_candles(sym, "4h", 60)
+                    if df is None or getattr(df, "empty", True) or len(df) < 15:
+                        raise RuntimeError(f"insufficient candles ({len(df) if df is not None else 0})")
+                    last_close = float(df["close"].iloc[-1])
+                    atr = float(compute_atr(df, 14).iloc[-1])
+                    sl_price = round(last_close - 3.0 * atr, 6)
+                    tp_price = round(last_close + 3.0 * atr, 6)
+                    qty = round(held_qty, 4)
+                    prot = place_oco_protection(
+                        client=self.client,
+                        symbol=sym,
+                        entry_side="BUY",
+                        executed_qty=qty,
+                        actual_fill_price=last_close,
+                        sl_price=sl_price,
+                        tp_price=tp_price,
+                        list_client_order_id=f"recon-{sym}-{int(time.time())}",
+                    )
+                    summary["naked_positions_protected"].append(sym)
+                    logger.warning(
+                        f"[RECONCILE] 🛡️ Naked position {sym} ({qty}) protected: "
+                        f"SL={sl_price} TP={tp_price} result={prot}"
+                    )
+                except Exception as e:
+                    summary["errors"].append(f"protect_{sym}: {e}")
+                    logger.error(f"[RECONCILE] FAILED to protect naked position {sym}: {e}")
+
+            elif held_qty <= 0.0 and resting:
+                # Orphan orders with no position behind them
+                for o in resting:
+                    try:
+                        self.client.cancel_order(symbol=sym, orderId=o["orderId"])
+                        summary["orphan_orders_cancelled"].append(f"{sym}:{o['orderId']}")
+                        logger.warning(f"[RECONCILE] 🧹 Orphan order cancelled: {sym} #{o['orderId']} ({o.get('type')})")
+                    except Exception as e:
+                        summary["errors"].append(f"cancel_{sym}_{o['orderId']}: {e}")
+                        logger.error(f"[RECONCILE] Failed to cancel orphan {sym} #{o['orderId']}: {e}")
+
+        if summary["naked_positions_protected"] or summary["orphan_orders_cancelled"] or summary["errors"]:
+            logger.info(f"[RECONCILE] Boot reconciliation summary: {summary}")
+        return summary
+
     def run(self):
+        # 0. Authoritative state reconciliation (before any scanning):
+        #    repair naked positions / orphan orders left by crashes or reboots.
+        try:
+            if not os.environ.get("PYTEST_CURRENT_TEST"):
+                self.reconcile_state()
+        except Exception as e:
+            logger.error(f"[RECONCILE] Boot reconciliation crashed (non-fatal): {e}")
+
         # 1. Discover Symbols
         discovery = SymbolDiscoveryService()
         self.symbol_filters = discovery.discover_eligible_symbols(min_quote_volume=1_000_000)
