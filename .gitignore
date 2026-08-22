@@ -78,3 +78,8 @@ backup_ui/
 # Bulk market-data fetches for parameter studies (re-fetchable via script)
 research/upgrade_2026_08/data/
 backup/
+
+# Upgrade-runtime state files (feat/operational-upgrades)
+panic_state.json
+slippage_log.json
+paper_runner_heartbeat.json

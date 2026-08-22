@@ -2761,6 +2761,65 @@ def api_telemetry_analytics():
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
 @app.route('/api/config', methods=['GET', 'POST'])
+@app.route('/api/recent-actions')
+def api_recent_actions():
+    """
+    Upgrade 8: last 5 human-readable engine actions for the dashboard widget.
+    Sourced from the opportunity decision log and closed-trade ledger.
+    Format: {"actions": ["12:00 UTC | BTCUSDT | Profitability Gate | FAILED (EV < 5bps)", ...]}
+    """
+    def _fmt_ts(ts):
+        try:
+            if isinstance(ts, (int, float)):
+                dt = datetime.datetime.fromtimestamp(ts if ts < 1e11 else ts / 1000, datetime.timezone.utc)
+            else:
+                dt = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+            return dt.strftime("%H:%M") + " UTC"
+        except Exception:
+            return "--:-- UTC"
+
+    def _component_for(reason, decision):
+        r = str(reason or "").upper()
+        if "REGIME" in r: return "Regime Gate"
+        if "LONG_ONLY" in r: return "Long-Only Guard"
+        if any(k in r for k in ("EDGE", "EV", "EXPECTANCY", "PROFIT", "FRICTION", "RISK_REWARD")): return "Profitability Gate"
+        if any(k in r for k in ("RISK", "EXPOSURE", "POSITION", "DAILY")): return "Risk Gate"
+        if any(k in r for k in ("COOLDOWN", "DUPLICATE")): return "Cooldown Guard"
+        if "PANIC" in r: return "Manual Kill-Switch"
+        if str(decision).upper().startswith("ACCEPTED") or "TRADED" in str(decision).upper(): return "Execution"
+        return "Scanner"
+
+    actions = []
+    try:
+        log_file = os.getenv("TESTNET_OPPORTUNITY_LOG", "testnet_opportunity_log.jsonl")
+        if os.path.exists(log_file):
+            with open(log_file, "r", encoding="utf-8") as f:
+                lines = [l for l in f if l.strip()][-20:]
+            for line in reversed(lines):  # newest first
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                decision = str(rec.get("decision", ""))
+                reason = rec.get("reason", "")
+                metrics = rec.get("metrics") if isinstance(rec.get("metrics"), dict) else {}
+                if not reason:
+                    reason = metrics.get("reason", "SCANNED")
+                status = "PASSED" if decision.startswith("ACCEPTED") or "TRADED" in decision.upper() else f"FAILED/BLOCKED ({reason})"
+                actions.append(
+                    f"{_fmt_ts(rec.get('timestamp', rec.get('time', '')))} | {rec.get('symbol', '?')} | "
+                    f"{_component_for(reason, decision)} | {status}"
+                )
+                if len(actions) >= 5:
+                    break
+    except Exception as e:
+        app.logger.error(f"[RECENT_ACTIONS] opportunity log read error: {e}")
+    if not actions:
+        actions = ["--:-- UTC | — | Engine | No decisions logged yet"]
+    return jsonify({"status": "OK", "count": len(actions), "actions": actions,
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()})
+
+
 @app.route('/api/panic', methods=['POST'])
 def api_panic():
     """

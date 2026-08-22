@@ -199,3 +199,35 @@ window.resetSettings = resetSettings;
 window.toggleSoundAlerts = toggleSoundAlerts;
 window.toggleNotificationDropdown = toggleNotificationDropdown;
 window.playAudioAlert = playAudioAlert;
+
+/* ── Upgrade 8: Engine Action Log widget ──────────────────────────────── */
+
+async function refreshActionLog() {
+    const list = document.getElementById('action-log-list');
+    const updated = document.getElementById('action-log-updated');
+    if (!list) return;
+    try {
+        const res = await fetch('/api/recent-actions');
+        const body = await res.json();
+        if (body && Array.isArray(body.actions)) {
+            list.innerHTML = body.actions.map(a => {
+                const ok = /PASSED|Execution/.test(a);
+                return `<li style="padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05); color:${ok ? 'var(--profit-green, #22C55E)' : 'var(--text-secondary, #A7B5C8)'};">${a}</li>`;
+            }).join('');
+            if (updated) updated.textContent = 'updated ' + new Date().toLocaleTimeString();
+        }
+    } catch (e) {
+        list.innerHTML = '<li style="padding:6px 0; color:var(--loss-red, #EF4444);">Action log unavailable: ' + e.message + '</li>';
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.refreshActionLog = refreshActionLog;
+    // initial load + 15s refresh (additive; does not disturb app.js timers)
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => { refreshActionLog(); setInterval(refreshActionLog, 15000); });
+    } else {
+        refreshActionLog();
+        setInterval(refreshActionLog, 15000);
+    }
+}
