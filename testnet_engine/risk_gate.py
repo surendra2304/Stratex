@@ -46,7 +46,7 @@ class RiskGate:
             e_price = float(entry_price)
             if p_qty <= 0 or e_price <= 0 or math.isnan(p_qty) or math.isnan(e_price) or math.isinf(p_qty) or math.isinf(e_price):
                 logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: INVALID_INPUT | Qty: {proposed_qty}, Price: {entry_price}")
-                return False, "INVALID_INPUT", f"Price or quantity is non-positive or NaN/Inf."
+                return False, "INVALID_INPUT", "Price or quantity is non-positive or NaN/Inf."
         except (ValueError, TypeError):
             return False, "INVALID_INPUT", "Invalid numeric value passed to risk evaluation."
 

@@ -581,6 +581,7 @@ def run():
     data_events = {"gaps": 0, "stale": 0, "unavailable": 0}
     last_candle_ts = None
     open_positions_meta = {}   # pos_id -> {sl, tp}
+    last_known_price = None    # set once market data is fetched; guards daily report
 
     # Reconcile on startup
     run_reconciliation(portfolio, health)
@@ -608,7 +609,7 @@ def run():
             if today_str != last_day_str:
                 if last_day_str is not None:
                     generate_daily_report(
-                        portfolio, cfg, {FROZEN_SYMBOL: last_known_price},
+                        portfolio, cfg, {FROZEN_SYMBOL: last_known_price} if last_known_price is not None else {},
                         last_day_str, daily_signals, daily_trades, data_events,
                     )
                     run_reconciliation(portfolio, health)
