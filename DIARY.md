@@ -367,3 +367,30 @@ TESTNET ONLY
 - Complete Pytest Suite: **529 passed / 529 tests (100% across two consecutive runs)**.
 - Route sweep: 47/47 endpoints correct status codes incl. security rejections (403 live-trading, 400 invalid/negative/out-of-range/unknown settings).
 - Warm-seed verified live: BTCUSDT 4h cache 249 bars; EMA200=65,551 vs close=77,274 (regime risk-on), ADX=62.6.
+
+---
+
+# DAY 10 — 2026-08-22: Eight Operational, Research & UI Upgrades (feat/operational-upgrades)
+## Objectives
+- Operator-commissioned 8-upgrade program on branch `feat/operational-upgrades`: operational resilience (UTC audit, boot reconciliation, paper-runner supervision), research hardening (walk-forward, slippage reality-check), infrastructure (WS backfill, manual kill-switch), and UI (action log). Strict additive-only implementation; frozen strategy logic untouched.
+
+## Work Completed
+- **1. Timezone & Daily-Loss Audit**: `utcnow()` is UTC (naive) — semantics already correct — but hardened every daily boundary to explicit `now(timezone.utc).date()` (risk_gate init + boundary, service daily-loss filters). Fixed a REAL bug found in the audit: `fromtimestamp()` converted exchange timestamps in LOCAL time in `_rebuild_testnet_state`; now `utcfromtimestamp` (identical string format, correct UTC).
+- **2. Boot State Reconciliation (Bug #52)**: new `TestnetService.reconcile_state()` runs before scanning — queries `get_open_orders()` + `get_account()`, protects naked positions with an immediate OCO (SL/TP = 3×ATR around last close), cancels orphan orders with zero base balance. 4 new tests in `tests/test_state_reconciliation.py` (naked→OCO geometry, orphan→cancel, healthy→untouched, exchange-failure→non-fatal).
+- **3. Paper Runner Supervision**: new isolated module `paper_runner_supervisor.py` — daemon thread runs `paper_forward_runner.run()`, restarts with capped backoff (5s→300s), writes `paper_runner_heartbeat.json`; `/api/engine-health` now includes `paper_runner_status` RUNNING/DISABLED/DEAD (stale-heartbeat detection). Disable via `SUPERVISE_PAPER_RUNNER=0`. Verified RUNNING live.
+- **4. Anchored Walk-Forward Validation**: new `research/upgrade_2026_08/walk_forward_validation.py` (72-config grid × 3 anchored folds: train'21→test'22, '21-22→'23, '21-23→'24-26). Verdict: per-fold optimum DRIFTS (ADX15/20/25, SL2.5, TP4.5) — BUT the frozen live config OUT-PERFORMED each fold's walk-forward-selected config on that fold's own out-of-sample window (PF 12.48v1.94, 1.27v0.59, 2.48v2.20) — genuine out-of-sample robustness evidence for V2-spot rev3 (annotated in walk_forward_report.json).
+- **5. Slippage & Fee Reality-Check**: `track_recent_slippage()` in the monitor loop — for newly closed ledger entries fetches `get_my_trades()` + 4h candles, records fill-VWAP vs signal-candle-close in bps + fees to `slippage_log.json` (capped 500). Observability only — EV gate NOT auto-adjusted.
+- **6. WebSocket Auto-Healing Backfill**: after the scanner's atomic reconnect, every (symbol, tf) cache is fully REST-backfilled (250 bars incl. production warm-seed) before the live stream is trusted again — prevents missed candle closes / under-warmed EMAs after Render reboots.
+- **7. Manual Kill-Switch**: `POST /api/panic` — writes `panic_state.json` (cross-process flag read by the engine before every order placement), cancels pending orders EXCEPT protective SL/TP/OCO legs (verified live: kept 10 protective orders on junk-faucet holdings, cancelled none), `{"release": true}` re-enables. Engine-side rejection reason `MANUAL_PANIC_SWITCH`.
+- **8. Action Log Widget**: `GET /api/recent-actions` (last 5 human-readable engine decisions with component attribution: Regime Gate / Profitability Gate / Risk Gate / Cooldown / Kill-Switch) + new bottom-panel widget on the dashboard view with 15s refresh, bound in `ui-compat.js`.
+
+## Bug Fixes
+- Bug #52: naked-position exposure window on boot (crash between market order and OCO) — closed by `reconcile_state()`.
+- Bug #53: LOCAL-time conversion of exchange timestamps in state rebuild (`fromtimestamp` → `utcfromtimestamp`).
+- Bug #54 (caught by suite, same session): route insertion split the stacked decorators for `/api/config`+`/api/settings`, binding POST /api/config to the wrong view (security regression) — fixed immediately; decorator stacking restored and verified (403/403/400 on security probes).
+
+## Verification
+- Complete Pytest Suite: **533 passed / 533 tests (100% across two consecutive runs in 80.35s and 70.55s)** — includes 4 new reconciliation tests.
+- Frontend: `node -c static/app.js` and `node -c static/ui-compat.js` both PASS.
+- Live local smoke tests: `/api/recent-actions` 200; `/api/panic` activate+release verified with real exchange order sweep (protective orders correctly preserved); `paper_runner_status: "RUNNING"` in engine-health.
+- Walk-forward report reproducible: `python research/upgrade_2026_08/walk_forward_validation.py`.
