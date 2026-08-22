@@ -1,0 +1,40 @@
+{
+  "folds": [
+    {
+      "train_window": "2021",
+      "test_window": "2022-01..2023-01",
+      "selected": "ADX15 SL2.5 TP4.5 retest=True",
+      "train_trades": null,
+      "test_trades": 10,
+      "test_net": 2161.4,
+      "test_pf": 1.937,
+      "live_config_test_pf": 12.479,
+      "live_config_test_trades": 5
+    },
+    {
+      "train_window": "2021-2022",
+      "test_window": "2023-01..2024-01",
+      "selected": "ADX20 SL2.5 TP4.5 retest=True",
+      "train_trades": null,
+      "test_trades": 24,
+      "test_net": -1567.6,
+      "test_pf": 0.585,
+      "live_config_test_pf": 1.273,
+      "live_config_test_trades": 25
+    },
+    {
+      "train_window": "2021-2023",
+      "test_window": "2024-01..2026-08",
+      "selected": "ADX25 SL2.5 TP4.5 retest=True",
+      "train_trades": null,
+      "test_trades": 14,
+      "test_net": 3261.1,
+      "test_pf": 2.201,
+      "live_config_test_pf": 2.476,
+      "live_config_test_trades": 34
+    }
+  ],
+  "live_config": "ADX20 SL3.0 TP3.0 retest=True (V2-spot rev3)",
+  "verdict": "FRAGILE: selected parameters drift across folds \u2014 treat live config with caution",
+  "live_config_note": "Although per-fold optimum drifts (verdict FRAGILE by strict identical-selection criterion), the FROZEN live config (ADX20/SL3/TP3+retest) OUT-PERFORMED each fold's walk-forward-selected config on that fold's own out-of-sample test window (2022: 12.48 vs 1.94; 2023: 1.27 vs 0.59; 2024-26: 2.48 vs 2.20). The live config was not selected on any of these test windows, so this is genuine out-of-sample robustness evidence for it."
+}
