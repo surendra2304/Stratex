@@ -74,3 +74,7 @@ PRODUCTION_STRATEGIES.md
 *heartbeat.json
 # Local UI backup
 backup_ui/
+
+# Bulk market-data fetches for parameter studies (re-fetchable via script)
+research/upgrade_2026_08/data/
+backup/

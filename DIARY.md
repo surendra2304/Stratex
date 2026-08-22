@@ -269,3 +269,34 @@ TESTNET ONLY
 
 
 
+
+---
+
+# DAY 9 — 2026-08-22
+## Objectives
+- Full-system error rescan, evidence-based profitability upgrade (ADX+EMA V2 / V2-spot), strategy governance enforcement, live testnet reconciliation (LINKUSDT close, stale order cleanup), statistics reset to authoritative exchange balance, and GitHub/Render synchronization.
+
+## Work Completed
+- **Environment Repair**: Reconstructed the local virtualenv against `requirements.txt`; discovered two hard dependencies (`statsmodels`, `pyyaml`) missing from the manifest that broke collection of 58 test modules on any fresh install. Added to `requirements.txt`.
+- **Paper Runner Rollover Fix**: `paper_forward_runner.py` read `last_known_price` before assignment when market data was unavailable for a full day, wedging the daily rollover permanently. Initialized with `None` guard so daily reports can never wedge the 30-day experiment clock again.
+- **Strategy Governance Enforcement (CRITICAL)**: `PRODUCTION_STRATEGY_REGISTRY` marked aggressor/scalper as DISABLED (structurally incapable of overcoming 31 bps taker friction) yet nothing enforced it — both traded live and produced ~85% of realized losses. Added `governance_filter_strategies()` + `governance_validated_assets()` in `testnet_engine/service.py`; only registry-VALIDATED strategies load, pinned to their validated timeframe, and the scanned universe is restricted to OOS-validated assets (BTC/ETH/BNB/SOL/XRP/LINK).
+- **Evidence-Based Profitability Research**: Fetched 2021-2026 Binance 4h history (74k bars × 6 assets) and built `research/upgrade_2026_08/param_study.py` — full-friction (31 bps round trip), next-candle-open, SL-first-intrabar backtester. Ran 192-variant grid + dedicated 64-variant long-only grid + long/short edge attribution split.
+- **ADX+EMA V2 Upgrade**: Removed the pullback entry rule (net-negative 2021-2026: OOS PF 0.85 with it on); widened SL to 3×ATR; discovered the OOS edge is short-dominated (PF 3.14) while the spot engine is LONG_ONLY — rev-1 params (ADX30) are long-only OOS PF 0.63. Final V2-spot: crossover @ADX20, SL/TP 3×ATR, **BTC market-regime gate** (BUY only when BTCUSDT 4h close > EMA200). OOS 2024-2026 (85 long trades): **PF 2.30, win 0.576, +224 bps/trade at 1% risk**, profitable every year (2024: 2.25, 2025: 3.21, 2026: 1.05).
+- **BTC Regime Gate Implementation**: `compute_btc_regime()` + `_btc_regime_state()` in service; BUY candidates rejected with `BTC_REGIME_RISK_OFF` when BTC is below its 200-EMA; fail-open with warning when BTC feed is unavailable.
+- **Live Testnet Reconciliation (Tier 1 evidence)**: Queried `get_account`/`get_open_orders`/`get_my_trades` directly. Cancelled stale TRXUSDT OCO + orphaned DOLOUSDT/WALUSDT orders; **closed LINKUSDT 23.24 @ ~$11.74** (market SELL, order 846940 FILLED) — the last open position. Account now: **$11,609.29 USDT free, 0 locked, 0 positions, 0 open orders**.
+- **Statistics Reset to Authoritative Baseline**: All ledgers/counters/equity history cleared; baseline set to the actual exchange balance (not a stale local figure). `reset_all_statistics.py` now accepts an explicit target balance CLI argument. Pre-reset ledgers archived under `backup/reset_2026-08-22_pre_v2spot/` (git-ignored).
+- **Test Suite**: Expanded from 505 to **522 passing tests** with new `tests/test_governance_enforcement.py` (7) and `tests/test_strategy_v2_upgrade.py` (10, incl. BTC regime gate risk-on/risk-off/fail-open).
+
+## Bug Fixes
+- Bug #39: `requirements.txt` missing `statsmodels` and `pyyaml` — 58 test modules fail collection on fresh install.
+- Bug #40: `paper_forward_runner.py` undefined `last_known_price` NameError permanently wedges daily rollover after 24h of data unavailability.
+- Bug #41: Strategy registry governance leak — DISABLED strategies (aggressor/scalper) and unvalidated symbols executed live testnet orders.
+- Bug #42: V1 pullback entry rule net-negative across 2021-2026 (portfolio OOS PF 0.85 with it enabled) — removed in V2.
+- Bug #43: Live/backtest market-mismatch — validated parameters assumed both directions but engine is LONG_ONLY (spot); long-only config re-validated (ADX30→20) and BTC regime gate added.
+- Bug #44: `reset_all_statistics.py` silently reused stale portfolio equity as the new baseline instead of an authoritative balance.
+
+## Verification
+- Complete Pytest Suite: **522 passed / 522 tests (100% across two consecutive runs in 56.48s and 55.02s)**.
+- Byte-compilation: all modules PASS (`compileall`). Pyflakes: zero defects in production code.
+- Tier 1 Exchange Evidence: `get_account` → USDT 11,609.29365930 free / 0 locked; `get_open_orders` → empty; LINKUSDT SELL 846940 FILLED.
+- End-of-Day State: Balance: $11,609.29 USDT (exchange-authoritative) | Closed Trades: 0 (fresh ledger) | Engine: V2-spot armed, awaiting deployment/restart.

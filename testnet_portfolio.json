@@ -1,29 +1,23 @@
 {
   "account": "BINANCE_TESTNET_SPOT",
-  "cash": 11413.5144,
+  "cash": 11609.2936593,
   "crypto_holdings_value": 219.29,
   "total_equity": 11632.81,
-  "equity": 11632.81,
+  "equity": 11609.2936593,
   "unrealized_pnl": 0.53,
   "total_realized_pnl": -39.7928,
   "total_fees": 20.0188,
   "closed_trades_count": 30,
   "wins": 4,
   "losses": 26,
-  "open_positions": 1,
-  "positions": {
-    "LINKUSDT": {
-      "symbol": "LINKUSDT",
-      "quantity": 23.24,
-      "entry_price": 9.407,
-      "current_price": 9.435,
-      "unrealized_pnl": 0.53,
-      "stop_loss_order_id": 436592,
-      "take_profit_order_id": 436593,
-      "source": "BINANCE_EXECUTION",
-      "provenance": "BINANCE_EXECUTION",
-      "verified": true
-    }
-  },
-  "last_reconciliation_timestamp": "2026-08-18T18:45:00Z"
+  "open_positions": 0,
+  "positions": {},
+  "last_reconciliation_timestamp": "2026-08-18T18:45:00Z",
+  "initial_deposit": 11609.2936593,
+  "realized_pnl": 0.0,
+  "used_margin": 0.0,
+  "fees": 0.0,
+  "funding": 0.0,
+  "max_drawdown": 0.0,
+  "service_start_time": "2026-08-22T08:07:10.078324Z"
 }

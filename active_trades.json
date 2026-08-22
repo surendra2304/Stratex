@@ -1,18 +1,1 @@
-[
-  {
-    "symbol": "LINKUSDT",
-    "strategy": "aggressor",
-    "side": "BUY",
-    "entry_price": 9.407,
-    "quantity": 23.24,
-    "entry_time": "2026-08-17T20:20:00Z",
-    "stop_loss": 9.03,
-    "take_profit": 14.104,
-    "entry_order_id": 436591,
-    "stop_loss_order_id": 436592,
-    "take_profit_order_id": 436593,
-    "source": "BINANCE_EXECUTION",
-    "provenance": "BINANCE_EXECUTION",
-    "verified": true
-  }
-]
+[]

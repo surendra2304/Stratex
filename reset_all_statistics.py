@@ -1,9 +1,10 @@
 import datetime
 import json
 import os
+import sys
 
 
-def reset_all():
+def reset_all(target_balance=None):
     now_iso = datetime.datetime.utcnow().isoformat() + "Z"
     print(f"Starting trade statistics reset at {now_iso}...")
 
@@ -51,39 +52,45 @@ def reset_all():
             with open("testnet_portfolio.json", "r", encoding="utf-8") as f:
                 tp = json.load(f)
             port_equity = float(tp.get("equity", port_equity))
-            tp["initial_deposit"] = port_equity
-            tp["cash"] = port_equity
-            tp["equity"] = port_equity
-            tp["realized_pnl"] = 0.0
-            tp["used_margin"] = 0.0
-            tp["fees"] = 0.0
-            tp["funding"] = 0.0
-            tp["open_positions"] = 0
-            tp["positions"] = {}
-            tp["max_drawdown"] = 0.0
-            tp["service_start_time"] = now_iso
-            if "scanner_stats" in tp and isinstance(tp["scanner_stats"], dict):
-                sc = tp["scanner_stats"]
-                for k in ["TOTAL_SIGNALS", "PROFITABILITY_ACCEPTED", "PROFITABILITY_REJECTED",
-                          "RISK_ACCEPTED", "RISK_REJECTED", "EXECUTION_ELIGIBLE", "EXECUTION_REJECTED",
-                          "COOLDOWN_REJECTED", "MARKET_DATA_REJECTED", "JIT_REJECTED", "OTHER_REJECTED",
-                          "QUALIFIED", "ORDERS_SUBMITTED", "ORDERS_FILLED", "ORDERS_FAILED",
-                          "OPEN_POSITIONS", "CLOSED_TRADES", "strategy_evaluations",
-                          "buy_predictions", "sell_predictions", "TOTAL_CANDLES",
-                          "BUY_SIGNALS", "SELL_SIGNALS", "HOLD_SIGNALS"]:
-                    if k in sc:
-                        sc[k] = 0
-                if "strategy_metrics" in sc and isinstance(sc["strategy_metrics"], dict):
-                    for strat in sc["strategy_metrics"]:
-                        sc["strategy_metrics"][strat] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0}
-                if "timeframe_metrics" in sc and isinstance(sc["timeframe_metrics"], dict):
-                    for tfm in sc["timeframe_metrics"]:
-                        sc["timeframe_metrics"][tfm] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0}
-            with open("testnet_portfolio.json", "w", encoding="utf-8") as f:
-                json.dump(tp, f, indent=2)
-            print("  [RESET] testnet_portfolio.json (PnL=0, trades=0, open_positions=0)")
         except Exception as e:
-            print(f"  [ERROR] updating testnet_portfolio.json: {e}")
+            print(f"  [ERROR] reading testnet_portfolio.json: {e}")
+            tp = {}
+    else:
+        tp = {}
+    if target_balance is not None:
+        port_equity = float(target_balance)
+        print(f"  [TARGET] Balance override: {port_equity}")
+    tp["initial_deposit"] = port_equity
+    tp["cash"] = port_equity
+    tp["equity"] = port_equity
+    tp["realized_pnl"] = 0.0
+    tp["used_margin"] = 0.0
+    tp["fees"] = 0.0
+    tp["funding"] = 0.0
+    tp["open_positions"] = 0
+    tp["positions"] = {}
+    tp["max_drawdown"] = 0.0
+    tp["service_start_time"] = now_iso
+    if "scanner_stats" in tp and isinstance(tp["scanner_stats"], dict):
+        sc = tp["scanner_stats"]
+        for k in ["TOTAL_SIGNALS", "PROFITABILITY_ACCEPTED", "PROFITABILITY_REJECTED",
+                  "RISK_ACCEPTED", "RISK_REJECTED", "EXECUTION_ELIGIBLE", "EXECUTION_REJECTED",
+                  "COOLDOWN_REJECTED", "MARKET_DATA_REJECTED", "JIT_REJECTED", "OTHER_REJECTED",
+                  "QUALIFIED", "ORDERS_SUBMITTED", "ORDERS_FILLED", "ORDERS_FAILED",
+                  "OPEN_POSITIONS", "CLOSED_TRADES", "strategy_evaluations",
+                  "buy_predictions", "sell_predictions", "TOTAL_CANDLES",
+                  "BUY_SIGNALS", "SELL_SIGNALS", "HOLD_SIGNALS"]:
+            if k in sc:
+                sc[k] = 0
+        if "strategy_metrics" in sc and isinstance(sc["strategy_metrics"], dict):
+            for strat in sc["strategy_metrics"]:
+                sc["strategy_metrics"][strat] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0}
+        if "timeframe_metrics" in sc and isinstance(sc["timeframe_metrics"], dict):
+            for tfm in sc["timeframe_metrics"]:
+                sc["timeframe_metrics"][tfm] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0}
+    with open("testnet_portfolio.json", "w", encoding="utf-8") as f:
+        json.dump(tp, f, indent=2)
+    print("  [RESET] testnet_portfolio.json (PnL=0, trades=0, open_positions=0)")
 
     # 5. Reset baseline and initial deposit
     with open("testnet_baseline.json", "w", encoding="utf-8") as f:
@@ -139,4 +146,5 @@ def reset_all():
     print("\nAll trade statistics and ledger history have been successfully reset!")
 
 if __name__ == "__main__":
-    reset_all()
+    # Optional CLI arg: target starting balance, e.g. `python reset_all_statistics.py 10000`
+    reset_all(target_balance=sys.argv[1] if len(sys.argv) > 1 else None)
