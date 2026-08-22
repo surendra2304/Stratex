@@ -2760,7 +2760,6 @@ def api_telemetry_analytics():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
-@app.route('/api/config', methods=['GET', 'POST'])
 @app.route('/api/recent-actions')
 def api_recent_actions():
     """
@@ -2884,6 +2883,7 @@ def api_panic():
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
 
+@app.route('/api/config', methods=['GET', 'POST'])
 @app.route('/api/settings', methods=['GET', 'POST'])
 def api_config():
     """
