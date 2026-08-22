@@ -83,20 +83,15 @@ def test_service_strategy_loading(monkeypatch, mocker):
     
     service = TestnetService()
     
-    assert "4h" in service.strategies
-    assert "2h" in service.strategies
-    assert "1m" in service.strategies
+    # Governance gate: adx_ema is VALIDATED (pinned to its 4h registry timeframe);
+    # aggressor is DISABLED in PRODUCTION_STRATEGY_REGISTRY and must never load.
+    assert list(service.strategies.keys()) == ["4h"]
     
     assert len(service.strategies["4h"]) == 1
     assert service.strategies["4h"][0][0] == "adx_ema"
     
-    assert len(service.strategies["2h"]) == 1
-    assert service.strategies["2h"][0][0] == "adx_ema"
-    
-    assert len(service.strategies["1m"]) == 1
-    assert service.strategies["1m"][0][0] == "aggressor"
+    assert "2h" not in service.strategies
+    assert "1m" not in service.strategies
     
     # Validate timeframe_metrics initialization
     assert "4h" in service.stats["timeframe_metrics"]
-    assert "2h" in service.stats["timeframe_metrics"]
-    assert "1m" in service.stats["timeframe_metrics"]

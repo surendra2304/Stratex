@@ -14,6 +14,7 @@ from binance.exceptions import BinanceAPIException
 
 import config
 from config import ACTIVE_STRATEGIES, TRADING_MODE
+from config_strategy import ADX_EMA_STRATEGY_V2, PRODUCTION_STRATEGY_REGISTRY
 from data import add_indicators
 from execution import _load_active_trades, get_exchange_client, place_market_order
 from logger import get_logger
@@ -26,6 +27,57 @@ from testnet_engine.risk_gate import RiskGate
 from testnet_engine.telemetry_manager import get_telemetry_manager
 
 logger = get_logger("service")
+
+
+def governance_filter_strategies(active_strategies):
+    """Return {strategy: [timeframes]} restricted to registry-VALIDATED strategies.
+
+    Governance gate: only strategies with defensible out-of-sample proof may trade.
+    DISABLED/unregistered strategies (e.g. 1m scalpers whose targets cannot overcome
+    taker friction) are dropped, and scanning is pinned to the validated timeframe.
+    """
+    filtered = {}
+    for strat_name, tfs in active_strategies.items():
+        entry = PRODUCTION_STRATEGY_REGISTRY.get(strat_name)
+        if entry is None or entry.get("status") != "VALIDATED":
+            status = entry.get("status") if entry else "UNREGISTERED"
+            logger.warning(
+                f"[GOVERNANCE] Strategy '{strat_name}' skipped — registry status "
+                f"{status}; only VALIDATED strategies may generate executable signals."
+            )
+            continue
+        validated_tf = entry.get("timeframe")
+        tfs_list = tfs if isinstance(tfs, list) else [tfs]
+        if validated_tf and validated_tf not in tfs_list:
+            validated_tf = tfs_list[-1]
+        filtered[strat_name] = [validated_tf] if validated_tf else tfs_list
+    return filtered
+
+
+def governance_validated_assets(strategies_by_tf):
+    """Union of OOS-validated assets across the loaded (already gated) strategies."""
+    assets = set()
+    for tf_strats in (strategies_by_tf or {}).values():
+        for strat_name, _mod in tf_strats:
+            entry = PRODUCTION_STRATEGY_REGISTRY.get(strat_name, {})
+            assets.update(entry.get("validated_assets", []))
+    return assets
+
+
+def compute_btc_regime(btc_df):
+    """Return (regime_ok, btc_close, btc_ema200) from a BTCUSDT 4h frame.
+
+    regime_ok is True (risk-on) when close > EMA200, False (risk-off) below.
+    Returns (None, None, None) when the data is insufficient to judge — the
+    caller treats None as fail-open with a warning rather than blocking all
+    trading on a lagging websocket feed.
+    """
+    if btc_df is None or len(btc_df) < 200 or "close" not in btc_df.columns:
+        return None, None, None
+    closes = btc_df["close"].astype(float)
+    ema200 = float(closes.ewm(span=200, adjust=False).mean().iloc[-1])
+    close = float(closes.iloc[-1])
+    return (close > ema200), close, ema200
 
 _TF_SECONDS = {"1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "2h": 7200, "4h": 14400, "6h": 21600, "8h": 28800, "12h": 43200, "1d": 86400}
 _COOLDOWN_SECONDS = float(os.getenv("SIGNAL_COOLDOWN_SECONDS", "300"))  # 5 minutes default
@@ -72,11 +124,10 @@ class TestnetService:
         print(f"Strategies: {', '.join(ACTIVE_STRATEGIES.keys())}")
         
         self.strategies = {}
-        for strat_name, tfs in ACTIVE_STRATEGIES.items():
+        for strat_name, scan_tfs in governance_filter_strategies(ACTIVE_STRATEGIES).items():
             try:
                 mod = importlib.import_module(f"strategy_{strat_name}")
-                tfs_list = tfs if isinstance(tfs, list) else [tfs]
-                for tf in tfs_list:
+                for tf in scan_tfs:
                     if tf not in self.strategies:
                         self.strategies[tf] = []
                     self.strategies[tf].append((strat_name, mod))
@@ -616,8 +667,9 @@ class TestnetService:
                         cross_dn = (ema20_val < ema50_val) and (float(prev_row.get("ema_20", 0)) >= float(prev_row.get("ema_50", 0)))
                         if not (cross_up or cross_dn):
                             reasons.append("NO_CROSSOVER")
-                        if adx_val <= 25:
-                            reasons.append("ADX_BELOW_25")
+                        _adx_th = ADX_EMA_STRATEGY_V2.get("ADX_THRESHOLD", 30)
+                        if adx_val <= _adx_th:
+                            reasons.append(f"ADX_BELOW_{_adx_th}")
                         if cross_up and current_price <= ema200_val:
                             reasons.append("CLOSE_BELOW_EMA200")
                         if cross_dn and current_price >= ema200_val:
@@ -681,6 +733,24 @@ class TestnetService:
                             self.stats["timeframe_metrics"][tf]["rejected"] += 1
                         self.log_opportunity(signal_id, symbol, side, {"reason": "LONG_ONLY_RESTRICTION"}, "REJECTED", "LONG_ONLY_RESTRICTION")
                         continue
+
+                    # V2 spot upgrade: BTC market-regime gate — alts follow BTC;
+                    # long entries during BTC risk-off (4h close < EMA200) are
+                    # historically net-negative (see research/upgrade_2026_08).
+                    if side == "BUY" and ADX_EMA_STRATEGY_V2.get("BTC_REGIME_FILTER", False):
+                        regime_ok, btc_close, btc_ema = self._btc_regime_state()
+                        if regime_ok is False:
+                            self.stats["OTHER_REJECTED"] += 1
+                            if strat_name in self.stats["strategy_metrics"]:
+                                self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                            if tf in self.stats["timeframe_metrics"]:
+                                self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                            self.log_opportunity(
+                                signal_id, symbol, side,
+                                {"reason": "BTC_REGIME_RISK_OFF", "btc_close": btc_close, "btc_ema200": btc_ema},
+                                "REJECTED", "BTC_REGIME_RISK_OFF"
+                            )
+                            continue
 
                     passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
                         symbol, side, current_price, sl, tp, signal_result
@@ -1521,6 +1591,22 @@ class TestnetService:
         except Exception as e:
             logger.error(f"[SERVICE] Authoritative Rebuild Failed: {e}")
 
+    def _btc_regime_state(self):
+        """Current BTC risk-on/risk-off state from the scanner's BTCUSDT 4h cache."""
+        try:
+            btc_df = None
+            scanner = getattr(self, "scanner", None)
+            if scanner is not None:
+                with scanner._cache_lock:
+                    btc_df = scanner.candle_cache.get(("BTCUSDT", "4h"))
+            if btc_df is None:
+                logger.warning("[GOVERNANCE] BTCUSDT 4h data unavailable — regime gate fail-open for this candle")
+                return None, None, None
+            return compute_btc_regime(btc_df)
+        except Exception as e:
+            logger.error(f"[GOVERNANCE] BTC regime evaluation failed ({e}) — fail-open")
+            return None, None, None
+
     def _check_degradation(self):
         """Phase 5: Automatically switch to OBSERVE-ONLY if strategy degrades."""
         window = getattr(config, "DEGRADATION_WINDOW", 20)
@@ -1670,10 +1756,25 @@ class TestnetService:
         discovery = SymbolDiscoveryService()
         self.symbol_filters = discovery.discover_eligible_symbols(min_quote_volume=1_000_000)
         symbol_list = list(self.symbol_filters.keys())
+
+        # Governance gate: restrict the trading universe to assets with OOS-validated
+        # edge for the enabled strategies. Unvalidated symbols carry unquantified
+        # slippage/regime risk and are excluded from signal generation.
+        validated_assets = governance_validated_assets(self.strategies)
+        if validated_assets:
+            blocked = [s for s in symbol_list if s not in validated_assets]
+            if blocked:
+                logger.info(
+                    f"[GOVERNANCE] Restricting universe to {len(validated_assets)} OOS-validated assets; "
+                    f"{len(blocked)} discovered symbols excluded from scanning."
+                )
+            self.symbol_filters = {s: f for s, f in self.symbol_filters.items() if s in validated_assets}
+            symbol_list = list(self.symbol_filters.keys())
         self.stats["symbols_scanned"] = len(symbol_list)
         
-        # 2. Train ML Strategy (if enabled)
-        if "ml" in ACTIVE_STRATEGIES:
+        # 2. Train ML Strategy (only if it survived the governance gate)
+        _ml_loaded = any(name == "ml" for tf_strats in self.strategies.values() for name, _ in tf_strats)
+        if _ml_loaded:
             try:
                 from data import add_indicators, get_candles
                 from strategy_ml import train
