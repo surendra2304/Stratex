@@ -57,3 +57,30 @@ class TestSymbolGovernance:
     def test_no_assets_when_nothing_loaded(self):
         assert governance_validated_assets({}) == set()
         assert governance_validated_assets(None) == set()
+
+
+class TestHeartbeatReportsLoadedTruth:
+    def test_heartbeat_shows_governance_filtered_strategies(self, monkeypatch, mocker, tmp_path):
+        """The dashboard must mirror the engine: heartbeat reports actually-loaded
+        (VALIDATED) strategies, not the raw config that includes DISABLED ones."""
+        import json as _json
+        import testnet_engine.service as svc
+
+        monkeypatch.setattr(svc, "TRADING_MODE", "TESTNET")
+        monkeypatch.setenv("API_KEY", "dummy")
+        monkeypatch.setenv("SECRET_KEY", "dummy")
+        mock_client = mocker.MagicMock()
+        mock_client.get_account.return_value = {"balances": [{"asset": "USDT", "free": "10000.0", "locked": "0.0"}]}
+        mocker.patch("testnet_engine.service.get_exchange_client", return_value=mock_client)
+        mocker.patch("execution._load_active_trades", return_value=[])
+        monkeypatch.setattr(svc, "ACTIVE_STRATEGIES", {"adx_ema": ["4h"], "aggressor": "1m"})
+
+        hb_file = tmp_path / "hb.json"
+        monkeypatch.setattr(svc, "TESTNET_HEARTBEAT_FILE", str(hb_file))
+
+        service = svc.TestnetService()
+        service._write_heartbeat()
+        hb = _json.loads(hb_file.read_text())
+        assert hb["strategies"] == ["adx_ema"]
+        assert hb["strategy"] == "adx_ema"
+        assert hb["timeframes"] == ["4h"]

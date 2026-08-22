@@ -1672,6 +1672,10 @@ class TestnetService:
                 if eval_times:
                     last_eval = max(eval_times)
 
+            # Report what the engine ACTUALLY loaded (post-governance-gate),
+            # not the raw config — the dashboard must mirror real testnet state.
+            loaded_strats = sorted({name for tf_strats in self.strategies.values() for name, _ in tf_strats})
+            loaded_tfs = sorted(self.strategies.keys())
             hb = {
                 "worker_alive": worker_alive,
                 "status": status,
@@ -1680,9 +1684,9 @@ class TestnetService:
                 "mode": "TESTNET",
                 "binance_connected": self.client is not None,
                 "websocket_connected": hasattr(self, 'scanner') and bool(self.scanner),
-                "strategy": next(iter(ACTIVE_STRATEGIES.keys())) if ACTIVE_STRATEGIES else "adx_ema",
-                "strategies": list(ACTIVE_STRATEGIES.keys()),
-                "timeframes": list({tf for tfs in ACTIVE_STRATEGIES.values() for tf in (tfs if isinstance(tfs, list) else [tfs])}),
+                "strategy": loaded_strats[0] if loaded_strats else "none",
+                "strategies": loaded_strats,
+                "timeframes": loaded_tfs,
                 "symbols": symbols,
                 "symbol_count": len(symbols),
                 "last_market_update": last_m_update,
