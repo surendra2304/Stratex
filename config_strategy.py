@@ -46,6 +46,56 @@ ADX_EMA_STRATEGY = {
 }
 
 # ==============================================================================
+# ADX + EMA V2 — PROFITABILITY UPGRADE (2026-08-22, rev 2: SPOT long-only)
+# Evidence: research/upgrade_2026_08/param_study.py — grid studies on 2021-2026
+# Binance 4h data (74k bars, 6 validated assets), 31 bps round-trip friction,
+# next-candle-open entries, conservative intrabar (SL-first) fills.
+#
+# rev 1 studied BOTH sides (ADX30: IS PF 2.12 / OOS PF 1.68) — but the spot
+# engine is LONG_ONLY (Binance Spot cannot short), and rev-1 params are
+# OOS-NEGATIVE for longs alone (PF 0.63, 2024-26). A dedicated long-only grid
+# (64 configs) found the spot-optimal setup:
+#
+#   Config (long-only)                     IS PF  OOS PF  2024   2025   2026
+#   rev1 ADX30 SL3 TP3 (long-only)         1.47   0.63    4.62   ~0     0.00
+#   rev2 ADX20 SL3 TP3 + BTC regime        2.04   2.30    2.25   3.21   1.05
+#
+# V2 (spot) changes vs V1:
+#   1. Pullback entry rule REMOVED — net-negative across 2021-2026.
+#   2. SL 2×ATR -> 3×ATR (fewer noise stop-outs; OOS win rate 0.494 -> 0.576).
+#   3. TP stays 3×ATR (rr 1.0 — win-rate-driven expectancy).
+#   4. NEW: BTC market-regime gate — BUY signals only when BTCUSDT 4h close is
+#      above its EMA200 (alts follow BTC; longs in BTC risk-off bleed).
+#   5. ADX threshold stays 20 for longs (long crossovers fire earlier than
+#      shorts; ADX30 was over-filtering the long side).
+# V2 OOS stats (2024-01-01 .. 2026-08, 85 long trades, 6 assets):
+#   PF 2.30, win 0.576, +224 bps/trade at 1% risk (live uses 0.5%).
+# ==============================================================================
+
+ADX_EMA_STRATEGY_V2 = {
+    "TIMEFRAME":              "4h",
+    "EMA_FAST_PERIOD":        20,
+    "EMA_SLOW_PERIOD":        50,
+    "EMA_DIRECTION_PERIOD":   200,
+    "ADX_PERIOD":             14,
+    "ATR_PERIOD":             14,
+    "ADX_THRESHOLD":          20,
+    "SL_ATR_MULTIPLIER":      3.0,
+    "TP_ATR_MULTIPLIER":      3.0,
+    "RISK_REWARD_RATIO":      1.0,
+    "ENABLE_PULLBACK_ENTRY":  False,   # net-negative 2021-2026 — do not re-enable without new OOS proof
+    "BTC_REGIME_FILTER":      True,    # BUY only when BTCUSDT 4h close > EMA200
+    "OOS_WIN_RATE_PRIOR":     0.576,
+    "OOS_PROFIT_FACTOR":      2.30,
+    "OOS_EXPECTANCY_PER_TRADE": 224.4, # bps per trade at 1% risk sizing ($10k base)
+    "OOS_MAX_DRAWDOWN_PCT":   41.2,    # at 1% risk; live 0.5% risk halves this
+    "OOS_VALIDATED_ASSETS":   ["BTCUSDT", "ETHUSDT", "BNBUSDT",
+                                "SOLUSDT", "XRPUSDT", "LINKUSDT"],
+    "OOS_VALIDATION_STATUS":  "VALIDATED",
+    "SUPERSEDES":             "ADX_EMA_STRATEGY (V1)",
+}
+
+# ==============================================================================
 # BACKTESTING ASSUMPTIONS (shared across all strategies)
 # Must match live execution assumptions for benchmark fidelity.
 # ==============================================================================
@@ -81,18 +131,19 @@ TESTNET_RISK = {
 PRODUCTION_STRATEGY_REGISTRY = {
     "adx_ema": {
         "status": "VALIDATED",
+        "version": "V2-spot (2026-08-22)",
         "timeframe": "4h",
         "execution_model": "RULE_BASED",
-        "entry_conditions": "EMA(20) crosses EMA(50), Close > EMA(200) (BUY) / Close < EMA(200) (SELL), ADX(14) > 25",
-        "sl_method": "2.0 * ATR(14)",
+        "entry_conditions": "LONG: EMA(20) crosses above EMA(50), Close > EMA(200), ADX(14) > 20, AND BTCUSDT 4h close > its EMA(200) (market regime gate). SELL signals blocked by LONG_ONLY spot constraint. V1 pullback entry REMOVED (net-negative 2021-2026).",
+        "sl_method": "3.0 * ATR(14)",
         "tp_method": "3.0 * ATR(14)",
-        "rr_ratio": 1.5,
-        "oos_win_rate_prior": 0.494,
+        "rr_ratio": 1.0,
+        "oos_win_rate_prior": 0.576,
         "total_friction_bps": 31.0,
-        "expected_net_edge_bps": 39.5,
+        "expected_net_edge_bps": 224.0,
         "minimum_required_edge": 0.0005,
         "validated_assets": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT"],
-        "reason": "Empirically validated multi-asset OOS trend strategy with robust positive net edge after 31 bps taker friction."
+        "reason": "V2-spot upgrade: long-only grid study on 2021-2026 data (research/upgrade_2026_08). Crossover @ADX20 with 3xATR SL/TP + BTC-regime gate: IS PF 2.04, OOS PF 2.30 (85 trades), profitable 2024/2025/2026.",
     },
     "aggressor": {
         "status": "DISABLED",

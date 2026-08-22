@@ -19,8 +19,11 @@ class TestProductionStrategyRegistry:
         assert "adx_ema" in PRODUCTION_STRATEGY_REGISTRY
         assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["status"] == "VALIDATED"
         assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["timeframe"] == "4h"
-        assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["oos_win_rate_prior"] == 0.494
-        assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["rr_ratio"] == 1.5
+        # V2-spot upgrade (2026-08): long-only crossover @ADX20 + BTC-regime gate,
+        # 3×ATR SL/TP — see research/upgrade_2026_08/param_study.py.
+        # OOS 2024-2026 (85 long trades): win 0.576, PF 2.30.
+        assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["oos_win_rate_prior"] == 0.576
+        assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["rr_ratio"] == 1.0
         
         # Disabled strategies
         for strat in ["aggressor", "scalper", "supertrend", "swing", "ml"]:
