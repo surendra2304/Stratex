@@ -394,3 +394,19 @@ TESTNET ONLY
 - Frontend: `node -c static/app.js` and `node -c static/ui-compat.js` both PASS.
 - Live local smoke tests: `/api/recent-actions` 200; `/api/panic` activate+release verified with real exchange order sweep (protective orders correctly preserved); `paper_runner_status: "RUNNING"` in engine-health.
 - Walk-forward report reproducible: `python research/upgrade_2026_08/walk_forward_validation.py`.
+
+---
+
+# DAY 10 (verification addendum) — 2026-08-22: Merge, Deploy & Live Protocol
+## Deployment
+- Merged `feat/operational-upgrades` → `master` (fast-forward `a12b2e2..2c5a79e`), pushed; Render deployed (boot 12:09:48 UTC), hotfix `641d9ce` deployed (boot 12:18:49 UTC).
+
+## Bug Fixes
+- Bug #55: paper-runner supervisor falsely reported DEAD on Render — heartbeat was only written on state transitions, so a healthy runner in its 60s poll loop went stale (>180s) and was marked DEAD; additionally SystemExit-class failures escaped `except Exception` so restarts never fired. Fixed with a 30s heartbeat watchdog thread + BaseException handling. Verified live: `paper_runner_status: "RUNNING"` sustained across consecutive polls.
+
+## Verification (Tier 1 + panic protocol)
+- `/health`: 200, engine online. `/api/engine-health`: ONLINE, adx_ema @ 4h, 7 validated symbols, paper_runner RUNNING, restarts 0.
+- `/api/recent-actions`: 200, valid empty-state payload (ledger clean since 2026-08-22 reset — expected).
+- **Panic switch**: TRIGGERED (protective OCO orders on BNB/ETH/TRX/XRP+ preserved intact; no non-protective orders to cancel) → RELEASED immediately → engine ONLINE, trading resumable next scan cycle. Confirmed halted-state via endpoint state machine (`panic_active: true → false`); note: `/api/status` does not yet surface a panic field (follow-up candidate).
+- Dashboard UI: GET / 200; app.js + ui-compat.js 200; action-log panel present in served HTML.
+- Suite after hotfix: **533 passed / 533 (two consecutive runs)**.
