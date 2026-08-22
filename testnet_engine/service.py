@@ -1773,6 +1773,17 @@ class TestnetService:
                     f"{len(blocked)} discovered symbols excluded from scanning."
                 )
             self.symbol_filters = {s: f for s, f in self.symbol_filters.items() if s in validated_assets}
+            # Backfill validated assets that volume-ranked discovery missed
+            # (top-N discovery can drop a validated asset on the low-volume testnet).
+            missing = validated_assets - set(self.symbol_filters)
+            if missing:
+                try:
+                    backfill = discovery.get_symbol_filters(sorted(missing))
+                    if backfill:
+                        self.symbol_filters.update(backfill)
+                        logger.info(f"[GOVERNANCE] Backfilled validated assets into universe: {sorted(backfill)}")
+                except Exception as e:
+                    logger.error(f"[GOVERNANCE] Symbol backfill failed: {e}")
             symbol_list = list(self.symbol_filters.keys())
         self.stats["symbols_scanned"] = len(symbol_list)
         

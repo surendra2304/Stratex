@@ -102,7 +102,7 @@ class SymbolDiscoveryService:
                     
             logger.info(f"[DISCOVERY] Found {len(eligible_symbols)} eligible symbols.")
             return eligible_symbols
-            
+
         except Exception as e:
             logger.error(f"[DISCOVERY] Error discovering symbols: {e}")
             fallback = {
@@ -111,3 +111,39 @@ class SymbolDiscoveryService:
             }
             logger.info(f"[DISCOVERY] Falling back to {len(fallback)} major symbols.")
             return fallback
+
+    def get_symbol_filters(self, symbols):
+        """Parse exchange filters for explicitly requested symbols.
+
+        Used by the governance layer to backfill OOS-validated assets that the
+        volume-ranked discovery (top-N + majors backstop) may have missed —
+        e.g. a validated asset outside the top-N on a low-volume testnet.
+        Returns {symbol: {stepSize, minNotional, tickSize}} for TRADING symbols.
+        """
+        out = {}
+        try:
+            exchange_info = self.client.get_exchange_info()
+        except Exception as e:
+            logger.error(f"[DISCOVERY] get_symbol_filters exchange_info error: {e}")
+            return out
+        wanted = set(symbols)
+        for symbol_info in exchange_info.get("symbols", []):
+            symbol = symbol_info["symbol"]
+            if symbol not in wanted or symbol_info.get("status") != "TRADING":
+                continue
+            if symbol_info.get("quoteAsset") != "USDT":
+                continue
+            parsed = {"stepSize": 1.0, "minNotional": 10.0, "tickSize": 0.01}
+            for f in symbol_info.get("filters", []):
+                f_type = f.get("filterType")
+                if f_type == "LOT_SIZE":
+                    parsed["stepSize"] = float(f.get("stepSize", 1.0))
+                elif f_type in ["MIN_NOTIONAL", "NOTIONAL"]:
+                    parsed["minNotional"] = float(f.get("minNotional", f.get("notional", 10.0)))
+                elif f_type == "PRICE_FILTER":
+                    parsed["tickSize"] = float(f.get("tickSize", 0.01))
+            out[symbol] = parsed
+        missing = wanted - set(out)
+        if missing:
+            logger.warning(f"[DISCOVERY] Requested symbols not TRADING/USDT: {sorted(missing)}")
+        return out
