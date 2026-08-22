@@ -219,6 +219,20 @@ class MarketScanner:
                             for tf in self.timeframes:
                                 self.last_market_update[(sym, tf)] = datetime.datetime.utcnow()
                         logger.info("[SCANNER] Atomic reconnect completed successfully.")
+
+                        # Upgrade 6: post-reconnect REST backfill. While the socket
+                        # was dead we may have missed candle closes; repopulate every
+                        # cache with a full 250-bar REST fetch (includes production
+                        # warm-seed) so EMAs are fully warmed before the live stream
+                        # is trusted again.
+                        for sym in self.symbols:
+                            for tf in self.timeframes:
+                                try:
+                                    self._fetch_historical_candles(sym, tf)
+                                    cached = len(self.candle_cache.get((sym, tf), []))
+                                    logger.info(f"[SCANNER] Post-reconnect backfill: {sym} {tf} -> {cached} bars")
+                                except Exception as bf_err:
+                                    logger.error(f"[SCANNER] Post-reconnect backfill failed for {sym} {tf}: {bf_err}")
                     except Exception as e:
                         logger.error(f"[SCANNER] Atomic reconnect failed: {e}")
                         
