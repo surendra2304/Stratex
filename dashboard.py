@@ -2761,6 +2761,70 @@ def api_telemetry_analytics():
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
 @app.route('/api/config', methods=['GET', 'POST'])
+@app.route('/api/panic', methods=['POST'])
+def api_panic():
+    """
+    Upgrade 7: Manual kill-switch.
+      - POST /api/panic            -> activate: blocks all NEW orders engine-side
+                                      (panic_state.json flag; works across processes)
+                                      and cancels pending testnet orders EXCEPT
+                                      protective SL/TP (OCO) orders, which stay to
+                                      protect open positions.
+      - POST /api/panic {"release": true} -> release the switch.
+    Never touches live-trading locks; testnet-only operational control.
+    """
+    import uuid as _uuid
+    panic_file = os.getenv("PANIC_STATE_FILE", "panic_state.json")
+    try:
+        payload = request.get_json(silent=True) or {}
+        release = bool(payload.get("release"))
+        # Flip the engine-side flag file
+        state = {
+            "active": not release,
+            "activated_at": None if release else datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "actor": "api:/api/panic",
+        }
+        tmp = panic_file + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+        os.replace(tmp, panic_file)
+
+        cancelled, kept = [], []
+        if not release:
+            # Cancel pending orders, preserving protective SL/TP types (OCO legs)
+            PROTECTIVE = {"STOP_LOSS_LIMIT", "STOP_LOSS", "TAKE_PROFIT", "TAKE_PROFIT_LIMIT", "LIMIT_MAKER"}
+            try:
+                from execution import get_exchange_client as _gec
+                client = _gec()
+                if client is not None:
+                    for o in client.get_open_orders():
+                        if str(o.get("type", "")).upper() in PROTECTIVE:
+                            kept.append(f"{o['symbol']}:{o['orderId']}")
+                            continue
+                        try:
+                            client.cancel_order(symbol=o["symbol"], orderId=o["orderId"])
+                            cancelled.append(f"{o['symbol']}:{o['orderId']}")
+                        except Exception as ce:
+                            app.logger.warning(f"[PANIC] cancel failed {o['symbol']} #{o['orderId']}: {ce}")
+            except Exception as ex:
+                app.logger.error(f"[PANIC] order sweep failed: {ex}")
+
+        return jsonify({
+            "status": "SUCCESS",
+            "panic_active": not release,
+            "message": ("PANIC ACTIVATED: new orders blocked engine-side; "
+                        f"{len(cancelled)} pending order(s) cancelled; "
+                        f"{len(kept)} protective OCO order(s) left intact")
+                    if not release else "PANIC RELEASED: trading may resume next scan cycle",
+            "cancelled_orders": cancelled,
+            "kept_protective_orders": kept,
+            "event_id": str(_uuid.uuid4()),
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+
 @app.route('/api/settings', methods=['GET', 'POST'])
 def api_config():
     """

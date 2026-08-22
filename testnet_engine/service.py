@@ -959,6 +959,12 @@ class TestnetService:
                         "open_positions": len(self.active_positions)
                     })
                     
+                    if self.panic_active():
+                        self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                        self.log_opportunity(signal_id, symbol, side, {"reason": "MANUAL_PANIC_SWITCH"}, "REJECTED", "MANUAL_PANIC_SWITCH")
+                        logger.warning("[PANIC] Manual kill-switch active — order submission blocked (OCO protection unaffected)")
+                        continue
+
                     try:
                         order_res = place_market_order(strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp, client_order_id=signal_id)
                         if order_res:
@@ -1370,6 +1376,24 @@ class TestnetService:
         except Exception as e:
             logger.error(f"[SLIPPAGE] tracking failed: {e}")
             return []
+
+
+    # ------------------------------------------------------------------
+    # Upgrade 7: manual kill-switch (POST /api/panic writes panic_state.json).
+    # While active, NO new orders are placed; open positions keep their OCO
+    # protection. Released by POST /api/panic {"release": true}.
+    # ------------------------------------------------------------------
+    PANIC_STATE_FILE = os.getenv("PANIC_STATE_FILE", "panic_state.json")
+
+    def panic_active(self):
+        """True if the manual kill-switch flag file is active."""
+        try:
+            if not os.path.exists(self.PANIC_STATE_FILE):
+                return False
+            with open(self.PANIC_STATE_FILE, "r", encoding="utf-8") as f:
+                return bool(json.load(f).get("active", False))
+        except Exception:
+            return False
 
     def position_monitor_loop(self):
         """Continuously reconciles active positions against Binance."""
