@@ -465,6 +465,34 @@ TESTNET ONLY
 - Test Suite: **539 passed / 539 tests (100% across two consecutive runs in ~62s)**.
 - Live Deployment: `/health` returns 200 OK, `/api/scanner` confirms 16 symbols actively scanned.
 
+---
+
+# DAY 16 — 2026-08-23
+## Objectives
+- Purge all obsolete 5m UI artifacts from dashboard HTML, JS, and server API responses to reflect the active 15m MTF execution layer.
+- Lower profitability gate threshold from restrictive high expectations to a permissive 40% probability floor while preserving exact 8 bps friction calculation.
+- Merge to `master`, deploy to Render production, and verify `/api/recent-actions` and `/health`.
+
+## Work Completed
+- **5m UI & Config Artifact Purge (Task 1)**:
+  - Updated `dashboard.py`: Modified `/api/strategy-metrics` to accurately register `ADX_EMA` (4h) and `ADX_EMA_MTF` (15m, HTF: 1h) while keeping 5m in matrix headers for frontend compatibility.
+  - Updated `static/index.html`: Corrected the static strategies table to display `ADX_EMA_MTF` on `15m (HTF: 1h)` and `ADX_EMA` on `4h`.
+  - Updated `static/app.js`: Updated fallback timeframes and metric rendering.
+- **Profitability Gate Calibration (Task 2)**:
+  - Updated `testnet_engine/profitability_gate.py`:
+    - Integrated `MIN_PROBABILITY_THRESHOLD` (default: `0.40`).
+    - Configured gate to accept trades with `prob_win >= 0.40` and expected gross return exceeding friction (8 bps).
+  - Updated `config.py`: Added `MIN_PROBABILITY_THRESHOLD = 0.40` and ensured `MINIMUM_EXPECTED_EDGE = 0.0001`.
+  - Updated `testnet_engine/service.py`: Auto-switches CostEngine to `get_futures_maker_config()` (8 bps friction) when `TRADING_MODE == "FUTURES"`.
+- **Deployment & Verification (Task 3)**:
+  - Merged `feat/lower-gate-and-ui-fix` to `master` and pushed to GitHub.
+  - Monitored Render auto-deployment until 200 OK.
+
+## Verification
+- Test Suite: **539 passed / 539 tests (100% across two consecutive runs in ~68s)**.
+- Live Deployment: `/health` returns 200 OK (`engine: online`, `engine_healthy: true`), `/api/recent-actions` active.
+
+
 
 
 

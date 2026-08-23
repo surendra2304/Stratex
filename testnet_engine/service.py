@@ -182,7 +182,10 @@ class TestnetService:
             raise RuntimeError(f"CRITICAL ERROR: Failed to fetch Testnet account balance. Valid Testnet credentials are REQUIRED. Reason: {e}")
 
         # Initialize core components
-        self.cost_engine = CostEngine.get_binance_taker_config()
+        if TRADING_MODE == "FUTURES":
+            self.cost_engine = CostEngine.get_futures_maker_config()
+        else:
+            self.cost_engine = CostEngine.get_binance_taker_config()
         self.profitability_gate = ProfitabilityGate(cost_engine=self.cost_engine)
         self.risk_gate = RiskGate(starting_balance=self.starting_equity)
         self.telemetry = get_telemetry_manager()

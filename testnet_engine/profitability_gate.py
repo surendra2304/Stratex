@@ -124,6 +124,18 @@ class ProfitabilityGate:
                 "confidence": prob_win,
             }
 
+        # Lower probability threshold to 40% (0.40) as required
+        MIN_PROB_THRESHOLD = getattr(config, "MIN_PROBABILITY_THRESHOLD", 0.40)
+        if prob_win < MIN_PROB_THRESHOLD:
+            return False, {
+                "decision": "REJECTED",
+                "reason": f"PROB_WIN_BELOW_{int(MIN_PROB_THRESHOLD*100)}PCT",
+                "details": f"Win Probability {prob_win:.4f} < {MIN_PROB_THRESHOLD:.2f}",
+                "strategy_type": strategy_type,
+                "prob_source": prob_source,
+                "confidence": prob_win,
+            }
+
         # ------------------------------------------------------------------
         # 3. Expected value calculation — consistent with benchmark
         #    E[gross] = P(win)×reward - P(loss)×risk
@@ -133,8 +145,9 @@ class ProfitabilityGate:
         total_friction_pct    = self.cost_engine.get_total_friction()
         expected_net_return   = expected_gross_return - total_friction_pct
 
-        min_edge  = getattr(config, "MINIMUM_EXPECTED_EDGE", 0.0005)
-        is_accepted = expected_net_return >= min_edge
+        # Permissive gate: accept any trade with positive edge or meeting the 40% probability floor above friction
+        min_edge  = getattr(config, "MINIMUM_EXPECTED_EDGE", 0.0001)
+        is_accepted = (expected_net_return >= min_edge) or (prob_win >= 0.40 and expected_gross_return > total_friction_pct)
         reason    = "POSITIVE_EDGE" if is_accepted else "NEGATIVE_EXPECTED_NET_RETURN"
 
         # ------------------------------------------------------------------

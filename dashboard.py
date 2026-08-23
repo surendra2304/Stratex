@@ -1592,16 +1592,17 @@ def api_strategy_metrics():
     trades = telemetry.query_trades(limit=500)
     signals = telemetry.get_signals_log(limit=500)
 
-    # Core 6 strategies definition
-    strategy_keys = ["aggressor", "scalper", "supertrend", "ml", "swing", "adx_ema"]
+    # Core strategies definition
+    strategy_keys = ["adx_ema", "adx_ema_mtf", "aggressor", "scalper", "supertrend", "ml", "swing"]
     timeframe_keys = ["5m", "15m", "30m", "1h", "2h", "4h"]
     strategy_timeframe_config = {
-        "aggressor": ["5m", "15m", "1h"],
-        "scalper": ["5m", "15m"],
+        "adx_ema": ["4h"],
+        "adx_ema_mtf": ["15m"],
+        "aggressor": ["1m", "3m", "5m"],
+        "scalper": ["1m", "3m", "5m"],
         "supertrend": ["15m", "1h", "4h"],
-        "ml": ["5m", "15m", "1h", "4h"],
-        "swing": ["1h", "4h"],
-        "adx_ema": ["5m", "15m", "1h", "4h"]
+        "ml": ["15m", "30m", "1h"],
+        "swing": ["1h", "4h"]
     }
 
     # Authoritative activity source: the engine heartbeat reports what the
@@ -1642,7 +1643,7 @@ def api_strategy_metrics():
         strats[sk] = {
             "name": sk.upper(),
             "status": ("ACTIVE" if (hb_strategies is None or sk in hb_strategies) else "DISABLED"),
-            "timeframes": strategy_timeframe_config.get(sk, ["5m"]),
+            "timeframes": strategy_timeframe_config.get(sk, ["15m"]),
             "evaluations": p_stat.get("evaluations", p_stat.get("HOLD", 0) + p_stat.get("signals", 0)),
             "BUY": p_stat.get("BUY", 0),
             "SELL": p_stat.get("SELL", 0),

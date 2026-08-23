@@ -20,6 +20,11 @@ class CostEngine:
         # VIP0 Maker fee is 0.1% on Spot, but on USD-M Futures it's 0.02%. 
         # We will assume Futures VIP0 Maker (0.02%)
         return cls(entry_fee=0.0002, exit_fee=0.0002, entry_slip=0.0, exit_slip=0.0, spread=0.0)
+
+    @classmethod
+    def get_futures_maker_config(cls):
+        # 8 bps round-trip friction for USD-M Futures with LIMIT_MAKER entry (0.02% maker + 0.04% taker exit + 0.02% slippage)
+        return cls(entry_fee=0.0002, exit_fee=0.0004, entry_slip=0.0, exit_slip=0.0002, spread=0.0)
         
     def calculate_net_pnl(self, gross_pnl_pct):
         """

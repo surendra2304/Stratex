@@ -94,6 +94,7 @@ RECONCILIATION_TOLERANCE = float(os.getenv("RECONCILIATION_TOLERANCE", "5.0"))  
 
 # --- Strategy Quality Control (Phase 5) ---
 MINIMUM_EXPECTED_EDGE = float(os.getenv("MINIMUM_EXPECTED_EDGE", "0.0001"))     # Standard positive expected edge threshold
+MIN_PROBABILITY_THRESHOLD = float(os.getenv("MIN_PROBABILITY_THRESHOLD", "0.40")) # 40% probability threshold
 DEGRADATION_WINDOW = 20            # Evaluate last 20 trades for degradation
 MIN_WIN_RATE_THRESHOLD = 0.35      # Automatically switch to OBSERVE-ONLY if < 35% win rate
 MAX_PREDICTION_ERROR = 0.02        # Automatically switch to OBSERVE-ONLY if actual differs from expected by > 2%
