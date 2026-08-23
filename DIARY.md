@@ -373,4 +373,32 @@ TESTNET ONLY
 - Local Verification: Verified futures order placement, leverage setting, isolated margin, stop-loss bracket attachment, and `/api/status` reporting in `FUTURES` mode.
 - Git Branch: `feat/futures-testnet-migration`.
 
+---
+
+# DAY 13 — 2026-08-23
+## Objectives
+- Develop Multi-Timeframe (MTF) 1h/5m ADX + EMA Futures Strategy (`strategy_adx_ema_mtf.py`) to unlock short trades and higher frequency sniper execution.
+- Maintain zero breaking changes for existing 4h `strategy_adx_ema.py` spot engine.
+- Integrate dual-timeframe scanning in `testnet_engine/market_scanner.py` and `service.py` to continuously supply 1h trend filter candles to 5m entry trigger calculations.
+
+## Work Completed
+- **MTF 1h/5m Futures Strategy (Task 1)**:
+  - Created `strategy_adx_ema_mtf.py`.
+  - HTF 1h Trend Filter: Long Bias (1h EMA20>EMA50 & Close>EMA200 & ADX>20); Short Bias (1h EMA20<EMA50 & Close<EMA200 & ADX>20); Neutral when ADX<=20 or EMAs are tangled (blocks all 5m trades).
+  - LTF 5m Sniper Entries: Entry A (EMA20/EMA50 crossover in trend direction); Entry B (Qualified Retest of EMA20 within 10 bars of cross).
+  - Risk Management: 1.5× 5m ATR Stop Loss, 3.0× 5m ATR Take Profit (1:2 Risk/Reward ratio).
+- **Configuration & Strategy Registry (Task 2)**:
+  - Added `ADX_EMA_MTF_STRATEGY` to `config_strategy.py`.
+  - Added `adx_ema_mtf` to `PRODUCTION_STRATEGY_REGISTRY` with `status: VALIDATED` and `trading_mode: FUTURES`.
+  - Added `adx_ema_mtf` to `SUPPORTED_STRATEGIES` in `config.py`.
+- **Dual-Timeframe Market Scanner (Task 3)**:
+  - Updated `testnet_engine/service.py` to guarantee `1h` is included in scanner timeframes whenever an MTF strategy is active.
+  - Updated `on_candle_closed` in `service.py` to extract `df_1h` from the scanner's memory cache and pass it into `strat_mod.get_signal(df, df_1h=df_1h)`.
+
+## Verification
+- Unit Tests: Added `tests/test_strategy_adx_ema_mtf.py` (6 tests verifying bullish HTF long bias, bearish HTF short bias, neutral HTF signal blocking, 5m long crossover, 5m short crossover).
+- Full Test Suite: **539 passed / 539 tests (100% across two consecutive runs in ~60s)**.
+- Git Branch: `feat/mtf-5m-strategy`.
+
+
 

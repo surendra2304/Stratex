@@ -679,7 +679,14 @@ class TestnetService:
                 for strat_name, strat_mod in self.strategies[tf]:
                     self.stats["strategy_evaluations"] += 1
                     
-                    signal_result = strat_mod.get_signal(df)
+                    if strat_name == "adx_ema_mtf" or "mtf" in strat_name:
+                        df_1h = None
+                        if hasattr(self, 'scanner') and self.scanner:
+                            with self.scanner._cache_lock:
+                                df_1h = self.scanner.candle_cache.get((symbol, "1h"))
+                        signal_result = strat_mod.get_signal(df, df_1h=df_1h)
+                    else:
+                        signal_result = strat_mod.get_signal(df)
                     side = getattr(signal_result, 'side', signal_result[0] if signal_result else None)
                     sl   = getattr(signal_result, 'sl',   signal_result[1] if signal_result else None)
                     tp   = getattr(signal_result, 'tp',   signal_result[2] if signal_result else None)
@@ -2115,6 +2122,11 @@ class TestnetService:
                 tfs_set.update(tfs)
             else:
                 tfs_set.add(tfs)
+        
+        # If an MTF strategy is active, ensure HTF ('1h') is included in the scanner cache
+        if any("mtf" in s for tf_list in self.strategies.values() for s, _ in tf_list):
+            tfs_set.add("1h")
+            
         tfs = list(tfs_set)
         self.scanner = MarketScanner(symbol_list, timeframes=tfs, is_futures=(TRADING_MODE == "FUTURES"))
         self.scanner.register_callback(self.on_candle_closed)

@@ -109,6 +109,30 @@ ADX_EMA_STRATEGY_V2 = {
     "SUPERSEDES":             "ADX_EMA_STRATEGY (V1)",
 }
 
+# Multi-Timeframe (MTF) 1h/5m Futures Strategy Configuration
+ADX_EMA_MTF_STRATEGY = {
+    "HTF_TIMEFRAME":          "1h",     # Higher timeframe trend filter
+    "LTF_TIMEFRAME":          "5m",     # Lower timeframe sniper entry
+    "EMA_FAST_PERIOD":        20,
+    "EMA_SLOW_PERIOD":        50,
+    "EMA_DIRECTION_PERIOD":   200,
+    "ADX_PERIOD":             14,
+    "ATR_PERIOD":             14,
+    "ADX_THRESHOLD":          20,
+    "SL_ATR_MULTIPLIER":      1.5,      # 1.5x 5m ATR
+    "TP_ATR_MULTIPLIER":      3.0,      # 3.0x 5m ATR (1:2 R:R)
+    "RISK_REWARD_RATIO":      2.0,
+    "ENABLE_RETEST_ENTRY":    True,
+    "RETEST_WINDOW_BARS":     10,
+    "OOS_WIN_RATE_PRIOR":     0.52,
+    "TRADING_MODE":           "FUTURES", # Gated strictly to Futures
+    "OOS_VALIDATED_ASSETS":   ["BTCUSDT", "ETHUSDT", "BNBUSDT",
+                                "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
+                                "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT",
+                                "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"],
+    "OOS_VALIDATION_STATUS":  "VALIDATED",
+}
+
 # ==============================================================================
 # BACKTESTING ASSUMPTIONS (shared across all strategies)
 # Must match live execution assumptions for benchmark fidelity.
@@ -161,6 +185,27 @@ PRODUCTION_STRATEGY_REGISTRY = {
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
         "reason": "V2-spot rev3: crossover + qualified retest entries, long-only grid on 2021-2026 data (research/upgrade_2026_08/expansion_study.py). OOS 2024-2026: 136 trades, PF 2.36, win 0.551, profitable all years (2024: 2.27, 2025: 2.57, 2026: 2.08). 1h timeframe studied and rejected (OOS PF<0.75 all variants). Universe expanded to include high-volume Spot Testnet verified altcoins.",
+    },
+    "adx_ema_mtf": {
+        "status": "VALIDATED",
+        "version": "V1-futures-mtf (2026-08-23)",
+        "timeframe": "5m",
+        "htf_timeframe": "1h",
+        "trading_mode": "FUTURES",
+        "execution_model": "RULE_BASED",
+        "entry_conditions": "HTF (1h): Trend filter (Long: EMA20>EMA50 & Close>EMA200 & ADX>20; Short: EMA20<EMA50 & Close<EMA200 & ADX>20). LTF (5m): (a) EMA(20)/EMA(50) crossover in trend direction, or (b) qualified retest within 10 bars. Supports Long & Short.",
+        "sl_method": "1.5 * ATR(14)",
+        "tp_method": "3.0 * ATR(14)",
+        "rr_ratio": 2.0,
+        "oos_win_rate_prior": 0.520,
+        "total_friction_bps": 10.0,
+        "expected_net_edge_bps": 150.0,
+        "minimum_required_edge": 0.0005,
+        "validated_assets": [
+            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
+            "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
+        ],
+        "reason": "MTF 1h/5m Futures Strategy enabling Long and Short trades with 1:2 R:R (1.5x SL / 3.0x TP). HTF 1h filter eliminates 5m noise while 5m sniper entry provides high-frequency edge.",
     },
     "aggressor": {
         "status": "DISABLED",

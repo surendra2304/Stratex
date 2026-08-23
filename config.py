@@ -107,7 +107,7 @@ OOS_TRAIN_PCT = 0.60               # Walk-forward train %
 OOS_VAL_PCT = 0.20                 # Walk-forward validation %
 INTRABAR_RESOLUTION = "conservative" # "conservative" or "optimistic"
 
-SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema", "fast1m", "fast5m", "hybrid", "bollinger", "breakout_vol"]
+SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema", "adx_ema_mtf", "fast1m", "fast5m", "hybrid", "bollinger", "breakout_vol"]
 SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"]
 VALID_MODES = ["PAPER", "TESTNET", "FUTURES"]
 
