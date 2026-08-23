@@ -400,5 +400,37 @@ TESTNET ONLY
 - Full Test Suite: **539 passed / 539 tests (100% across two consecutive runs in ~60s)**.
 - Git Branch: `feat/mtf-5m-strategy`.
 
+---
+
+# DAY 14 — 2026-08-23
+## Objectives
+- Rigorously backtest the Multi-Timeframe (1h/5m) ADX+EMA strategy across 2024-01-01 to 2026-08-23 (~32 months out-of-sample data) on BTCUSDT, ETHUSDT, and SOLUSDT.
+- Model realistic Binance Futures execution friction: 15 bps total round-trip friction (8 bps taker fees + 7 bps market order slippage) under 5x isolated margin leverage.
+- Determine whether 1h macro filtering rescues 5m entries from friction degradation.
+
+## Work Completed
+- **Backtest Harness (`research/upgrade_2026_08/backtest_mtf_5m.py`)**:
+  - Downloaded continuous 1h and 5m candle history (23,161 1h bars and 277,921 5m bars per symbol).
+  - Synchronized multi-timeframe timestamp alignment using causal binary-search lookups (no lookahead bias).
+  - Evaluated 5,796 total trades across BTCUSDT, ETHUSDT, and SOLUSDT with next-bar open execution and conservative intrabar SL-first resolution.
+  - Calculated PnL on allocated margin at 5x leverage ($0.5\%$ risk per trade).
+- **Report Generated (`research/upgrade_2026_08/mtf_5m_backtest_report.md`)**:
+  - **Total Trades**: 5,796 trades (BTC: 2,135, ETH: 1,900, SOL: 1,761)
+  - **Overall Win Rate**: **28.5%** (BTC: 24.7%, ETH: 28.1%, SOL: 33.6%)
+  - **Gross Profit Factor**: **0.79** (BTC: 0.60, ETH: 0.83, SOL: 0.87)
+  - **Net Profit Factor (15 bps friction)**: **0.42** (BTC: 0.24, ETH: 0.39, SOL: 0.55)
+  - **Average Hold Time**: **43.7 minutes**
+  - **Maximum Drawdown**: **100.0%**
+- **Scientific Conclusion**:
+  - **VERDICT: FAILED (Net PF 0.42 < 1.20 Gate)**.
+  - Even with a 1h macro trend filter, raw 5m crossover and retest triggers suffer from severe intrabar noise on crypto assets, resulting in low win rate (28.5%) and high turnover (5,796 trades).
+  - 15 bps friction consumes ~36% of typical 5m ATR moves ($0.42\%$ average 5m ATR), which compounds across thousands of trades into catastrophic drag.
+  - The strategy cannot be deployed to live testnet in its current form and requires parameter tuning (e.g., widening to 15m/1h or requiring Maker-only limit order execution).
+
+## Verification
+- Harness Execution: `python research/upgrade_2026_08/backtest_mtf_5m.py` runs cleanly and generates `mtf_5m_backtest_report.md`.
+- Git Branch: `feat/mtf-5m-backtest`.
+
+
 
 
