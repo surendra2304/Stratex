@@ -68,6 +68,7 @@ ACTIVE_STRATEGIES = {
     "ml": ["5m", "15m", "30m"],
     "swing": ["15m", "30m", "1h", "2h", "4h"],
     "adx_ema": ["15m", "30m", "1h", "4h"],
+    "adx_ema_mtf": ["15m"],
     "hybrid": ["5m", "15m", "30m", "1h"],
     "bollinger": ["15m", "30m", "1h"],
     "breakout_vol": ["1m", "5m", "15m"]

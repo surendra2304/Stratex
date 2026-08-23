@@ -83,7 +83,7 @@ def test_get_signal_long_crossover():
     assert sig.side == "BUY"
     assert sig.sl < df_5m['close'].iloc[-1]
     assert sig.tp > df_5m['close'].iloc[-1]
-    assert sig.rr_ratio == 2.0
+    assert sig.rr_ratio == 1.33
 
 
 def test_get_signal_short_crossover():
@@ -102,7 +102,7 @@ def test_get_signal_short_crossover():
     assert sig.side == "SELL"
     assert sig.sl > df_5m['close'].iloc[-1]
     assert sig.tp < df_5m['close'].iloc[-1]
-    assert sig.rr_ratio == 2.0
+    assert sig.rr_ratio == 1.33
 
 
 def test_neutral_htf_blocks_all_signals():

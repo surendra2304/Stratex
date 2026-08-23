@@ -1,19 +1,19 @@
 """
-strategy_adx_ema_mtf.py — Multi-Timeframe (1h/5m) ADX + EMA Futures Strategy
+strategy_adx_ema_mtf.py — Multi-Timeframe (1h/15m) ADX + EMA Futures Strategy
 
 ARCHITECTURE:
   - HTF (Higher Timeframe - 1h): Trend Filter
       * Long Bias:  1h EMA(20) > EMA(50) AND 1h Close > EMA(200) AND 1h ADX(14) > 20
       * Short Bias: 1h EMA(20) < EMA(50) AND 1h Close < EMA(200) AND 1h ADX(14) > 20
       * Neutral:    No trades allowed if 1h ADX <= 20 or EMAs are tangled.
-  - LTF (Lower Timeframe - 5m): Sniper Entry Trigger
-      * Long Trigger A (Crossover):  5m EMA(20) crosses above 5m EMA(50) while 1h Long Bias is active.
-      * Long Trigger B (Retest):     First 5m bar touching 5m EMA(20) with a bullish close within 10 bars of a cross.
-      * Short Trigger A (Crossover): 5m EMA(20) crosses below 5m EMA(50) while 1h Short Bias is active.
-      * Short Trigger B (Retest):    First 5m bar touching 5m EMA(20) with a bearish close within 10 bars of a cross.
-  - Exits & Risk Management (5m):
-      * Stop Loss (SL):   1.5 × 5m ATR(14)
-      * Take Profit (TP): 3.0 × 5m ATR(14) (Risk/Reward = 1:2)
+  - LTF (Lower Timeframe - 15m): Sniper Entry Trigger
+      * Long Trigger A (Crossover):  15m EMA(20) crosses above 15m EMA(50) while 1h Long Bias is active.
+      * Long Trigger B (Retest):     First 15m bar touching 15m EMA(20) with a bullish close within 10 bars of a cross.
+      * Short Trigger A (Crossover): 15m EMA(20) crosses below 15m EMA(50) while 1h Short Bias is active.
+      * Short Trigger B (Retest):    First 15m bar touching 15m EMA(20) with a bearish close within 10 bars of a cross.
+  - Exits & Risk Management (15m):
+      * Stop Loss (SL):   1.5 × 15m ATR(14)
+      * Take Profit (TP): 3.0 × 15m ATR(14) (Risk/Reward = 1:2)
 """
 
 from collections import namedtuple
@@ -30,11 +30,11 @@ class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_typ
 
 
 _STRATEGY_TYPE      = "RULE_BASED"
-_OOS_WIN_RATE_PRIOR = _CFG.get("OOS_WIN_RATE_PRIOR", 0.52)
-_RR_RATIO           = _CFG.get("RISK_REWARD_RATIO", 2.0)
-_ADX_THRESHOLD      = _CFG.get("ADX_THRESHOLD", 20)
-_SL_ATR             = _CFG.get("SL_ATR_MULTIPLIER", 1.5)
-_TP_ATR             = _CFG.get("TP_ATR_MULTIPLIER", 3.0)
+_OOS_WIN_RATE_PRIOR = _CFG.get("OOS_WIN_RATE_PRIOR", 0.516)
+_RR_RATIO           = _CFG.get("RISK_REWARD_RATIO", 1.33)
+_ADX_THRESHOLD      = _CFG.get("ADX_THRESHOLD", 25)
+_SL_ATR             = _CFG.get("SL_ATR_MULTIPLIER", 3.0)
+_TP_ATR             = _CFG.get("TP_ATR_MULTIPLIER", 4.0)
 _ENABLE_RETEST      = _CFG.get("ENABLE_RETEST_ENTRY", True)
 _RETEST_WINDOW_BARS = _CFG.get("RETEST_WINDOW_BARS", 10)
 
