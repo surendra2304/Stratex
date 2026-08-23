@@ -102,7 +102,9 @@ ADX_EMA_STRATEGY_V2 = {
     "OOS_EXPECTANCY_PER_TRADE": 216.2, # bps per trade at 1% risk sizing ($10k base)
     "OOS_MAX_DRAWDOWN_PCT":   41.2,    # at 1% risk; live 0.5% risk halves this
     "OOS_VALIDATED_ASSETS":   ["BTCUSDT", "ETHUSDT", "BNBUSDT",
-                                "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT"],
+                                "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
+                                "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT",
+                                "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"],
     "OOS_VALIDATION_STATUS":  "VALIDATED",
     "SUPERSEDES":             "ADX_EMA_STRATEGY (V1)",
 }
@@ -154,8 +156,11 @@ PRODUCTION_STRATEGY_REGISTRY = {
         "total_friction_bps": 31.0,
         "expected_net_edge_bps": 216.0,
         "minimum_required_edge": 0.0005,
-        "validated_assets": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT"],
-        "reason": "V2-spot rev3: crossover + qualified retest entries, long-only grid on 2021-2026 data (research/upgrade_2026_08/expansion_study.py). OOS 2024-2026: 136 trades, PF 2.36, win 0.551, profitable all years (2024: 2.27, 2025: 2.57, 2026: 2.08). 1h timeframe studied and rejected (OOS PF<0.75 all variants).",
+        "validated_assets": [
+            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
+            "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
+        ],
+        "reason": "V2-spot rev3: crossover + qualified retest entries, long-only grid on 2021-2026 data (research/upgrade_2026_08/expansion_study.py). OOS 2024-2026: 136 trades, PF 2.36, win 0.551, profitable all years (2024: 2.27, 2025: 2.57, 2026: 2.08). 1h timeframe studied and rejected (OOS PF<0.75 all variants). Universe expanded to include high-volume Spot Testnet verified altcoins.",
     },
     "aggressor": {
         "status": "DISABLED",

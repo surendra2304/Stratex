@@ -318,3 +318,31 @@ TESTNET ONLY
 - Live Deployment (Render): `/health` 200, engine ONLINE with adx_ema @ 4h across 7 validated symbols, `paper_runner_status: "RUNNING"`; panic switch triggered (10+ protective OCO orders preserved) and released with verified resumption; dashboard UI serving with action-log widget.
 - Walk-forward report reproducible: `python research/upgrade_2026_08/walk_forward_validation.py`.
 - End-of-Day State: Cash: $11,583.57 USDT against the $11,609.29 baseline (delta = post-reset exchange fees/drift) | Active Market Value: $0.00 (faucet residue excluded) | Closed Trades: 0 (clean ledger, verified post-deploy) | Engine: V2-spot rev3 + 8 operational upgrades + baseline-scoped reconciliation | Suite: 533 passing.
+
+---
+
+# DAY 11 — 2026-08-23
+## Objectives
+- Safely increase trade cadence and opportunity discovery without compromising risk limits or dropping to noise timeframes.
+- Expand validated asset universe from 7 to 16 high-volume, Binance Spot Testnet verified altcoins.
+- Develop architectural blueprint for Binance USDⓈ-M Futures Testnet migration to unlock short-side edge (OOS PF 3.14).
+- Execute empirical lower timeframe volatility and friction study (15m vs. 1h vs. 4h) on BTCUSDT data under 31 bps round-trip friction.
+
+## Work Completed
+- **Asset Universe Expansion (Task 1)**:
+  - Queried live Binance Spot Testnet exchange metadata (`c.get_exchange_info()` & `c.get_klines()`) and verified 9 additional high-volume pairs: `AVAXUSDT`, `LTCUSDT`, `ATOMUSDT`, `UNIUSDT`, `NEARUSDT`, `APTUSDT`, `ADAUSDT`, `DOGEUSDT`, `DOTUSDT`. Note: `MATICUSDT` is superseded by `POLUSDT` on Binance Spot Testnet.
+  - Updated `config_strategy.py` (`ADX_EMA_STRATEGY_V2["OOS_VALIDATED_ASSETS"]` and `PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["validated_assets"]`) to include all 16 verified symbols (`BTC`, `ETH`, `BNB`, `SOL`, `XRP`, `LINK`, `INJ`, `AVAX`, `LTC`, `ATOM`, `UNI`, `NEAR`, `APT`, `ADA`, `DOGE`, `DOT`).
+  - Verified `testnet_engine/market_scanner.py` and `testnet_engine/service.py` (`governance_validated_assets()`) automatically discover and warm indicators across all 16 symbols.
+  - Verified local scanner evaluation via `/api/scanner`.
+- **Futures Testnet Migration Plan (Task 2)**:
+  - Created `FUTURES_MIGRATION_PLAN.md` documenting endpoint migrations (`fapi.binance.com` / `testnet.binancefuture.com`), replacement of Spot OCO with Futures conditional orders (`STOP_MARKET` / `TAKE_PROFIT_MARKET` with `closePosition=True`), isolated margin enforcement (`MARGIN_TYPE = "ISOLATED"`, 1x–2x leverage ceiling), and funding rate cost-of-carry filters.
+- **Lower Timeframe Research Harness (Task 3)**:
+  - Created `research/upgrade_2026_08/lower_tf_study.py` and generated `lower_tf_report.md`.
+  - Calculated empirical ATR and friction drag across 17,280 15m bars, 8,760 1h bars, and 2,190 4h bars on BTCUSDT.
+  - **Mathematical Finding**: On 15m, average ATR is 0.285% (3×ATR target is 0.855%), meaning 31 bps round-trip friction consumes **36.3% of the total profit target** and **108.8% of a single ATR move**, producing negative net expectancy (-34.7 bps/trade, PF 0.44). On 4h, average ATR is 1.295% (3×ATR target is 3.885%), where 31 bps friction is only **8.0% of the target**, preserving positive net expectancy (+79 bps/trade).
+
+## Verification
+- Test Suite: **533 passed / 533 tests (100% across two consecutive runs in ~64s)**.
+- Frontend Lints: `node -c static/app.js` and `npx -y htmlhint static/index.html` — PASS.
+- Git Branch: `feat/expand-universe-and-research`.
+
