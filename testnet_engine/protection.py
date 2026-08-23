@@ -395,6 +395,194 @@ def check_oco_status(client: Client, symbol: str, oco_order_list_id: int) -> dic
     return result
 
 
+def _get_futures_symbol_filters(client: Client, symbol: str) -> dict:
+    """
+    Fetch PRICE_FILTER and LOT_SIZE from Futures exchange info.
+    Returns {tick_size, price_precision, step_size, qty_precision, min_notional}.
+    """
+    info = client.futures_exchange_info() if hasattr(client, 'futures_exchange_info') else None
+    if not info:
+        return {"tick_size": 0.01, "price_precision": 2, "step_size": 0.001, "qty_precision": 3, "min_notional": 5.0}
+
+    symbol_info = next((s for s in info.get("symbols", []) if s.get("symbol") == symbol), None)
+    if not symbol_info:
+        return {"tick_size": 0.01, "price_precision": 2, "step_size": 0.001, "qty_precision": 3, "min_notional": 5.0}
+
+    result = {"tick_size": 0.01, "price_precision": 2,
+               "step_size": 0.001, "qty_precision": 3, "min_notional": 5.0}
+
+    for f in symbol_info.get("filters", []):
+        ft = f["filterType"]
+        if ft == "PRICE_FILTER":
+            ts = float(f["tickSize"])
+            result["tick_size"] = ts
+            result["price_precision"] = max(0, round(-math.log10(ts))) if ts > 0 else 2
+        elif ft == "LOT_SIZE":
+            ss = float(f["stepSize"])
+            result["step_size"] = ss
+            result["qty_precision"] = max(0, round(-math.log10(ss))) if ss > 0 else 3
+        elif ft in ("MIN_NOTIONAL", "NOTIONAL"):
+            result["min_notional"] = float(f.get("minNotional", f.get("notional", 5.0)))
+
+    return result
+
+
+def place_futures_bracket_protection(
+    client: Client,
+    symbol: str,
+    entry_side: str,           # "BUY" (Long) or "SELL" (Short)
+    executed_qty: float,
+    actual_fill_price: float,
+    sl_price: float,
+    tp_price: float,
+) -> dict:
+    """
+    Places conditional STOP_MARKET and TAKE_PROFIT_MARKET orders to protect a Futures position.
+    
+    Args:
+        client: Authenticated Binance client
+        symbol: e.g. "BTCUSDT"
+        entry_side: "BUY" (closing side will be "SELL") or "SELL" (closing side will be "BUY")
+        executed_qty: Position size
+        actual_fill_price: Entry price
+        sl_price: Stop loss price
+        tp_price: Take profit price
+        
+    Returns:
+        dict with keys: tp_order_id, sl_order_id, tp_price_sent, sl_price_sent, close_side
+    """
+    if executed_qty <= 0:
+        raise ValueError(f"executed_qty must be positive, got {executed_qty}")
+    if actual_fill_price <= 0:
+        raise ValueError(f"actual_fill_price must be positive, got {actual_fill_price}")
+
+    close_side = "SELL" if entry_side == "BUY" else "BUY"
+
+    if entry_side == "BUY":
+        if sl_price >= actual_fill_price:
+            raise ValueError(f"BUY position: SL ({sl_price}) must be below fill price ({actual_fill_price})")
+        if tp_price <= actual_fill_price:
+            raise ValueError(f"BUY position: TP ({tp_price}) must be above fill price ({actual_fill_price})")
+    elif entry_side == "SELL":
+        if sl_price <= actual_fill_price:
+            raise ValueError(f"SELL position: SL ({sl_price}) must be above fill price ({actual_fill_price})")
+        if tp_price >= actual_fill_price:
+            raise ValueError(f"SELL position: TP ({tp_price}) must be below fill price ({actual_fill_price})")
+
+    filters = _get_futures_symbol_filters(client, symbol)
+    tick = filters["tick_size"]
+    pp = filters["price_precision"]
+
+    tp_str = round_price(tp_price, tick, pp)
+    sl_str = round_price(sl_price, tick, pp)
+
+    logger.info(
+        f"[FUTURES_PROTECTION] {symbol} {entry_side} | "
+        f"Fill: {actual_fill_price:.{pp}f} | TP: {tp_str} | SL: {sl_str} | CloseSide: {close_side}"
+    )
+
+    # 1. Place Stop Loss conditional order (STOP_MARKET with closePosition=True)
+    sl_order = client.futures_create_order(
+        symbol=symbol,
+        side=close_side,
+        type="STOP_MARKET",
+        stopPrice=sl_str,
+        closePosition=True
+    )
+    sl_order_id = sl_order.get("orderId")
+
+    # 2. Place Take Profit conditional order (TAKE_PROFIT_MARKET with closePosition=True)
+    tp_order = client.futures_create_order(
+        symbol=symbol,
+        side=close_side,
+        type="TAKE_PROFIT_MARKET",
+        stopPrice=tp_str,
+        closePosition=True
+    )
+    tp_order_id = tp_order.get("orderId")
+
+    return {
+        "tp_order_id": tp_order_id,
+        "sl_order_id": sl_order_id,
+        "tp_price_sent": tp_str,
+        "sl_price_sent": sl_str,
+        "close_side": close_side,
+    }
+
+
+def emergency_futures_market_close(
+    client: Client,
+    symbol: str,
+    entry_side: str,
+    executed_qty: float,
+) -> dict:
+    """
+    Emergency market order to immediately close a Futures position.
+    """
+    close_side = "SELL" if entry_side == "BUY" else "BUY"
+    logger.critical(
+        f"[FUTURES_PROTECTION] 🚨 EMERGENCY CLOSE: {symbol} {close_side} {executed_qty}"
+    )
+    return client.futures_create_order(
+        symbol=symbol,
+        side=close_side,
+        type="MARKET",
+        quantity=executed_qty,
+        reduceOnly=True,
+    )
+
+
+def check_futures_bracket_status(client: Client, symbol: str, tp_order_id: int | None, sl_order_id: int | None) -> dict:
+    """
+    Checks if either the TP or SL conditional order has fired and closed the futures position.
+    """
+    result = {
+        "position_closed": False,
+        "tp_filled": False,
+        "sl_filled": False,
+        "close_avg_price": 0.0,
+        "close_qty": 0.0,
+    }
+
+    if tp_order_id:
+        try:
+            tp_info = client.futures_get_order(symbol=symbol, orderId=tp_order_id)
+            if tp_info.get("status") == "FILLED":
+                result["position_closed"] = True
+                result["tp_filled"] = True
+                result["close_avg_price"] = float(tp_info.get("avgPrice", 0.0))
+                result["close_qty"] = float(tp_info.get("executedQty", 0.0))
+                # Cancel the opposing SL order if still active
+                if sl_order_id:
+                    try:
+                        client.futures_cancel_order(symbol=symbol, orderId=sl_order_id)
+                    except Exception:
+                        pass
+                return result
+        except Exception as e:
+            logger.debug(f"[FUTURES] Query TP order {tp_order_id} failed: {e}")
+
+    if sl_order_id:
+        try:
+            sl_info = client.futures_get_order(symbol=symbol, orderId=sl_order_id)
+            if sl_info.get("status") == "FILLED":
+                result["position_closed"] = True
+                result["sl_filled"] = True
+                result["close_avg_price"] = float(sl_info.get("avgPrice", 0.0))
+                result["close_qty"] = float(sl_info.get("executedQty", 0.0))
+                # Cancel the opposing TP order if still active
+                if tp_order_id:
+                    try:
+                        client.futures_cancel_order(symbol=symbol, orderId=tp_order_id)
+                    except Exception:
+                        pass
+                return result
+        except Exception as e:
+            logger.debug(f"[FUTURES] Query SL order {sl_order_id} failed: {e}")
+
+    return result
+
+
 def compute_net_pnl(
     entry_side: str,
     entry_qty: float,

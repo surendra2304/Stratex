@@ -1001,7 +1001,16 @@ class TestnetService:
                         continue
 
                     try:
-                        order_res = place_market_order(strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp, client_order_id=signal_id)
+                        if TRADING_MODE == "FUTURES":
+                            from execution import place_futures_market_order
+                            leverage = getattr(config, "FUTURES_LEVERAGE", 5)
+                            order_res = place_futures_market_order(
+                                strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp, client_order_id=signal_id, leverage=leverage
+                            )
+                        else:
+                            order_res = place_market_order(
+                                strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp, client_order_id=signal_id
+                            )
                         if order_res:
                             self.stats["ORDERS_SUBMITTED"] += 1
                             order_status = str(order_res.get("status", "")).upper()
@@ -2107,7 +2116,7 @@ class TestnetService:
             else:
                 tfs_set.add(tfs)
         tfs = list(tfs_set)
-        self.scanner = MarketScanner(symbol_list, timeframes=tfs)
+        self.scanner = MarketScanner(symbol_list, timeframes=tfs, is_futures=(TRADING_MODE == "FUTURES"))
         self.scanner.register_callback(self.on_candle_closed)
         self.scanner.start()
         logger.info(f"[MARKET_DATA_CONNECTED] Multiplex WebSocket streaming active for {len(symbol_list)} symbols.")

@@ -20,12 +20,18 @@ _APPROVED_METHODS = frozenset([
     "futures_funding_rate",
     "get_exchange_info",
     "get_orderbook_tickers",
+    "futures_klines",
+    "futures_historical_klines",
+    "futures_exchange_info",
+    "futures_symbol_ticker",
+    "futures_ticker",
+    "futures_mark_price",
 ])
 
 
 class MarketDataClient:
     """
-    A strictly read-only adapter for Binance market data.
+    A strictly read-only adapter for Binance market data (Spot & Futures).
     Provides candles, tickers, funding rates — no account or execution access.
 
     Security guarantees:
@@ -92,6 +98,42 @@ class MarketDataClient:
         if not self.is_available():
             return None
         return self.__client.get_exchange_info(**kwargs)
+
+    def futures_klines(self, **kwargs):
+        """Futures klines/candlestick data for a symbol (/fapi/v1/klines)."""
+        if not self.is_available():
+            return None
+        return self.__client.futures_klines(**kwargs)
+
+    def futures_historical_klines(self, symbol, interval, start_str, end_str=None, **kwargs):
+        """Historical futures klines for a symbol."""
+        if not self.is_available():
+            return None
+        return self.__client.futures_historical_klines(symbol, interval, start_str, end_str, **kwargs)
+
+    def futures_exchange_info(self, **kwargs):
+        """Current futures exchange trading rules and symbol information (/fapi/v1/exchangeInfo)."""
+        if not self.is_available():
+            return None
+        return self.__client.futures_exchange_info(**kwargs)
+
+    def futures_symbol_ticker(self, **kwargs):
+        """Latest futures price for a symbol (/fapi/v1/ticker/price)."""
+        if not self.is_available():
+            return None
+        return self.__client.futures_symbol_ticker(**kwargs)
+
+    def futures_ticker(self, **kwargs):
+        """24-hour futures ticker price change statistics (/fapi/v1/ticker/24hr)."""
+        if not self.is_available():
+            return None
+        return self.__client.futures_ticker(**kwargs)
+
+    def futures_mark_price(self, **kwargs):
+        """Latest futures mark price and funding rate (/fapi/v1/premiumIndex)."""
+        if not self.is_available():
+            return None
+        return self.__client.futures_mark_price(**kwargs)
 
     # --- Explicit Block: No other methods allowed ---
     def __getattr__(self, item):

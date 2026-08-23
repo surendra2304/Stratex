@@ -251,7 +251,7 @@ def health():
         "dashboard": "online",
         "engine": engine_data["engine_status"].lower(),
         "engine_healthy": engine_data["healthy"],
-        "mode": TRADING_MODE,
+        "mode": getattr(config, "TRADING_MODE", "TESTNET"),
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
     }), 200
 
@@ -313,59 +313,79 @@ def get_live_account_and_holdings(force_refresh=False):
         
         try:
             client = get_exchange_client()
-            if client:
+            if TRADING_MODE == "FUTURES" and client:
+                fut_acc = client.futures_account()
+                usdt_free = float(fut_acc.get("availableBalance", 0.0))
+                usdt_locked = float(fut_acc.get("totalInitialMargin", 0.0))
+                total_crypto_value = float(fut_acc.get("totalUnrealizedProfit", 0.0))
+                active_trade_holdings_value = float(fut_acc.get("totalPositionInitialMargin", 0.0))
+                for p in fut_acc.get("positions", []):
+                    pos_amt = float(p.get("positionAmt", 0.0))
+                    if abs(pos_amt) > 0:
+                        sym = p.get("symbol", "")
+                        base_asset = sym.replace("USDT", "")
+                        entry_p = float(p.get("entryPrice", 0.0))
+                        mark_p = float(p.get("markPrice", 0.0)) or entry_p
+                        u_pnl = float(p.get("unrealizedProfit", 0.0))
+                        holdings.append({
+                            "asset": base_asset,
+                            "symbol": sym,
+                            "free": 0.0,
+                            "locked": abs(pos_amt),
+                            "total_quantity": abs(pos_amt),
+                            "price": mark_p,
+                            "usd_value": abs(pos_amt) * mark_p,
+                            "is_bot_trade": True,
+                            "unrealized_pnl": u_pnl,
+                            "side": "LONG" if pos_amt > 0 else "SHORT"
+                        })
+            elif client:
                 account = client.get_account()
-            md = MarketDataClient()
-            tickers = {}
-            if md.is_available():
-                for t in md.get_ticker():
-                    tickers[t['symbol']] = float(t['lastPrice'])
-            
-            for b in account.get('balances', []):
-                asset = b['asset']
-                free = float(b['free'])
-                locked = float(b['locked'])
-                total_qty = free + locked
-                if total_qty <= 0:
-                    continue
-                    
-                if asset == 'USDT':
-                    usdt_free = free
-                    usdt_locked = locked
-                    continue
-                    
-                pair = f"{asset}USDT"
-                price = tickers.get(pair, 0.0)
-                usd_val = total_qty * price
+                md = MarketDataClient()
+                tickers = {}
+                if md.is_available():
+                    for t in md.get_ticker():
+                        tickers[t['symbol']] = float(t['lastPrice'])
                 
-                # If price is not directly in USDT, try direct lookup
-                if price <= 0 and asset in ['USDC', 'TUSD', 'FDUSD', 'USDS', 'RLUSD']:
-                    price = 1.0
-                    usd_val = total_qty
+                for b in account.get('balances', []):
+                    asset = b['asset']
+                    free = float(b['free'])
+                    locked = float(b['locked'])
+                    total_qty = free + locked
+                    if total_qty <= 0:
+                        continue
+                        
+                    if asset == 'USDT':
+                        usdt_free = free
+                        usdt_locked = locked
+                        continue
+                        
+                    pair = f"{asset}USDT"
+                    price = tickers.get(pair, 0.0)
+                    usd_val = total_qty * price
                     
-                if usd_val > 0.05:
-                    # A holding is a genuine active bot trade ONLY if it is a VALIDATED
-                    # asset AND (locked in an exchange order (e.g. OCO) or recorded as
-                    # an open position in the local portfolio state).
-                    # Unmanaged faucet airdrops — even when locked by stray orders —
-                    # are classified as unmanaged holdings and never valued as engine equity.
-                    is_bot_trade = (asset in validated_bases) and (asset in active_bot_assets)
-                    h_info = {
-                        "asset": asset,
-                        "symbol": pair if price > 0 else asset,
-                        "free": free,
-                        "locked": locked,
-                        "total_quantity": total_qty,
-                        "price": price,
-                        "usd_value": usd_val,
-                        "is_bot_trade": is_bot_trade
-                    }
-                    holdings.append(h_info)
-                    total_crypto_value += usd_val
-                    if is_bot_trade and asset not in ['USDC', 'TUSD', 'FDUSD', 'USDS', 'USDP', 'RLUSD']:
-                        # If locked, only the locked portion is deployed in the bot trade
-                        trade_qty = locked if locked > 0 else total_qty
-                        active_trade_holdings_value += trade_qty * price
+                    # If price is not directly in USDT, try direct lookup
+                    if price <= 0 and asset in ['USDC', 'TUSD', 'FDUSD', 'USDS', 'RLUSD']:
+                        price = 1.0
+                        usd_val = total_qty
+                        
+                    if usd_val > 0.05:
+                        is_bot_trade = (asset in validated_bases) and (asset in active_bot_assets)
+                        h_info = {
+                            "asset": asset,
+                            "symbol": pair if price > 0 else asset,
+                            "free": free,
+                            "locked": locked,
+                            "total_quantity": total_qty,
+                            "price": price,
+                            "usd_value": usd_val,
+                            "is_bot_trade": is_bot_trade
+                        }
+                        holdings.append(h_info)
+                        total_crypto_value += usd_val
+                        if is_bot_trade and asset not in ['USDC', 'TUSD', 'FDUSD', 'USDS', 'USDP', 'RLUSD']:
+                            trade_qty = locked if locked > 0 else total_qty
+                            active_trade_holdings_value += trade_qty * price
         except Exception as e:
             logger.error(f"[DASHBOARD] Error calculating live holdings: {e}")
             
@@ -597,7 +617,7 @@ def get_status():
     clean_mdd = abs(mdd) if mdd != 0.0 else 0.0
 
     return jsonify({
-        "mode": TRADING_MODE,
+        "mode": getattr(config, "TRADING_MODE", "TESTNET"),
         "overall_health": overall,
         "engine_status": engine_data["engine_status"],
         "engine_healthy": engine_data["healthy"],

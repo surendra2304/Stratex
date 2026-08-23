@@ -11,7 +11,7 @@ from logger import get_logger
 logger = get_logger("market_scanner")
 
 class MarketScanner:
-    def __init__(self, symbols, timeframes=None, timeframe=None, testnet=True):
+    def __init__(self, symbols, timeframes=None, timeframe=None, testnet=True, is_futures=False):
         self.symbols = symbols
         if timeframes is not None:
             self.timeframes = timeframes if isinstance(timeframes, list) else [timeframes]
@@ -21,6 +21,7 @@ class MarketScanner:
             self.timeframes = ["1m"]
             
         self.testnet = testnet
+        self.is_futures = is_futures
         
         self.client = Client("", "", testnet=testnet)
         self.twm = ThreadedWebsocketManager(testnet=testnet)
@@ -37,12 +38,10 @@ class MarketScanner:
         self._health_thread = None
         
     def _fetch_historical_candles(self, symbol, tf):
-        """Initializes the cache with 250 historical candles via REST.
+        """Initializes the cache with 250 historical candles via REST (Spot or Futures).
 
-        Binance TESTNET caps klines at ~101 per request (production returns
-        1000), so a single limit=250 call silently yields a 101-bar cache —
-        too short for a correctly warmed EMA200/ADX. Paginate backwards until
-        the target depth is reached or the symbol history is exhausted.
+        Binance TESTNET caps klines at ~101-500 per request.
+        Paginate backwards until the target depth is reached.
         """
         TARGET_BARS = 250
         try:
@@ -52,7 +51,12 @@ class MarketScanner:
                 params = {"symbol": symbol, "interval": tf, "limit": 250}
                 if end_id is not None:
                     params["endTime"] = end_id
-                page = self.client.get_klines(**params)
+                
+                if self.is_futures:
+                    page = self.client.futures_klines(**params)
+                else:
+                    page = self.client.get_klines(**params)
+                    
                 if not page:
                     break
                 klines = page + klines if end_id is not None else page
@@ -133,7 +137,10 @@ class MarketScanner:
         
         # Subscribe to multiplex kline streams
         streams = [f"{sym.lower()}@kline_{tf}" for sym in self.symbols for tf in self.timeframes]
-        self.twm.start_multiplex_socket(callback=self._handle_socket_message, streams=streams)
+        if self.is_futures:
+            self.twm.start_futures_multiplex_socket(callback=self._handle_socket_message, streams=streams)
+        else:
+            self.twm.start_multiplex_socket(callback=self._handle_socket_message, streams=streams)
         
         # Start health monitor
         self._health_thread = threading.Thread(target=self._health_monitor_loop, daemon=True)

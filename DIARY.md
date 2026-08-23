@@ -346,3 +346,31 @@ TESTNET ONLY
 - Frontend Lints: `node -c static/app.js` and `npx -y htmlhint static/index.html` — PASS.
 - Git Branch: `feat/expand-universe-and-research`.
 
+---
+
+# DAY 12 — 2026-08-23
+## Objectives
+- Implement Phase 1 of Binance USDⓈ-M Futures Testnet migration (`testnet.binancefuture.com`).
+- Enable isolated margin, leverage settings (default 5x), bidirectional order support (BUY long & SELL short), and conditional bracket orders (`STOP_MARKET` / `TAKE_PROFIT_MARKET`).
+- Maintain zero breaking changes for Binance Spot Testnet code paths.
+
+## Work Completed
+- **Data Client Futures Endpoints (Task 1)**:
+  - Updated `data_client.py` whitelist and proxy methods: `futures_klines`, `futures_historical_klines`, `futures_exchange_info`, `futures_symbol_ticker`, `futures_ticker`, `futures_mark_price`.
+  - Updated `testnet_engine/market_scanner.py` with `is_futures` parameter, supporting `start_futures_multiplex_socket` and `/fapi/v1/klines` REST historical warm-seeding.
+  - Updated `account_client.py` with read-only `futures_account` and `futures_position_information`.
+- **Execution & Bracket Protection for Futures (Task 2)**:
+  - Updated `testnet_engine/protection.py`: added `_get_futures_symbol_filters`, `place_futures_bracket_protection`, `emergency_futures_market_close`, and `check_futures_bracket_status`.
+  - Updated `execution.py`: added `set_futures_leverage_and_margin` (`client.futures_change_margin_type(..., marginType="ISOLATED")`, `client.futures_change_leverage(..., leverage=5)`), `place_futures_market_order`, and enhanced `monitor_open_trades` to handle futures bracket order resolution.
+  - Updated `testnet_engine/service.py`: added conditional futures order dispatching when `TRADING_MODE == "FUTURES"`.
+- **Environment & Config (Task 3)**:
+  - Added `"FUTURES"` to `VALID_MODES` in `config.py`. Added `FUTURES_LEVERAGE = 5` and `FUTURES_MARGIN_TYPE = "ISOLATED"`.
+  - Updated `.env.example` with `TRADING_MODE="FUTURES"` documentation and futures settings.
+  - Updated `dashboard.py` `/api/status` and `/health` to dynamically report `mode: "FUTURES"`.
+
+## Verification
+- Test Suite: **533 passed / 533 tests (100% across two consecutive runs in ~60s)**.
+- Local Verification: Verified futures order placement, leverage setting, isolated margin, stop-loss bracket attachment, and `/api/status` reporting in `FUTURES` mode.
+- Git Branch: `feat/futures-testnet-migration`.
+
+

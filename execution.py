@@ -21,7 +21,13 @@ from config import (
 )
 from logger import get_logger, log_trade
 from paper_engine.exceptions import StateCorruptionError, ZeroFillError
-from testnet_engine.protection import emergency_market_close, place_oco_protection
+from testnet_engine.protection import (
+    check_futures_bracket_status,
+    emergency_futures_market_close,
+    emergency_market_close,
+    place_futures_bracket_protection,
+    place_oco_protection,
+)
 
 sys_logger = get_logger("execution")
 ACTIVE_TRADES_FILE = os.getenv("ACTIVE_TRADES_FILE", "active_trades.json")
@@ -57,10 +63,10 @@ class ExecutionPolicy:
         if os.environ.get("RESEARCH_MODE") == "1":
             return False, "RESEARCH_BLOCKED"
 
-        if TRADING_MODE == "TESTNET":
+        if TRADING_MODE in ["TESTNET", "FUTURES"]:
             if not TESTNET_ENABLED:
                 return False, "TESTNET_DISABLED"
-            return True, "ALLOWED_TESTNET"
+            return True, f"ALLOWED_{TRADING_MODE}"
 
         if TRADING_MODE == "LIVE" or LIVE_TRADING_ENABLED:
             return False, "LIVE_FORBIDDEN_BY_DESIGN"
@@ -92,9 +98,10 @@ def get_exchange_client():
             
         raise RuntimeError(f"CRITICAL ERROR: Client creation blocked. ({reason})")
 
-    if TRADING_MODE == "TESTNET":
+    if TRADING_MODE in ["TESTNET", "FUTURES"]:
         client = Client(API_KEY, SECRET_KEY, testnet=True)
-        client.API_URL = "https://testnet.binance.vision/api"
+        if TRADING_MODE == "TESTNET":
+            client.API_URL = "https://testnet.binance.vision/api"
         return client
         
     return None
@@ -395,6 +402,162 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         raise
 
 
+def set_futures_leverage_and_margin(client: Client, symbol: str, leverage: int = 5, margin_type: str = "ISOLATED"):
+    """
+    Configures leverage and margin type for a futures symbol.
+    Fails safely if already configured.
+    """
+    try:
+        # Set margin type (ISOLATED or CROSSED)
+        try:
+            client.futures_change_margin_type(symbol=symbol, marginType=margin_type)
+            sys_logger.info(f"[FUTURES] Margin type for {symbol} set to {margin_type}")
+        except BinanceAPIException as me:
+            if "No need to change margin type" in str(me) or "-4046" in str(me):
+                pass
+            else:
+                sys_logger.warning(f"[FUTURES] Margin type setting for {symbol} warning: {me}")
+                
+        # Set leverage
+        try:
+            client.futures_change_leverage(symbol=symbol, leverage=leverage)
+            sys_logger.info(f"[FUTURES] Leverage for {symbol} set to {leverage}x")
+        except Exception as le:
+            sys_logger.warning(f"[FUTURES] Leverage setting for {symbol} warning: {le}")
+    except Exception as e:
+        sys_logger.warning(f"[FUTURES] Error setting leverage/margin for {symbol}: {e}")
+
+
+def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None, tp=None, client_order_id=None, leverage=5):
+    """
+    Places a Futures market order (BUY for Long, SELL for Short) with attached STOP_MARKET and TAKE_PROFIT_MARKET orders.
+    """
+    allowed, reason = ExecutionPolicy.can_place_order()
+    if not allowed:
+        raise RuntimeError(f"CRITICAL ERROR: Order blocked. ({reason})")
+
+    try:
+        active_trades = _load_active_trades()
+        if client_order_id:
+            for t in active_trades:
+                if t.get("signal_id") == client_order_id or t.get("entry_client_id") == client_order_id or t.get("trade_id") == client_order_id or str(t.get("entry_order_id")) == str(client_order_id):
+                    sys_logger.warning(f"[{strategy_name}] 🚫 Duplicate Client/Signal ID {client_order_id} rejected.")
+                    return None
+    except StateCorruptionError as e:
+        sys_logger.critical(f"State corruption prevents new orders: {e}")
+        return None
+
+    client = get_exchange_client()
+    state = OrderState.ENTRY_SUBMITTED
+
+    try:
+        # 1. Ensure isolated margin & leverage
+        set_futures_leverage_and_margin(client, symbol, leverage=leverage, margin_type="ISOLATED")
+
+        # 2. Place entry order via /fapi/v1/order
+        order_params = {
+            "symbol": symbol,
+            "side": side,  # "BUY" (Long) or "SELL" (Short)
+            "type": "MARKET",
+            "quantity": quantity
+        }
+        if client_order_id:
+            order_params["newClientOrderId"] = client_order_id
+
+        order = client.futures_create_order(**order_params)
+        order_id = order.get("orderId", "N/A")
+        
+        executed_qty = float(order.get("executedQty", quantity))
+        cum_quote = float(order.get("cumQuote", 0.0))
+        avg_price = float(order.get("avgPrice", 0.0))
+        if avg_price == 0.0 and executed_qty > 0 and cum_quote > 0:
+            avg_price = cum_quote / executed_qty
+
+        actual_price = avg_price
+        total_fee = (cum_quote or (actual_price * executed_qty)) * 0.0005  # 0.05% taker fee estimate for futures
+        state = OrderState.ENTRY_FILLED
+
+        sys_logger.info(
+            f"[FUTURES] [{strategy_name}] ✅ {side} order {state}! "
+            f"Avg Price: {actual_price:.2f}, Executed Qty: {executed_qty}, Fees: {total_fee}",
+            extra={"strategy": strategy_name, "symbol": symbol}
+        )
+
+        tp_order_id = None
+        sl_order_id = None
+
+        # 3. Place conditional SL and TP bracket orders
+        if sl and tp:
+            state = OrderState.PROTECTION_PENDING
+            try:
+                prot = place_futures_bracket_protection(
+                    client=client,
+                    symbol=symbol,
+                    entry_side=side,
+                    executed_qty=executed_qty,
+                    actual_fill_price=actual_price,
+                    sl_price=sl,
+                    tp_price=tp,
+                )
+                tp_order_id = prot["tp_order_id"]
+                sl_order_id = prot["sl_order_id"]
+                state = OrderState.PROTECTED
+
+                sys_logger.info(
+                    f"[FUTURES_PROTECTION_PLACED] [{strategy_name}] {symbol} | "
+                    f"TP_orderId={tp_order_id} (@ {prot['tp_price_sent']}) "
+                    f"SL_orderId={sl_order_id} (@ {prot['sl_price_sent']})",
+                    extra={"strategy": strategy_name, "symbol": symbol}
+                )
+
+                # Save to active trades
+                active = _load_active_trades()
+                active.append({
+                    "strategy":          strategy_name,
+                    "symbol":            symbol,
+                    "side":              side,
+                    "quantity":          executed_qty,
+                    "entry_price":       actual_price,
+                    "entry_fee":         total_fee,
+                    "entry_timestamp":   datetime.datetime.utcnow().isoformat() + "Z",
+                    "signal_id":         client_order_id or f"MANUAL_{int(time.time())}",
+                    "oco_id":            None,  # Futures uses distinct tp_order_id / sl_order_id
+                    "tp_order_id":       tp_order_id,
+                    "sl_order_id":       sl_order_id,
+                    "tp_price":          tp,
+                    "sl_price":          sl,
+                    "state":             state.value,
+                    "entry_client_id":   client_order_id,
+                    "entry_order_id":    order_id,
+                    "is_futures":        True,
+                    "leverage":          leverage,
+                })
+                _save_active_trades(active)
+
+            except Exception as e:
+                state = OrderState.PROTECTION_FAILED
+                sys_logger.error(
+                    f"[FUTURES_PROTECTION_FAILED] [{strategy_name}] {symbol} | "
+                    f"Error: {e}. Attempting emergency Futures MARKET close.",
+                    extra={"strategy": strategy_name, "symbol": symbol}
+                )
+                try:
+                    emergency_futures_market_close(client, symbol, side, executed_qty)
+                except Exception as ce:
+                    sys_logger.critical(f"[FUTURES] 🚨 FATAL: Emergency close failed for {symbol}: {ce}")
+                return None
+
+        log_trade(strategy_name, symbol, side, executed_qty, actual_price, sl, tp, order_id, state)
+        order["_actual_price"] = actual_price
+        order["_executed_qty"] = executed_qty
+        order["_total_fee"] = total_fee
+        order["_final_state"] = state
+        return order
+    except Exception as e:
+        sys_logger.error(f"[FUTURES_EXECUTION_FAILED] Error: {e} | Symbol: {symbol} | Side: {side}")
+        raise
+
+
 def monitor_open_trades():
     """Checks active OCO orders to see if SL or TP was hit. Uses actual fill prices for PnL."""
     if TRADING_MODE == "PAPER":
@@ -422,7 +585,84 @@ def monitor_open_trades():
     ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
 
     for t in active:
+        is_fut = t.get("is_futures", False) or TRADING_MODE == "FUTURES"
         oco_id = t.get("oco_id")
+        tp_oid = t.get("tp_order_id")
+        sl_oid = t.get("sl_order_id")
+
+        if is_fut:
+            if not tp_oid and not sl_oid:
+                remaining_trades.append(t)
+                continue
+            try:
+                fut_res = check_futures_bracket_status(client, t["symbol"], tp_oid, sl_oid)
+                if fut_res["position_closed"]:
+                    close_price = fut_res["close_avg_price"]
+                    close_qty = fut_res["close_qty"] or float(t.get("quantity", 0))
+                    tp_filled = fut_res["tp_filled"]
+                    outcome = "WIN" if tp_filled else "LOSS"
+
+                    entry_price = float(t.get("entry_price", 0))
+                    entry_qty = float(t.get("quantity", close_qty))
+                    entry_fee = float(t.get("entry_fee", 0.0))
+                    exit_fee = close_price * close_qty * 0.0005
+
+                    gross_pnl, net_pnl = compute_net_pnl(
+                        t["side"], entry_qty, entry_price, entry_fee,
+                        close_qty, close_price, exit_fee
+                    )
+
+                    sys_logger.info(
+                        f"[FUTURES_POSITION_CLOSED] {t['symbol']} {outcome} | Qty: {close_qty} @ {close_price:.4f} (Entry: {entry_price:.4f})",
+                        extra={"strategy": t["strategy"], "symbol": t["symbol"]}
+                    )
+                    
+                    ledger_entry = {
+                        "signal_id":      t.get("signal_id", "UNKNOWN"),
+                        "symbol":         t["symbol"],
+                        "strategy":       t["strategy"],
+                        "source":         "BINANCE_FUTURES_EXECUTION",
+                        "side":           t["side"],
+                        "entry_order_id": t.get("entry_order_id"),
+                        "entry_price":    entry_price,
+                        "entry_executed_quantity": entry_qty,
+                        "entry_fee":      entry_fee,
+                        "exit_order_id":  tp_oid if tp_filled else sl_oid,
+                        "exit_price":     close_price,
+                        "exit_executed_quantity": close_qty,
+                        "exit_fee":       exit_fee,
+                        "exit_reason":    outcome,
+                        "gross_pnl":      gross_pnl,
+                        "total_fees":     entry_fee + exit_fee,
+                        "net_pnl":        net_pnl,
+                        "pnl":            net_pnl,
+                        "fees":           entry_fee + exit_fee,
+                        "entry_timestamp": t.get("entry_timestamp"),
+                        "exit_timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                        "timestamp":      datetime.datetime.utcnow().isoformat() + "Z",
+                        "action":         f"CLOSE_{outcome}",
+                        "quantity":       close_qty,
+                        "is_futures":     True
+                    }
+                    with LEDGER_WRITE_LOCK:
+                        with open(ledger_file, "a") as lf:
+                            lf.write(json.dumps(ledger_entry) + "\n")
+                    log_trade(
+                        t["strategy"], t["symbol"],
+                        f"{t['side']}_FUTURES_CLOSE_{outcome}",
+                        close_qty, close_price,
+                        t.get("sl_price"), t.get("tp_price"),
+                        tp_oid if tp_filled else sl_oid, f"CLOSED_{outcome}"
+                    )
+                    continue
+                else:
+                    remaining_trades.append(t)
+                    continue
+            except Exception as e:
+                sys_logger.error(f"[MONITOR_FUTURES] Error checking {t['symbol']}: {e}")
+                remaining_trades.append(t)
+                continue
+
         if not oco_id:
             remaining_trades.append(t)
             continue

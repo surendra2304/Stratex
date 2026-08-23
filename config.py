@@ -33,6 +33,12 @@ GEMINI_ENABLED = os.getenv("GEMINI_ENABLED", "True").lower() == "true"
 # --- Testnet Base URLs ---
 BASE_URL = "https://testnet.binance.vision"
 WS_URL = "wss://ws-api.testnet.binance.vision/ws-api/v3"
+FUTURES_BASE_URL = "https://testnet.binancefuture.com"
+FUTURES_WS_URL = "wss://stream.binancefuture.com/ws"
+
+# --- Futures Configuration ---
+FUTURES_LEVERAGE = int(os.getenv("FUTURES_LEVERAGE", "5"))  # Default 5x leverage for testnet testing
+FUTURES_MARGIN_TYPE = os.getenv("FUTURES_MARGIN_TYPE", "ISOLATED").upper()
 
 # --- Dynamic Market Scanner ---
 SYMBOL = "BTCUSDT"
@@ -43,13 +49,13 @@ MAX_OPEN_TRADES = 5         # Aligned with MAX_OPEN_POSITIONS (risk gate enforce
 TOP_COINS_LIMIT = 20  # Increase number of top trending coins to scan
 TARGET_TRADE_COUNT = 30   # Aligned with the 30-trade statistical validation gate
 TARGET_TRADE_WINDOW_HOURS = 720  # 30-day forward validation window (stress-test remnant fixed)
-LONG_ONLY = True            # Binance Spot default
+LONG_ONLY = os.getenv("TRADING_MODE", "PAPER").upper() != "FUTURES"  # Spot is LONG_ONLY, Futures allows Short
 
 # -------------------------------------------------------------------
 # OPERATIONAL SAFETY GATES (TESTNET ONLY)
 # -------------------------------------------------------------------
 TRADING_MODE = os.getenv("TRADING_MODE", "PAPER").upper()
-PAPER_SAFE_MODE = os.getenv("PAPER_SAFE_MODE", "False" if TRADING_MODE == "TESTNET" else "True").lower() == "true"
+PAPER_SAFE_MODE = os.getenv("PAPER_SAFE_MODE", "False" if TRADING_MODE in ["TESTNET", "FUTURES"] else "True").lower() == "true"
 TESTNET_ENABLED = os.getenv("TESTNET_ENABLED", "False").lower() == "true"
 LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is impossible by design
 
@@ -103,7 +109,7 @@ INTRABAR_RESOLUTION = "conservative" # "conservative" or "optimistic"
 
 SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema", "fast1m", "fast5m", "hybrid", "bollinger", "breakout_vol"]
 SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"]
-VALID_MODES = ["PAPER", "TESTNET"]
+VALID_MODES = ["PAPER", "TESTNET", "FUTURES"]
 
 def validate_config():
     # If legacy ACTIVE_STRATEGY or TIMEFRAME attributes were set dynamically (e.g. in tests)
@@ -136,10 +142,10 @@ def validate_config():
         raise ValueError("Configuration Error: TOP_COINS_LIMIT must be a positive integer.")
 
     # For non-PAPER modes, credentials must be set (but not hardcoded here)
-    if TRADING_MODE in ["TESTNET", "LIVE"] and (not API_KEY or not SECRET_KEY):
+    if TRADING_MODE in ["TESTNET", "FUTURES", "LIVE"] and (not API_KEY or not SECRET_KEY):
         raise ValueError(
-            "Configuration Error: API_KEY and SECRET_KEY must be set via "
-            "environment variables or .env file for TESTNET/LIVE mode."
+            f"Configuration Error: API_KEY and SECRET_KEY must be set via "
+            f"environment variables or .env file for {TRADING_MODE} mode."
         )
 
 # Validate immediately upon import

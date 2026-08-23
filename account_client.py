@@ -61,6 +61,20 @@ class AccountClient:
             return self._client.get_open_orders(symbol=symbol)
         return self._client.get_open_orders()
 
+    def futures_account(self) -> dict:
+        """Returns Futures account info (/fapi/v2/account)."""
+        if not self.is_available():
+            return {}
+        return self._client.futures_account()
+
+    def futures_position_information(self, symbol: str | None = None) -> list:
+        """Returns Futures position info."""
+        if not self.is_available():
+            return []
+        if symbol:
+            return self._client.futures_position_information(symbol=symbol)
+        return self._client.futures_position_information()
+
     # --- Block all other Binance Client methods ---
     def __getattr__(self, item):
         # Deny any attribute not explicitly defined above
