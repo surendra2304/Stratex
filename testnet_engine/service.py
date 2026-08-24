@@ -147,11 +147,15 @@ class TestnetService:
             
         # Reconcile Initial Balance
         try:
-            account = self.client.get_account()
-            usdt_balance = next((item for item in account['balances'] if item['asset'] == 'USDT'), None)
-            if not usdt_balance:
-                raise RuntimeError("No USDT balance found on Testnet.")
-            actual_binance_balance = float(usdt_balance['free']) + float(usdt_balance['locked'])
+            if TRADING_MODE == "FUTURES":
+                account = self.client.futures_account()
+                actual_binance_balance = float(account.get("availableBalance", account.get("totalWalletBalance", 0.0)))
+            else:
+                account = self.client.get_account()
+                usdt_balance = next((item for item in account['balances'] if item['asset'] == 'USDT'), None)
+                if not usdt_balance:
+                    raise RuntimeError("No USDT balance found on Testnet.")
+                actual_binance_balance = float(usdt_balance['free']) + float(usdt_balance['locked'])
             
             # Calculate total reconstructable PnL from the Ledger
             total_reconstructable_pnl = 0.0
@@ -337,15 +341,17 @@ class TestnetService:
     def sync_exchange_state(self, account):
         """Phase 2: Reconcile local active_trades with Binance open orders and balances."""
         try:
-            open_orders = self.client.get_open_orders()
-            # Find any non-USDT balances — GOVERNANCE-SCOPED: the testnet wallet holds
-            # hundreds of faucet airdrop coins; only OOS-validated assets may be
-            # adopted, protected, or counted as engine positions. Junk balances and
-            # their stray orders are treated as floating and cancelled.
-            validated = governance_validated_assets(self.strategies)
-            assets = [item for item in account['balances'] if float(item['free']) > 0 or float(item['locked']) > 0]
-            open_symbols_from_assets = {a['asset'] + "USDT" for a in assets
-                                        if a['asset'] != "USDT" and (a['asset'] + "USDT") in validated}
+            if TRADING_MODE == "FUTURES":
+                open_orders = self.client.futures_get_open_orders() if hasattr(self.client, "futures_get_open_orders") else []
+                validated = governance_validated_assets(self.strategies)
+                positions = account.get("positions", [])
+                open_symbols_from_assets = {p["symbol"] for p in positions if abs(float(p.get("positionAmt", 0.0))) > 0 and p["symbol"] in validated}
+            else:
+                open_orders = self.client.get_open_orders()
+                validated = governance_validated_assets(self.strategies)
+                assets = [item for item in account.get('balances', []) if float(item['free']) > 0 or float(item['locked']) > 0]
+                open_symbols_from_assets = {a['asset'] + "USDT" for a in assets
+                                            if a['asset'] != "USDT" and (a['asset'] + "USDT") in validated}
             
             from execution import _load_active_trades
             try:
