@@ -137,6 +137,9 @@ class MarketScanner:
         
         # Subscribe to multiplex kline streams
         streams = [f"{sym.lower()}@kline_{tf}" for sym in self.symbols for tf in self.timeframes]
+        total_streams = len(streams)
+        logger.info(f"[SCANNER] 📡 Subscribing to {total_streams} total streams ({len(self.symbols)} assets × {len(self.timeframes)} timeframes)...")
+        print(f"[SCANNER] 📡 Subscribing to {total_streams} total streams ({len(self.symbols)} assets × {len(self.timeframes)} timeframes)...")
         if self.is_futures:
             self.twm.start_futures_multiplex_socket(callback=self._handle_socket_message, streams=streams)
         else:

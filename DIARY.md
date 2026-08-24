@@ -290,12 +290,17 @@ TESTNET ONLY
   - Stripped EV hurdles and bypassed cooldown timers in `testnet_engine/profitability_gate.py` and `testnet_engine/service.py` to allow instant trade execution on candle closes.
   - Increased concurrent position capacity to 50 (`MAX_OPEN_POSITIONS_AGGRESSIVE = 50`).
   - Added 1-second continuous ticking to the web UI uptime header (`static/app.js`).
-- **Phase 6: Production Deployment & Merging**:
-  - Committed changes to feature branch `feat/all-timeframes-aggressive`.
-  - Merged to `master` and pushed to GitHub.
-  - Verified `/health` and live `/api/scanner` on Render production.
+- **Phase 6: Hyper-Frequency Trigger & 96-Stream Multi-Timeframe Ingestion**:
+  - Replaced crossover triggers with pure **Hyper-Frequency Price Action**:
+    * Green Candle Close (`Close > Open`) $\rightarrow$ **BUY (Long)**.
+    * Red Candle Close (`Close < Open`) $\rightarrow$ **SELL (Short)**.
+    * Exits: SL = $0.5 \times \text{ATR}(14)$, TP = $1.0 \times \text{ATR}(14)$ ($1:2.0$ RR).
+  - Hardcoded active timeframes to all 6 (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`) in `config.py` and `market_scanner.py`.
+  - Configured multiplex websocket subscribing to **96 total streams** (16 assets $\times$ 6 timeframes).
+  - Zero-gate execution: signals qualify instantly without cooldown or EV delay.
+  - Committed to `feat/hyper-frequency-trigger`, merged to `master`, and pushed to Render.
 
 ## Verification
-- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~75s)**.
+- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~71s)**.
 - Live Deployment: `/health` returns 200 OK (`engine: online`, `engine_healthy: true`).
-- Live Scanner: Active across all 6 timeframes (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`) for 16 validated assets.
+- Live Scanner: 96 total streams streaming across all 16 assets on 6 timeframes.

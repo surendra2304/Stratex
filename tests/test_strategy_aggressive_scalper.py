@@ -29,15 +29,13 @@ def _generate_synthetic_candles(n_bars=60, base_price=100.0, trend="BULLISH"):
     return df
 
 
-def test_aggressive_scalper_bullish_cross():
+def test_aggressive_scalper_bullish_green_candle():
     df = _generate_synthetic_candles(50, trend="BULLISH")
     df = add_features(df)
     
-    # Simulate fresh EMA9 crossing above EMA21 on last bar
-    df.loc[df.index[-2], 'ema_9'] = 100.0
-    df.loc[df.index[-2], 'ema_21'] = 100.5
-    df.loc[df.index[-1], 'ema_9'] = 101.0
-    df.loc[df.index[-1], 'ema_21'] = 100.5
+    # Last candle is GREEN: Close > Open
+    df.loc[df.index[-1], 'open'] = 100.0
+    df.loc[df.index[-1], 'close'] = 101.0
     
     sig = get_signal(df)
     assert sig.side == "BUY"
@@ -46,15 +44,13 @@ def test_aggressive_scalper_bullish_cross():
     assert sig.rr_ratio == 2.0
 
 
-def test_aggressive_scalper_bearish_cross():
+def test_aggressive_scalper_bearish_red_candle():
     df = _generate_synthetic_candles(50, trend="BEARISH")
     df = add_features(df)
     
-    # Simulate fresh EMA9 crossing below EMA21 on last bar
-    df.loc[df.index[-2], 'ema_9'] = 100.5
-    df.loc[df.index[-2], 'ema_21'] = 100.0
-    df.loc[df.index[-1], 'ema_9'] = 99.5
-    df.loc[df.index[-1], 'ema_21'] = 100.0
+    # Last candle is RED: Close < Open
+    df.loc[df.index[-1], 'open'] = 100.0
+    df.loc[df.index[-1], 'close'] = 99.0
     
     sig = get_signal(df)
     assert sig.side == "SELL"
@@ -63,15 +59,13 @@ def test_aggressive_scalper_bearish_cross():
     assert sig.rr_ratio == 2.0
 
 
-def test_aggressive_scalper_no_cross():
+def test_aggressive_scalper_doji_no_signal():
     df = _generate_synthetic_candles(50, trend="BULLISH")
     df = add_features(df)
     
-    # EMA9 already above EMA21 on both bars
-    df.loc[df.index[-2], 'ema_9'] = 101.0
-    df.loc[df.index[-2], 'ema_21'] = 100.0
-    df.loc[df.index[-1], 'ema_9'] = 102.0
-    df.loc[df.index[-1], 'ema_21'] = 100.5
+    # Last candle is DOJI: Close == Open
+    df.loc[df.index[-1], 'open'] = 100.0
+    df.loc[df.index[-1], 'close'] = 100.0
     
     sig = get_signal(df)
     assert sig.side is None

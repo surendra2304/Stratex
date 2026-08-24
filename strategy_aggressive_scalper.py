@@ -50,36 +50,34 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
 
 def get_signal(df: pd.DataFrame, **kwargs) -> SignalResult:
     """
-    1m EMA(9)/EMA(21) crossover signal generator.
+    Hyper-frequency price action signal generator:
+    - Candle closes GREEN (Close > Open) -> BUY (Long)
+    - Candle closes RED (Close < Open)   -> SELL (Short)
+    Exits: SL = 0.5 × ATR(14), TP = 1.0 × ATR(14)
     """
     _NO_SIGNAL = SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
-    if df is None or len(df) < 25:
+    if df is None or len(df) < 15:
         return _NO_SIGNAL
 
-    if 'ema_9' not in df.columns or 'ema_21' not in df.columns or 'atr' not in df.columns:
+    if 'atr' not in df.columns:
         df = add_features(df)
 
     last = df.iloc[-1]
-    prev = df.iloc[-2]
 
-    if pd.isna(last['ema_9']) or pd.isna(last['ema_21']) or pd.isna(last['atr']):
-        return _NO_SIGNAL
+    atr_val = last.get('atr', compute_atr(df, 14).iloc[-1])
+    if pd.isna(atr_val) or atr_val <= 0:
+        atr_val = last['close'] * 0.01
 
-    atr_val = last['atr']
-    if atr_val <= 0:
-        return _NO_SIGNAL
+    close_p = float(last['close'])
+    open_p = float(last['open'])
 
-    close_p = last['close']
-    cross_up = (last['ema_9'] > last['ema_21']) and (prev['ema_9'] <= prev['ema_21'])
-    cross_dn = (last['ema_9'] < last['ema_21']) and (prev['ema_9'] >= prev['ema_21'])
-
-    if cross_up:
+    if close_p > open_p:
         sl = close_p - (_SL_ATR * atr_val)
         tp = close_p + (_TP_ATR * atr_val)
         return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
-    if cross_dn:
+    if close_p < open_p:
         sl = close_p + (_SL_ATR * atr_val)
         tp = close_p - (_TP_ATR * atr_val)
         return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
