@@ -61,18 +61,20 @@ LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is im
 
 # --- Strategies to Run ---
 # Multi-strategy configuration mapping validated strategy -> timeframe(s)
-# Live engine runs exactly the top 5 Strategy Factory Winners
+# Live engine runs aggressive scalper across all 6 timeframes
 ACTIVE_STRATEGIES = {
-    "factory_winner_1": ["5m"],
-    "factory_winner_2": ["5m"],
-    "factory_winner_3": ["5m"],
-    "factory_winner_4": ["5m"],
-    "factory_winner_5": ["15m"],
+    "aggressive_scalper": ["1m", "5m", "15m", "30m", "1h", "4h"],
+    "factory_winner_1": ["1m", "5m", "15m", "30m", "1h", "4h"],
+    "factory_winner_2": ["1m", "5m", "15m", "30m", "1h", "4h"],
+    "factory_winner_3": ["1m", "5m", "15m", "30m", "1h", "4h"],
+    "factory_winner_4": ["1m", "5m", "15m", "30m", "1h", "4h"],
+    "factory_winner_5": ["1m", "5m", "15m", "30m", "1h", "4h"],
 }
 
-ACTIVE_STRATEGY = next(iter(ACTIVE_STRATEGIES.keys()))
-_first_tf = next(iter(ACTIVE_STRATEGIES.values()))
-TIMEFRAME = _first_tf[0] if isinstance(_first_tf, list) else _first_tf
+ACTIVE_STRATEGY = "aggressive_scalper"
+TIMEFRAME = "1m"
+ALL_ACTIVE_TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "4h"]
+BYPASS_PROFITABILITY_GATE = os.getenv("BYPASS_PROFITABILITY_GATE", "False").lower() == "true"
 
 # Trading Config
 MAX_POSITION_SIZE = 0.95

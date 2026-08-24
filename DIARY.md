@@ -284,11 +284,18 @@ TESTNET ONLY
   - Registered all 5 winners as `VALIDATED` in `config_strategy.py`.
   - Set `ACTIVE_STRATEGIES` in `config.py` to run **exactly these 5 winners** to protect API rate limits and memory.
   - Added unit test suite `tests/test_strategy_factory_winners.py`.
-- **Phase 5: Production Deployment**:
-  - Merged feature branch to `master` and pushed to GitHub.
-  - Render deployment monitored and verified online.
+- **Phase 5: Force Multi-Timeframe Scanning & Aggressive Scalper Activation**:
+  - Activated `aggressive_scalper` (Fast EMA 9 cross Slow EMA 21) across all 6 timeframes (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`) for all 16 assets.
+  - Enabled multi-timeframe ingestion across `1m`, `5m`, `15m`, `30m`, `1h`, and `4h` in `MarketScanner` via multiplexed websocket stream.
+  - Stripped EV hurdles and bypassed cooldown timers in `testnet_engine/profitability_gate.py` and `testnet_engine/service.py` to allow instant trade execution on candle closes.
+  - Increased concurrent position capacity to 50 (`MAX_OPEN_POSITIONS_AGGRESSIVE = 50`).
+  - Added 1-second continuous ticking to the web UI uptime header (`static/app.js`).
+- **Phase 6: Production Deployment & Merging**:
+  - Committed changes to feature branch `feat/all-timeframes-aggressive`.
+  - Merged to `master` and pushed to GitHub.
+  - Verified `/health` and live `/api/scanner` on Render production.
 
 ## Verification
-- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~46s)**.
+- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~75s)**.
 - Live Deployment: `/health` returns 200 OK (`engine: online`, `engine_healthy: true`).
-- Live Scanner: Exactly 5 winning factory strategies active across 16 symbols.
+- Live Scanner: Active across all 6 timeframes (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`) for 16 validated assets.

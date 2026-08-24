@@ -144,11 +144,16 @@ class ProfitabilityGate:
         expected_gross_return = (prob_win * reward_pct) - (prob_loss * risk_pct)
         total_friction_pct    = self.cost_engine.get_total_friction()
         expected_net_return   = expected_gross_return - total_friction_pct
+        min_edge              = getattr(config, "MINIMUM_EXPECTED_EDGE", 0.0001)
 
-        # Permissive gate: accept any trade with positive edge or meeting the 40% probability floor above friction
-        min_edge  = getattr(config, "MINIMUM_EXPECTED_EDGE", 0.0001)
+        # Standard mathematical evaluation
         is_accepted = (expected_net_return >= min_edge) or (prob_win >= 0.40 and expected_gross_return > total_friction_pct)
-        reason    = "POSITIVE_EDGE" if is_accepted else "NEGATIVE_EXPECTED_NET_RETURN"
+        reason      = "POSITIVE_EDGE" if is_accepted else "NEGATIVE_EXPECTED_NET_RETURN"
+
+        # Bypass all filters if requested (Zero rejections mode)
+        if getattr(config, "BYPASS_PROFITABILITY_GATE", False):
+            is_accepted = True
+            reason = "BYPASS_PROFITABILITY_GATE"
 
         # ------------------------------------------------------------------
         # 4. Diagnostic logging
