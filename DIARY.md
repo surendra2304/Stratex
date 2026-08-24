@@ -321,7 +321,7 @@ TESTNET ONLY
 
 ---
 
-# DAY 11 — 2026-08-23
+# DAY 10 — 2026-08-23
 ## Objectives
 - Safely increase trade cadence and opportunity discovery without compromising risk limits or dropping to noise timeframes.
 - Expand validated asset universe from 7 to 16 high-volume, Binance Spot Testnet verified altcoins.
@@ -348,7 +348,7 @@ TESTNET ONLY
 
 ---
 
-# DAY 12 — 2026-08-23
+# DAY 11 — 2026-08-23
 ## Objectives
 - Implement Phase 1 of Binance USDⓈ-M Futures Testnet migration (`testnet.binancefuture.com`).
 - Enable isolated margin, leverage settings (default 5x), bidirectional order support (BUY long & SELL short), and conditional bracket orders (`STOP_MARKET` / `TAKE_PROFIT_MARKET`).
@@ -375,7 +375,7 @@ TESTNET ONLY
 
 ---
 
-# DAY 13 — 2026-08-23
+# DAY 12 — 2026-08-23
 ## Objectives
 - Develop Multi-Timeframe (MTF) 1h/5m ADX + EMA Futures Strategy (`strategy_adx_ema_mtf.py`) to unlock short trades and higher frequency sniper execution.
 - Maintain zero breaking changes for existing 4h `strategy_adx_ema.py` spot engine.
@@ -402,7 +402,7 @@ TESTNET ONLY
 
 ---
 
-# DAY 14 — 2026-08-23
+# DAY 13 — 2026-08-23
 ## Objectives
 - Rigorously backtest the Multi-Timeframe (1h/5m) ADX+EMA strategy across 2024-01-01 to 2026-08-23 (~32 months out-of-sample data) on BTCUSDT, ETHUSDT, and SOLUSDT.
 - Model realistic Binance Futures execution friction: 15 bps total round-trip friction (8 bps taker fees + 7 bps market order slippage) under 5x isolated margin leverage.
@@ -433,7 +433,7 @@ TESTNET ONLY
 
 ---
 
-# DAY 15 — 2026-08-23
+# DAY 14 — 2026-08-23
 ## Objectives
 - Scale MTF Strategy execution timeframe from noisy 5m to 15m to overcome intrabar friction drag.
 - Model optimized LIMIT_MAKER entry execution reducing round-trip friction from 15 bps down to 8 bps (0.02% maker fee + 0.04% taker stop/tp exit + 2 bps slippage).
@@ -467,7 +467,7 @@ TESTNET ONLY
 
 ---
 
-# DAY 16 — 2026-08-23
+# DAY 15 — 2026-08-23
 ## Objectives
 - Purge all obsolete 5m UI artifacts from dashboard HTML, JS, and server API responses to reflect the active 15m MTF execution layer.
 - Lower profitability gate threshold from restrictive high expectations to a permissive 40% probability floor while preserving exact 8 bps friction calculation.
@@ -494,7 +494,7 @@ TESTNET ONLY
 
 ---
 
-# DAY 17 — 2026-08-24
+# DAY 16 — 2026-08-24
 ## Objectives
 - Implement hyper-aggressive 1m EMA(9)/EMA(21) crossover scalper (`strategy_aggressive_scalper.py`) for rapid-fire Binance Futures testnet execution.
 - Strip macro filters (no 1h trend filter, no ADX requirements) and bypass EV/profitability gates for aggressive setups.
@@ -529,7 +529,7 @@ TESTNET ONLY
 
 ---
 
-# DAY 18 — 2026-08-24
+# DAY 17 — 2026-08-24
 ## Objectives
 - Expand hyper-aggressive EMA(9)/EMA(21) crossover scalper to run simultaneously across ALL 6 standard timeframes (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`) on all 16 validated assets.
 - Configure market scanner and websocket candle constructors to ingest all 6 timeframes in parallel.
@@ -562,7 +562,7 @@ TESTNET ONLY
 
 ---
 
-# DAY 19 — 2026-08-24
+# DAY 18 — 2026-08-24
 ## Objectives
 - Implement and deploy 3 additional high-frequency aggressive scalping strategies to run alongside `aggressive_scalper`:
   1. `bb_reversion` (`strategy_bb_reversion.py`): Bollinger Band (20, 2) Mean Reversion.
