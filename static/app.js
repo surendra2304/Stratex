@@ -238,12 +238,30 @@ function loadActiveViewData(view) {
 // ==========================================
 // 4. GLOBAL HEADER & REAL-TIME STATUS
 // ==========================================
+let currentServiceStartTime = null;
+
+function updateUptimeDisplay() {
+    if (!currentServiceStartTime) return;
+    try {
+        const startDt = new Date(currentServiceStartTime);
+        const now = new Date();
+        const diffSec = Math.max(0, Math.floor((now - startDt) / 1000));
+        const hrs = Math.floor(diffSec / 3600);
+        const mins = Math.floor((diffSec % 3600) / 60);
+        const secs = Math.floor(diffSec % 60);
+        safeSetText('hdr-uptime', `UPTIME: ${hrs}h ${mins}m ${secs}s`);
+    } catch {
+        safeSetText('hdr-uptime', 'UPTIME: 0h 0m 0s');
+    }
+}
+
 function initGlobalHeader() {
-    // Clock loop
+    // Clock & Uptime loop (runs every 1 second)
     if (clockTimer) clearInterval(clockTimer);
     clockTimer = setInterval(() => {
         const now = new Date();
         safeSetText('live-clock', now.toLocaleTimeString('en-US', { hour12: false }) + ' IST');
+        updateUptimeDisplay();
     }, 1000);
 
     // Sound toggle
@@ -281,17 +299,8 @@ async function fetchGlobalStatus() {
 
     const startTimeStr = data.engine_data?.service_start_time || data.bot_start_time;
     if (startTimeStr) {
-        try {
-            const startDt = new Date(startTimeStr);
-            const now = new Date();
-            const diffSec = Math.max(0, Math.floor((now - startDt) / 1000));
-            const hrs = Math.floor(diffSec / 3600);
-            const mins = Math.floor((diffSec % 3600) / 60);
-            const secs = Math.floor(diffSec % 60);
-            safeSetText('hdr-uptime', `UPTIME: ${hrs}h ${mins}m ${secs}s`);
-        } catch {
-            safeSetText('hdr-uptime', 'UPTIME: 0h 0m 0s');
-        }
+        currentServiceStartTime = startTimeStr;
+        updateUptimeDisplay();
     }
 
     // Sidebar status matrix & latency

@@ -1620,18 +1620,24 @@ class TestnetService:
             # Fetch orders and trades for all relevant symbols
             for sym in symbols_to_check:
                 try:
-                    orders = self.client.get_all_orders(symbol=sym, limit=500)
+                    if TRADING_MODE == "FUTURES":
+                        orders = self.client.futures_get_all_orders(symbol=sym, limit=500) if hasattr(self.client, "futures_get_all_orders") else []
+                    else:
+                        orders = self.client.get_all_orders(symbol=sym, limit=500)
                     if baseline_ts:
                         # Orders without a timestamp count as post-baseline (fail-open;
                         # real Binance payloads always carry 'time').
                         orders = [o for o in orders if o.get('time', float('inf')) >= baseline_ts]
-                    all_filled_orders.extend([o for o in orders if o['status'] == 'FILLED'])
+                    all_filled_orders.extend([o for o in orders if o.get('status') == 'FILLED'])
                     
-                    trades = self.client.get_my_trades(symbol=sym, limit=500)
+                    if TRADING_MODE == "FUTURES":
+                        trades = self.client.futures_account_trades(symbol=sym, limit=500) if hasattr(self.client, "futures_account_trades") else []
+                    else:
+                        trades = self.client.get_my_trades(symbol=sym, limit=500)
                     if baseline_ts:
                         trades = [t for t in trades if t.get('time', float('inf')) >= baseline_ts]
                     for t in trades:
-                        oid = str(t['orderId'])
+                        oid = str(t.get('orderId', ''))
                         if oid not in all_trades_by_order:
                             all_trades_by_order[oid] = []
                         all_trades_by_order[oid].append(t)
@@ -2019,8 +2025,12 @@ class TestnetService:
                    "orphan_orders_cancelled": [], "errors": []}
         try:
             from testnet_engine.protection import place_oco_protection
-            open_orders = self.client.get_open_orders()
-            account = self.client.get_account()
+            if TRADING_MODE == "FUTURES":
+                open_orders = self.client.futures_get_open_orders() if hasattr(self.client, "futures_get_open_orders") else []
+                account = self.client.futures_account() if hasattr(self.client, "futures_account") else {}
+            else:
+                open_orders = self.client.get_open_orders()
+                account = self.client.get_account()
         except Exception as e:
             summary["errors"].append(f"exchange_query_failed: {e}")
             logger.error(f"[RECONCILE] Cannot query exchange state: {e}")
@@ -2028,10 +2038,18 @@ class TestnetService:
 
         # Balances by asset (free + locked), ignoring dust
         balances = {}
-        for b in account.get("balances", []):
-            total = float(b.get("free", 0.0)) + float(b.get("locked", 0.0))
-            if total > 0.0:
-                balances[b["asset"]] = total
+        if TRADING_MODE == "FUTURES":
+            for p in account.get("positions", []):
+                amt = abs(float(p.get("positionAmt", 0.0)))
+                if amt > 0.0:
+                    sym = p.get("symbol", "")
+                    base = sym[:-4] if sym.endswith("USDT") else sym
+                    balances[base] = amt
+        else:
+            for b in account.get("balances", []):
+                total = float(b.get("free", 0.0)) + float(b.get("locked", 0.0))
+                if total > 0.0:
+                    balances[b["asset"]] = total
 
         # Orders grouped by symbol
         orders_by_symbol = {}
