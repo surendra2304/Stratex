@@ -313,7 +313,8 @@ def get_live_account_and_holdings(force_refresh=False):
         
         try:
             client = get_exchange_client()
-            if TRADING_MODE == "FUTURES" and client:
+            current_mode = getattr(config, "TRADING_MODE", "TESTNET").upper()
+            if current_mode == "FUTURES" and client:
                 fut_acc = client.futures_account()
                 usdt_free = float(fut_acc.get("availableBalance", 0.0))
                 usdt_locked = float(fut_acc.get("totalInitialMargin", 0.0))
@@ -340,7 +341,19 @@ def get_live_account_and_holdings(force_refresh=False):
                             "side": "LONG" if pos_amt > 0 else "SHORT"
                         })
             elif client:
-                account = client.get_account()
+                try:
+                    account = client.get_account()
+                except Exception:
+                    # Fallback to futures_account if Spot account call fails
+                    try:
+                        fut_acc = client.futures_account()
+                        usdt_free = float(fut_acc.get("availableBalance", 0.0))
+                        usdt_locked = float(fut_acc.get("totalInitialMargin", 0.0))
+                        total_crypto_value = float(fut_acc.get("totalUnrealizedProfit", 0.0))
+                        active_trade_holdings_value = float(fut_acc.get("totalPositionInitialMargin", 0.0))
+                        account = None
+                    except Exception:
+                        account = None
                 md = MarketDataClient()
                 tickers = {}
                 if md.is_available():

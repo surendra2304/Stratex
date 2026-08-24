@@ -10,7 +10,7 @@ services:
     dockerCommand: python scripts/supervise_services.py
     envVars:
       - key: TRADING_MODE
-        value: "TESTNET"
+        value: "FUTURES"
       - key: TESTNET_ONLY
         value: "TRUE"
       - key: TESTNET_ENABLED
