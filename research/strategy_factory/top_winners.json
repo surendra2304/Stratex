@@ -1,0 +1,232 @@
+[
+  {
+    "id": 182,
+    "name": "factory_macd_bb_confluence_5m_182",
+    "type": "macd_bb_confluence",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "total_trades": 5403,
+    "win_rate": 0.4307,
+    "net_pf": 1.481,
+    "total_return_pct": 1794.52,
+    "entry_logic": "Confluence macd_bb_confluence on 5m with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 181,
+    "name": "factory_macd_bb_confluence_5m_181",
+    "type": "macd_bb_confluence",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "total_trades": 9264,
+    "win_rate": 0.4133,
+    "net_pf": 1.449,
+    "total_return_pct": 1793.43,
+    "entry_logic": "Confluence macd_bb_confluence on 5m with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 183,
+    "name": "factory_macd_bb_confluence_5m_183",
+    "type": "macd_bb_confluence",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "total_trades": 11338,
+    "win_rate": 0.334,
+    "net_pf": 1.433,
+    "total_return_pct": 1370.06,
+    "entry_logic": "Confluence macd_bb_confluence on 5m with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 184,
+    "name": "factory_macd_bb_confluence_5m_184",
+    "type": "macd_bb_confluence",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "total_trades": 3731,
+    "win_rate": 0.4103,
+    "net_pf": 1.39,
+    "total_return_pct": 1381.46,
+    "entry_logic": "Confluence macd_bb_confluence on 5m with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 187,
+    "name": "factory_macd_bb_confluence_15m_187",
+    "type": "macd_bb_confluence",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "total_trades": 3907,
+    "win_rate": 0.3046,
+    "net_pf": 1.361,
+    "total_return_pct": 652.91,
+    "entry_logic": "Confluence macd_bb_confluence on 15m with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 186,
+    "name": "factory_macd_bb_confluence_15m_186",
+    "type": "macd_bb_confluence",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "total_trades": 2408,
+    "win_rate": 0.3708,
+    "net_pf": 1.219,
+    "total_return_pct": 565.05,
+    "entry_logic": "Confluence macd_bb_confluence on 15m with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 139,
+    "name": "factory_stoch_crossover_15m_139",
+    "type": "stoch_crossover",
+    "timeframe": "15m",
+    "params": {
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "total_trades": 25412,
+    "win_rate": 0.2834,
+    "net_pf": 1.188,
+    "total_return_pct": 2848.18,
+    "entry_logic": "stoch_crossover on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 185,
+    "name": "factory_macd_bb_confluence_15m_185",
+    "type": "macd_bb_confluence",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "total_trades": 3302,
+    "win_rate": 0.3755,
+    "net_pf": 1.182,
+    "total_return_pct": 466.19,
+    "entry_logic": "Confluence macd_bb_confluence on 15m with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 151,
+    "name": "factory_stoch_crossover_15m_151",
+    "type": "stoch_crossover",
+    "timeframe": "15m",
+    "params": {
+      "stoch_k": 5,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "total_trades": 27394,
+    "win_rate": 0.2803,
+    "net_pf": 1.177,
+    "total_return_pct": 2815.21,
+    "entry_logic": "stoch_crossover on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 188,
+    "name": "factory_macd_bb_confluence_15m_188",
+    "type": "macd_bb_confluence",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "total_trades": 1730,
+    "win_rate": 0.3636,
+    "net_pf": 1.151,
+    "total_return_pct": 373.88,
+    "entry_logic": "Confluence macd_bb_confluence on 15m with SL 2.0x ATR and TP 4.0x ATR"
+  }
+]

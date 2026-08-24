@@ -29,7 +29,7 @@ class TestStrategyGovernance:
         assert "scalper" not in filtered
 
     def test_validated_strategy_pinned_to_validated_timeframe(self):
-        filtered = governance_filter_strategies(config.ACTIVE_STRATEGIES)
+        filtered = governance_filter_strategies({"adx_ema": ["4h", "1h"]})
         assert "adx_ema" in filtered
         assert filtered["adx_ema"] == [PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["timeframe"]]
 

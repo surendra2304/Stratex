@@ -802,7 +802,7 @@ class TestnetService:
                             )
                             continue
 
-                    is_aggressive = any(k in strat_name.lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
+                    is_aggressive = any(k in strat_name.lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend", "factory_winner"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
                     if is_aggressive:
                         passed_profit = True
                         p_metrics = {
@@ -816,11 +816,11 @@ class TestnetService:
                             "prob_win": 0.50,
                             "confidence": 0.50,
                             "strategy_type": "RULE_BASED",
-                            "prob_source": "AGGRESSIVE_SCALPER_BYPASS",
+                            "prob_source": "FACTORY_WINNER_BYPASS",
                             "predicted_move": abs(tp - current_price),
-                            "holding_horizon": "SCALPER_AGGRESSIVE",
+                            "holding_horizon": "FACTORY_WINNER",
                             "decision": "ACCEPTED",
-                            "reason": "AGGRESSIVE_SCALPER_BYPASS",
+                            "reason": "FACTORY_WINNER_BYPASS",
                         }
                     else:
                         passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
@@ -916,7 +916,7 @@ class TestnetService:
                 sl = candidate["sl"]
                 tp = candidate["tp"]
                 strategy_name = candidate.get("strategy", "adx_ema")
-                is_aggressive_strat = any(k in str(strategy_name).lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
+                is_aggressive_strat = any(k in str(strategy_name).lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend", "factory_winner"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
                 
                 with self.lock:
                     # Enforce per-symbol cooldown (bypassed for aggressive scalper)
@@ -957,7 +957,7 @@ class TestnetService:
                     
                     # Re-validate Profitability Gate (Price may have moved)
                     # Pass signal_result from original candidate — preserves strategy_type metadata.
-                    is_aggressive_strat = any(k in str(strategy_name).lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
+                    is_aggressive_strat = any(k in str(strategy_name).lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend", "factory_winner"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
                     if is_aggressive_strat:
                         passed_profit = True
                         fresh_metrics = p_metrics

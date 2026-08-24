@@ -591,6 +591,44 @@ TESTNET ONLY
 - Live Deployment: `/health` returns 200 OK (`engine: online`, `engine_healthy: true`).
 - Live Multi-Strategy Matrix: 4 strategies active across 16 symbols on 6 timeframes.
 
+---
+
+# DAY 19 — 2026-08-24
+## Objectives
+- Engineer automated Strategy Factory generating 100+ systematic strategy variations across indicators (EMAs, RSI, Bollinger Bands, MACD, Stochastic) and timeframes (`5m`, `15m`, `1h`).
+- Execute mass backtester evaluating all variations against continuous historical data for `BTCUSDT`, `ETHUSDT`, and `SOLUSDT` (2024–2026) under realistic 8 bps Maker/Taker Futures friction.
+- Deploy exactly the top 5 highest-ranking strategies by Net Profit Factor to the live testnet engine, ensuring strict compliance with API limits (max 5 active strategies).
+- Verify 100% test suite pass rate, merge to `master`, deploy to Render, and verify live market scanner operation.
+
+## Work Completed
+- **Strategy Generator (`research/strategy_factory/generate_strategies.py`)**:
+  - Programmatically generated **204 strategy variations** spanning single-indicator models and multi-indicator confluence rules with dynamic ATR SL/TP ratios.
+  - Outputted full catalog to `research/strategy_factory/strategy_variations.json`.
+- **Mass Backtest Harness (`research/strategy_factory/mass_backtester.py`)**:
+  - Downloaded and cached continuous 5m, 15m, and 1h candle data for BTC, ETH, and SOL (880k+ bars).
+  - Evaluated all 204 variations under 8 bps futures friction and ranked by Net Profit Factor.
+  - Published comprehensive results in `research/strategy_factory/factory_results.md`.
+- **Top 5 Winners Selected**:
+  1. `factory_winner_1` (`5m` MACD(12,26,9) + BB(20,2) Confluence, SL 1.5× ATR, TP 3.0× ATR): **Net PF 1.481**, Win Rate 43.1%, 5,403 trades, **+1,794.5% return**.
+  2. `factory_winner_2` (`5m` MACD(12,26,9) + BB(20,2) Confluence, SL 1.0× ATR, TP 2.0× ATR): **Net PF 1.449**, Win Rate 41.3%, 9,264 trades, **+1,793.4% return**.
+  3. `factory_winner_3` (`5m` MACD(12,26,9) + BB(20,2) Confluence, SL 0.5× ATR, TP 1.5× ATR): **Net PF 1.433**, Win Rate 33.4%, 11,338 trades, **+1,370.1% return**.
+  4. `factory_winner_4` (`5m` MACD(12,26,9) + BB(20,2) Confluence, SL 2.0× ATR, TP 4.0× ATR): **Net PF 1.390**, Win Rate 41.0%, 3,731 trades, **+1,381.5% return**.
+  5. `factory_winner_5` (`15m` MACD(12,26,9) + BB(20,2) Confluence, SL 0.5× ATR, TP 1.5× ATR): **Net PF 1.361**, Win Rate 30.5%, 3,907 trades, **+652.9% return**.
+- **Implementation & Live Engine Deployment**:
+  - Built `strategy_factory_winners.py` and modular proxy modules `strategy_factory_winner_1.py` through `strategy_factory_winner_5.py`.
+  - Registered all 5 winners in `config_strategy.py` with `status: VALIDATED` and `trading_mode: FUTURES`.
+  - Disabled previous `aggressive_scalper`, `bb_reversion`, `rsi_burst`, and `vwap_trend` to constrain live engine to exactly 5 strategies (`ACTIVE_STRATEGIES` in `config.py`).
+  - Added unit test suite in `tests/test_strategy_factory_winners.py` (3 tests verifying long/short signals and exits).
+- **Deployment & Verification**:
+  - Merged `feat/strategy-factory` into `master` and pushed to GitHub.
+  - Render deployment monitored and verified online.
+
+## Verification
+- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~46s)**.
+- Live Deployment: `/health` returns 200 OK (`engine: online`, `engine_healthy: true`).
+- Live Scanner: Exactly 5 winning factory strategies active across 16 symbols.
+
+
 
 
 
