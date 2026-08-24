@@ -205,15 +205,16 @@ PRODUCTION_STRATEGY_REGISTRY = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Disabled in favor of 1m hyper-aggressive scalper.",
+        "reason": "Disabled in favor of multi-timeframe hyper-aggressive scalper.",
     },
     "aggressive_scalper": {
         "status": "VALIDATED",
-        "version": "V1-futures-1m (2026-08-24)",
+        "version": "V1-futures-multi-tf (2026-08-24)",
         "timeframe": "1m",
+        "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h"],
         "trading_mode": "FUTURES",
         "execution_model": "RULE_BASED",
-        "entry_conditions": "1m EMA(9) crosses EMA(21). Long on cross up, Short on cross down. No macro filter.",
+        "entry_conditions": "EMA(9) crosses EMA(21) on any active timeframe (1m, 5m, 15m, 30m, 1h, 4h). Long on cross up, Short on cross down. No macro filter.",
         "sl_method": "0.5 * ATR(14)",
         "tp_method": "1.0 * ATR(14)",
         "rr_ratio": 2.0,
@@ -225,7 +226,7 @@ PRODUCTION_STRATEGY_REGISTRY = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Hyper-aggressive 1m scalper for rapid-fire futures testnet trading.",
+        "reason": "Multi-timeframe hyper-aggressive scalper for rapid-fire futures testnet trading across 1m, 5m, 15m, 30m, 1h, 4h.",
     },
     "aggressor": {
         "status": "DISABLED",

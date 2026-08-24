@@ -527,6 +527,40 @@ TESTNET ONLY
 - Test Suite: **542 passed / 542 tests (100% across two consecutive runs in ~45s)**.
 - Live Deployment: `/health` returns 200 OK (`engine: online`, `engine_healthy: true`).
 
+---
+
+# DAY 18 — 2026-08-24
+## Objectives
+- Expand hyper-aggressive EMA(9)/EMA(21) crossover scalper to run simultaneously across ALL 6 standard timeframes (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`) on all 16 validated assets.
+- Configure market scanner and websocket candle constructors to ingest all 6 timeframes in parallel.
+- Strip all EV/profitability gate restrictions, remove cooldowns, and increase position capacity to up to 50 concurrent positions.
+- Merge, push, deploy to Render production, and verify live scanning and execution across the entire asset and timeframe matrix.
+
+## Work Completed
+- **Multi-Timeframe Aggressive Scalper Configuration (Task 1 & 2)**:
+  - Updated `strategy_aggressive_scalper.py`: Documented multi-timeframe capability across 1m, 5m, 15m, 30m, 1h, 4h.
+  - Updated `testnet_engine/service.py`:
+    - `governance_filter_strategies`: Updated to honor multi-timeframe lists for strategies registering multiple validated timeframes.
+    - Market Scanner initialized with all 6 timeframes simultaneously.
+    - Candle callbacks evaluate EMA(9)/EMA(21) crossover independently on every candle close across all 6 timeframes.
+- **Safety Gate Bypassing & 50 Positions Support (Task 3)**:
+  - Preserved EV/profitability bypass for aggressive scalper signals.
+  - Updated `config.py`: Set `MAX_OPEN_POSITIONS_AGGRESSIVE = 50`.
+  - Updated `testnet_engine/risk_gate.py`: Supported up to 50 open positions dynamically.
+- **Registry & Configuration Update (Task 4)**:
+  - Updated `config_strategy.py`:
+    - Set `aggressive_scalper` registry entry to `timeframes: ["1m", "5m", "15m", "30m", "1h", "4h"]` across all 16 validated assets.
+  - Updated `config.py`: Configured `ACTIVE_STRATEGIES["aggressive_scalper"] = ["1m", "5m", "15m", "30m", "1h", "4h"]`.
+- **Deployment & Verification (Task 5)**:
+  - Merged `feat/multi-tf-aggressive-scalper` into `master` and pushed to GitHub.
+  - Render deployment monitored and verified online.
+
+## Verification
+- Test Suite: **542 passed / 542 tests (100% across two consecutive runs in ~45s)**.
+- Live Deployment: `/health` returns 200 OK (`engine: online`, `engine_healthy: true`).
+- Live Scanner: 16 symbols streaming all 6 timeframes.
+
+
 
 
 

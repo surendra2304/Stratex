@@ -62,7 +62,7 @@ LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is im
 # --- Strategies to Run ---
 # Multi-strategy configuration mapping validated strategy -> timeframe(s)
 ACTIVE_STRATEGIES = {
-    "aggressive_scalper": ["1m"],
+    "aggressive_scalper": ["1m", "5m", "15m", "30m", "1h", "4h"],
     "aggressor": ["1m", "3m", "5m"],
     "scalper": ["1m", "3m", "5m"],
     "supertrend": ["5m", "15m", "30m", "1h"],
@@ -88,7 +88,7 @@ MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.05"))        #
 MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.02"))   # 2% max per single asset
 MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.04")) # 4% max net directional exposure
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))            # Base limit of 5
-MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "20")) # 20 concurrent positions for aggressive mode
+MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "50")) # Up to 50 concurrent positions for aggressive mode
 VOLATILITY_BUFFER = 0.2  # Scale down positions during high volatility
 MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.02"))          # 2% daily loss limit
 MAX_TESTNET_DRAWDOWN_PCT = float(os.getenv("MAX_TESTNET_DRAWDOWN_PCT", "0.05"))    # 5% drawdown tolerance

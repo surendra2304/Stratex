@@ -1,15 +1,15 @@
 """
-strategy_aggressive_scalper.py — Hyper-Aggressive 1m Scalper (Futures)
+strategy_aggressive_scalper.py — Multi-Timeframe Hyper-Aggressive Scalper (Futures)
 
 ARCHITECTURE:
-  - Timeframe: 1m
-  - Logic: Fast EMA(9) crosses Slow EMA(21) on 1-minute chart.
+  - Timeframes: 1m, 5m, 15m, 30m, 1h, 4h
+  - Logic: Fast EMA(9) crosses Slow EMA(21) on any active timeframe.
       * Long Entry:  EMA(9) crosses above EMA(21) -> BUY
       * Short Entry: EMA(9) crosses below EMA(21) -> SELL
   - Exits:
-      * Stop Loss (SL):   0.5 × 1m ATR(14)
-      * Take Profit (TP): 1.0 × 1m ATR(14) (Risk/Reward = 1:2.0)
-  - Filters: None (Pure high-frequency crossover)
+      * Stop Loss (SL):   0.5 × ATR(14)
+      * Take Profit (TP): 1.0 × ATR(14) (Risk/Reward = 1:2.0)
+  - Filters: None (Pure multi-timeframe price action crossover)
 """
 
 from collections import namedtuple

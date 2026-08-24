@@ -33,8 +33,7 @@ def governance_filter_strategies(active_strategies):
     """Return {strategy: [timeframes]} restricted to registry-VALIDATED strategies.
 
     Governance gate: only strategies with defensible out-of-sample proof may trade.
-    DISABLED/unregistered strategies (e.g. 1m scalpers whose targets cannot overcome
-    taker friction) are dropped, and scanning is pinned to the validated timeframe.
+    DISABLED/unregistered strategies are dropped, and scanning is permitted on all validated timeframes.
     """
     filtered = {}
     for strat_name, tfs in active_strategies.items():
@@ -46,11 +45,17 @@ def governance_filter_strategies(active_strategies):
                 f"{status}; only VALIDATED strategies may generate executable signals."
             )
             continue
-        validated_tf = entry.get("timeframe")
+        validated_tfs = entry.get("timeframes")
         tfs_list = tfs if isinstance(tfs, list) else [tfs]
-        if validated_tf and validated_tf not in tfs_list:
-            validated_tf = tfs_list[-1]
-        filtered[strat_name] = [validated_tf] if validated_tf else tfs_list
+        if validated_tfs and isinstance(validated_tfs, list):
+            # Intersect or keep validated timeframes
+            valid_subset = [tf for tf in tfs_list if tf in validated_tfs]
+            filtered[strat_name] = valid_subset if valid_subset else validated_tfs
+        else:
+            validated_tf = entry.get("timeframe")
+            if validated_tf and validated_tf not in tfs_list:
+                validated_tf = tfs_list[-1]
+            filtered[strat_name] = [validated_tf] if validated_tf else tfs_list
     return filtered
 
 
