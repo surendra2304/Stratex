@@ -521,7 +521,7 @@ function renderScannerTable() {
     });
 
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 24px;">No evaluation records match the selected filter criteria.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding: 24px;">No evaluation records match the selected filter criteria.</td></tr>';
         return;
     }
 
@@ -532,16 +532,20 @@ function renderScannerTable() {
         const pNet = ev.expected_net_percent !== undefined ? ev.expected_net_percent : (s.expected_net || 0);
         const reason = s.reason || ev.profitability?.reason || ev.risk?.reason || 'Evaluation complete';
         const idParam = s.signal_id || `${s.symbol}_${s.timestamp}`;
+        const entryPrice = s.current_price || s.entry_price || s.price || 0;
+        const entryStr = entryPrice > 0 ? '$' + Number(entryPrice).toFixed(2) : 'MARKET';
+        const edgeStr = (pNet * 100).toFixed(2) + '%';
 
         return `
             <tr class="clickable-row" onclick="inspectSignal('${idParam}')">
+                <td class="num text-muted" style="font-size:11px;">${formatTime(s.timestamp)}</td>
                 <td><strong class="text-primary">${s.symbol}</strong></td>
                 <td><span class="text-secondary" style="font-family:var(--font-mono); font-size:11px;">${s.timeframe || '5m'}</span></td>
                 <td><span class="badge ${s.side === 'BUY' || s.side === 'LONG' ? 'badge-long' : 'badge-short'}">${s.side}</span></td>
-                <td><span style="font-size:11px; color:var(--text-secondary);">${String(s.strategy || 'AGGRESSOR').toUpperCase()}</span></td>
+                <td class="num" style="font-size:11px;">${entryStr}</td>
+                <td class="num" style="font-size:11px; color:var(--accent-primary);">${edgeStr}</td>
                 <td><span class="badge ${isAcc ? 'badge-accepted' : 'badge-rejected'}">${dec}</span></td>
                 <td style="font-size:11px; color:var(--text-muted); max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${reason}</td>
-                <td class="num text-muted" style="font-size:11px;">${formatTime(s.timestamp)}</td>
             </tr>
         `;
     }).join('');
@@ -565,13 +569,19 @@ async function fetchPositionsData() {
     safeSetText('pos2-active-ratio', (statusData.risk_used || 0).toFixed(1) + '%');
 
     if (positions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 24px;">No Active Open Positions — Risk Engine standing by.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding: 24px;">No Active Open Positions — Risk Engine standing by.</td></tr>';
         return;
     }
 
     tbody.innerHTML = positions.map(p => {
         const uPnl = Number(p.unrealized_pnl || 0);
         const pnlClass = uPnl >= 0 ? 'text-profit' : 'text-danger';
+        const notional = (Number(p.quantity || 0) * Number(p.current_price || p.entry_price || 0));
+        const totalEq = Number(statusData.equity || 5000.0);
+        const expPct = totalEq > 0 ? ((notional / totalEq) * 100).toFixed(1) + '%' : '0.0%';
+        const slVal = Number(p.sl || 0) > 0 ? '$' + Number(p.sl).toFixed(2) : '—';
+        const tpVal = Number(p.tp || 0) > 0 ? '$' + Number(p.tp).toFixed(2) : '—';
+
         return `
             <tr class="clickable-row" onclick="inspectPosition('${p.symbol}')">
                 <td><strong class="text-primary">${p.symbol}</strong></td>
@@ -579,8 +589,11 @@ async function fetchPositionsData() {
                 <td class="num">${Number(p.quantity).toFixed(4)}</td>
                 <td class="num">$${Number(p.entry_price).toFixed(2)}</td>
                 <td class="num">$${Number(p.current_price || p.entry_price).toFixed(2)}</td>
+                <td class="num text-danger">${slVal}</td>
+                <td class="num text-profit">${tpVal}</td>
                 <td class="num ${pnlClass}"><strong>${uPnl >= 0 ? '+' : ''}${formatCurrency(uPnl)}</strong></td>
-                <td style="font-size:11px; color:var(--text-secondary);">${String(p.strategy || 'AGGRESSOR').toUpperCase()}</td>
+                <td class="num">${expPct}</td>
+                <td><span class="badge badge-accepted">OPEN</span></td>
             </tr>
         `;
     }).join('');

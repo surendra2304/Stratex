@@ -559,6 +559,26 @@ def get_status():
         except Exception as e:
             logger.error(f"Failed to process testnet portfolio: {e}")
 
+    # For FUTURES mode, populate live open positions directly from Binance Futures account if portfolio file is empty
+    if getattr(config, "TRADING_MODE", "TESTNET").upper() == "FUTURES" and account_holdings.get("holdings"):
+        fut_positions = [h for h in account_holdings["holdings"] if h.get("is_bot_trade") and h.get("total_quantity", 0) > 0]
+        if fut_positions:
+            open_positions = len(fut_positions)
+            open_pos_list = []
+            for fp in fut_positions:
+                open_pos_list.append({
+                    "symbol": fp.get("symbol"),
+                    "side": fp.get("side", "LONG"),
+                    "entry_price": fp.get("price", 0.0),
+                    "current_price": fp.get("price", 0.0),
+                    "quantity": fp.get("total_quantity", 0.0),
+                    "unrealized_pnl": fp.get("unrealized_pnl", 0.0),
+                    "sl": 0.0,
+                    "tp": 0.0,
+                    "strategy": "AGGRESSIVE_SCALPER",
+                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+                })
+
     today_utc_str = datetime.datetime.utcnow().date().isoformat()
     today_realized_pnl = 0.0
     try:
@@ -602,11 +622,10 @@ def get_status():
             equity_change = round(((today_equities[-1] - first_eq) / first_eq) * 100, 2)
 
     # Total Valuation: Liquid USDT Cash + Current Market Value of Active Crypto Trades
-    # Note: Crypto Trade Value is ALREADY Mark-to-Market (current_price * quantity = cost_basis + unrealized_pnl).
-    # Realized PnL is ALREADY credited into Binance USDT Cash upon trade close.
-    # Therefore, Total Equity = USDT Cash + Active Crypto Holdings Value.
-    # We MUST NEVER add unrealized_pnl or realized_pnl on top of (Cash + Active Crypto Value).
-    if usdt_cash > 0 or crypto_trade_val > 0:
+    # In Futures: Total Equity = Total Wallet Balance + Unrealized PnL (from Binance futures_account)
+    if getattr(config, "TRADING_MODE", "TESTNET").upper() == "FUTURES" and usdt_cash > 0:
+        total_equity = usdt_cash + unrealized_pnl
+    elif usdt_cash > 0 or crypto_trade_val > 0:
         total_equity = usdt_cash + crypto_trade_val
     else:
         base_cap = float(port.get("starting_equity", port.get("starting_balance", 10000.0))) if (isinstance(port, dict) if 'port' in locals() else False) else 10000.0

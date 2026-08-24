@@ -297,10 +297,14 @@ TESTNET ONLY
     * Exits: SL = $0.5 \times \text{ATR}(14)$, TP = $1.0 \times \text{ATR}(14)$ ($1:2.0$ RR).
   - Hardcoded active timeframes to all 6 (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`) in `config.py` and `market_scanner.py`.
   - Configured multiplex websocket subscribing to **96 total streams** (16 assets $\times$ 6 timeframes).
-  - Zero-gate execution: signals qualify instantly without cooldown or EV delay.
-  - Committed to `feat/hyper-frequency-trigger`, merged to `master`, and pushed to Render.
+- **Phase 7: Frontend & Backend State Reconciliation & Visual Alignment**:
+  - Reconciled live Binance Futures positions with dashboard state endpoints (`/api/status`), streaming live open positions, unrealized PnL, mark prices, and margin data directly from `futures_account()`.
+  - Fixed total equity formula for Futures mode (`Total Wallet Balance + Unrealized PnL`), eliminating artificial cash/margin double-counting glitches.
+  - Aligned table columns across Scanner (8 columns: TIME, SYMBOL, TF, SIDE, ENTRY, EDGE, RESULT, REASON) and Positions view (10 columns: SYMBOL, SIDE, QUANTITY, ENTRY, CURRENT, SL, TP, PnL, EXPOSURE, STATUS).
+  - Aligned Dashboard active positions table to 6 columns (SYMBOL, SIDE, QTY, ENTRY, CURRENT, PnL).
+  - Merged fixes to `master` and pushed to Render.
 
 ## Verification
-- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~71s)**.
+- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~82s)**.
 - Live Deployment: `/health` returns 200 OK (`engine: online`, `engine_healthy: true`).
-- Live Scanner: 96 total streams streaming across all 16 assets on 6 timeframes.
+- Live Positions: Real-time rendering of all live active Futures positions and mark-to-market valuations.
