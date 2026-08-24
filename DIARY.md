@@ -560,6 +560,38 @@ TESTNET ONLY
 - Live Deployment: `/health` returns 200 OK (`engine: online`, `engine_healthy: true`).
 - Live Scanner: 16 symbols streaming all 6 timeframes.
 
+---
+
+# DAY 19 — 2026-08-24
+## Objectives
+- Implement and deploy 3 additional high-frequency aggressive scalping strategies to run alongside `aggressive_scalper`:
+  1. `bb_reversion` (`strategy_bb_reversion.py`): Bollinger Band (20, 2) Mean Reversion.
+  2. `rsi_burst` (`strategy_rsi_burst.py`): RSI(14) Oversold/Overbought Momentum Burst.
+  3. `vwap_trend` (`strategy_vwap_trend.py`): Volume Weighted Average Price (VWAP) Trend Follow with EMA(9)/EMA(21) confluence.
+- Register all 4 strategies as `VALIDATED` for Binance Futures Testnet across all 6 timeframes (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`) on all 16 validated assets.
+- Ensure all EV/profitability gate bypasses and 50 open positions risk allowances apply to all 4 aggressive scalpers.
+- Deploy to Render production and verify live execution.
+
+## Work Completed
+- **Strategy Implementations (Task 1)**:
+  - Created `strategy_bb_reversion.py`: Pierces lower/upper Bollinger Band (20, 2) and closes back inside. SL: 0.5× ATR, TP: 1.5× ATR (1:3.0 R:R).
+  - Created `strategy_rsi_burst.py`: RSI(14) crosses back above 30 (BUY) or below 70 (SELL). SL: 0.5× ATR, TP: 1.5× ATR (1:3.0 R:R).
+  - Created `strategy_vwap_trend.py`: Crosses above/below VWAP in alignment with EMA(9)/EMA(21). SL: 0.5× ATR, TP: 1.5× ATR (1:3.0 R:R).
+  - Created unit tests in `tests/test_additional_aggressive_strategies.py` (3 tests covering long signals for all 3 strategies).
+- **Governance & Configuration Updates (Task 2)**:
+  - Updated `config_strategy.py`: Added `bb_reversion`, `rsi_burst`, `vwap_trend` to `PRODUCTION_STRATEGY_REGISTRY` with `status: VALIDATED`, `trading_mode: FUTURES`, and `timeframes: ["1m", "5m", "15m", "30m", "1h", "4h"]`.
+  - Updated `config.py`: Added all 3 strategies to `ACTIVE_STRATEGIES` and `SUPPORTED_STRATEGIES`.
+  - Updated `testnet_engine/service.py`: Extended gate bypass and immediate acceptance to `bb_reversion`, `rsi_burst`, and `vwap_trend`.
+- **Deployment & Verification (Task 3)**:
+  - Merged `feat/multi-strategy-scalpers` into `master` and pushed to GitHub.
+  - Render deployment monitored and verified online.
+
+## Verification
+- Test Suite: **545 passed / 545 tests (100% across two consecutive runs in ~50s)**.
+- Live Deployment: `/health` returns 200 OK (`engine: online`, `engine_healthy: true`).
+- Live Multi-Strategy Matrix: 4 strategies active across 16 symbols on 6 timeframes.
+
+
 
 
 
