@@ -709,7 +709,17 @@ def run():
                 continue
 
             try:
-                sig, sl, tp = get_signal(df_feat)
+                sig_res = get_signal(df_feat)
+                if hasattr(sig_res, "side"):
+                    sig = sig_res.side
+                    sl = sig_res.sl
+                    tp = sig_res.tp
+                elif isinstance(sig_res, (tuple, list)):
+                    sig = sig_res[0]
+                    sl = sig_res[1] if len(sig_res) > 1 else None
+                    tp = sig_res[2] if len(sig_res) > 2 else None
+                else:
+                    sig, sl, tp = None, None, None
             except Exception as e:
                 health.set("strategy", "DEGRADED")
                 logger.error(f"Signal generation failed: {e}")

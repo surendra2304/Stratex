@@ -53,7 +53,7 @@ def main():
     print("=" * 60)
     
     from config import TRADING_MODE
-    if TRADING_MODE == "TESTNET":
+    if TRADING_MODE in ["TESTNET", "FUTURES"]:
         from testnet_engine.service import TestnetService
         print("Starting bot execution...")
         service = TestnetService()
@@ -67,7 +67,7 @@ def main():
         finally:
             _cleanup()
     else:
-        print(f"TRADING_MODE {TRADING_MODE} is not supported by this entrypoint. Please configure TRADING_MODE=TESTNET.")
+        print(f"TRADING_MODE {TRADING_MODE} is not supported by this entrypoint. Please configure TRADING_MODE=TESTNET or TRADING_MODE=FUTURES.")
 
 if __name__ == "__main__":
     main()

@@ -279,16 +279,18 @@ async function fetchGlobalStatus() {
         dotEl.className = isOnline ? 'dot dot-green' : 'dot dot-red';
     }
 
-    if (data.bot_start_time) {
+    const startTimeStr = data.engine_data?.service_start_time || data.bot_start_time;
+    if (startTimeStr) {
         try {
-            const startDt = new Date(data.bot_start_time);
+            const startDt = new Date(startTimeStr);
             const now = new Date();
             const diffSec = Math.max(0, Math.floor((now - startDt) / 1000));
             const hrs = Math.floor(diffSec / 3600);
             const mins = Math.floor((diffSec % 3600) / 60);
-            safeSetText('hdr-uptime', `UPTIME: ${hrs}h ${mins}m`);
+            const secs = Math.floor(diffSec % 60);
+            safeSetText('hdr-uptime', `UPTIME: ${hrs}h ${mins}m ${secs}s`);
         } catch {
-            safeSetText('hdr-uptime', 'UPTIME: 0h 0m');
+            safeSetText('hdr-uptime', 'UPTIME: 0h 0m 0s');
         }
     }
 
