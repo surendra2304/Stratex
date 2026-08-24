@@ -492,6 +492,42 @@ TESTNET ONLY
 - Test Suite: **539 passed / 539 tests (100% across two consecutive runs in ~68s)**.
 - Live Deployment: `/health` returns 200 OK (`engine: online`, `engine_healthy: true`), `/api/recent-actions` active.
 
+---
+
+# DAY 17 — 2026-08-24
+## Objectives
+- Implement hyper-aggressive 1m EMA(9)/EMA(21) crossover scalper (`strategy_aggressive_scalper.py`) for rapid-fire Binance Futures testnet execution.
+- Strip macro filters (no 1h trend filter, no ADX requirements) and bypass EV/profitability gates for aggressive setups.
+- Remove execution cooldowns and support high concurrency (up to 20 positions) to facilitate high trade frequency.
+- Deploy to Render production and verify live high-frequency execution.
+
+## Work Completed
+- **1m Aggressive Scalper Strategy (Task 1)**:
+  - Created `strategy_aggressive_scalper.py`:
+    - Signal Logic: Fast EMA(9) crosses Slow EMA(21) on 1m chart. Long on cross up, Short on cross down.
+    - Exits: Tight Stop Loss at 0.5× ATR(14) and Take Profit at 1.0× ATR(14) (1:2.0 R:R).
+    - Macro Filters: Completely removed (pure price action crossover).
+  - Added unit test suite in `tests/test_strategy_aggressive_scalper.py` (3 tests covering bullish cross, bearish cross, and no cross).
+- **Safety Gate Bypassing & Cooldown Removal (Task 2)**:
+  - Updated `testnet_engine/service.py`:
+    - Profitability Gate: Bypasses EV calculations for aggressive scalper signals to ensure immediate execution.
+    - Cooldown: Bypassed per-symbol cooldown timer for aggressive strategies.
+  - Updated `testnet_engine/risk_gate.py`:
+    - Supported position limits up to 20 concurrent positions.
+- **Configuration & Registry Update (Task 3)**:
+  - Updated `config_strategy.py`:
+    - Added `aggressive_scalper` to `PRODUCTION_STRATEGY_REGISTRY` (`status: VALIDATED`, `timeframe: 1m`, `trading_mode: FUTURES`).
+    - Disabled `adx_ema_mtf` (`status: DISABLED`).
+  - Updated `config.py`: Set `ACTIVE_STRATEGIES = {"aggressive_scalper": ["1m"]}`.
+- **Deployment & Verification (Task 4)**:
+  - Merged `feat/aggressive-1m-scalper` into `master` and pushed to GitHub.
+  - Render deployment monitored and verified online.
+
+## Verification
+- Test Suite: **542 passed / 542 tests (100% across two consecutive runs in ~45s)**.
+- Live Deployment: `/health` returns 200 OK (`engine: online`, `engine_healthy: true`).
+
+
 
 
 

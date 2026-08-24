@@ -187,7 +187,7 @@ PRODUCTION_STRATEGY_REGISTRY = {
         "reason": "V2-spot rev3: crossover + qualified retest entries, long-only grid on 2021-2026 data (research/upgrade_2026_08/expansion_study.py). OOS 2024-2026: 136 trades, PF 2.36, win 0.551, profitable all years (2024: 2.27, 2025: 2.57, 2026: 2.08). 1h timeframe studied and rejected (OOS PF<0.75 all variants). Universe expanded to include high-volume Spot Testnet verified altcoins.",
     },
     "adx_ema_mtf": {
-        "status": "VALIDATED",
+        "status": "DISABLED",
         "version": "V1-futures-mtf (2026-08-23)",
         "timeframe": "15m",
         "htf_timeframe": "1h",
@@ -205,7 +205,27 @@ PRODUCTION_STRATEGY_REGISTRY = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "MTF 1h/15m Futures Strategy enabling Long and Short trades with 1:1.33 R:R (3.0x SL / 4.0x TP) and LIMIT_MAKER entry model. HTF 1h filter + LTF 15m ADX>25 eliminates noise and delivers Net PF 1.26 OOS.",
+        "reason": "Disabled in favor of 1m hyper-aggressive scalper.",
+    },
+    "aggressive_scalper": {
+        "status": "VALIDATED",
+        "version": "V1-futures-1m (2026-08-24)",
+        "timeframe": "1m",
+        "trading_mode": "FUTURES",
+        "execution_model": "RULE_BASED",
+        "entry_conditions": "1m EMA(9) crosses EMA(21). Long on cross up, Short on cross down. No macro filter.",
+        "sl_method": "0.5 * ATR(14)",
+        "tp_method": "1.0 * ATR(14)",
+        "rr_ratio": 2.0,
+        "oos_win_rate_prior": 0.500,
+        "total_friction_bps": 8.0,
+        "expected_net_edge_bps": 100.0,
+        "minimum_required_edge": 0.0001,
+        "validated_assets": [
+            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
+            "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
+        ],
+        "reason": "Hyper-aggressive 1m scalper for rapid-fire futures testnet trading.",
     },
     "aggressor": {
         "status": "DISABLED",

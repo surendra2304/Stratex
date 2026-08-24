@@ -80,7 +80,7 @@ def compute_btc_regime(btc_df):
     return (close > ema200), close, ema200
 
 _TF_SECONDS = {"1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "2h": 7200, "4h": 14400, "6h": 21600, "8h": 28800, "12h": 43200, "1d": 86400}
-_COOLDOWN_SECONDS = float(os.getenv("SIGNAL_COOLDOWN_SECONDS", "300"))  # 5 minutes default
+_COOLDOWN_SECONDS = float(os.getenv("SIGNAL_COOLDOWN_SECONDS", "300"))  # 5 minutes default (bypassed dynamically for aggressive scalper)
 
 TESTNET_LEDGER_FILE = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
 TESTNET_OPPORTUNITY_LOG = os.getenv("TESTNET_OPPORTUNITY_LOG", "testnet_opportunity_log.jsonl")
@@ -797,9 +797,30 @@ class TestnetService:
                             )
                             continue
 
-                    passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
-                        symbol, side, current_price, sl, tp, signal_result
-                    )
+                    is_aggressive = "aggressive" in strat_name.lower() or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
+                    if is_aggressive:
+                        passed_profit = True
+                        p_metrics = {
+                            "expected_gross_return": 0.01,
+                            "total_friction": 0.0008,
+                            "expected_net_return": 0.0092,
+                            "atr": abs(current_price - sl),
+                            "atr_pct": abs(current_price - sl) / current_price if current_price > 0 else 0.0,
+                            "reward_pct": abs(tp - current_price) / current_price if current_price > 0 else 0.0,
+                            "risk_pct": abs(current_price - sl) / current_price if current_price > 0 else 0.0,
+                            "prob_win": 0.50,
+                            "confidence": 0.50,
+                            "strategy_type": "RULE_BASED",
+                            "prob_source": "AGGRESSIVE_SCALPER_BYPASS",
+                            "predicted_move": abs(tp - current_price),
+                            "holding_horizon": "1M_AGGRESSIVE",
+                            "decision": "ACCEPTED",
+                            "reason": "AGGRESSIVE_SCALPER_BYPASS",
+                        }
+                    else:
+                        passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
+                            symbol, side, current_price, sl, tp, signal_result
+                        )
                     
                     if not passed_profit:
                         self.stats["PROFITABILITY_REJECTED"] += 1
@@ -890,11 +911,12 @@ class TestnetService:
                 sl = candidate["sl"]
                 tp = candidate["tp"]
                 strategy_name = candidate.get("strategy", "adx_ema")
+                is_aggressive_strat = "aggressive" in str(strategy_name).lower() or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
                 
                 with self.lock:
-                    # Enforce per-symbol cooldown
+                    # Enforce per-symbol cooldown (bypassed for aggressive scalper)
                     now_ts = datetime.datetime.utcnow().timestamp()
-                    if symbol in self.cooldowns and now_ts - self.cooldowns[symbol] < _COOLDOWN_SECONDS:
+                    if not is_aggressive_strat and symbol in self.cooldowns and now_ts - self.cooldowns[symbol] < _COOLDOWN_SECONDS:
                         self.stats["COOLDOWN_REJECTED"] += 1
                         self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "ON_COOLDOWN")
                         continue
@@ -930,10 +952,15 @@ class TestnetService:
                     
                     # Re-validate Profitability Gate (Price may have moved)
                     # Pass signal_result from original candidate — preserves strategy_type metadata.
-                    passed_profit, fresh_metrics = self.profitability_gate.evaluate_signal(
-                        symbol, side, current_price, sl, tp,
-                        candidate.get("signal_result", p_metrics["prob_win"])
-                    )
+                    is_aggressive_strat = "aggressive" in strategy_name.lower() or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
+                    if is_aggressive_strat:
+                        passed_profit = True
+                        fresh_metrics = p_metrics
+                    else:
+                        passed_profit, fresh_metrics = self.profitability_gate.evaluate_signal(
+                            symbol, side, current_price, sl, tp,
+                            candidate.get("signal_result", p_metrics["prob_win"])
+                        )
                     
                     if not passed_profit:
                         self.stats["PROFITABILITY_REJECTED"] += 1

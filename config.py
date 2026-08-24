@@ -62,6 +62,7 @@ LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is im
 # --- Strategies to Run ---
 # Multi-strategy configuration mapping validated strategy -> timeframe(s)
 ACTIVE_STRATEGIES = {
+    "aggressive_scalper": ["1m"],
     "aggressor": ["1m", "3m", "5m"],
     "scalper": ["1m", "3m", "5m"],
     "supertrend": ["5m", "15m", "30m", "1h"],
@@ -86,7 +87,8 @@ MAX_TESTNET_RISK_PER_TRADE = float(os.getenv("MAX_TESTNET_RISK_PER_TRADE", "0.00
 MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.05"))        # 5% max total exposure
 MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.02"))   # 2% max per single asset
 MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.04")) # 4% max net directional exposure
-MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))            # Allow up to 5 concurrent positions
+MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))            # Base limit of 5
+MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "20")) # 20 concurrent positions for aggressive mode
 VOLATILITY_BUFFER = 0.2  # Scale down positions during high volatility
 MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.02"))          # 2% daily loss limit
 MAX_TESTNET_DRAWDOWN_PCT = float(os.getenv("MAX_TESTNET_DRAWDOWN_PCT", "0.05"))    # 5% drawdown tolerance
@@ -109,7 +111,7 @@ OOS_TRAIN_PCT = 0.60               # Walk-forward train %
 OOS_VAL_PCT = 0.20                 # Walk-forward validation %
 INTRABAR_RESOLUTION = "conservative" # "conservative" or "optimistic"
 
-SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema", "adx_ema_mtf", "fast1m", "fast5m", "hybrid", "bollinger", "breakout_vol"]
+SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema", "adx_ema_mtf", "aggressive_scalper", "strategy_aggressive_scalper", "fast1m", "fast5m", "hybrid", "bollinger", "breakout_vol"]
 SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"]
 VALID_MODES = ["PAPER", "TESTNET", "FUTURES"]
 

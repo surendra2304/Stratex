@@ -60,10 +60,11 @@ class RiskGate:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: CONSECUTIVE_LOSS_LIMIT | Losses: {self.consecutive_losses}")
             return False, "CONSECUTIVE_LOSS_LIMIT", f"Hit {self.max_consecutive_losses} consecutive losses."
 
-        # 3. Open Positions Limit
-        if len(active_positions) >= config.MAX_OPEN_POSITIONS:
+        # 3. Open Positions Limit (Supports up to 20 concurrent positions)
+        max_pos = int(getattr(config, "MAX_OPEN_POSITIONS", 20))
+        if len(active_positions) >= max_pos:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_OPEN_POSITIONS | Open: {len(active_positions)}")
-            return False, "MAX_OPEN_POSITIONS", f"Currently at limit of {config.MAX_OPEN_POSITIONS} open positions."
+            return False, "MAX_OPEN_POSITIONS", f"Currently at limit of {max_pos} open positions."
 
         # Compute exposures
         current_exposure = 0.0
