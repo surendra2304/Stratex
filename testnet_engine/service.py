@@ -96,8 +96,8 @@ class TestnetService:
     __test__ = False
     def __init__(self):
         # 1. TRADING_MODE strictly validated
-        if TRADING_MODE != "TESTNET":
-            raise RuntimeError(f"CRITICAL ERROR: Refusing to start TestnetService because TRADING_MODE={TRADING_MODE}. Must be TESTNET.")
+        if TRADING_MODE not in ["TESTNET", "FUTURES"]:
+            raise RuntimeError(f"CRITICAL ERROR: Refusing to start TestnetService because TRADING_MODE={TRADING_MODE}. Must be TESTNET or FUTURES.")
             
         testnet_is_only = os.getenv("TESTNET_ONLY", "").upper() == "TRUE"
         testnet_is_enabled = getattr(config, "TESTNET_ENABLED", False) or os.getenv("TESTNET_ENABLED", "False").lower() == "true"
