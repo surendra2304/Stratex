@@ -551,9 +551,6 @@ function renderScannerTable() {
     }).join('');
 }
 
-// ==========================================
-// 7. VIEW 3: POSITIONS (ONLY OPEN POSITIONS)
-// ==========================================
 async function fetchPositionsData() {
     const statusData = await apiClient.get('/api/status');
     const tbody = $('pos2-body');
@@ -562,11 +559,16 @@ async function fetchPositionsData() {
     const positions = statusData.open_positions_data || [];
     globalPositionsData = positions;
 
+    // Calculate total notional value directly from the active trades table
+    const totalNotional = positions.reduce((sum, p) => sum + (Number(p.quantity || 0) * Number(p.current_price || p.entry_price || 0)), 0);
+    const totalEq = Number(statusData.equity || 5000.0);
+    const activeRatio = totalEq > 0 ? (totalNotional / totalEq) * 100 : 0;
+
     safeSetText('pos2-open-count', positions.length);
-    safeSetText('pos2-total-val', formatCurrency(statusData.crypto_holdings_value || 0));
+    safeSetText('pos2-total-val', formatCurrency(totalNotional));
     safeSetText('pos2-upnl', (Number(statusData.unrealized_pnl || 0) >= 0 ? '+' : '') + formatCurrency(statusData.unrealized_pnl || 0));
     const upnlEl = $('pos2-upnl'); if (upnlEl) upnlEl.style.color = Number(statusData.unrealized_pnl || 0) >= 0 ? 'var(--profit-green)' : 'var(--loss-red)';
-    safeSetText('pos2-active-ratio', (statusData.risk_used || 0).toFixed(1) + '%');
+    safeSetText('pos2-active-ratio', activeRatio.toFixed(1) + '%');
 
     if (positions.length === 0) {
         tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding: 24px;">No Active Open Positions — Risk Engine standing by.</td></tr>';
@@ -577,7 +579,6 @@ async function fetchPositionsData() {
         const uPnl = Number(p.unrealized_pnl || 0);
         const pnlClass = uPnl >= 0 ? 'text-profit' : 'text-danger';
         const notional = (Number(p.quantity || 0) * Number(p.current_price || p.entry_price || 0));
-        const totalEq = Number(statusData.equity || 5000.0);
         const expPct = totalEq > 0 ? ((notional / totalEq) * 100).toFixed(1) + '%' : '0.0%';
         const slVal = Number(p.sl || 0) > 0 ? '$' + Number(p.sl).toFixed(2) : '—';
         const tpVal = Number(p.tp || 0) > 0 ? '$' + Number(p.tp).toFixed(2) : '—';

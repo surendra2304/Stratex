@@ -651,9 +651,12 @@ def get_status():
         if first_eq > 0:
             equity_change = round(((today_equities[-1] - first_eq) / first_eq) * 100, 2)
 
-    # Sum current PnL across all active open positions
+    # Sum current PnL across all active open positions and compute active position notional value
     if open_pos_list:
         unrealized_pnl = sum(float(p.get("unrealized_pnl", 0.0)) for p in open_pos_list)
+        total_open_notional = sum(float(p.get("quantity", 0.0)) * float(p.get("current_price", p.get("entry_price", 0.0))) for p in open_pos_list)
+        if total_open_notional > 0:
+            crypto_trade_val = total_open_notional
 
     # Total Valuation: cash + unrealized_pnl + crypto_holdings_value
     # In Futures: Total Equity = Liquid USDT Cash + Unrealized PnL (or cash + unrealized_pnl + crypto_trade_val)

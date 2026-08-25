@@ -352,10 +352,16 @@ TESTNET ONLY
   - Identified that Binance Futures positions populated directly from exchange account holdings had empty SL/TP fields rendering dashes (`—`) on the Positions dashboard view.
   - Enhanced `/api/status` endpoint in `dashboard.py` to dynamically resolve each open position against active portfolio metadata and real-time `1.5× ATR` (SL) and `0.75× ATR` (TP) levels.
   - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
+- **Task 8: Total Position Value & Active Trades Valuation Synchronization**:
+  - Reconciled Total Position Value and Active Positions ratio in `static/app.js` and `dashboard.py` (`/api/status`).
+  - Synced `TOTAL POSITION VALUE` metric to compute directly from the sum of active positions' mark notional value (`Σ quantity × current_price`), eliminating the mismatch between position initial margin and gross trade exposure.
+  - Synced `ACTIVE POSITIONS %` to `(total_notional / equity) × 100`.
+  - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
 
 ## Verification
-- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~70s and ~68s)**.
+- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~66s and ~64s)**.
 - Live Deployment: Render deployment triggered and active; `/health` returns 200 OK.
+- Position Valuation Sync: Total Position Value header card dynamically matches the exact dollar sum of active trades in the positions table.
 - Positions SL & TP Columns: Fully populated with active quantitative dollar values for all open positions.
 - Scalper Exit Math: All newly generated signals and trades execute with `1.5 × ATR` Stop Loss and `0.75 × ATR` Take Profit.
 - PnL & Positions Sync: Real-time calculation and synchronization of `unrealized_pnl` matching live positions in `/api/status`.
