@@ -618,7 +618,7 @@ def get_status():
     except Exception as td_err:
         logger.error(f"Failed to load trades data: {td_err}")
 
-    # Read today's equity history for High / Low calculation
+    # Read today's equity history for High / Low and Drawdown calculation
     hist_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
     today_equities = []
     if os.path.exists(hist_file):
@@ -641,6 +641,9 @@ def get_status():
         first_eq = today_equities[0]
         if first_eq > 0:
             equity_change = round(((today_equities[-1] - first_eq) / first_eq) * 100, 2)
+        if equity_high > 0:
+            current_eq_val = today_equities[-1]
+            mdd = max(0.0, ((equity_high - current_eq_val) / equity_high) * 100)
 
     # Sum current PnL across all active open positions and compute active position notional value
     if open_pos_list:

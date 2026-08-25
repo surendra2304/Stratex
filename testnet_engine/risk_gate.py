@@ -56,12 +56,12 @@ class RiskGate:
             return False, "DATA_DEGRADED", f"Data health is {data_health_status}"
 
         # 2. Consecutive Losses
-        if self.consecutive_losses >= self.max_consecutive_losses:
+        is_aggressive = getattr(config, "BYPASS_PROFITABILITY_GATE", False) or getattr(config, "UNLIMITED_POSITIONS", False) or (getattr(config, "MAX_OPEN_POSITIONS", 5) >= 999)
+        if not is_aggressive and self.consecutive_losses >= self.max_consecutive_losses:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: CONSECUTIVE_LOSS_LIMIT | Losses: {self.consecutive_losses}")
             return False, "CONSECUTIVE_LOSS_LIMIT", f"Hit {self.max_consecutive_losses} consecutive losses."
 
         # 3. Open Positions Limit
-        is_aggressive = getattr(config, "BYPASS_PROFITABILITY_GATE", False) or getattr(config, "UNLIMITED_POSITIONS", False) or (getattr(config, "MAX_OPEN_POSITIONS", 5) >= 999)
         max_pos = 999 if is_aggressive else int(getattr(config, "MAX_OPEN_POSITIONS", 50))
         if len(active_positions) >= max_pos:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_OPEN_POSITIONS | Open: {len(active_positions)}")
@@ -135,14 +135,16 @@ class RiskGate:
 
         # 7. Drawdown Limit
         drawdown_pct = (self.peak_equity - current_equity) / self.peak_equity if self.peak_equity > 0 else 0.0
-        if drawdown_pct >= config.MAX_TESTNET_DRAWDOWN_PCT:
-            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_DRAWDOWN_BREACH | DD: {drawdown_pct:.2%} >= {config.MAX_TESTNET_DRAWDOWN_PCT:.2%}")
-            return False, "MAX_DRAWDOWN_BREACH", f"Current drawdown {drawdown_pct:.2%} >= {config.MAX_TESTNET_DRAWDOWN_PCT:.2%}"
+        max_dd = 999.0 if is_aggressive else config.MAX_TESTNET_DRAWDOWN_PCT
+        if drawdown_pct >= max_dd:
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_DRAWDOWN_BREACH | DD: {drawdown_pct:.2%} >= {max_dd:.2%}")
+            return False, "MAX_DRAWDOWN_BREACH", f"Current drawdown {drawdown_pct:.2%} >= {max_dd:.2%}"
 
         daily_loss_pct = abs(self.daily_realized_loss) / current_equity if self.daily_realized_loss < 0 else 0
-        if daily_loss_pct >= config.MAX_DAILY_LOSS_PCT:
-            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: DAILY_LOSS_LIMIT | Loss: {daily_loss_pct:.2%} >= {config.MAX_DAILY_LOSS_PCT:.2%}")
-            return False, "DAILY_LOSS_LIMIT", f"Daily loss {daily_loss_pct:.2%} >= {config.MAX_DAILY_LOSS_PCT:.2%}"
+        max_daily_loss = 999.0 if is_aggressive else config.MAX_DAILY_LOSS_PCT
+        if daily_loss_pct >= max_daily_loss:
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: DAILY_LOSS_LIMIT | Loss: {daily_loss_pct:.2%} >= {max_daily_loss:.2%}")
+            return False, "DAILY_LOSS_LIMIT", f"Daily loss {daily_loss_pct:.2%} >= {max_daily_loss:.2%}"
 
         logger.info(f"[RISK_ACCEPTED] {symbol} {side} | Proposed Qty: {proposed_qty} | Value: ${new_trade_value:.2f} | Total Exposure: {total_exposure_pct:.2%}")
         return True, "RISK_OK", ""

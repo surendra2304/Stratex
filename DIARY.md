@@ -369,10 +369,16 @@ TESTNET ONLY
   - Implemented pre-trade margin check in `execution.py` and `testnet_engine/service.py`: calculated required margin (`Quantity × Entry Price / Leverage`) against `availableBalance` from `futures_account()`.
   - Automatically skips trades as `SKIPPED (INSUFFICIENT MARGIN)` if required margin exceeds available balance, preventing Binance `-2019` API rejection errors.
   - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
+- **Task 11: Uncapped Aggressive Risk Limits & Real-Time Drawdown Calculation**:
+  - Fixed `MAX_DRAWDOWN_BREACH` and `CONSECUTIVE_LOSS_LIMIT` rejections in `testnet_engine/risk_gate.py` by un-capping drawdown, daily loss, and consecutive losses when in aggressive trading mode.
+  - Fixed dashboard performance KPI card in `dashboard.py` to calculate true daily drawdown from today's equity history rather than stale starting balance comparisons.
+  - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
 
 ## Verification
-- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~58s and ~62s)**.
+- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~69s and ~68s)**.
 - Live Deployment: Render deployment triggered and active; `/health` returns 200 OK.
+- Scanner Signals: Signals no longer blocked by `MAX_DRAWDOWN_BREACH` or `CONSECUTIVE_LOSS_LIMIT` in aggressive mode.
+- Dashboard Drawdown KPI: Dynamically reflects true daily drawdown from today's high-water mark.
 - Fixed Percentage Exits: All aggressive scalper signals and trades use fixed 0.5% SL and 0.3% TP.
 - Pre-Trade Margin Check: Insufficient balance trades cleanly logged as SKIPPED without exchange rejection.
 - UI Stats: Positions header card clearly displays exact integer count (e.g., `8 Open`) and "TOTAL NOTIONAL VALUE".
