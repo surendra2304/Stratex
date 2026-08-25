@@ -339,8 +339,9 @@ async function fetchDashboardData() {
         safeSetText('db-avail-bal', formatCurrency(statusData.cash));
 
         const rPnl = Number(statusData.realized_pnl || 0);
+        const todayRealized = Number(statusData.today_realized_pnl !== undefined ? statusData.today_realized_pnl : rPnl);
         const uPnl = Number(statusData.unrealized_pnl || 0);
-        const tPnl = Number(statusData.today_pnl || (rPnl + uPnl));
+        const tPnl = Number(statusData.today_pnl !== undefined ? statusData.today_pnl : (todayRealized + uPnl));
 
         safeSetText('db-realized-pnl', (rPnl >= 0 ? '+' : '') + formatCurrency(rPnl));
         safeSetText('db-unrealized-pnl', (uPnl >= 0 ? '+' : '') + formatCurrency(uPnl));

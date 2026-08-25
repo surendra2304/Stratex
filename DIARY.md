@@ -378,10 +378,17 @@ TESTNET ONLY
   - Fixed `Authoritative Rebuild Failed: 'cummulativeQuoteQty'` by adding resilient fallback to `cumQuote` / `avgPrice * executedQty` in `service.py:_rebuild_testnet_state()`.
   - Added directory existence guarantees before writing heartbeat temporary files in `service.py`.
   - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
+- **Task 13: Dashboard Valuation, Today's PnL & Profit Factor Formatting Alignment**:
+  - Synced Dashboard KPI cards in `static/app.js` and `dashboard.py`:
+    * Aligned `TODAY'S PNL` calculation directly with `today_realized_pnl + unrealized_pnl` (`-$46.85 = -$2.76 + -$44.09`).
+    * Formatted `PROFIT FACTOR` to clean 2 decimal places (`0.70`) instead of unrounded float representations (`0.6981830071274288`).
+  - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
 
 ## Verification
-- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~65s and ~69s)**.
+- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~80s and ~62s)**.
 - Live Deployment: Render deployment triggered and active; `/health` returns 200 OK.
+- PnL Accounting Alignment: Today's PnL, Realized PnL, and Unrealized PnL perfectly synced.
+- Profit Factor: Display formatted neatly to 2 decimal places.
 - Boot Reconciliation: Clean reconciliation without `-2015` spot OCO order permission errors.
 - Authoritative Rebuild: Accurate ledger reconstruction handling all Binance Futures order payload variants without `KeyError`.
 - Scanner Signals: Signals unblocked and active across all timeframes.

@@ -801,7 +801,7 @@ def _get_trades_data():
     total_closed = wins + losses
     net_pnl = gross_profit - gross_loss
     win_rate = (wins / total_closed * 100) if total_closed > 0 else 0.0
-    profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else ("Infinity" if gross_profit > 0 else 0.0)
+    profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else ("Infinity" if gross_profit > 0 else 0.0)
     
     return {
         "net_pnl": round(net_pnl, 4),
