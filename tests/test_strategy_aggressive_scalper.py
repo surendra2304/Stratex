@@ -41,10 +41,9 @@ def test_aggressive_scalper_bullish_green_candle():
     assert sig.side == "BUY"
     assert sig.sl < df['close'].iloc[-1]
     assert sig.tp > df['close'].iloc[-1]
-    assert sig.rr_ratio == 0.5
-    atr_val = df['atr'].iloc[-1]
-    assert sig.sl == pytest.approx(101.0 - (1.5 * atr_val))
-    assert sig.tp == pytest.approx(101.0 + (0.75 * atr_val))
+    assert sig.rr_ratio == 0.6
+    assert sig.sl == pytest.approx(101.0 * 0.995, rel=1e-4)
+    assert sig.tp == pytest.approx(101.0 * 1.003, rel=1e-4)
 
 
 def test_aggressive_scalper_bearish_red_candle():
@@ -59,10 +58,9 @@ def test_aggressive_scalper_bearish_red_candle():
     assert sig.side == "SELL"
     assert sig.sl > df['close'].iloc[-1]
     assert sig.tp < df['close'].iloc[-1]
-    assert sig.rr_ratio == 0.5
-    atr_val = df['atr'].iloc[-1]
-    assert sig.sl == pytest.approx(99.0 + (1.5 * atr_val))
-    assert sig.tp == pytest.approx(99.0 - (0.75 * atr_val))
+    assert sig.rr_ratio == 0.6
+    assert sig.sl == pytest.approx(99.0 * 1.005, rel=1e-4)
+    assert sig.tp == pytest.approx(99.0 * 0.997, rel=1e-4)
 
 
 def test_aggressive_scalper_doji_no_signal():

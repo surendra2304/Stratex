@@ -451,6 +451,33 @@ def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, 
     state = OrderState.ENTRY_SUBMITTED
 
     try:
+        # Pre-Trade Margin Check
+        try:
+            acc = client.futures_account() if hasattr(client, "futures_account") else {}
+            available_balance = float(acc.get("availableBalance", 0.0))
+            est_entry_price = float(sl or tp or 0.0)
+            if est_entry_price <= 0:
+                try:
+                    mark_ticker = client.futures_symbol_ticker(symbol=symbol) if hasattr(client, "futures_symbol_ticker") else None
+                    if mark_ticker and "price" in mark_ticker:
+                        est_entry_price = float(mark_ticker["price"])
+                except Exception:
+                    pass
+            
+            qty_float = float(quantity)
+            lev = float(leverage) if leverage > 0 else 5.0
+            required_margin = (qty_float * est_entry_price) / lev if (qty_float > 0 and est_entry_price > 0) else 0.0
+
+            if required_margin > 0 and available_balance > 0 and required_margin > available_balance:
+                sys_logger.warning(
+                    f"[{strategy_name}] ⚠️ SKIPPED (INSUFFICIENT MARGIN) for {symbol} {side} {quantity}. "
+                    f"Required: ${required_margin:.2f} USDT, Available: ${available_balance:.2f} USDT",
+                    extra={"strategy": strategy_name, "symbol": symbol}
+                )
+                return None
+        except Exception as margin_err:
+            sys_logger.debug(f"[FUTURES] Pre-trade margin check bypassed: {margin_err}")
+
         # 1. Ensure isolated margin & leverage
         set_futures_leverage_and_margin(client, symbol, leverage=leverage, margin_type="ISOLATED")
 

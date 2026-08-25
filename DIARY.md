@@ -362,14 +362,22 @@ TESTNET ONLY
   - Changed KPI label from "TOTAL POSITION VALUE" to "TOTAL NOTIONAL VALUE" in `static/index.html` to clearly reflect leveraged position notional sizing.
   - Hardened `testnet_engine/service.py` position monitoring loop to query Binance Futures account endpoints (`futures_account()`) when in Futures mode, keeping ledger reconciliation active.
   - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
+- **Task 10: Fixed Percentage Exits & Pre-Trade Margin Check**:
+  - Replaced ATR-based Stop Loss and Take Profit with fixed percentage math in `strategy_aggressive_scalper.py`:
+    * Long: SL = `Entry × 0.995` (0.5% away), TP = `Entry × 1.003` (0.3% away)
+    * Short: SL = `Entry × 1.005` (0.5% away), TP = `Entry × 0.997` (0.3% away)
+  - Implemented pre-trade margin check in `execution.py` and `testnet_engine/service.py`: calculated required margin (`Quantity × Entry Price / Leverage`) against `availableBalance` from `futures_account()`.
+  - Automatically skips trades as `SKIPPED (INSUFFICIENT MARGIN)` if required margin exceeds available balance, preventing Binance `-2019` API rejection errors.
+  - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
 
 ## Verification
-- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~68s and ~68s)**.
+- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~58s and ~62s)**.
 - Live Deployment: Render deployment triggered and active; `/health` returns 200 OK.
+- Fixed Percentage Exits: All aggressive scalper signals and trades use fixed 0.5% SL and 0.3% TP.
+- Pre-Trade Margin Check: Insufficient balance trades cleanly logged as SKIPPED without exchange rejection.
 - UI Stats: Positions header card clearly displays exact integer count (e.g., `8 Open`) and "TOTAL NOTIONAL VALUE".
 - Closed Trades Ledger: Verified ledger synchronization logic and `/api/trades` parsing.
 - Position Valuation Sync: Total Position Value header card dynamically matches the exact dollar sum of active trades in the positions table.
 - Positions SL & TP Columns: Fully populated with active quantitative dollar values for all open positions.
-- Scalper Exit Math: All newly generated signals and trades execute with `1.5 × ATR` Stop Loss and `0.75 × ATR` Take Profit.
 - PnL & Positions Sync: Real-time calculation and synchronization of `unrealized_pnl` matching live positions in `/api/status`.
 - Fresh Telemetry: Scanner evaluations actively incrementing with today's timestamps (2026-08-25).

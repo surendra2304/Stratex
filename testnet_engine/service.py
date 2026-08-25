@@ -1052,6 +1052,24 @@ class TestnetService:
                             logger.warning("[PANIC] Manual kill-switch active — order submission blocked (OCO protection unaffected)")
                             continue
 
+                        # Pre-Trade Margin Check in Service Loop
+                        if TRADING_MODE == "FUTURES":
+                            try:
+                                acc = self.client.futures_account() if hasattr(self.client, "futures_account") else {}
+                                avail_bal = float(acc.get("availableBalance", 0.0))
+                                req_margin = (float(qty_str) * current_price) / float(getattr(config, "FUTURES_LEVERAGE", 5))
+                                if avail_bal > 0 and req_margin > 0 and req_margin > avail_bal:
+                                    self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                                    logger.warning(
+                                        f"[MARGIN_CHECK] ⚠️ SKIPPED (INSUFFICIENT MARGIN) for {symbol} {side} {qty_str}. "
+                                        f"Required: ${req_margin:.2f}, Available: ${avail_bal:.2f}"
+                                    )
+                                    self.log_opportunity(signal_id, symbol, side, fresh_metrics, "SKIPPED", "INSUFFICIENT_MARGIN", current_price=current_price)
+                                    self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
+                                    continue
+                            except Exception as mc_err:
+                                logger.debug(f"[SERVICE] Pre-trade margin check bypassed: {mc_err}")
+
                         try:
                             if TRADING_MODE == "FUTURES":
                                 from execution import place_futures_market_order

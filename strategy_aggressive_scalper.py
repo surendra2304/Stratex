@@ -6,9 +6,9 @@ ARCHITECTURE:
   - Logic: Hyper-frequency green/red candle close on any active timeframe.
       * Long Entry:  Close > Open -> BUY
       * Short Entry: Close < Open -> SELL
-  - Exits:
-      * Stop Loss (SL):   1.5 × ATR(14) (Room to breathe against 1m noise)
-      * Take Profit (TP): 0.75 × ATR(14) (Fast profit capture before reversal)
+  - Exits (Fixed Percentages):
+      * Long:  SL = Entry × 0.995 (0.5% away), TP = Entry × 1.003 (0.3% away)
+      * Short: SL = Entry × 1.005 (0.5% away), TP = Entry × 0.997 (0.3% away)
   - Filters: None (Pure multi-timeframe price action)
 """
 
@@ -24,13 +24,13 @@ class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_typ
 
 _STRATEGY_TYPE      = "RULE_BASED"
 _OOS_WIN_RATE_PRIOR = 0.50
-_RR_RATIO           = 0.5
-_SL_ATR             = 1.5
-_TP_ATR             = 0.75
+_RR_RATIO           = 0.6  # 0.3% TP / 0.5% SL = 0.6
+_SL_PCT             = 0.005  # 0.5% Stop Loss
+_TP_PCT             = 0.003  # 0.3% Take Profit
 
 
 def compute_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """ATR(period) using Wilder's EWM smoothing."""
+    """ATR(period) using Wilder's EWM smoothing (retained for backward compatibility)."""
     tr = pd.concat([
         df['high'] - df['low'],
         abs(df['high'] - df['close'].shift(1)),
@@ -51,35 +51,26 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
 def get_signal(df: pd.DataFrame, **kwargs) -> SignalResult:
     """
     Hyper-frequency price action signal generator:
-    - Candle closes GREEN (Close > Open) -> BUY (Long)
-    - Candle closes RED (Close < Open)   -> SELL (Short)
-    Exits: SL = 1.5 × ATR(14), TP = 0.75 × ATR(14)
+    - Candle closes GREEN (Close > Open) -> BUY (Long) with SL = Entry * 0.995, TP = Entry * 1.003
+    - Candle closes RED (Close < Open)   -> SELL (Short) with SL = Entry * 1.005, TP = Entry * 0.997
     """
     _NO_SIGNAL = SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
-    if df is None or len(df) < 15:
+    if df is None or len(df) < 2:
         return _NO_SIGNAL
 
-    if 'atr' not in df.columns:
-        df = add_features(df)
-
     last = df.iloc[-1]
-
-    atr_val = last.get('atr', compute_atr(df, 14).iloc[-1])
-    if pd.isna(atr_val) or atr_val <= 0:
-        atr_val = last['close'] * 0.01
-
     close_p = float(last['close'])
     open_p = float(last['open'])
 
     if close_p > open_p:
-        sl = close_p - (_SL_ATR * atr_val)
-        tp = close_p + (_TP_ATR * atr_val)
+        sl = round(close_p * (1.0 - _SL_PCT), 4)  # Entry * 0.995
+        tp = round(close_p * (1.0 + _TP_PCT), 4)  # Entry * 1.003
         return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     if close_p < open_p:
-        sl = close_p + (_SL_ATR * atr_val)
-        tp = close_p - (_TP_ATR * atr_val)
+        sl = round(close_p * (1.0 + _SL_PCT), 4)  # Entry * 1.005
+        tp = round(close_p * (1.0 - _TP_PCT), 4)  # Entry * 0.997
         return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     return _NO_SIGNAL

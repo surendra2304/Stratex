@@ -579,22 +579,13 @@ def get_status():
                 # If SL/TP not in portfolio file, estimate from entry_price and recent 1m ATR as fallback
                 entry_p = float(fp.get("entry_price", fp.get("price", 0.0)))
                 if (sl_val == 0.0 or tp_val == 0.0) and entry_p > 0:
-                    try:
-                        df_c = fetch_candles(sym, "1m", 20)
-                        if not df_c.empty:
-                            import pandas as pd
-                            from strategy_aggressive_scalper import compute_atr
-                            atr_series = compute_atr(df_c, 14)
-                            curr_atr = float(atr_series.iloc[-1]) if not atr_series.empty and not pd.isna(atr_series.iloc[-1]) else entry_p * 0.01
-                            side_val = fp.get("side", "LONG")
-                            if side_val in ["LONG", "BUY"]:
-                                if sl_val == 0.0: sl_val = round(entry_p - (1.5 * curr_atr), 4)
-                                if tp_val == 0.0: tp_val = round(entry_p + (0.75 * curr_atr), 4)
-                            else:
-                                if sl_val == 0.0: sl_val = round(entry_p + (1.5 * curr_atr), 4)
-                                if tp_val == 0.0: tp_val = round(entry_p - (0.75 * curr_atr), 4)
-                    except Exception:
-                        pass
+                    side_val = fp.get("side", "LONG")
+                    if side_val in ["LONG", "BUY"]:
+                        if sl_val == 0.0: sl_val = round(entry_p * 0.995, 4)
+                        if tp_val == 0.0: tp_val = round(entry_p * 1.003, 4)
+                    else:
+                        if sl_val == 0.0: sl_val = round(entry_p * 1.005, 4)
+                        if tp_val == 0.0: tp_val = round(entry_p * 0.997, 4)
 
                 open_pos_list.append({
                     "symbol": sym,
