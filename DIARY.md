@@ -348,10 +348,15 @@ TESTNET ONLY
   - Decreased Take Profit (TP) to `0.75 × ATR(14)` to lock in profits rapidly before price reversals.
   - Updated test assertions in `tests/test_strategy_aggressive_scalper.py` to rigorously validate exact SL/TP formula and risk-reward ratio (`0.5`).
   - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
+- **Task 7: Synchronized Real-Time SL & TP Target Computation on Positions Table**:
+  - Identified that Binance Futures positions populated directly from exchange account holdings had empty SL/TP fields rendering dashes (`—`) on the Positions dashboard view.
+  - Enhanced `/api/status` endpoint in `dashboard.py` to dynamically resolve each open position against active portfolio metadata and real-time `1.5× ATR` (SL) and `0.75× ATR` (TP) levels.
+  - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
 
 ## Verification
-- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~60s and ~67s)**.
+- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~70s and ~68s)**.
 - Live Deployment: Render deployment triggered and active; `/health` returns 200 OK.
+- Positions SL & TP Columns: Fully populated with active quantitative dollar values for all open positions.
 - Scalper Exit Math: All newly generated signals and trades execute with `1.5 × ATR` Stop Loss and `0.75 × ATR` Take Profit.
 - PnL & Positions Sync: Real-time calculation and synchronization of `unrealized_pnl` matching live positions in `/api/status`.
 - Fresh Telemetry: Scanner evaluations actively incrementing with today's timestamps (2026-08-25).

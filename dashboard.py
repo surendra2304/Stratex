@@ -566,18 +566,47 @@ def get_status():
         if fut_positions:
             open_positions = len(fut_positions)
             open_pos_list = []
+            
+            # Retrieve active SL / TP metadata from portfolio if available
+            port_positions = port.get("positions", {}) if (isinstance(port, dict) if 'port' in locals() else False) else {}
+            
             for fp in fut_positions:
+                sym = fp.get("symbol")
+                pos_meta = port_positions.get(sym, {}) if isinstance(port_positions.get(sym), dict) else {}
+                sl_val = float(pos_meta.get("sl", pos_meta.get("sl_price", 0.0)))
+                tp_val = float(pos_meta.get("tp", pos_meta.get("tp_price", 0.0)))
+                
+                # If SL/TP not in portfolio file, estimate from entry_price and recent 1m ATR as fallback
+                entry_p = float(fp.get("entry_price", fp.get("price", 0.0)))
+                if (sl_val == 0.0 or tp_val == 0.0) and entry_p > 0:
+                    try:
+                        df_c = fetch_candles(sym, "1m", 20)
+                        if not df_c.empty:
+                            import pandas as pd
+                            from strategy_aggressive_scalper import compute_atr
+                            atr_series = compute_atr(df_c, 14)
+                            curr_atr = float(atr_series.iloc[-1]) if not atr_series.empty and not pd.isna(atr_series.iloc[-1]) else entry_p * 0.01
+                            side_val = fp.get("side", "LONG")
+                            if side_val in ["LONG", "BUY"]:
+                                if sl_val == 0.0: sl_val = round(entry_p - (1.5 * curr_atr), 4)
+                                if tp_val == 0.0: tp_val = round(entry_p + (0.75 * curr_atr), 4)
+                            else:
+                                if sl_val == 0.0: sl_val = round(entry_p + (1.5 * curr_atr), 4)
+                                if tp_val == 0.0: tp_val = round(entry_p - (0.75 * curr_atr), 4)
+                    except Exception:
+                        pass
+
                 open_pos_list.append({
-                    "symbol": fp.get("symbol"),
+                    "symbol": sym,
                     "side": fp.get("side", "LONG"),
-                    "entry_price": fp.get("entry_price", fp.get("price", 0.0)),
+                    "entry_price": entry_p,
                     "current_price": fp.get("price", 0.0),
                     "quantity": fp.get("total_quantity", 0.0),
                     "unrealized_pnl": fp.get("unrealized_pnl", 0.0),
-                    "sl": 0.0,
-                    "tp": 0.0,
-                    "strategy": "AGGRESSIVE_SCALPER",
-                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+                    "sl": sl_val,
+                    "tp": tp_val,
+                    "strategy": pos_meta.get("strategy", "AGGRESSIVE_SCALPER"),
+                    "timestamp": pos_meta.get("timestamp", datetime.datetime.utcnow().isoformat() + "Z")
                 })
 
     today_utc_str = datetime.datetime.utcnow().date().isoformat()
