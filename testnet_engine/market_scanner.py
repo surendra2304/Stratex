@@ -123,12 +123,18 @@ class MarketScanner:
 
     def start(self):
         """Starts the multiplexed websocket stream for all discovered symbols and timeframes."""
-        logger.info(f"[SCANNER] Initializing cache for {len(self.symbols)} symbols across {len(self.timeframes)} timeframes...")
+        logger.info(f"[SCANNER] Clearing stale cache and initializing {len(self.symbols)} symbols across {len(self.timeframes)} timeframes on boot...")
+        with self._cache_lock:
+            self.candle_cache.clear()
+            self.last_market_update.clear()
+            self.last_candle_close.clear()
+
+        boot_now = datetime.datetime.utcnow()
         for sym in self.symbols:
             for tf in self.timeframes:
                 self._fetch_historical_candles(sym, tf)
-                self.last_market_update[(sym, tf)] = datetime.datetime.utcnow()
-                self.last_candle_close[(sym, tf)] = datetime.datetime.utcnow()
+                self.last_market_update[(sym, tf)] = boot_now
+                self.last_candle_close[(sym, tf)] = boot_now
             self.data_health_status[sym] = "OK"
             time.sleep(0.1) # Small delay to respect REST rate limits during init
             
@@ -151,179 +157,198 @@ class MarketScanner:
         
     def stop(self):
         self._stop_event.set()
-        self.twm.stop()
+        if hasattr(self, 'twm') and self.twm:
+            try:
+                self.twm.stop()
+            except Exception:
+                pass
 
     def _health_monitor_loop(self):
         """Monitors tick staleness and triggers REST fallback or WS reconnect."""
         while not self._stop_event.is_set():
-            now = datetime.datetime.utcnow()
-            all_stale = True
-            
-            for sym in self.symbols:
-                sym_stale = False
-                for tf in self.timeframes:
-                    last_update = self.last_market_update.get((sym, tf))
-                    if not last_update:
-                        continue
-                        
-                    elapsed = (now - last_update).total_seconds()
-                    try:
-                        tf_secs = int(pd.to_timedelta(tf).total_seconds())
-                    except Exception:
-                        if tf.endswith('m'): tf_secs = int(tf[:-1]) * 60
-                        elif tf.endswith('h'): tf_secs = int(tf[:-1]) * 3600
-                        else: tf_secs = 60
-                        
-                    last_close = self.last_candle_close.get((sym, tf), now - datetime.timedelta(days=1))
-                    elapsed_close = (now - last_close).total_seconds()
-                    
-                    # Faster stale threshold: cap at 90s so 1m candles are detected quickly
-                    stale_threshold = max(15, min(tf_secs * 1.5, 90))
-                    if elapsed > stale_threshold or elapsed_close > tf_secs + 15:
-                        sym_stale = True
-                        if self.data_health_status.get(sym) == "OK":
-                            logger.warning(f"[CANDLE_CLOSE_MISSED] {sym} ({tf}) data STALE. Tick elapsed: {elapsed:.1f}s, Close elapsed: {elapsed_close:.1f}s")
-                            logger.warning(f"[REST_FALLBACK] Triggering historical sync for {sym} ({tf})")
-                        
-                        # REST Fallback
-                        try:
-                            self._fetch_historical_candles(sym, tf)
-                            # Dispatch simulated tick from REST
-                            for cb in self.callbacks:
-                                try:
-                                    cb(sym, tf, self.candle_cache[(sym, tf)].copy(), "STALE")
-                                except Exception as e:
-                                    logger.error(f"[SCANNER] Callback error (REST Fallback) for {sym} ({tf}): {e}")
-                            
-                            self.last_candle_close[(sym, tf)] = now
-                        except Exception as e:
-                            logger.error(f"[SCANNER] REST Fallback failed for {sym} ({tf}): {e}")
+            try:
+                now = datetime.datetime.utcnow()
+                all_stale = True
                 
-                if sym_stale:
-                    self.data_health_status[sym] = "STALE"
-                else:
-                    self.data_health_status[sym] = "OK"
-                    all_stale = False
-            
-            # If all symbols are completely dead for > 120 seconds, reconnect socket atomically
-            if all_stale and len(self.symbols) > 0:
-                max_elapsed = max([(now - self.last_market_update.get((s, t), now)).total_seconds() for s in self.symbols for t in self.timeframes])
-                if max_elapsed > 120:
-                    logger.critical("[SCANNER] 🚨 Entire websocket appears DEAD. Attempting atomic reconnect...")
-                    try:
-                        old_twm = self.twm
-                        # Build new TWM before stopping old one — prevents gap window
-                        new_twm = ThreadedWebsocketManager(testnet=self.testnet)
-                        new_twm.start()
-                        streams = [f"{sym.lower()}@kline_{tf}" for sym in self.symbols for tf in self.timeframes]
-                        new_twm.start_multiplex_socket(callback=self._handle_socket_message, streams=streams)
-                        # Swap atomically
-                        self.twm = new_twm
-                        # Now safely stop the old one
+                for sym in self.symbols:
+                    sym_stale = False
+                    for tf in self.timeframes:
+                        last_update = self.last_market_update.get((sym, tf))
+                        if not last_update:
+                            continue
+                            
+                        elapsed = (now - last_update).total_seconds()
                         try:
-                            old_twm.stop()
-                        except Exception as stop_err:
-                            logger.warning(f"[SCANNER] Old TWM stop error (non-fatal): {stop_err}")
-                        # Reset staleness timers only after new stream confirmed
-                        for sym in self.symbols:
-                            for tf in self.timeframes:
-                                self.last_market_update[(sym, tf)] = datetime.datetime.utcnow()
-                        logger.info("[SCANNER] Atomic reconnect completed successfully.")
-
-                        # Upgrade 6: post-reconnect REST backfill. While the socket
-                        # was dead we may have missed candle closes; repopulate every
-                        # cache with a full 250-bar REST fetch (includes production
-                        # warm-seed) so EMAs are fully warmed before the live stream
-                        # is trusted again.
-                        for sym in self.symbols:
-                            for tf in self.timeframes:
-                                try:
-                                    self._fetch_historical_candles(sym, tf)
-                                    cached = len(self.candle_cache.get((sym, tf), []))
-                                    logger.info(f"[SCANNER] Post-reconnect backfill: {sym} {tf} -> {cached} bars")
-                                except Exception as bf_err:
-                                    logger.error(f"[SCANNER] Post-reconnect backfill failed for {sym} {tf}: {bf_err}")
-                    except Exception as e:
-                        logger.error(f"[SCANNER] Atomic reconnect failed: {e}")
+                            tf_secs = int(pd.to_timedelta(tf).total_seconds())
+                        except Exception:
+                            if tf.endswith('m'): tf_secs = int(tf[:-1]) * 60
+                            elif tf.endswith('h'): tf_secs = int(tf[:-1]) * 3600
+                            else: tf_secs = 60
+                            
+                        last_close = self.last_candle_close.get((sym, tf), now - datetime.timedelta(days=1))
+                        elapsed_close = (now - last_close).total_seconds()
                         
-            time.sleep(3)  # Reduced from 5s for faster stale detection
+                        # Faster stale threshold: cap at 90s so 1m candles are detected quickly
+                        stale_threshold = max(15, min(tf_secs * 1.5, 90))
+                        if elapsed > stale_threshold or elapsed_close > tf_secs + 15:
+                            sym_stale = True
+                            if self.data_health_status.get(sym) == "OK":
+                                logger.warning(f"[CANDLE_CLOSE_MISSED] {sym} ({tf}) data STALE. Tick elapsed: {elapsed:.1f}s, Close elapsed: {elapsed_close:.1f}s")
+                                logger.warning(f"[REST_FALLBACK] Triggering historical sync for {sym} ({tf})")
+                            
+                            # REST Fallback
+                            try:
+                                self._fetch_historical_candles(sym, tf)
+                                # Dispatch simulated tick from REST
+                                for cb in self.callbacks:
+                                    try:
+                                        cb(sym, tf, self.candle_cache[(sym, tf)].copy(), "STALE")
+                                    except Exception as e:
+                                        logger.error(f"[SCANNER] Callback error (REST Fallback) for {sym} ({tf}): {e}")
+                                
+                                self.last_candle_close[(sym, tf)] = now
+                            except Exception as e:
+                                logger.error(f"[SCANNER] REST Fallback failed for {sym} ({tf}): {e}")
+                    
+                    if sym_stale:
+                        self.data_health_status[sym] = "STALE"
+                    else:
+                        self.data_health_status[sym] = "OK"
+                        all_stale = False
+                
+                # If all symbols are completely dead for > 120 seconds, reconnect socket atomically
+                if all_stale and len(self.symbols) > 0:
+                    max_elapsed = max([(now - self.last_market_update.get((s, t), now)).total_seconds() for s in self.symbols for t in self.timeframes])
+                    if max_elapsed > 120:
+                        logger.critical("[SCANNER] 🚨 Entire websocket appears DEAD. Attempting atomic reconnect...")
+                        try:
+                            old_twm = self.twm
+                            # Build new TWM before stopping old one — prevents gap window
+                            new_twm = ThreadedWebsocketManager(testnet=self.testnet)
+                            new_twm.start()
+                            streams = [f"{sym.lower()}@kline_{tf}" for sym in self.symbols for tf in self.timeframes]
+                            new_twm.start_multiplex_socket(callback=self._handle_socket_message, streams=streams)
+                            # Swap atomically
+                            self.twm = new_twm
+                            # Now safely stop the old one
+                            try:
+                                old_twm.stop()
+                            except Exception as stop_err:
+                                logger.warning(f"[SCANNER] Old TWM stop error (non-fatal): {stop_err}")
+                            # Reset staleness timers only after new stream confirmed
+                            for sym in self.symbols:
+                                for tf in self.timeframes:
+                                    self.last_market_update[(sym, tf)] = datetime.datetime.utcnow()
+                            logger.info("[SCANNER] Atomic reconnect completed successfully.")
+
+                            # Upgrade 6: post-reconnect REST backfill
+                            for sym in self.symbols:
+                                for tf in self.timeframes:
+                                    try:
+                                        self._fetch_historical_candles(sym, tf)
+                                        cached = len(self.candle_cache.get((sym, tf), []))
+                                        logger.info(f"[SCANNER] Post-reconnect backfill: {sym} {tf} -> {cached} bars")
+                                    except Exception as bf_err:
+                                        logger.error(f"[SCANNER] Post-reconnect backfill failed for {sym} {tf}: {bf_err}")
+                        except Exception as e:
+                            logger.error(f"[SCANNER] Atomic reconnect failed: {e}")
+                            
+            except Exception as loop_err:
+                logger.critical(f"[SCANNER_LOOP_ERROR] Uncaught exception in health monitor loop: {loop_err}", exc_info=True)
+                time.sleep(5)
+                continue
+                
+            time.sleep(3)
 
     def register_callback(self, callback_func):
         """Register a function to be called when a candle closes. Signature: cb(symbol, tf, df, health)"""
         self.callbacks.append(callback_func)
 
     def _handle_socket_message(self, msg):
-        """Process incoming websocket messages."""
-        if 'data' not in msg or msg['data'].get('e') != 'kline':
-            return
-            
-        data = msg['data']
-        kline = data['k']
-        symbol = data['s']
-        tf = kline.get('i', self.timeframes[0] if self.timeframes else "1m")
-        is_closed = kline.get('x', True)
-        
-        # Track market update time
-        self.last_market_update[(symbol, tf)] = datetime.datetime.utcnow()
-        if not hasattr(self, 'tick_counts'):
-            self.tick_counts = {}
-        self.tick_counts[(symbol, tf)] = self.tick_counts.get((symbol, tf), 0) + 1
-        
-        # Only process fully closed candles for signals
-        if not is_closed:
-            return
-            
-        self.last_candle_close[(symbol, tf)] = datetime.datetime.utcnow()
-            
-        # Parse new row
-        vol = float(kline.get('v', 0))
-        taker_vol = float(kline.get('V', vol / 2.0))
-        buy_vol = taker_vol
-        sell_vol = max(0.0, vol - buy_vol)
-        vol_delta = buy_vol - sell_vol
-
-        candle_ts = pd.to_datetime(kline.get('t', int(time.time() * 1000)), unit='ms')
-        new_row = {
-            'timestamp': candle_ts,
-            'close_time': pd.to_datetime(kline.get('T', int(time.time() * 1000)), unit='ms'),
-            'open': float(kline['o']),
-            'high': float(kline['h']),
-            'low': float(kline['l']),
-            'close': float(kline['c']),
-            'volume': vol,
-            'vol_delta': vol_delta,
-            'buy_vol': buy_vol,
-            'sell_vol': sell_vol
-        }
-        
-        logger.info(f"[DATA_RECEIVED] {symbol} {tf} | Candle Closed: {new_row['close']} | Vol: {vol:.2f} | VolDelta: {vol_delta:.2f}")
-
-        cached_copy = None
-        with self._cache_lock:
-            if (symbol, tf) in self.candle_cache:
-                df = self.candle_cache[(symbol, tf)]
+        """Process incoming websocket messages with crash-proof error isolation."""
+        try:
+            if not isinstance(msg, dict):
+                return
+            if 'data' not in msg or not isinstance(msg['data'], dict) or msg['data'].get('e') != 'kline':
+                return
                 
-                # Duplicate candle prevention: skip if this timestamp already exists
-                if 'timestamp' in df.columns and len(df) > 0:
-                    existing_ts = df['timestamp'].iloc[-1]
-                    if existing_ts == candle_ts:
-                        logger.debug(f"[DUPLICATE_CANDLE_SKIPPED] {symbol} {tf} ts={candle_ts} already in cache")
-                        return
+            data = msg['data']
+            kline = data.get('k')
+            if not kline or not isinstance(kline, dict):
+                return
                 
-                # Append and sort by timestamp to handle any out-of-order delivery
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-                df = df.sort_values('timestamp', ascending=True).reset_index(drop=True)
-                if len(df) > 250:
-                    df = df.iloc[-250:].reset_index(drop=True)
-                self.candle_cache[(symbol, tf)] = df
-            else:
-                self.candle_cache[(symbol, tf)] = pd.DataFrame([new_row])
-            cached_copy = self.candle_cache[(symbol, tf)].copy()
+            symbol = data.get('s', '')
+            if not symbol:
+                return
+                
+            tf = kline.get('i', self.timeframes[0] if self.timeframes else "1m")
+            is_closed = kline.get('x', True)
             
-        # Dispatch event to registered callbacks
-        if cached_copy is not None:
-            for cb in self.callbacks:
-                try:
-                    cb(symbol, tf, cached_copy, self.data_health_status.get(symbol, "OK"))
-                except Exception as e:
-                    logger.error(f"[SCANNER] Callback error for {symbol} ({tf}): {e}")
+            # Track market update time
+            now_utc = datetime.datetime.utcnow()
+            self.last_market_update[(symbol, tf)] = now_utc
+            if not hasattr(self, 'tick_counts'):
+                self.tick_counts = {}
+            self.tick_counts[(symbol, tf)] = self.tick_counts.get((symbol, tf), 0) + 1
+            
+            # Only process fully closed candles for signals
+            if not is_closed:
+                return
+                
+            self.last_candle_close[(symbol, tf)] = now_utc
+                
+            # Parse new row
+            vol = float(kline.get('v', 0))
+            taker_vol = float(kline.get('V', vol / 2.0))
+            buy_vol = taker_vol
+            sell_vol = max(0.0, vol - buy_vol)
+            vol_delta = buy_vol - sell_vol
+
+            candle_ts = pd.to_datetime(kline.get('t', int(time.time() * 1000)), unit='ms')
+            new_row = {
+                'timestamp': candle_ts,
+                'close_time': pd.to_datetime(kline.get('T', int(time.time() * 1000)), unit='ms'),
+                'open': float(kline.get('o', 0.0)),
+                'high': float(kline.get('h', 0.0)),
+                'low': float(kline.get('l', 0.0)),
+                'close': float(kline.get('c', 0.0)),
+                'volume': vol,
+                'vol_delta': vol_delta,
+                'buy_vol': buy_vol,
+                'sell_vol': sell_vol
+            }
+            
+            logger.info(f"[DATA_RECEIVED] {symbol} {tf} | Candle Closed: {new_row['close']} | Vol: {vol:.2f} | VolDelta: {vol_delta:.2f}")
+
+            cached_copy = None
+            with self._cache_lock:
+                if (symbol, tf) in self.candle_cache:
+                    df = self.candle_cache[(symbol, tf)]
+                    
+                    # Duplicate candle prevention: skip if this timestamp already exists
+                    if 'timestamp' in df.columns and len(df) > 0:
+                        existing_ts = df['timestamp'].iloc[-1]
+                        if existing_ts == candle_ts:
+                            logger.debug(f"[DUPLICATE_CANDLE_SKIPPED] {symbol} {tf} ts={candle_ts} already in cache")
+                            return
+                    
+                    # Append and sort by timestamp to handle any out-of-order delivery
+                    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+                    df = df.sort_values('timestamp', ascending=True).reset_index(drop=True)
+                    if len(df) > 250:
+                        df = df.iloc[-250:].reset_index(drop=True)
+                    self.candle_cache[(symbol, tf)] = df
+                else:
+                    self.candle_cache[(symbol, tf)] = pd.DataFrame([new_row])
+                cached_copy = self.candle_cache[(symbol, tf)].copy()
+                
+            # Dispatch event to registered callbacks
+            if cached_copy is not None:
+                for cb in self.callbacks:
+                    try:
+                        cb(symbol, tf, cached_copy, self.data_health_status.get(symbol, "OK"))
+                    except Exception as e:
+                        logger.error(f"[SCANNER] Callback error for {symbol} ({tf}): {e}")
+
+        except Exception as ws_err:
+            logger.error(f"[WS_MESSAGE_HANDLER_ERROR] Error parsing websocket message: {ws_err}", exc_info=True)

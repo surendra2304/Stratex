@@ -10,6 +10,46 @@ from binance.client import Client
 from config import API_KEY, SECRET_KEY, TRADING_MODE
 
 
+import time
+import logging
+from binance.exceptions import BinanceAPIException
+
+logger = logging.getLogger("account_client")
+
+# Global rate limit tracker across instances
+_LAST_429_PAUSE_UNTIL = 0.0
+
+
+def _execute_with_rate_limit_protection(func, *args, **kwargs):
+    """Executes a Binance API call with automatic 429/418 rate-limit protection."""
+    global _LAST_429_PAUSE_UNTIL
+    now = time.time()
+    if now < _LAST_429_PAUSE_UNTIL:
+        wait_left = _LAST_429_PAUSE_UNTIL - now
+        logger.warning(f"[RATE_LIMIT_SAFETY] In active 429 backoff. Pausing API call for {wait_left:.1f}s...")
+        time.sleep(min(wait_left, 60.0))
+
+    try:
+        return func(*args, **kwargs)
+    except BinanceAPIException as e:
+        if e.status_code in (429, 418) or "429" in str(e) or "418" in str(e) or "Way too many requests" in str(e):
+            logger.critical(f"[RATE_LIMIT_HIT] 🚨 Binance API {e.status_code} Rate Limit Hit! Pausing all requests for 60s...")
+            _LAST_429_PAUSE_UNTIL = time.time() + 60.0
+            time.sleep(60.0)
+            try:
+                return func(*args, **kwargs)
+            except Exception as retry_err:
+                logger.error(f"[RATE_LIMIT_RETRY_FAILED] Call failed after 60s pause: {retry_err}")
+                return {}
+        raise
+    except Exception as e:
+        if "429" in str(e) or "418" in str(e):
+            logger.critical(f"[RATE_LIMIT_HIT] 🚨 Rate Limit in Exception: {e}. Pausing all requests for 60s...")
+            _LAST_429_PAUSE_UNTIL = time.time() + 60.0
+            time.sleep(60.0)
+        raise
+
+
 class AccountClient:
     """
     A strictly read-only adapter for Binance account data.
@@ -40,13 +80,13 @@ class AccountClient:
         """Returns full account info."""
         if not self.is_available():
             return {}
-        return self._client.get_account()
+        return _execute_with_rate_limit_protection(self._client.get_account) or {}
 
     def get_balances(self) -> dict:
         """Returns non-zero free balances as {asset: float}."""
         if not self.is_available():
             return {}
-        account = self._client.get_account()
+        account = _execute_with_rate_limit_protection(self._client.get_account) or {}
         return {
             b["asset"]: float(b["free"])
             for b in account.get("balances", [])
@@ -58,22 +98,22 @@ class AccountClient:
         if not self.is_available():
             return []
         if symbol:
-            return self._client.get_open_orders(symbol=symbol)
-        return self._client.get_open_orders()
+            return _execute_with_rate_limit_protection(self._client.get_open_orders, symbol=symbol) or []
+        return _execute_with_rate_limit_protection(self._client.get_open_orders) or []
 
     def futures_account(self) -> dict:
         """Returns Futures account info (/fapi/v2/account)."""
         if not self.is_available():
             return {}
-        return self._client.futures_account()
+        return _execute_with_rate_limit_protection(self._client.futures_account) or {}
 
     def futures_position_information(self, symbol: str | None = None) -> list:
         """Returns Futures position info."""
         if not self.is_available():
             return []
         if symbol:
-            return self._client.futures_position_information(symbol=symbol)
-        return self._client.futures_position_information()
+            return _execute_with_rate_limit_protection(self._client.futures_position_information, symbol=symbol) or []
+        return _execute_with_rate_limit_protection(self._client.futures_position_information) or []
 
     # --- Block all other Binance Client methods ---
     def __getattr__(self, item):

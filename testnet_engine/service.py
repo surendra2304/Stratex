@@ -648,222 +648,225 @@ class TestnetService:
 
     def on_candle_closed(self, symbol, tf, df, data_health_status="OK"):
         """Callback invoked by MarketScanner when a new candle closes."""
-        if getattr(self, 'safety_halt', False):
-            logger.warning(f"[SAFETY_HALT] Scanning halted due to RECONCILIATION MISMATCH. Rejecting {symbol} signal.")
-            return
-
-        # Strategy Protection: Reject stale, unverified, or missing market data
-        if data_health_status != "OK":
-            logger.warning(f"[STRATEGY_SKIPPED] reason=STALE_MARKET_DATA symbol={symbol} tf={tf} health={data_health_status}")
-            return
-
-        if df is None or df.empty or len(df) < 20:
-            logger.warning(f"[STRATEGY_SKIPPED] reason=INSUFFICIENT_MARKET_DATA symbol={symbol} tf={tf} rows={len(df) if df is not None else 0}")
-            return
-
-        # Check candle age freshness against timeframe
         try:
-            last_ts = df["timestamp"].iloc[-1]
-            if isinstance(last_ts, pd.Timestamp):
-                age_sec = (datetime.datetime.utcnow() - last_ts.to_pydatetime()).total_seconds()
-            else:
-                age_sec = 0
-            max_allowed_age = _TF_SECONDS.get(tf, 3600) * 3
-            if age_sec > max_allowed_age and age_sec > 0:
-                logger.warning(f"[STRATEGY_SKIPPED] reason=STALE_MARKET_DATA symbol={symbol} tf={tf} age={age_sec:.1f}s")
+            if getattr(self, 'safety_halt', False):
+                logger.warning(f"[SAFETY_HALT] Scanning halted due to RECONCILIATION MISMATCH. Rejecting {symbol} signal.")
                 return
-        except Exception:
-            pass
 
-        df = add_indicators(df)
-        if df.empty:
-            return
+            # Strategy Protection: Reject stale, unverified, or missing market data
+            if data_health_status != "OK":
+                logger.warning(f"[STRATEGY_SKIPPED] reason=STALE_MARKET_DATA symbol={symbol} tf={tf} health={data_health_status}")
+                return
 
-        current_price = df['close'].iloc[-1]
-        logger.info(f"[FEATURES_READY] {symbol} {tf} | Rows: {len(df)} | Current Price: {current_price}")
+            if df is None or df.empty or len(df) < 20:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=INSUFFICIENT_MARKET_DATA symbol={symbol} tf={tf} rows={len(df) if df is not None else 0}")
+                return
 
-        with self.lock:
+            # Check candle age freshness against timeframe
             try:
-                self.stats["TOTAL_CANDLES"] += 1
-                self.last_evaluation[symbol] = datetime.datetime.utcnow().isoformat() + "Z"
-                
-                if tf not in self.strategies:
+                last_ts = df["timestamp"].iloc[-1]
+                if isinstance(last_ts, pd.Timestamp):
+                    age_sec = (datetime.datetime.utcnow() - last_ts.to_pydatetime()).total_seconds()
+                else:
+                    age_sec = 0
+                max_allowed_age = _TF_SECONDS.get(tf, 3600) * 3
+                if age_sec > max_allowed_age and age_sec > 0:
+                    logger.warning(f"[STRATEGY_SKIPPED] reason=STALE_MARKET_DATA symbol={symbol} tf={tf} age={age_sec:.1f}s")
                     return
-                
-                for strat_name, strat_mod in self.strategies[tf]:
-                    self.stats["strategy_evaluations"] += 1
+            except Exception:
+                pass
+
+            df = add_indicators(df)
+            if df.empty:
+                return
+
+            current_price = df['close'].iloc[-1]
+            logger.info(f"[FEATURES_READY] {symbol} {tf} | Rows: {len(df)} | Current Price: {current_price}")
+
+            with self.lock:
+                try:
+                    self.stats["TOTAL_CANDLES"] += 1
+                    self.last_evaluation[symbol] = datetime.datetime.utcnow().isoformat() + "Z"
                     
-                    if strat_name == "adx_ema_mtf" or "mtf" in strat_name:
-                        df_1h = None
-                        if hasattr(self, 'scanner') and self.scanner:
-                            with self.scanner._cache_lock:
-                                df_1h = self.scanner.candle_cache.get((symbol, "1h"))
-                        signal_result = strat_mod.get_signal(df, df_1h=df_1h)
-                    else:
-                        signal_result = strat_mod.get_signal(df)
-                    side = getattr(signal_result, 'side', signal_result[0] if signal_result else None)
-                    sl   = getattr(signal_result, 'sl',   signal_result[1] if signal_result else None)
-                    tp   = getattr(signal_result, 'tp',   signal_result[2] if signal_result else None)
-
-                    last_row = df.iloc[-1]
-                    prev_row = df.iloc[-2] if len(df) >= 2 else last_row
-                    adx_val = float(last_row.get("adx", 0.0))
-                    ema20_val = float(last_row.get("ema_20", 0.0))
-                    ema50_val = float(last_row.get("ema_50", 0.0))
-                    ema200_val = float(last_row.get("ema_200", 0.0))
-                    atr_val = float(last_row.get("atr_adx_ema", 0.0))
-                    atr_pct = (atr_val / current_price) if current_price > 0 else 0.0
-                    trend_dir = "BULLISH" if current_price > ema200_val else "BEARISH"
-                    candle_ts = last_row.name if hasattr(last_row, 'name') else df.index[-1]
+                    if tf not in self.strategies:
+                        return
                     
-                    rejection_reason = "VALID_SIGNAL"
-                    if not side:
-                        reasons = []
-                        cross_up = (ema20_val > ema50_val) and (float(prev_row.get("ema_20", 0)) <= float(prev_row.get("ema_50", 0)))
-                        cross_dn = (ema20_val < ema50_val) and (float(prev_row.get("ema_20", 0)) >= float(prev_row.get("ema_50", 0)))
-                        if not (cross_up or cross_dn):
-                            reasons.append("NO_CROSSOVER")
-                        _adx_th = ADX_EMA_STRATEGY_V2.get("ADX_THRESHOLD", 30)
-                        if adx_val <= _adx_th:
-                            reasons.append(f"ADX_BELOW_{_adx_th}")
-                        if cross_up and current_price <= ema200_val:
-                            reasons.append("CLOSE_BELOW_EMA200")
-                        if cross_dn and current_price >= ema200_val:
-                            reasons.append("CLOSE_ABOVE_EMA200")
-                        rejection_reason = "; ".join(reasons) if reasons else "NO_TRIGGER"
+                    for strat_name, strat_mod in self.strategies[tf]:
+                        self.stats["strategy_evaluations"] += 1
+                        
+                        if strat_name == "adx_ema_mtf" or "mtf" in strat_name:
+                            df_1h = None
+                            if hasattr(self, 'scanner') and self.scanner:
+                                with self.scanner._cache_lock:
+                                    df_1h = self.scanner.candle_cache.get((symbol, "1h"))
+                            signal_result = strat_mod.get_signal(df, df_1h=df_1h)
+                        else:
+                            signal_result = strat_mod.get_signal(df)
+                        side = getattr(signal_result, 'side', signal_result[0] if signal_result else None)
+                        sl   = getattr(signal_result, 'sl',   signal_result[1] if signal_result else None)
+                        tp   = getattr(signal_result, 'tp',   signal_result[2] if signal_result else None)
 
-                    logger.info(
-                        f"[CANDLE_EVALUATION] symbol={symbol} tf={tf} timestamp={candle_ts} "
-                        f"price={current_price:.4f} ADX={adx_val:.2f} EMA20={ema20_val:.4f} "
-                        f"EMA50={ema50_val:.4f} EMA200={ema200_val:.4f} ATR={atr_val:.4f} "
-                        f"ATR%={atr_pct*100:.3f}% trend_direction={trend_dir} "
-                        f"decision={side or 'HOLD'} reason={rejection_reason}"
-                    )
-                    logger.info(
-                        f"[STRATEGY_SCAN] symbol={symbol} timeframe={tf} strategy={strat_name} "
-                        f"decision={'SIGNAL' if side else 'HOLD'} reason={rejection_reason}"
-                    )
+                        last_row = df.iloc[-1]
+                        prev_row = df.iloc[-2] if len(df) >= 2 else last_row
+                        adx_val = float(last_row.get("adx", 0.0))
+                        ema20_val = float(last_row.get("ema_20", 0.0))
+                        ema50_val = float(last_row.get("ema_50", 0.0))
+                        ema200_val = float(last_row.get("ema_200", 0.0))
+                        atr_val = float(last_row.get("atr_adx_ema", 0.0))
+                        atr_pct = (atr_val / current_price) if current_price > 0 else 0.0
+                        trend_dir = "BULLISH" if current_price > ema200_val else "BEARISH"
+                        candle_ts = last_row.name if hasattr(last_row, 'name') else df.index[-1]
+                        
+                        rejection_reason = "VALID_SIGNAL"
+                        if not side:
+                            reasons = []
+                            cross_up = (ema20_val > ema50_val) and (float(prev_row.get("ema_20", 0)) <= float(prev_row.get("ema_50", 0)))
+                            cross_dn = (ema20_val < ema50_val) and (float(prev_row.get("ema_20", 0)) >= float(prev_row.get("ema_50", 0)))
+                            if not (cross_up or cross_dn):
+                                reasons.append("NO_CROSSOVER")
+                            _adx_th = ADX_EMA_STRATEGY_V2.get("ADX_THRESHOLD", 30)
+                            if adx_val <= _adx_th:
+                                reasons.append(f"ADX_BELOW_{_adx_th}")
+                            if cross_up and current_price <= ema200_val:
+                                reasons.append("CLOSE_BELOW_EMA200")
+                            if cross_dn and current_price >= ema200_val:
+                                reasons.append("CLOSE_ABOVE_EMA200")
+                            rejection_reason = "; ".join(reasons) if reasons else "NO_TRIGGER"
 
-                    # Aggregate global metrics
-                    if not side:
-                        self.stats["HOLD_SIGNALS"] += 1
+                        logger.info(
+                            f"[CANDLE_EVALUATION] symbol={symbol} tf={tf} timestamp={candle_ts} "
+                            f"price={current_price:.4f} ADX={adx_val:.2f} EMA20={ema20_val:.4f} "
+                            f"EMA50={ema50_val:.4f} EMA200={ema200_val:.4f} ATR={atr_val:.4f} "
+                            f"ATR%={atr_pct*100:.3f}% trend_direction={trend_dir} "
+                            f"decision={side or 'HOLD'} reason={rejection_reason}"
+                        )
+                        logger.info(
+                            f"[STRATEGY_SCAN] symbol={symbol} timeframe={tf} strategy={strat_name} "
+                            f"decision={'SIGNAL' if side else 'HOLD'} reason={rejection_reason}"
+                        )
+
+                        # Aggregate global metrics
+                        if not side:
+                            self.stats["HOLD_SIGNALS"] += 1
+                            if strat_name not in self.stats["strategy_metrics"]:
+                                self.stats["strategy_metrics"][strat_name] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0}
+                            if tf not in self.stats["timeframe_metrics"]:
+                                self.stats["timeframe_metrics"][tf] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0}
+                            
+                            self.stats["strategy_metrics"][strat_name]["HOLD"] = self.stats["strategy_metrics"][strat_name].get("HOLD", 0) + 1
+                            self.stats["timeframe_metrics"][tf]["HOLD"] = self.stats["timeframe_metrics"][tf].get("HOLD", 0) + 1
+                            continue
+                            
+                        self.stats["TOTAL_SIGNALS"] += 1
+                        if side == "BUY":
+                            self.stats["BUY_SIGNALS"] += 1
+                            self.stats["buy_predictions"] += 1
+                        elif side == "SELL":
+                            self.stats["SELL_SIGNALS"] += 1
+                            self.stats["sell_predictions"] += 1
+                            
                         if strat_name not in self.stats["strategy_metrics"]:
                             self.stats["strategy_metrics"][strat_name] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0}
                         if tf not in self.stats["timeframe_metrics"]:
                             self.stats["timeframe_metrics"][tf] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0}
+                            
+                        self.stats["strategy_metrics"][strat_name]["signals"] = self.stats["strategy_metrics"][strat_name].get("signals", 0) + 1
+                        self.stats["timeframe_metrics"][tf]["signals"] = self.stats["timeframe_metrics"][tf].get("signals", 0) + 1
                         
-                        self.stats["strategy_metrics"][strat_name]["HOLD"] = self.stats["strategy_metrics"][strat_name].get("HOLD", 0) + 1
-                        self.stats["timeframe_metrics"][tf]["HOLD"] = self.stats["timeframe_metrics"][tf].get("HOLD", 0) + 1
-                        continue
-                        
-                    self.stats["TOTAL_SIGNALS"] += 1
-                    if side == "BUY":
-                        self.stats["BUY_SIGNALS"] += 1
-                        self.stats["buy_predictions"] += 1
-                    elif side == "SELL":
-                        self.stats["SELL_SIGNALS"] += 1
-                        self.stats["sell_predictions"] += 1
-                        
-                    if strat_name not in self.stats["strategy_metrics"]:
-                        self.stats["strategy_metrics"][strat_name] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0}
-                    if tf not in self.stats["timeframe_metrics"]:
-                        self.stats["timeframe_metrics"][tf] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0}
-                        
-                    self.stats["strategy_metrics"][strat_name]["signals"] = self.stats["strategy_metrics"][strat_name].get("signals", 0) + 1
-                    self.stats["timeframe_metrics"][tf]["signals"] = self.stats["timeframe_metrics"][tf].get("signals", 0) + 1
-                    
-                    self.stats["strategy_metrics"][strat_name][side] = self.stats["strategy_metrics"][strat_name].get(side, 0) + 1
-                    self.stats["timeframe_metrics"][tf][side] = self.stats["timeframe_metrics"][tf].get(side, 0) + 1
+                        self.stats["strategy_metrics"][strat_name][side] = self.stats["strategy_metrics"][strat_name].get(side, 0) + 1
+                        self.stats["timeframe_metrics"][tf][side] = self.stats["timeframe_metrics"][tf].get(side, 0) + 1
 
-                    candle_timestamp = df['timestamp'].iloc[-1]
-                    deterministic_str = f"{symbol}_{strat_name}_{side}_{candle_timestamp}"
-                    signal_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, deterministic_str))
+                        candle_timestamp = df['timestamp'].iloc[-1]
+                        deterministic_str = f"{symbol}_{strat_name}_{side}_{candle_timestamp}"
+                        signal_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, deterministic_str))
 
-                    logger.info(f"[SIGNAL_GENERATED] {strat_name} {side} {symbol} ({tf}) | SignalID: {signal_id} | SL: {sl} | TP: {tp}")
+                        logger.info(f"[SIGNAL_GENERATED] {strat_name} {side} {symbol} ({tf}) | SignalID: {signal_id} | SL: {sl} | TP: {tp}")
 
-                    if side == "SELL" and getattr(config, 'LONG_ONLY', False):
-                        self.stats["OTHER_REJECTED"] += 1
-                        if strat_name in self.stats["strategy_metrics"]:
-                            self.stats["strategy_metrics"][strat_name]["rejected"] += 1
-                        if tf in self.stats["timeframe_metrics"]:
-                            self.stats["timeframe_metrics"][tf]["rejected"] += 1
-                        self.log_opportunity(signal_id, symbol, side, {"reason": "LONG_ONLY_RESTRICTION"}, "REJECTED", "LONG_ONLY_RESTRICTION")
-                        continue
-
-                    # V2 spot upgrade: BTC market-regime gate — alts follow BTC;
-                    # long entries during BTC risk-off (4h close < EMA200) are
-                    # historically net-negative (see research/upgrade_2026_08).
-                    if side == "BUY" and ADX_EMA_STRATEGY_V2.get("BTC_REGIME_FILTER", False):
-                        regime_ok, btc_close, btc_ema = self._btc_regime_state()
-                        if regime_ok is False:
+                        if side == "SELL" and getattr(config, 'LONG_ONLY', False):
                             self.stats["OTHER_REJECTED"] += 1
                             if strat_name in self.stats["strategy_metrics"]:
                                 self.stats["strategy_metrics"][strat_name]["rejected"] += 1
                             if tf in self.stats["timeframe_metrics"]:
                                 self.stats["timeframe_metrics"][tf]["rejected"] += 1
-                            self.log_opportunity(
-                                signal_id, symbol, side,
-                                {"reason": "BTC_REGIME_RISK_OFF", "btc_close": btc_close, "btc_ema200": btc_ema},
-                                "REJECTED", "BTC_REGIME_RISK_OFF"
-                            )
+                            self.log_opportunity(signal_id, symbol, side, {"reason": "LONG_ONLY_RESTRICTION"}, "REJECTED", "LONG_ONLY_RESTRICTION")
                             continue
 
-                    is_aggressive = any(k in strat_name.lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend", "factory_winner"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
-                    if is_aggressive:
-                        passed_profit = True
-                        p_metrics = {
-                            "expected_gross_return": 0.01,
-                            "total_friction": 0.0008,
-                            "expected_net_return": 0.0092,
-                            "atr": abs(current_price - sl),
-                            "atr_pct": abs(current_price - sl) / current_price if current_price > 0 else 0.0,
-                            "reward_pct": abs(tp - current_price) / current_price if current_price > 0 else 0.0,
-                            "risk_pct": abs(current_price - sl) / current_price if current_price > 0 else 0.0,
-                            "prob_win": 0.50,
-                            "confidence": 0.50,
-                            "strategy_type": "RULE_BASED",
-                            "prob_source": "FACTORY_WINNER_BYPASS",
-                            "predicted_move": abs(tp - current_price),
-                            "holding_horizon": "FACTORY_WINNER",
-                            "decision": "ACCEPTED",
-                            "reason": "FACTORY_WINNER_BYPASS",
-                        }
-                    else:
-                        passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
-                            symbol, side, current_price, sl, tp, signal_result
-                        )
-                    
-                    if not passed_profit:
-                        self.stats["PROFITABILITY_REJECTED"] += 1
-                        if strat_name in self.stats["strategy_metrics"]:
-                            self.stats["strategy_metrics"][strat_name]["rejected"] += 1
-                        if tf in self.stats["timeframe_metrics"]:
-                            self.stats["timeframe_metrics"][tf]["rejected"] += 1
-                        self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", p_metrics["reason"])
-                        continue
+                        # V2 spot upgrade: BTC market-regime gate — alts follow BTC;
+                        # long entries during BTC risk-off (4h close < EMA200) are
+                        # historically net-negative (see research/upgrade_2026_08).
+                        if side == "BUY" and ADX_EMA_STRATEGY_V2.get("BTC_REGIME_FILTER", False):
+                            regime_ok, btc_close, btc_ema = self._btc_regime_state()
+                            if regime_ok is False:
+                                self.stats["OTHER_REJECTED"] += 1
+                                if strat_name in self.stats["strategy_metrics"]:
+                                    self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                                if tf in self.stats["timeframe_metrics"]:
+                                    self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                                self.log_opportunity(
+                                    signal_id, symbol, side,
+                                    {"reason": "BTC_REGIME_RISK_OFF", "btc_close": btc_close, "btc_ema200": btc_ema},
+                                    "REJECTED", "BTC_REGIME_RISK_OFF"
+                                )
+                                continue
+
+                        is_aggressive = any(k in strat_name.lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend", "factory_winner"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
+                        if is_aggressive:
+                            passed_profit = True
+                            p_metrics = {
+                                "expected_gross_return": 0.01,
+                                "total_friction": 0.0008,
+                                "expected_net_return": 0.0092,
+                                "atr": abs(current_price - sl),
+                                "atr_pct": abs(current_price - sl) / current_price if current_price > 0 else 0.0,
+                                "reward_pct": abs(tp - current_price) / current_price if current_price > 0 else 0.0,
+                                "risk_pct": abs(current_price - sl) / current_price if current_price > 0 else 0.0,
+                                "prob_win": 0.50,
+                                "confidence": 0.50,
+                                "strategy_type": "RULE_BASED",
+                                "prob_source": "FACTORY_WINNER_BYPASS",
+                                "predicted_move": abs(tp - current_price),
+                                "holding_horizon": "FACTORY_WINNER",
+                                "decision": "ACCEPTED",
+                                "reason": "FACTORY_WINNER_BYPASS",
+                            }
+                        else:
+                            passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
+                                symbol, side, current_price, sl, tp, signal_result
+                            )
                         
-                    candidate = {
-                        "signal_id": signal_id,
-                        "symbol": symbol,
-                        "tf": tf,
-                        "side": side,
-                        "entry": current_price,
-                        "current_price": current_price,
-                        "sl": sl,
-                        "tp": tp,
-                        "strategy": strat_name,
-                        "metrics": p_metrics,
-                        "signal_result": signal_result,
-                        "timestamp": datetime.datetime.utcnow().timestamp()
-                    }
-                    self.opportunity_pool.put(candidate)
-                    self.pool_event.set()
-                    self.log_opportunity(signal_id, symbol, side, p_metrics, "QUALIFIED", "ADDED_TO_POOL", current_price=current_price, candidate=candidate)
-                
-            except Exception as e:
-                logger.error(f"[STRATEGY_EXCEPTION] Error processing signal for {symbol} ({tf}): {e}", exc_info=True)
-            finally:
-                self._save_state()
+                        if not passed_profit:
+                            self.stats["PROFITABILITY_REJECTED"] += 1
+                            if strat_name in self.stats["strategy_metrics"]:
+                                self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                            if tf in self.stats["timeframe_metrics"]:
+                                self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                            self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", p_metrics["reason"])
+                            continue
+                            
+                        candidate = {
+                            "signal_id": signal_id,
+                            "symbol": symbol,
+                            "tf": tf,
+                            "side": side,
+                            "entry": current_price,
+                            "current_price": current_price,
+                            "sl": sl,
+                            "tp": tp,
+                            "strategy": strat_name,
+                            "metrics": p_metrics,
+                            "signal_result": signal_result,
+                            "timestamp": datetime.datetime.utcnow().timestamp()
+                        }
+                        self.opportunity_pool.put(candidate)
+                        self.pool_event.set()
+                        self.log_opportunity(signal_id, symbol, side, p_metrics, "QUALIFIED", "ADDED_TO_POOL", current_price=current_price, candidate=candidate)
+                    
+                except Exception as e:
+                    logger.error(f"[STRATEGY_EXCEPTION] Error processing signal for {symbol} ({tf}): {e}", exc_info=True)
+                finally:
+                    self._save_state()
+        except Exception as outer_err:
+            logger.error(f"[ON_CANDLE_CLOSED_ERROR] Uncaught error in on_candle_closed for {symbol} ({tf}): {outer_err}", exc_info=True)
 
     def execution_loop(self):
         """Phase 6: Multi-Asset Opportunity Ranking and Execution"""
@@ -884,301 +887,318 @@ class TestnetService:
             if not candidates:
                 continue
                 
-            # Opportunity Ranking:
-            # Deterministic Score Formula: score = round((expected_net_return * confidence) / max(0.001, risk_pct), 6)
-            for c in candidates:
-                p_met = c.get("metrics", {})
-                exp_net = float(p_met.get("expected_net_return", 0.0))
-                conf = float(p_met.get("confidence", p_met.get("prob_win", p_met.get("win_rate_prior", 0.5))))
-                sl_p = float(c.get("sl", 0.0))
-                tp_p = float(c.get("tp", 0.0))
-                fallback_entry = (sl_p + tp_p) / 2 if (sl_p > 0 and tp_p > 0) else 1.0
-                entry_p = float(c.get("entry", c.get("current_price", fallback_entry)))
-                if entry_p <= 1.0 and fallback_entry > 1.0:
-                    entry_p = fallback_entry
-                risk_pct = float(p_met.get("risk_pct", abs(entry_p - sl_p) / max(1e-5, entry_p)))
-                if risk_pct <= 0.0 or risk_pct > 1.0:
-                    risk_pct = 0.01 # normalize to standard 1% risk baseline
-                score = round(exp_net * conf / max(0.001, risk_pct), 6)
-                c["score"] = score
-                c["net_edge"] = exp_net
-                c["risk"] = risk_pct
-                c["confidence"] = conf
+            try:
+                # Opportunity Ranking:
+                # Deterministic Score Formula: score = round((expected_net_return * confidence) / max(0.001, risk_pct), 6)
+                for c in candidates:
+                    p_met = c.get("metrics", {})
+                    exp_net = float(p_met.get("expected_net_return", 0.0))
+                    conf = float(p_met.get("confidence", p_met.get("prob_win", p_met.get("win_rate_prior", 0.5))))
+                    sl_p = float(c.get("sl", 0.0))
+                    tp_p = float(c.get("tp", 0.0))
+                    fallback_entry = (sl_p + tp_p) / 2 if (sl_p > 0 and tp_p > 0) else 1.0
+                    entry_p = float(c.get("entry", c.get("current_price", fallback_entry)))
+                    if entry_p <= 1.0 and fallback_entry > 1.0:
+                        entry_p = fallback_entry
+                    risk_pct = float(p_met.get("risk_pct", abs(entry_p - sl_p) / max(1e-5, entry_p)))
+                    if risk_pct <= 0.0 or risk_pct > 1.0:
+                        risk_pct = 0.01 # normalize to standard 1% risk baseline
+                    score = round(exp_net * conf / max(0.001, risk_pct), 6)
+                    c["score"] = score
+                    c["net_edge"] = exp_net
+                    c["risk"] = risk_pct
+                    c["confidence"] = conf
                 
-            # Rank candidates by Deterministic Score (Descending), then Net Edge, Confidence, Risk, Symbol
-            candidates.sort(key=lambda x: (x["score"], x["net_edge"], x["confidence"], -x["risk"], x["symbol"]), reverse=True)
-            
-            for rank_idx, candidate in enumerate(candidates, 1):
-                candidate["rank"] = rank_idx
-                logger.info(
-                    f"[OPPORTUNITY_RANK] Rank #{rank_idx} | {candidate['symbol']} ({candidate.get('tf','15m')}) | "
-                    f"Strat: {candidate.get('strategy')} | Score: {candidate['score']} | "
-                    f"Net Edge: {candidate['net_edge']*100:.3f}% | Risk: {candidate['risk']*100:.3f}% | Conf: {candidate['confidence']*100:.1f}%"
-                )
-                symbol = candidate["symbol"]
-                side = candidate["side"]
-                signal_id = candidate["signal_id"]
-                p_metrics = candidate["metrics"]
-                sl = candidate["sl"]
-                tp = candidate["tp"]
-                strategy_name = candidate.get("strategy", "adx_ema")
-                is_aggressive_strat = any(k in str(strategy_name).lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend", "factory_winner"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
+                # Rank candidates by Deterministic Score (Descending), then Net Edge, Confidence, Risk, Symbol
+                candidates.sort(key=lambda x: (x["score"], x["net_edge"], x["confidence"], -x["risk"], x["symbol"]), reverse=True)
                 
-                with self.lock:
-                    # Enforce per-symbol cooldown (bypassed for aggressive scalper)
-                    now_ts = datetime.datetime.utcnow().timestamp()
-                    if not is_aggressive_strat and symbol in self.cooldowns and now_ts - self.cooldowns[symbol] < _COOLDOWN_SECONDS:
-                        self.stats["COOLDOWN_REJECTED"] += 1
-                        self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "ON_COOLDOWN")
-                        continue
-
-                    # Pre-execution duplicate position guard
-                    # Risk gate uses portfolio file which may be slightly stale on fast restarts.
-                    # This in-memory check prevents double-entry into the same symbol.
-                    if symbol in self.active_positions:
-                        existing = self.active_positions[symbol]
-                        if existing.get("status") == "OPEN":
-                            logger.warning(
-                                f"[DUPLICATE_POSITION_GUARD] {symbol} already has OPEN position "
-                                f"(SignalID: {signal_id}). Skipping duplicate entry."
-                            )
-                            self.stats["OTHER_REJECTED"] += 1
-                            self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "DUPLICATE_POSITION_GUARD")
-                            continue
-                        
-                    tf = candidate.get("tf", "15m")
-                    # Re-validate with absolute latest price
-                    df = None
-                    if hasattr(self, 'scanner'):
-                        df = self.scanner.candle_cache.get((symbol, tf))
-                            
-                    if df is None or df.empty:
-                        self.stats["MARKET_DATA_REJECTED"] += 1
-                        self.stats["JIT_REJECTED"] += 1
-                        self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "NO_MARKET_DATA")
-                        continue
-                        
-                    current_price = df['close'].iloc[-1]
-                    data_health = self.scanner.data_health_status.get(symbol, "OK") if hasattr(self, 'scanner') else "OK"
-                    
-                    # Re-validate Profitability Gate (Price may have moved)
-                    # Pass signal_result from original candidate — preserves strategy_type metadata.
-                    is_aggressive_strat = any(k in str(strategy_name).lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend", "factory_winner"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
-                    if is_aggressive_strat:
-                        passed_profit = True
-                        fresh_metrics = p_metrics
-                    else:
-                        passed_profit, fresh_metrics = self.profitability_gate.evaluate_signal(
-                            symbol, side, current_price, sl, tp,
-                            candidate.get("signal_result", p_metrics["prob_win"])
-                        )
-                    
-                    if not passed_profit:
-                        self.stats["PROFITABILITY_REJECTED"] += 1
-                        self.stats["JIT_REJECTED"] += 1
-                        self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", f"REVALIDATION_FAILED: {fresh_metrics['reason']}")
-                        continue
-                        
-                    self.stats["PROFITABILITY_ACCEPTED"] += 1
-                    
-                    # Sizing
-                    filters = self.symbol_filters.get(symbol, {})
-                    qty = self.risk_gate.calculate_position_size(self.current_equity, current_price, sl, filters)
-                    
-                    if qty < 0.00000001:
-                        self.stats["RISK_REJECTED"] += 1
-                        self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", "MIN_NOTIONAL_OR_ZERO_QTY")
-                        continue
-                        
-                    # Risk Gate
-                    passed_risk, r_reason, _r_details = self.risk_gate.evaluate_risk(
-                        symbol, side, self.current_equity, self.active_positions, qty, current_price, data_health
+                for rank_idx, candidate in enumerate(candidates, 1):
+                    candidate["rank"] = rank_idx
+                    logger.info(
+                        f"[OPPORTUNITY_RANK] Rank #{rank_idx} | {candidate['symbol']} ({candidate.get('tf','15m')}) | "
+                        f"Strat: {candidate.get('strategy')} | Score: {candidate['score']} | "
+                        f"Net Edge: {candidate['net_edge']*100:.3f}% | Risk: {candidate['risk']*100:.3f}% | Conf: {candidate['confidence']*100:.1f}%"
                     )
+                    symbol = candidate["symbol"]
+                    side = candidate["side"]
+                    signal_id = candidate["signal_id"]
+                    p_metrics = candidate["metrics"]
+                    sl = candidate["sl"]
+                    tp = candidate["tp"]
+                    strategy_name = candidate.get("strategy", "adx_ema")
+                    is_aggressive_strat = any(k in str(strategy_name).lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend", "factory_winner"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
                     
-                    if not passed_risk:
-                        self.stats["RISK_REJECTED"] += 1
-                        self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", r_reason)
-                        continue
-                        
-                    self.stats["RISK_ACCEPTED"] += 1
-                        
-                    # Execute
-                    if self.observe_only:
-                        self.stats["OTHER_REJECTED"] += 1
-                        self.log_opportunity(signal_id, symbol, side, fresh_metrics, "ACCEPTED (OBSERVE ONLY)", "DEGRADED_PERFORMANCE_HALT")
-                        continue
-                        
-                    self.stats["QUALIFIED"] += 1
-                    if strategy_name in self.stats["strategy_metrics"]:
-                        self.stats["strategy_metrics"][strategy_name]["qualified"] += 1
-                    if tf in self.stats["timeframe_metrics"]:
-                        self.stats["timeframe_metrics"][tf]["qualified"] += 1
-                    self.log_opportunity(signal_id, symbol, side, fresh_metrics, "ACCEPTED", "ALL_GATES_PASSED")
-                    
-                    # Format strictly for Binance execution to prevent LOT_SIZE Filter Failure
-                    step_size = filters.get("stepSize", 1.0)
-                    precision = 0
-                    if '.' in str(step_size):
-                        precision = len(str(step_size).rstrip('0').split('.')[1])
-                    qty_str = f"{qty:.{precision}f}"
-                    
-                    logger.info(f"[EXECUTION_ATTEMPTED] {strategy_name} {side} {qty_str} {symbol} @ ~{current_price} | SignalID: {signal_id}")
-                    self.stats["EXECUTION_ELIGIBLE"] += 1
-                    
-                    self.telemetry.record_execution_event({
-                        "event_type": "execution_attempt",
-                        "symbol": symbol,
-                        "strategy": strategy_name,
-                        "timeframe": tf,
-                        "trade_id": signal_id,
-                        "side": side,
-                        "quantity": float(qty_str),
-                        "price": current_price
-                    })
-                    self.telemetry.record_equity_snapshot({
-                        "trigger_event": "ORDER_SUBMISSION",
-                        "total_equity": self.current_equity,
-                        "cash": self.current_equity,
-                        "open_positions": len(self.active_positions)
-                    })
-                    
-                    if self.panic_active():
-                        self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
-                        self.log_opportunity(signal_id, symbol, side, {"reason": "MANUAL_PANIC_SWITCH"}, "REJECTED", "MANUAL_PANIC_SWITCH")
-                        logger.warning("[PANIC] Manual kill-switch active — order submission blocked (OCO protection unaffected)")
-                        continue
+                    with self.lock:
+                        # Enforce per-symbol cooldown (bypassed for aggressive scalper)
+                        now_ts = datetime.datetime.utcnow().timestamp()
+                        if not is_aggressive_strat and symbol in self.cooldowns and now_ts - self.cooldowns[symbol] < _COOLDOWN_SECONDS:
+                            self.stats["COOLDOWN_REJECTED"] += 1
+                            self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "ON_COOLDOWN")
+                            continue
 
-                    try:
-                        if TRADING_MODE == "FUTURES":
-                            from execution import place_futures_market_order
-                            leverage = getattr(config, "FUTURES_LEVERAGE", 5)
-                            order_res = place_futures_market_order(
-                                strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp, client_order_id=signal_id, leverage=leverage
-                            )
-                        else:
-                            order_res = place_market_order(
-                                strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp, client_order_id=signal_id
-                            )
-                        if order_res:
-                            self.stats["ORDERS_SUBMITTED"] += 1
-                            order_status = str(order_res.get("status", "")).upper()
-                            if order_status in ("FILLED", "PARTIALLY_FILLED") or order_res.get("_executed_qty", 0) > 0:
-                                self.stats["ORDERS_FILLED"] += 1
-                            if strategy_name in self.stats["strategy_metrics"]:
-                                self.stats["strategy_metrics"][strategy_name]["executed"] += 1
-                            if tf in self.stats["timeframe_metrics"]:
-                                self.stats["timeframe_metrics"][tf]["executed"] += 1
-                            actual_price = order_res.get("_actual_price", current_price)
-                            executed_qty = float(order_res.get("_executed_qty", qty_str))
-                            entry_oid = str(order_res.get("orderId", ""))
-                            notional = actual_price * executed_qty
-                            est_fee = notional * 0.001
-                            
-                            logger.info(f"[ORDER_FILLED] {symbol} {side} {executed_qty} @ {actual_price:.4f} | OrderID: {entry_oid} | SignalID: {signal_id}")
-
-                            # Partial fill detection: warn if filled quantity < 95% of requested
-                            proposed_qty = float(qty_str)
-                            if proposed_qty > 0 and executed_qty / proposed_qty < 0.95:
-                                fill_pct = (executed_qty / proposed_qty) * 100
+                        # Pre-execution duplicate position guard
+                        # Risk gate uses portfolio file which may be slightly stale on fast restarts.
+                        # This in-memory check prevents double-entry into the same symbol.
+                        if symbol in self.active_positions:
+                            existing = self.active_positions[symbol]
+                            if existing.get("status") == "OPEN":
                                 logger.warning(
-                                    f"[PARTIAL_FILL] {symbol} {side} filled {fill_pct:.1f}% of proposed qty. "
-                                    f"Requested: {proposed_qty}, Executed: {executed_qty}"
+                                    f"[DUPLICATE_POSITION_GUARD] {symbol} already has OPEN position "
+                                    f"(SignalID: {signal_id}). Skipping duplicate entry."
                                 )
+                                self.stats["OTHER_REJECTED"] += 1
+                                self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "DUPLICATE_POSITION_GUARD")
+                                continue
+                            
+                        tf = candidate.get("tf", "15m")
+                        # Re-validate with absolute latest price
+                        df = None
+                        if hasattr(self, 'scanner'):
+                            df = self.scanner.candle_cache.get((symbol, tf))
+                                
+                        if df is None or df.empty:
+                            self.stats["MARKET_DATA_REJECTED"] += 1
+                            self.stats["JIT_REJECTED"] += 1
+                            self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "NO_MARKET_DATA")
+                            continue
+                            
+                        current_price = df['close'].iloc[-1]
+                        data_health = self.scanner.data_health_status.get(symbol, "OK") if hasattr(self, 'scanner') else "OK"
+                        
+                        # Re-validate Profitability Gate (Price may have moved)
+                        # Pass signal_result from original candidate — preserves strategy_type metadata.
+                        is_aggressive_strat = any(k in str(strategy_name).lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend", "factory_winner"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
+                        if is_aggressive_strat:
+                            passed_profit = True
+                            fresh_metrics = p_metrics
+                        else:
+                            passed_profit, fresh_metrics = self.profitability_gate.evaluate_signal(
+                                symbol, side, current_price, sl, tp,
+                                candidate.get("signal_result", p_metrics["prob_win"])
+                            )
+                        
+                        if not passed_profit:
+                            self.stats["PROFITABILITY_REJECTED"] += 1
+                            self.stats["JIT_REJECTED"] += 1
+                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", f"REVALIDATION_FAILED: {fresh_metrics['reason']}")
+                            continue
+                            
+                        self.stats["PROFITABILITY_ACCEPTED"] += 1
+                        
+                        # Sizing
+                        filters = self.symbol_filters.get(symbol, {})
+                        qty = self.risk_gate.calculate_position_size(self.current_equity, current_price, sl, filters)
+                        
+                        if qty < 0.00000001:
+                            self.stats["RISK_REJECTED"] += 1
+                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", "MIN_NOTIONAL_OR_ZERO_QTY")
+                            continue
+                            
+                        # Risk Gate
+                        passed_risk, r_reason, _r_details = self.risk_gate.evaluate_risk(
+                            symbol, side, self.current_equity, self.active_positions, qty, current_price, data_health
+                        )
+                        
+                        if not passed_risk:
+                            self.stats["RISK_REJECTED"] += 1
+                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", r_reason)
+                            continue
+                            
+                        self.stats["RISK_ACCEPTED"] += 1
+                            
+                        # Execute
+                        if self.observe_only:
+                            self.stats["OTHER_REJECTED"] += 1
+                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "ACCEPTED (OBSERVE ONLY)", "DEGRADED_PERFORMANCE_HALT")
+                            continue
+                            
+                        self.stats["QUALIFIED"] += 1
+                        if strategy_name in self.stats["strategy_metrics"]:
+                            self.stats["strategy_metrics"][strategy_name]["qualified"] += 1
+                        if tf in self.stats["timeframe_metrics"]:
+                            self.stats["timeframe_metrics"][tf]["qualified"] += 1
+                        self.log_opportunity(signal_id, symbol, side, fresh_metrics, "ACCEPTED", "ALL_GATES_PASSED")
+                        
+                        # Format strictly for Binance execution to prevent LOT_SIZE Filter Failure
+                        step_size = filters.get("stepSize", 1.0)
+                        precision = 0
+                        if '.' in str(step_size):
+                            precision = len(str(step_size).rstrip('0').split('.')[1])
+                        qty_str = f"{qty:.{precision}f}"
+                        
+                        logger.info(f"[EXECUTION_ATTEMPTED] {strategy_name} {side} {qty_str} {symbol} @ ~{current_price} | SignalID: {signal_id}")
+                        self.stats["EXECUTION_ELIGIBLE"] += 1
+                        
+                        self.telemetry.record_execution_event({
+                            "event_type": "execution_attempt",
+                            "symbol": symbol,
+                            "strategy": strategy_name,
+                            "timeframe": tf,
+                            "trade_id": signal_id,
+                            "side": side,
+                            "quantity": float(qty_str),
+                            "price": current_price
+                        })
+                        self.telemetry.record_equity_snapshot({
+                            "trigger_event": "ORDER_SUBMISSION",
+                            "total_equity": self.current_equity,
+                            "cash": self.current_equity,
+                            "open_positions": len(self.active_positions)
+                        })
+                        
+                        if self.panic_active():
+                            self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                            self.log_opportunity(signal_id, symbol, side, {"reason": "MANUAL_PANIC_SWITCH"}, "REJECTED", "MANUAL_PANIC_SWITCH")
+                            logger.warning("[PANIC] Manual kill-switch active — order submission blocked (OCO protection unaffected)")
+                            continue
+
+                        try:
+                            if TRADING_MODE == "FUTURES":
+                                from execution import place_futures_market_order
+                                leverage = getattr(config, "FUTURES_LEVERAGE", 5)
+                                order_res = place_futures_market_order(
+                                    strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp, client_order_id=signal_id, leverage=leverage
+                                )
+                            else:
+                                order_res = place_market_order(
+                                    strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp, client_order_id=signal_id
+                                )
+                            if order_res:
+                                self.stats["ORDERS_SUBMITTED"] += 1
+                                order_status = str(order_res.get("status", "")).upper()
+                                if order_status in ("FILLED", "PARTIALLY_FILLED") or order_res.get("_executed_qty", 0) > 0:
+                                    self.stats["ORDERS_FILLED"] += 1
+                                if strategy_name in self.stats["strategy_metrics"]:
+                                    self.stats["strategy_metrics"][strategy_name]["executed"] += 1
+                                if tf in self.stats["timeframe_metrics"]:
+                                    self.stats["timeframe_metrics"][tf]["executed"] += 1
+                                actual_price = order_res.get("_actual_price", current_price)
+                                executed_qty = float(order_res.get("_executed_qty", qty_str))
+                                entry_oid = str(order_res.get("orderId", ""))
+                                notional = actual_price * executed_qty
+                                est_fee = notional * 0.001
+                                
+                                logger.info(f"[ORDER_FILLED] {symbol} {side} {executed_qty} @ {actual_price:.4f} | OrderID: {entry_oid} | SignalID: {signal_id}")
+
+                                # Partial fill detection: warn if filled quantity < 95% of requested
+                                proposed_qty = float(qty_str)
+                                if proposed_qty > 0 and executed_qty / proposed_qty < 0.95:
+                                    fill_pct = (executed_qty / proposed_qty) * 100
+                                    logger.warning(
+                                        f"[PARTIAL_FILL] {symbol} {side} filled {fill_pct:.1f}% of proposed qty. "
+                                        f"Requested: {proposed_qty}, Executed: {executed_qty}"
+                                    )
+                                    self.telemetry.record_execution_event({
+                                        "event_type": "partial_fill_detected",
+                                        "symbol": symbol,
+                                        "trade_id": signal_id,
+                                        "proposed_qty": proposed_qty,
+                                        "executed_qty": executed_qty,
+                                        "fill_pct": round(fill_pct, 2)
+                                    })
+                                
+                                self.active_positions[symbol] = {
+                                    "strategy": strategy_name,
+                                    "symbol": symbol,
+                                    "side": side,
+                                    "quantity": executed_qty,
+                                    "entry_price": actual_price,
+                                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                                    "sl": sl,
+                                    "tp": tp,
+                                    "status": "OPEN",
+                                    "entry_client_id": signal_id
+                                }
+                                self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
+                                
+                                # Telemetry Recording
                                 self.telemetry.record_execution_event({
-                                    "event_type": "partial_fill_detected",
+                                    "event_type": "order_filled",
                                     "symbol": symbol,
                                     "trade_id": signal_id,
-                                    "proposed_qty": proposed_qty,
-                                    "executed_qty": executed_qty,
-                                    "fill_pct": round(fill_pct, 2)
+                                    "order_id": entry_oid,
+                                    "strategy": strategy_name,
+                                    "timeframe": tf,
+                                    "side": side,
+                                    "quantity": executed_qty,
+                                    "price": actual_price
                                 })
-                            
-                            self.active_positions[symbol] = {
-                                "strategy": strategy_name,
-                                "symbol": symbol,
-                                "side": side,
-                                "quantity": executed_qty,
-                                "entry_price": actual_price,
-                                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-                                "sl": sl,
-                                "tp": tp,
-                                "status": "OPEN",
-                                "entry_client_id": signal_id
-                            }
-                            self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
-                            
-                            # Telemetry Recording
-                            self.telemetry.record_execution_event({
-                                "event_type": "order_filled",
-                                "symbol": symbol,
-                                "trade_id": signal_id,
-                                "order_id": entry_oid,
-                                "strategy": strategy_name,
-                                "timeframe": tf,
-                                "side": side,
-                                "quantity": executed_qty,
-                                "price": actual_price
-                            })
-                            self.telemetry.record_trade_event({
-                                "trade_id": signal_id,
-                                "symbol": symbol,
-                                "strategy": strategy_name,
-                                "timeframe": tf,
-                                "side": side,
-                                "status": "OPEN",
-                                "entry_order_id": entry_oid,
-                                "entry_price": actual_price,
-                                "average_entry_price": actual_price,
-                                "quantity": executed_qty,
-                                "notional": notional,
-                                "stop_loss": sl,
-                                "take_profit": tp,
-                                "entry_fee": est_fee,
-                                "risk_amount": notional * 0.005,
-                                "expected_gross_return": fresh_metrics.get("gross_edge", 0.0),
-                                "expected_net_return": fresh_metrics.get("expected_net_return", 0.0),
-                                "profitability_decision": "ACCEPTED",
-                                "risk_decision": "ACCEPTED",
-                                "equity_before_entry": self.current_equity,
-                                "equity_after_entry": self.current_equity,
-                                "cash_before_entry": self.current_equity,
-                                "cash_after_entry": max(0.0, self.current_equity - notional)
-                            })
-                            self.telemetry.record_position_update({
-                                "position_id": symbol,
-                                "trade_id": signal_id,
-                                "symbol": symbol,
-                                "strategy": strategy_name,
-                                "timeframe": tf,
-                                "side": side,
-                                "entry_price": actual_price,
-                                "quantity": executed_qty,
-                                "stop_loss": sl,
-                                "take_profit": tp,
-                                "status": "OPEN"
-                            })
-                            self.telemetry.record_balance_event({
-                                "event_type": "TRADE_OPEN",
-                                "reason": f"BUY {symbol} {strategy_name}",
-                                "balance_before": self.current_equity,
-                                "balance_after": max(0.0, self.current_equity - notional),
-                                "delta": -notional,
-                                "trade_id": signal_id,
-                                "symbol": symbol,
-                                "strategy": strategy_name,
-                                "timeframe": tf
-                            })
-                            self.telemetry.record_equity_snapshot({
-                                "trigger_event": "POSITION_OPEN",
-                                "total_equity": self.current_equity,
-                                "cash": max(0.0, self.current_equity - notional),
-                                "crypto_holdings_value": notional,
-                                "open_positions": len(self.active_positions)
-                            })
-                        else:
-                            self.stats["EXECUTION_REJECTED"] += 1
-                            logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: LOCAL_ORDER_BLOCKED")
-                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", "LOCAL_ORDER_BLOCKED", current_price=current_price)
+                                self.telemetry.record_trade_event({
+                                    "trade_id": signal_id,
+                                    "symbol": symbol,
+                                    "strategy": strategy_name,
+                                    "timeframe": tf,
+                                    "side": side,
+                                    "status": "OPEN",
+                                    "entry_order_id": entry_oid,
+                                    "entry_price": actual_price,
+                                    "average_entry_price": actual_price,
+                                    "quantity": executed_qty,
+                                    "notional": notional,
+                                    "stop_loss": sl,
+                                    "take_profit": tp,
+                                    "entry_fee": est_fee,
+                                    "risk_amount": notional * 0.005,
+                                    "expected_gross_return": fresh_metrics.get("gross_edge", 0.0),
+                                    "expected_net_return": fresh_metrics.get("expected_net_return", 0.0),
+                                    "profitability_decision": "ACCEPTED",
+                                    "risk_decision": "ACCEPTED",
+                                    "equity_before_entry": self.current_equity,
+                                    "equity_after_entry": self.current_equity,
+                                    "cash_before_entry": self.current_equity,
+                                    "cash_after_entry": max(0.0, self.current_equity - notional)
+                                })
+                                self.telemetry.record_position_update({
+                                    "position_id": symbol,
+                                    "trade_id": signal_id,
+                                    "symbol": symbol,
+                                    "strategy": strategy_name,
+                                    "timeframe": tf,
+                                    "side": side,
+                                    "entry_price": actual_price,
+                                    "quantity": executed_qty,
+                                    "stop_loss": sl,
+                                    "take_profit": tp,
+                                    "status": "OPEN"
+                                })
+                                self.telemetry.record_balance_event({
+                                    "event_type": "TRADE_OPEN",
+                                    "reason": f"BUY {symbol} {strategy_name}",
+                                    "balance_before": self.current_equity,
+                                    "balance_after": max(0.0, self.current_equity - notional),
+                                    "delta": -notional,
+                                    "trade_id": signal_id,
+                                    "symbol": symbol,
+                                    "strategy": strategy_name,
+                                    "timeframe": tf
+                                })
+                                self.telemetry.record_equity_snapshot({
+                                    "trigger_event": "POSITION_OPEN",
+                                    "total_equity": self.current_equity,
+                                    "cash": max(0.0, self.current_equity - notional),
+                                    "crypto_holdings_value": notional,
+                                    "open_positions": len(self.active_positions)
+                                })
+                            else:
+                                self.stats["EXECUTION_REJECTED"] += 1
+                                logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: LOCAL_ORDER_BLOCKED")
+                                self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", "LOCAL_ORDER_BLOCKED", current_price=current_price)
+                                self.telemetry.record_execution_event({
+                                    "event_type": "order_failed",
+                                    "symbol": symbol,
+                                    "trade_id": signal_id,
+                                    "strategy": strategy_name,
+                                    "timeframe": tf,
+                                    "status": "FAILED",
+                                    "error_code": "LOCAL_ORDER_BLOCKED",
+                                    "error_message": "Local order dispatch returned None"
+                                })
+                                self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
+                        except ZeroFillError as zfe:
+                            self.stats["ORDERS_SUBMITTED"] += 1
+                            self.stats["ORDERS_FAILED"] += 1
+                            logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: ZERO_FILL")
+                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", "ZERO_FILL", current_price=current_price)
                             self.telemetry.record_execution_event({
                                 "event_type": "order_failed",
                                 "symbol": symbol,
@@ -1186,60 +1206,47 @@ class TestnetService:
                                 "strategy": strategy_name,
                                 "timeframe": tf,
                                 "status": "FAILED",
-                                "error_code": "LOCAL_ORDER_BLOCKED",
-                                "error_message": "Local order dispatch returned None"
+                                "error_code": "ZERO_FILL",
+                                "error_message": str(zfe)
                             })
                             self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
-                    except ZeroFillError as zfe:
-                        self.stats["ORDERS_SUBMITTED"] += 1
-                        self.stats["ORDERS_FAILED"] += 1
-                        logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: ZERO_FILL")
-                        self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", "ZERO_FILL", current_price=current_price)
-                        self.telemetry.record_execution_event({
-                            "event_type": "order_failed",
-                            "symbol": symbol,
-                            "trade_id": signal_id,
-                            "strategy": strategy_name,
-                            "timeframe": tf,
-                            "status": "FAILED",
-                            "error_code": "ZERO_FILL",
-                            "error_message": str(zfe)
-                        })
-                        self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
-                    except BinanceAPIException as e:
-                        self.stats["ORDERS_SUBMITTED"] += 1
-                        self.stats["ORDERS_FAILED"] += 1
-                        logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: BINANCE_API_ERROR_{e.status_code}")
-                        self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", f"BINANCE_API_ERROR_{e.status_code}", current_price=current_price)
-                        self.telemetry.record_execution_event({
-                            "event_type": "order_failed",
-                            "symbol": symbol,
-                            "trade_id": signal_id,
-                            "strategy": strategy_name,
-                            "timeframe": tf,
-                            "status": "FAILED",
-                            "error_code": f"BINANCE_API_ERROR_{e.status_code}",
-                            "error_message": str(e)
-                        })
-                        self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
-                    except Exception as e:
-                        # Unhandled execution errors
-                        self.stats["ORDERS_SUBMITTED"] += 1
-                        self.stats["ORDERS_FAILED"] += 1
-                        logger.error(f"[ORDER_FAILED] {symbol} {side} | Reason: UNHANDLED_ERROR: {e}")
-                        self.telemetry.record_execution_event({
-                            "event_type": "order_failed",
-                            "symbol": symbol,
-                            "trade_id": signal_id,
-                            "strategy": strategy_name,
-                            "timeframe": tf,
-                            "status": "FAILED",
-                            "error_code": "UNHANDLED_ERROR",
-                            "error_message": str(e)
-                        })
-                        self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
-                        
-                    self._save_state()
+                        except BinanceAPIException as e:
+                            self.stats["ORDERS_SUBMITTED"] += 1
+                            self.stats["ORDERS_FAILED"] += 1
+                            logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: BINANCE_API_ERROR_{e.status_code}")
+                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", f"BINANCE_API_ERROR_{e.status_code}", current_price=current_price)
+                            self.telemetry.record_execution_event({
+                                "event_type": "order_failed",
+                                "symbol": symbol,
+                                "trade_id": signal_id,
+                                "strategy": strategy_name,
+                                "timeframe": tf,
+                                "status": "FAILED",
+                                "error_code": f"BINANCE_API_ERROR_{e.status_code}",
+                                "error_message": str(e)
+                            })
+                            self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
+                        except Exception as e:
+                            # Unhandled execution errors
+                            self.stats["ORDERS_SUBMITTED"] += 1
+                            self.stats["ORDERS_FAILED"] += 1
+                            logger.error(f"[ORDER_FAILED] {symbol} {side} | Reason: UNHANDLED_ERROR: {e}")
+                            self.telemetry.record_execution_event({
+                                "event_type": "order_failed",
+                                "symbol": symbol,
+                                "trade_id": signal_id,
+                                "strategy": strategy_name,
+                                "timeframe": tf,
+                                "status": "FAILED",
+                                "error_code": "UNHANDLED_ERROR",
+                                "error_message": str(e)
+                            })
+                            self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
+                            
+                        self._save_state()
+            except Exception as exec_loop_err:
+                logger.critical(f"[EXECUTION_LOOP_ERROR] Uncaught exception in execution loop: {exec_loop_err}", exc_info=True)
+                time.sleep(5)
 
     def _trade_target_monitor(self):
         """Monitor trade count and log progress toward 100-trade target."""

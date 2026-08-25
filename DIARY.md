@@ -254,7 +254,7 @@ TESTNET ONLY
 
 ---
 
-# DAY 11 — 2026-08-24 (TODAY)
+# DAY 11 — 2026-08-24
 ## Objectives
 - Implement high-frequency algorithmic scalping infrastructure on Binance Futures Testnet across all 16 assets and 6 timeframes (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`).
 - Build automated Strategy Factory generating 100+ systematic strategy variations across indicators and dynamic ATR risk-reward ratios.
@@ -308,3 +308,35 @@ TESTNET ONLY
 - Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~82s)**.
 - Live Deployment: `/health` returns 200 OK (`engine: online`, `engine_healthy: true`).
 - Live Positions: Real-time rendering of all live active Futures positions and mark-to-market valuations.
+
+---
+
+# DAY 12 — 2026-08-25 (TODAY)
+## Objectives
+- Resolve scanner stalling issue where scanning loop stalled on Binance 429 rate limit or websocket stream interruption.
+- Implement crash-proof exception handling across all scanner loops, websocket dispatchers, and order execution threads.
+- Implement automatic 60-second backoff pause across both market data and account REST clients upon receiving HTTP 429 or 418 rate-limit responses.
+- Clear stale candle caches from previous sessions on boot and ensure `last_candle_close` timestamps update immediately upon connecting to websockets.
+- Run complete test suite twice (100% pass required), merge to `master`, trigger Render deployment, and verify live operational telemetry.
+
+## Work Completed
+- **Task 1: Scanner Loop & Service Crash-Proofing**:
+  - Wrapped `MarketScanner._health_monitor_loop()` in `try...except Exception` blocks with 5s sleep and retry logic to prevent background thread death.
+  - Wrapped `MarketScanner._handle_socket_message()` in top-level `try...except Exception` handling to isolate malformed payloads or socket decode errors without interrupting stream processing.
+  - Wrapped `TestnetService.on_candle_closed()` in outer exception isolation blocks to prevent any indicator or strategy calculation errors from bubbling up to the websocket client.
+  - Wrapped `TestnetService.execution_loop()` in a top-level `try...except Exception` block with a 5-second backoff and recovery loop so unexpected order placement errors never crash the execution thread.
+- **Task 2: Global Binance API Rate Limit Safety (429 & 418 Protection)**:
+  - Added `_execute_with_rate_limit_protection()` helper in `data_client.py` wrapping all REST endpoints (`get_ticker`, `get_klines`, `futures_klines`, `futures_mark_price`, etc.).
+  - Added identical 60-second global pause in `account_client.py` wrapping `futures_account()`, `futures_position_information()`, `get_open_orders()`, and `get_balances()`.
+  - Upon encountering HTTP status `429` / `418` or rate-limit exception messages, all outgoing requests across all threads automatically pause for 60 seconds before safely retrying.
+- **Task 3: Boot Cache Clearing & Fresh Timestamps**:
+  - Updated `MarketScanner.start()` to explicitly clear `self.candle_cache`, `self.last_market_update`, and `self.last_candle_close` under cache lock upon startup.
+  - Initialized `last_market_update` and `last_candle_close` to `datetime.datetime.utcnow()` on boot for all discovered symbols and timeframes.
+- **Task 4: Quality Control & Deployment**:
+  - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
+  - Merged feature branch `fix/stalled-scanner-crash-proof` into `master` and pushed to GitHub.
+
+## Verification
+- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~59s)**.
+- Live Deployment: Render deployment triggered and active; `/health` returns 200 OK.
+- Fresh Telemetry: Scanner evaluations actively incrementing with today's timestamps (2026-08-25).

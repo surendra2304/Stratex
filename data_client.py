@@ -11,6 +11,12 @@ from binance.client import Client
 
 from config import TRADING_MODE
 
+import time
+import logging
+from binance.exceptions import BinanceAPIException
+
+logger = logging.getLogger("data_client")
+
 # Approved read-only methods that this adapter may proxy
 _APPROVED_METHODS = frozenset([
     "get_ticker",
@@ -27,6 +33,40 @@ _APPROVED_METHODS = frozenset([
     "futures_ticker",
     "futures_mark_price",
 ])
+
+# Global rate limit tracker across instances
+_LAST_429_PAUSE_UNTIL = 0.0
+
+
+def _execute_with_rate_limit_protection(func, *args, **kwargs):
+    """Executes a Binance API call with automatic 429/418 rate-limit protection."""
+    global _LAST_429_PAUSE_UNTIL
+    now = time.time()
+    if now < _LAST_429_PAUSE_UNTIL:
+        wait_left = _LAST_429_PAUSE_UNTIL - now
+        logger.warning(f"[RATE_LIMIT_SAFETY] In active 429 backoff. Pausing API call for {wait_left:.1f}s...")
+        time.sleep(min(wait_left, 60.0))
+
+    try:
+        return func(*args, **kwargs)
+    except BinanceAPIException as e:
+        if e.status_code in (429, 418) or "429" in str(e) or "418" in str(e) or "Way too many requests" in str(e):
+            logger.critical(f"[RATE_LIMIT_HIT] 🚨 Binance API {e.status_code} Rate Limit Hit! Pausing all requests for 60s...")
+            _LAST_429_PAUSE_UNTIL = time.time() + 60.0
+            time.sleep(60.0)
+            # Retry once after cooling off
+            try:
+                return func(*args, **kwargs)
+            except Exception as retry_err:
+                logger.error(f"[RATE_LIMIT_RETRY_FAILED] Call failed after 60s pause: {retry_err}")
+                return None
+        raise
+    except Exception as e:
+        if "429" in str(e) or "418" in str(e):
+            logger.critical(f"[RATE_LIMIT_HIT] 🚨 Rate Limit in Exception: {e}. Pausing all requests for 60s...")
+            _LAST_429_PAUSE_UNTIL = time.time() + 60.0
+            time.sleep(60.0)
+        raise
 
 
 class MarketDataClient:
@@ -67,73 +107,73 @@ class MarketDataClient:
         """All symbol 24hr ticker price change statistics."""
         if not self.is_available():
             return None
-        return self.__client.get_ticker(**kwargs)
+        return _execute_with_rate_limit_protection(self.__client.get_ticker, **kwargs)
 
     def get_symbol_ticker(self, **kwargs):
         """Latest price for a symbol."""
         if not self.is_available():
             return None
-        return self.__client.get_symbol_ticker(**kwargs)
+        return _execute_with_rate_limit_protection(self.__client.get_symbol_ticker, **kwargs)
 
     def get_klines(self, **kwargs):
         """Kline/Candlestick data for a symbol."""
         if not self.is_available():
             return None
-        return self.__client.get_klines(**kwargs)
+        return _execute_with_rate_limit_protection(self.__client.get_klines, **kwargs)
 
     def get_historical_klines(self, symbol, interval, start_str, end_str=None, **kwargs):
         """Historical klines (candles) for a symbol."""
         if not self.is_available():
             return None
-        return self.__client.get_historical_klines(symbol, interval, start_str, end_str, **kwargs)
+        return _execute_with_rate_limit_protection(self.__client.get_historical_klines, symbol, interval, start_str, end_str, **kwargs)
 
     def futures_funding_rate(self, **kwargs):
         """Get funding rate history."""
         if not self.is_available():
             return None
-        return self.__client.futures_funding_rate(**kwargs)
+        return _execute_with_rate_limit_protection(self.__client.futures_funding_rate, **kwargs)
 
     def get_exchange_info(self, **kwargs):
         """Current exchange trading rules and symbol information."""
         if not self.is_available():
             return None
-        return self.__client.get_exchange_info(**kwargs)
+        return _execute_with_rate_limit_protection(self.__client.get_exchange_info, **kwargs)
 
     def futures_klines(self, **kwargs):
         """Futures klines/candlestick data for a symbol (/fapi/v1/klines)."""
         if not self.is_available():
             return None
-        return self.__client.futures_klines(**kwargs)
+        return _execute_with_rate_limit_protection(self.__client.futures_klines, **kwargs)
 
     def futures_historical_klines(self, symbol, interval, start_str, end_str=None, **kwargs):
         """Historical futures klines for a symbol."""
         if not self.is_available():
             return None
-        return self.__client.futures_historical_klines(symbol, interval, start_str, end_str, **kwargs)
+        return _execute_with_rate_limit_protection(self.__client.futures_historical_klines, symbol, interval, start_str, end_str, **kwargs)
 
     def futures_exchange_info(self, **kwargs):
         """Current futures exchange trading rules and symbol information (/fapi/v1/exchangeInfo)."""
         if not self.is_available():
             return None
-        return self.__client.futures_exchange_info(**kwargs)
+        return _execute_with_rate_limit_protection(self.__client.futures_exchange_info, **kwargs)
 
     def futures_symbol_ticker(self, **kwargs):
         """Latest futures price for a symbol (/fapi/v1/ticker/price)."""
         if not self.is_available():
             return None
-        return self.__client.futures_symbol_ticker(**kwargs)
+        return _execute_with_rate_limit_protection(self.__client.futures_symbol_ticker, **kwargs)
 
     def futures_ticker(self, **kwargs):
         """24-hour futures ticker price change statistics (/fapi/v1/ticker/24hr)."""
         if not self.is_available():
             return None
-        return self.__client.futures_ticker(**kwargs)
+        return _execute_with_rate_limit_protection(self.__client.futures_ticker, **kwargs)
 
     def futures_mark_price(self, **kwargs):
         """Latest futures mark price and funding rate (/fapi/v1/premiumIndex)."""
         if not self.is_available():
             return None
-        return self.__client.futures_mark_price(**kwargs)
+        return _execute_with_rate_limit_protection(self.__client.futures_mark_price, **kwargs)
 
     # --- Explicit Block: No other methods allowed ---
     def __getattr__(self, item):
