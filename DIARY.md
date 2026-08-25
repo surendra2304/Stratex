@@ -342,9 +342,16 @@ TESTNET ONLY
   - Synced total equity computation to `usdt_cash + unrealized_pnl + crypto_trade_val` across `/api/status`.
   - Corrected entry price mapping for Binance Futures positions in `dashboard.py`.
   - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
+- **Task 6: Adjusted Scalper Exit Math (Prevent Noise Stop-Outs)**:
+  - Inverted the risk/reward math in `strategy_aggressive_scalper.py` across all timeframes (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`).
+  - Increased Stop Loss (SL) to `1.5 × ATR(14)` to prevent premature stop-outs from 1-minute market noise and wick volatility.
+  - Decreased Take Profit (TP) to `0.75 × ATR(14)` to lock in profits rapidly before price reversals.
+  - Updated test assertions in `tests/test_strategy_aggressive_scalper.py` to rigorously validate exact SL/TP formula and risk-reward ratio (`0.5`).
+  - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
 
 ## Verification
-- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~74s)**.
+- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~60s and ~67s)**.
 - Live Deployment: Render deployment triggered and active; `/health` returns 200 OK.
+- Scalper Exit Math: All newly generated signals and trades execute with `1.5 × ATR` Stop Loss and `0.75 × ATR` Take Profit.
 - PnL & Positions Sync: Real-time calculation and synchronization of `unrealized_pnl` matching live positions in `/api/status`.
 - Fresh Telemetry: Scanner evaluations actively incrementing with today's timestamps (2026-08-25).

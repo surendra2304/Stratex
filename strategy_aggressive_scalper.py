@@ -3,13 +3,13 @@ strategy_aggressive_scalper.py — Multi-Timeframe Hyper-Aggressive Scalper (Fut
 
 ARCHITECTURE:
   - Timeframes: 1m, 5m, 15m, 30m, 1h, 4h
-  - Logic: Fast EMA(9) crosses Slow EMA(21) on any active timeframe.
-      * Long Entry:  EMA(9) crosses above EMA(21) -> BUY
-      * Short Entry: EMA(9) crosses below EMA(21) -> SELL
+  - Logic: Hyper-frequency green/red candle close on any active timeframe.
+      * Long Entry:  Close > Open -> BUY
+      * Short Entry: Close < Open -> SELL
   - Exits:
-      * Stop Loss (SL):   0.5 × ATR(14)
-      * Take Profit (TP): 1.0 × ATR(14) (Risk/Reward = 1:2.0)
-  - Filters: None (Pure multi-timeframe price action crossover)
+      * Stop Loss (SL):   1.5 × ATR(14) (Room to breathe against 1m noise)
+      * Take Profit (TP): 0.75 × ATR(14) (Fast profit capture before reversal)
+  - Filters: None (Pure multi-timeframe price action)
 """
 
 from collections import namedtuple
@@ -24,9 +24,9 @@ class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_typ
 
 _STRATEGY_TYPE      = "RULE_BASED"
 _OOS_WIN_RATE_PRIOR = 0.50
-_RR_RATIO           = 2.0
-_SL_ATR             = 0.5
-_TP_ATR             = 1.0
+_RR_RATIO           = 0.5
+_SL_ATR             = 1.5
+_TP_ATR             = 0.75
 
 
 def compute_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
@@ -53,7 +53,7 @@ def get_signal(df: pd.DataFrame, **kwargs) -> SignalResult:
     Hyper-frequency price action signal generator:
     - Candle closes GREEN (Close > Open) -> BUY (Long)
     - Candle closes RED (Close < Open)   -> SELL (Short)
-    Exits: SL = 0.5 × ATR(14), TP = 1.0 × ATR(14)
+    Exits: SL = 1.5 × ATR(14), TP = 0.75 × ATR(14)
     """
     _NO_SIGNAL = SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
