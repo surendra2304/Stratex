@@ -568,7 +568,7 @@ async function fetchPositionsData() {
     safeSetText('pos2-total-val', formatCurrency(totalNotional));
     safeSetText('pos2-upnl', (Number(statusData.unrealized_pnl || 0) >= 0 ? '+' : '') + formatCurrency(statusData.unrealized_pnl || 0));
     const upnlEl = $('pos2-upnl'); if (upnlEl) upnlEl.style.color = Number(statusData.unrealized_pnl || 0) >= 0 ? 'var(--profit-green)' : 'var(--loss-red)';
-    safeSetText('pos2-active-ratio', activeRatio.toFixed(1) + '%');
+    safeSetText('pos2-active-ratio', `${positions.length} Open`);
 
     if (positions.length === 0) {
         tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding: 24px;">No Active Open Positions — Risk Engine standing by.</td></tr>';

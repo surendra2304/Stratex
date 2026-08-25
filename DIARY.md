@@ -357,10 +357,17 @@ TESTNET ONLY
   - Synced `TOTAL POSITION VALUE` metric to compute directly from the sum of active positions' mark notional value (`Σ quantity × current_price`), eliminating the mismatch between position initial margin and gross trade exposure.
   - Synced `ACTIVE POSITIONS %` to `(total_notional / equity) × 100`.
   - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
+- **Task 9: UI Stats Formatting & Closed Trade Ledger Sync**:
+  - Updated `static/index.html` and `static/app.js` to change the Positions page "Active Positions" display from confusing percentages to exact integer open position counts followed by `"Open"` (e.g. `8 Open`).
+  - Changed KPI label from "TOTAL POSITION VALUE" to "TOTAL NOTIONAL VALUE" in `static/index.html` to clearly reflect leveraged position notional sizing.
+  - Hardened `testnet_engine/service.py` position monitoring loop to query Binance Futures account endpoints (`futures_account()`) when in Futures mode, keeping ledger reconciliation active.
+  - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
 
 ## Verification
-- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~66s and ~64s)**.
+- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~68s and ~68s)**.
 - Live Deployment: Render deployment triggered and active; `/health` returns 200 OK.
+- UI Stats: Positions header card clearly displays exact integer count (e.g., `8 Open`) and "TOTAL NOTIONAL VALUE".
+- Closed Trades Ledger: Verified ledger synchronization logic and `/api/trades` parsing.
 - Position Valuation Sync: Total Position Value header card dynamically matches the exact dollar sum of active trades in the positions table.
 - Positions SL & TP Columns: Fully populated with active quantitative dollar values for all open positions.
 - Scalper Exit Math: All newly generated signals and trades execute with `1.5 × ATR` Stop Loss and `0.75 × ATR` Take Profit.

@@ -742,7 +742,7 @@ def _get_trades_data():
     seen_trade_keys = set()
     
     # 1. Parse closed trades from ledger
-    ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
+    ledger_file = os.getenv("TESTNET_LEDGER_FILE", "paper_trade_ledger.jsonl" if getattr(config, "TRADING_MODE", "TESTNET").upper() == "PAPER" else "testnet_trade_ledger.jsonl")
     if os.path.exists(ledger_file):
         with open(ledger_file, "r") as f:
             for line in f:
@@ -755,7 +755,7 @@ def _get_trades_data():
                     strategy = str(trade.get("strategy", "")).upper()
                     status = str(trade.get("status", "")).upper()
                     
-                    INVALID_PROVENANCES = ["TEST", "PAPER", "SYNTHETIC", "SYNTHETIC_GENERATED", "UNVERIFIED", "MOCK", "RECOVERED_WITHOUT_BINANCE_PROOF"]
+                    INVALID_PROVENANCES = ["TEST", "SYNTHETIC", "SYNTHETIC_GENERATED", "UNVERIFIED", "MOCK", "RECOVERED_WITHOUT_BINANCE_PROOF"]
                     if source in INVALID_PROVENANCES or prov in INVALID_PROVENANCES or strategy in INVALID_PROVENANCES or status == "OPEN":
                         continue
                     

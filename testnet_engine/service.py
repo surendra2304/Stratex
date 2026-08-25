@@ -1499,11 +1499,15 @@ class TestnetService:
         while True:
             try:
                 # 1. Update Equity
-                account = self.client.get_account()
-                usdt_balance = next((item for item in account['balances'] if item['asset'] == 'USDT'), None)
-                actual_binance_balance = 0.0
-                if usdt_balance:
-                    actual_binance_balance = float(usdt_balance['free']) + float(usdt_balance['locked'])
+                if TRADING_MODE == "FUTURES":
+                    account = self.client.futures_account() if hasattr(self.client, "futures_account") else {}
+                    actual_binance_balance = float(account.get("availableBalance", account.get("totalWalletBalance", 0.0)))
+                else:
+                    account = self.client.get_account()
+                    usdt_balance = next((item for item in account.get('balances', []) if item['asset'] == 'USDT'), None)
+                    actual_binance_balance = 0.0
+                    if usdt_balance:
+                        actual_binance_balance = float(usdt_balance['free']) + float(usdt_balance['locked'])
                     
                 # 2. Reconcile Positions
                 from execution import monitor_open_trades
