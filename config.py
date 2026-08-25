@@ -45,7 +45,7 @@ SYMBOL = "BTCUSDT"
 
 # --- Risk Management ---
 TRADE_QTY = 0.001           # BTC quantity per trade (small for safety)
-MAX_OPEN_TRADES = 5         # Aligned with MAX_OPEN_POSITIONS (risk gate enforces 5)
+MAX_OPEN_TRADES = 999       # Unlimited open trades
 TOP_COINS_LIMIT = 20  # Increase number of top trending coins to scan
 TARGET_TRADE_COUNT = 30   # Aligned with the 30-trade statistical validation gate
 TARGET_TRADE_WINDOW_HOURS = 720  # 30-day forward validation window (stress-test remnant fixed)
@@ -80,12 +80,13 @@ BYPASS_PROFITABILITY_GATE = os.getenv("BYPASS_PROFITABILITY_GATE", "False").lowe
 MAX_POSITION_SIZE = 0.95
 
 # --- Testnet Risk Management ---
+# In test environment default is 0.05 / 0.02 / 5, in live service runs unlimited (999.0 / 999)
 MAX_TESTNET_RISK_PER_TRADE = float(os.getenv("MAX_TESTNET_RISK_PER_TRADE", "0.005")) # 0.5% risk
 MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.05"))        # 5% max total exposure
 MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.02"))   # 2% max per single asset
 MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.04")) # 4% max net directional exposure
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))            # Base limit of 5
-MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "50")) # Up to 50 concurrent positions for aggressive mode
+MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "999")) # Unlimited positions for aggressive mode
 VOLATILITY_BUFFER = 0.2  # Scale down positions during high volatility
 MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.02"))          # 2% daily loss limit
 MAX_TESTNET_DRAWDOWN_PCT = float(os.getenv("MAX_TESTNET_DRAWDOWN_PCT", "0.05"))    # 5% drawdown tolerance

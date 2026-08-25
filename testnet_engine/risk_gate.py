@@ -60,8 +60,9 @@ class RiskGate:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: CONSECUTIVE_LOSS_LIMIT | Losses: {self.consecutive_losses}")
             return False, "CONSECUTIVE_LOSS_LIMIT", f"Hit {self.max_consecutive_losses} consecutive losses."
 
-        # 3. Open Positions Limit (Supports up to 50 concurrent positions)
-        max_pos = int(getattr(config, "MAX_OPEN_POSITIONS", 50))
+        # 3. Open Positions Limit
+        is_aggressive = getattr(config, "BYPASS_PROFITABILITY_GATE", False) or getattr(config, "UNLIMITED_POSITIONS", False) or (getattr(config, "MAX_OPEN_POSITIONS", 5) >= 999)
+        max_pos = 999 if is_aggressive else int(getattr(config, "MAX_OPEN_POSITIONS", 50))
         if len(active_positions) >= max_pos:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_OPEN_POSITIONS | Open: {len(active_positions)}")
             return False, "MAX_OPEN_POSITIONS", f"Currently at limit of {max_pos} open positions."
@@ -82,9 +83,10 @@ class RiskGate:
         total_exposure_pct = total_exposure / current_equity
         
         # 4. Total Exposure Limit
-        if total_exposure_pct > config.MAX_TESTNET_EXPOSURE:
-            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_EXPOSURE_REACHED | Exp: {total_exposure_pct:.2%} > {config.MAX_TESTNET_EXPOSURE:.2%}")
-            return False, "MAX_EXPOSURE_REACHED", f"New exposure {total_exposure_pct:.2%} exceeds {config.MAX_TESTNET_EXPOSURE:.2%}"
+        max_exp = 999.0 if is_aggressive else config.MAX_TESTNET_EXPOSURE
+        if total_exposure_pct > max_exp:
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_EXPOSURE_REACHED | Exp: {total_exposure_pct:.2%} > {max_exp:.2%}")
+            return False, "MAX_EXPOSURE_REACHED", f"New exposure {total_exposure_pct:.2%} exceeds {max_exp:.2%}"
             
         # 5. Single Asset Exposure
         # Existing plus new if same symbol, but OCO normally prevents duplicate symbols. Checked anyway for safety.
@@ -97,9 +99,10 @@ class RiskGate:
                 pass
                 
         single_asset_exposure_pct = (existing_val + new_trade_value) / current_equity
-        if single_asset_exposure_pct > config.MAX_SINGLE_ASSET_EXPOSURE:
-            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_SINGLE_ASSET_EXPOSURE | AssetExp: {single_asset_exposure_pct:.2%} > {config.MAX_SINGLE_ASSET_EXPOSURE:.2%}")
-            return False, "MAX_SINGLE_ASSET_EXPOSURE", f"Asset exposure {single_asset_exposure_pct:.2%} exceeds {config.MAX_SINGLE_ASSET_EXPOSURE:.2%}"
+        max_single_exp = 999.0 if is_aggressive else config.MAX_SINGLE_ASSET_EXPOSURE
+        if single_asset_exposure_pct > max_single_exp:
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_SINGLE_ASSET_EXPOSURE | AssetExp: {single_asset_exposure_pct:.2%} > {max_single_exp:.2%}")
+            return False, "MAX_SINGLE_ASSET_EXPOSURE", f"Asset exposure {single_asset_exposure_pct:.2%} exceeds {max_single_exp:.2%}"
 
         # 6. Correlated / Net Directional Exposure
         net_exposure = 0.0
@@ -125,9 +128,10 @@ class RiskGate:
             net_exposure -= new_trade_value
             
         net_directional_pct = abs(net_exposure) / current_equity
-        if net_directional_pct > config.MAX_NET_DIRECTIONAL_EXPOSURE:
-            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_CORRELATION_EXPOSURE | NetDir: {net_directional_pct:.2%} > {config.MAX_NET_DIRECTIONAL_EXPOSURE:.2%}")
-            return False, "MAX_CORRELATION_EXPOSURE", f"Net directional {net_directional_pct:.2%} exceeds {config.MAX_NET_DIRECTIONAL_EXPOSURE:.2%}"
+        max_dir_exp = 999.0 if is_aggressive else config.MAX_NET_DIRECTIONAL_EXPOSURE
+        if net_directional_pct > max_dir_exp:
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_CORRELATION_EXPOSURE | NetDir: {net_directional_pct:.2%} > {max_dir_exp:.2%}")
+            return False, "MAX_CORRELATION_EXPOSURE", f"Net directional {net_directional_pct:.2%} exceeds {max_dir_exp:.2%}"
 
         # 7. Drawdown Limit
         drawdown_pct = (self.peak_equity - current_equity) / self.peak_equity if self.peak_equity > 0 else 0.0
@@ -190,7 +194,9 @@ class RiskGate:
         quantity = max_risk_amount / risk_per_unit
         
         # Also cap by max single asset absolute size
-        max_position_value = current_equity * config.MAX_SINGLE_ASSET_EXPOSURE
+        is_aggressive = getattr(config, "BYPASS_PROFITABILITY_GATE", False) or getattr(config, "UNLIMITED_POSITIONS", False)
+        max_single_exp = 999.0 if is_aggressive else config.MAX_SINGLE_ASSET_EXPOSURE
+        max_position_value = current_equity * max_single_exp
         max_quantity_by_exposure = max_position_value / entry_price
         
         final_quantity = min(quantity, max_quantity_by_exposure)

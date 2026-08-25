@@ -335,8 +335,16 @@ TESTNET ONLY
 - **Task 4: Quality Control & Deployment**:
   - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
   - Merged feature branch `fix/stalled-scanner-crash-proof` into `master` and pushed to GitHub.
+- **Task 5: Removal of Position & Exposure Limits & Dashboard PnL Sync**:
+  - Configured `MAX_OPEN_TRADES = 999` and `MAX_OPEN_POSITIONS_AGGRESSIVE = 999` in `config.py`.
+  - Updated `testnet_engine/risk_gate.py` to allow unlimited positions (999) and unlimited exposure (999.0%) when operating in aggressive mode, ensuring the execution engine never rejects signals with `MAX_OPEN_POSITIONS` or `MAX_EXPOSURE_REACHED`.
+  - Fixed dashboard accounting math in `dashboard.py`: looped across all active positions in `open_pos_list` and set `unrealized_pnl` to their exact sum.
+  - Synced total equity computation to `usdt_cash + unrealized_pnl + crypto_trade_val` across `/api/status`.
+  - Corrected entry price mapping for Binance Futures positions in `dashboard.py`.
+  - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
 
 ## Verification
-- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~59s)**.
+- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~74s)**.
 - Live Deployment: Render deployment triggered and active; `/health` returns 200 OK.
+- PnL & Positions Sync: Real-time calculation and synchronization of `unrealized_pnl` matching live positions in `/api/status`.
 - Fresh Telemetry: Scanner evaluations actively incrementing with today's timestamps (2026-08-25).

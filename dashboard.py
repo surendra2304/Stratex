@@ -334,6 +334,7 @@ def get_live_account_and_holdings(force_refresh=False):
                             "free": 0.0,
                             "locked": abs(pos_amt),
                             "total_quantity": abs(pos_amt),
+                            "entry_price": entry_p,
                             "price": mark_p,
                             "usd_value": abs(pos_amt) * mark_p,
                             "is_bot_trade": True,
@@ -569,7 +570,7 @@ def get_status():
                 open_pos_list.append({
                     "symbol": fp.get("symbol"),
                     "side": fp.get("side", "LONG"),
-                    "entry_price": fp.get("price", 0.0),
+                    "entry_price": fp.get("entry_price", fp.get("price", 0.0)),
                     "current_price": fp.get("price", 0.0),
                     "quantity": fp.get("total_quantity", 0.0),
                     "unrealized_pnl": fp.get("unrealized_pnl", 0.0),
@@ -621,12 +622,16 @@ def get_status():
         if first_eq > 0:
             equity_change = round(((today_equities[-1] - first_eq) / first_eq) * 100, 2)
 
-    # Total Valuation: Liquid USDT Cash + Current Market Value of Active Crypto Trades
-    # In Futures: Total Equity = Total Wallet Balance + Unrealized PnL (from Binance futures_account)
+    # Sum current PnL across all active open positions
+    if open_pos_list:
+        unrealized_pnl = sum(float(p.get("unrealized_pnl", 0.0)) for p in open_pos_list)
+
+    # Total Valuation: cash + unrealized_pnl + crypto_holdings_value
+    # In Futures: Total Equity = Liquid USDT Cash + Unrealized PnL (or cash + unrealized_pnl + crypto_trade_val)
     if getattr(config, "TRADING_MODE", "TESTNET").upper() == "FUTURES" and usdt_cash > 0:
         total_equity = usdt_cash + unrealized_pnl
     elif usdt_cash > 0 or crypto_trade_val > 0:
-        total_equity = usdt_cash + crypto_trade_val
+        total_equity = usdt_cash + unrealized_pnl + crypto_trade_val
     else:
         base_cap = float(port.get("starting_equity", port.get("starting_balance", 10000.0))) if (isinstance(port, dict) if 'port' in locals() else False) else 10000.0
         total_equity = base_cap + realized_pnl + unrealized_pnl
