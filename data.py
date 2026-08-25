@@ -1,5 +1,5 @@
 import pandas as pd
-
+import config
 from data_client import MarketDataClient
 from logger import get_logger
 
@@ -36,11 +36,13 @@ def get_candles(symbol, interval="15m", limit=300):
         # until the requested depth is reached or history is exhausted.
         raw = []
         end_id = None
+        is_futures = getattr(config, "TRADING_MODE", "TESTNET").upper() == "FUTURES"
+        fetch_fn = client.futures_klines if is_futures else client.get_klines
         for _ in range(8):
             params = {"symbol": symbol, "interval": interval, "limit": min(limit, 1000)}
             if end_id is not None:
                 params["endTime"] = end_id
-            page = client.get_klines(**params)
+            page = fetch_fn(**params)
             if not page:
                 break
             raw = page + raw if end_id is not None else page
