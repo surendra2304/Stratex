@@ -1,6 +1,6 @@
-﻿# Algorithmic Trading Bot — My Development Diary
+# Algorithmic Trading Bot — Diary Summary
 
-Welcome to the development diary for my automated cryptocurrency trading bot. I have documented everything I worked on, fixed, and improved day by day from the start of the project in clear, straightforward language so that anyone reading this can easily follow the entire journey.
+Welcome to the diary summary for my automated cryptocurrency trading bot. I have documented everything I worked on, fixed, and improved day by day from the start of the project in clear, straightforward language so that anyone reading this can easily follow the entire journey.
 
 ---
 

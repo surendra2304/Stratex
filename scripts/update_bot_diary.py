@@ -18,7 +18,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='repla
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIARY_DIR = os.path.join(REPO_ROOT, "diary")
-MASTER_DIARY_FILE = os.path.join(REPO_ROOT, "DIARY.md")
+MASTER_DIARY_FILE = os.path.join(REPO_ROOT, "DIARY_SUMMARY.md")
 
 def validate_diary():
     print("=== VALIDATING BOT DIARY & CHRONICLES ===")
