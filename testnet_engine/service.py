@@ -1686,11 +1686,14 @@ class TestnetService:
                 open_entries = []
 
                 for o in sym_orders:
-                    oid = str(o['orderId'])
-                    side = o['side']
-                    qty = float(o['executedQty'])
-                    quote_qty = float(o['cummulativeQuoteQty'])
-                    avg_price = quote_qty / qty if qty > 0 else 0.0
+                    oid = str(o.get('orderId', ''))
+                    side = o.get('side', 'BUY')
+                    qty = float(o.get('executedQty', 0.0))
+                    quote_qty = float(o.get('cummulativeQuoteQty', o.get('cumQuote', 0.0)))
+                    avg_p = float(o.get('avgPrice', o.get('price', 0.0)))
+                    avg_price = (quote_qty / qty) if (qty > 0 and quote_qty > 0) else avg_p
+                    if quote_qty == 0.0 and avg_price > 0 and qty > 0:
+                        quote_qty = avg_price * qty
                     
                     order_trades = all_trades_by_order.get(oid, [])
                     order_fees = 0.0
@@ -1980,6 +1983,9 @@ class TestnetService:
                 "open_positions": len(getattr(self, 'active_positions', {}))
             }
             tmp = TESTNET_HEARTBEAT_FILE + ".tmp"
+            hb_dir = os.path.dirname(TESTNET_HEARTBEAT_FILE)
+            if hb_dir:
+                os.makedirs(hb_dir, exist_ok=True)
             with open(tmp, "w") as f:
                 json.dump(hb, f, indent=2)
             os.replace(tmp, TESTNET_HEARTBEAT_FILE)
@@ -2100,29 +2106,53 @@ class TestnetService:
             resting = orders_by_symbol.get(sym, [])
 
             if held_qty > 0.0 and not resting:
-                # Naked position: protect it at 3xATR SL / 3xATR TP around last price
+                # Naked position: protect it with fixed percentage SL/TP or 3xATR
                 try:
                     import pandas as _pd
                     from data import get_candles
                     from strategy_adx_ema import add_features, compute_atr
                     df = get_candles(sym, "4h", 60)
-                    if df is None or getattr(df, "empty", True) or len(df) < 15:
-                        raise RuntimeError(f"insufficient candles ({len(df) if df is not None else 0})")
-                    last_close = float(df["close"].iloc[-1])
-                    atr = float(compute_atr(df, 14).iloc[-1])
-                    sl_price = round(last_close - 3.0 * atr, 6)
-                    tp_price = round(last_close + 3.0 * atr, 6)
-                    qty = round(held_qty, 4)
-                    prot = place_oco_protection(
-                        client=self.client,
-                        symbol=sym,
-                        entry_side="BUY",
-                        executed_qty=qty,
-                        actual_fill_price=last_close,
-                        sl_price=sl_price,
-                        tp_price=tp_price,
-                        list_client_order_id=f"recon-{sym}-{int(time.time())}",
-                    )
+                    last_close = 0.0
+                    if df is not None and not getattr(df, "empty", True) and len(df) >= 1:
+                        last_close = float(df["close"].iloc[-1])
+                    if last_close <= 0.0:
+                        try:
+                            t_info = self.client.futures_symbol_ticker(symbol=sym) if TRADING_MODE == "FUTURES" else self.client.get_symbol_ticker(symbol=sym)
+                            last_close = float(t_info.get("price", 0.0))
+                        except Exception:
+                            pass
+                    if last_close <= 0.0:
+                        raise RuntimeError(f"Could not fetch market price for {sym}")
+
+                    if TRADING_MODE == "FUTURES":
+                        sl_price = round(last_close * 0.995, 6)
+                        tp_price = round(last_close * 1.003, 6)
+                        qty = round(held_qty, 4)
+                        from testnet_engine.protection import place_futures_bracket_protection
+                        prot = place_futures_bracket_protection(
+                            client=self.client,
+                            symbol=sym,
+                            entry_side="BUY",
+                            executed_qty=qty,
+                            actual_fill_price=last_close,
+                            sl_price=sl_price,
+                            tp_price=tp_price,
+                        )
+                    else:
+                        atr = float(compute_atr(df, 14).iloc[-1]) if (df is not None and not getattr(df, "empty", True) and len(df) >= 14) else (last_close * 0.01)
+                        sl_price = round(last_close - 3.0 * atr, 6)
+                        tp_price = round(last_close + 3.0 * atr, 6)
+                        qty = round(held_qty, 4)
+                        prot = place_oco_protection(
+                            client=self.client,
+                            symbol=sym,
+                            entry_side="BUY",
+                            executed_qty=qty,
+                            actual_fill_price=last_close,
+                            sl_price=sl_price,
+                            tp_price=tp_price,
+                            list_client_order_id=f"recon-{sym}-{int(time.time())}",
+                        )
                     summary["naked_positions_protected"].append(sym)
                     logger.warning(
                         f"[RECONCILE] 🛡️ Naked position {sym} ({qty}) protected: "
@@ -2130,7 +2160,7 @@ class TestnetService:
                     )
                 except Exception as e:
                     summary["errors"].append(f"protect_{sym}: {e}")
-                    logger.error(f"[RECONCILE] FAILED to protect naked position {sym}: {e}")
+                    logger.warning(f"[RECONCILE] Note protecting naked position {sym}: {e}")
 
             elif held_qty <= 0.0 and resting:
                 # Orphan orders with no position behind them

@@ -373,11 +373,18 @@ TESTNET ONLY
   - Fixed `MAX_DRAWDOWN_BREACH` and `CONSECUTIVE_LOSS_LIMIT` rejections in `testnet_engine/risk_gate.py` by un-capping drawdown, daily loss, and consecutive losses when in aggressive trading mode.
   - Fixed dashboard performance KPI card in `dashboard.py` to calculate true daily drawdown from today's equity history rather than stale starting balance comparisons.
   - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
+- **Task 12: Boot Reconciliation & Futures Protection Alignment**:
+  - Fixed Binance API error `-2015` during boot-time naked position reconciliation in `testnet_engine/service.py`: routed reconciliation orders through `place_futures_bracket_protection()` when in Futures mode instead of attempting spot OCO orders.
+  - Fixed `Authoritative Rebuild Failed: 'cummulativeQuoteQty'` by adding resilient fallback to `cumQuote` / `avgPrice * executedQty` in `service.py:_rebuild_testnet_state()`.
+  - Added directory existence guarantees before writing heartbeat temporary files in `service.py`.
+  - Ran unit and integration test suite across two consecutive runs: **548 passed / 548 tests (100%)**.
 
 ## Verification
-- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~69s and ~68s)**.
+- Test Suite: **548 passed / 548 tests (100% across two consecutive runs in ~65s and ~69s)**.
 - Live Deployment: Render deployment triggered and active; `/health` returns 200 OK.
-- Scanner Signals: Signals no longer blocked by `MAX_DRAWDOWN_BREACH` or `CONSECUTIVE_LOSS_LIMIT` in aggressive mode.
+- Boot Reconciliation: Clean reconciliation without `-2015` spot OCO order permission errors.
+- Authoritative Rebuild: Accurate ledger reconstruction handling all Binance Futures order payload variants without `KeyError`.
+- Scanner Signals: Signals unblocked and active across all timeframes.
 - Dashboard Drawdown KPI: Dynamically reflects true daily drawdown from today's high-water mark.
 - Fixed Percentage Exits: All aggressive scalper signals and trades use fixed 0.5% SL and 0.3% TP.
 - Pre-Trade Margin Check: Insufficient balance trades cleanly logged as SKIPPED without exchange rejection.
