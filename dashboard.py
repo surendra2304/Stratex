@@ -243,7 +243,9 @@ def get_engine_health_data():
         }
 
 @app.route('/health')
+@app.route('/ready')
 @app.route('/api/health')
+@app.route('/api/ready')
 def health():
     engine_data = get_engine_health_data()
     return jsonify({
@@ -2361,6 +2363,8 @@ def get_funnel():
 
 
 @app.route('/api/opportunities')
+@app.route('/api/funnel')
+@app.route('/api/funnel-stats')
 def api_opportunities():
     """Returns candidate funnel pipeline opportunities."""
     return get_funnel()
