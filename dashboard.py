@@ -649,7 +649,9 @@ def get_status():
     if open_pos_list:
         unrealized_pnl = sum(float(p.get("unrealized_pnl", 0.0)) for p in open_pos_list)
         total_open_notional = sum(float(p.get("quantity", 0.0)) * float(p.get("current_price", p.get("entry_price", 0.0))) for p in open_pos_list)
-        if total_open_notional > 0:
+        if getattr(config, "TRADING_MODE", "TESTNET").upper() == "FUTURES":
+            crypto_trade_val = account_holdings.get("active_trade_holdings_value", 0.0)
+        elif total_open_notional > 0:
             crypto_trade_val = total_open_notional
 
     # Total Valuation: cash + unrealized_pnl + crypto_holdings_value
@@ -993,22 +995,25 @@ def get_scanner():
                     if not line.strip(): continue
                     try:
                         s = json.loads(line)
+                        p_dec = s.get("profitability_decision") or ("REJECTED" if "REJECT" in str(s.get("decision", "")) else "ACCEPTED")
+                        r_dec = s.get("risk_decision") or ("REJECTED" if "REJECT" in str(s.get("decision", "")) else "ACCEPTED")
+                        f_dec = s.get("final_decision") or s.get("decision") or "REJECTED"
                         opps.append({
                             "timestamp": s.get("timestamp"),
                             "signal_id": s.get("signal_id"),
                             "symbol": s.get("symbol"),
-                            "timeframe": s.get("timeframe"),
+                            "timeframe": s.get("timeframe", "5m"),
                             "strategy": s.get("strategy"),
-                            "side": s.get("decision", "BUY"),
-                            "decision": s.get("final_decision", "ACCEPTED"),
-                            "confidence": s.get("confidence", 0.8),
-                            "expected_gross_return": s.get("expected_gross", 2.0),
-                            "expected_net_return": s.get("expected_net", 1.8),
-                            "expected_net": s.get("expected_net", 1.8),
-                            "profitability_decision": s.get("profitability_decision", "ACCEPTED"),
-                            "risk_decision": s.get("risk_decision", "ACCEPTED"),
-                            "final_decision": s.get("final_decision", "ACCEPTED"),
-                            "reason": "POSITIVE_ALPHA"
+                            "side": s.get("side", s.get("decision", "BUY")),
+                            "decision": f_dec,
+                            "confidence": float(s.get("confidence", 0.5)),
+                            "expected_gross_return": float(s.get("expected_gross", s.get("gross_edge", 0.0))),
+                            "expected_net_return": float(s.get("expected_net", s.get("net_edge", 0.0))),
+                            "expected_net": float(s.get("expected_net", s.get("net_edge", 0.0))),
+                            "profitability_decision": p_dec,
+                            "risk_decision": r_dec,
+                            "final_decision": f_dec,
+                            "reason": s.get("reason") or s.get("rejection_reason") or ("ALL_GATES_PASSED" if f_dec in ("ACCEPTED", "QUALIFIED") else "FILTERED_BY_GATE")
                         })
                     except Exception:
                         pass

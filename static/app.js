@@ -511,8 +511,9 @@ function renderScannerTable() {
         if (sideF !== 'ALL' && s.side !== sideF) return false;
         if (resF !== 'ALL') {
             const dec = String(s.final_decision || s.decision || '').toUpperCase();
-            if (resF === 'ACCEPTED' && dec !== 'ACCEPTED' && dec !== 'QUALIFIED') return false;
+            if ((resF === 'ACCEPTED' || resF === 'QUALIFIED') && (dec !== 'ACCEPTED' && dec !== 'QUALIFIED')) return false;
             if (resF === 'REJECTED' && (dec === 'ACCEPTED' || dec === 'QUALIFIED')) return false;
+            if (resF === 'HOLD' && dec !== 'HOLD') return false;
         }
         if (stratF !== 'ALL') {
             const strat = String(s.strategy || '').toUpperCase();
