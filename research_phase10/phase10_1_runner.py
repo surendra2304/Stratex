@@ -12,7 +12,7 @@ from research_phase7.data_loader import download_and_verify_data
 from research_phase9.cost_engine import CostEngine
 from research_phase10.funding_engine import FundingEngine
 from research_phase10.pairs_engine import PairsEngine
-from research_phase10.phase10_runner import fetch_funding_history
+from research_phase10.stage10_runner import fetch_funding_history
 
 
 def get_git_revision_hash():
@@ -21,12 +21,12 @@ def get_git_revision_hash():
     except Exception:
         return "UNKNOWN"
 
-def run_phase10_1():
+def run_stage10_1():
     print("==============================================")
-    print("PHASE 10.1: METHODOLOGY CORRECTIONS")
+    print("Stage 10.1: METHODOLOGY CORRECTIONS")
     print("==============================================\n")
     
-    os.makedirs('backtest_results/phase10', exist_ok=True)
+    os.makedirs('backtest_results/stage10', exist_ok=True)
     
     symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
     data = {}
@@ -67,12 +67,12 @@ def run_phase10_1():
         funding_results[sym] = res
         print(f"  -> {sym}: Viable={res['viable']}, Trades={res['trades']}, Net PnL={res.get('total_return_pct', 0)*100:.2f}%, Liquidations={res['liquidations']}")
         
-    print("\n[PHASE 10.1] Generating Reports...")
+    print("\n[Stage 10.1] Generating Reports...")
     
     # Generate Experiment Log
     experiment_log = {
         "git_commit": get_git_revision_hash(),
-        "phase": "10.1",
+        "stage": "10.1",
         "pairs_results": {k: {kk: bool(vv) if isinstance(vv, np.bool_) else vv for kk, vv in v.items() if kk != 'ledger'} for k, v in pairs_results.items()},
         "funding_results": {k: {kk: bool(vv) if isinstance(vv, np.bool_) else vv for kk, vv in v.items() if kk != 'ledger'} for k, v in funding_results.items()},
         "cost_assumptions": {
@@ -83,12 +83,12 @@ def run_phase10_1():
         }
     }
     
-    with open('backtest_results/phase10/experiment_log.json', 'w') as f:
+    with open('backtest_results/stage10/experiment_log.json', 'w') as f:
         json.dump(experiment_log, f, indent=4)
         
-    with open('backtest_results/phase10/phase10_1_corrections.md', 'w') as f:
-        f.write("# PHASE 10.1 EXECUTIVE SUMMARY (CORRECTED METHODOLOGY)\n\n")
-        f.write("> **Note**: This report supersedes Phase 10. It utilizes strict Train->Val->Test bounds, separated Basis/Funding PnL, Beta-Neutral sizing, and Leg-Specific Cost matching.\n\n")
+    with open('backtest_results/stage10/stage10_1_corrections.md', 'w') as f:
+        f.write("# Stage 10.1 EXECUTIVE SUMMARY (CORRECTED METHODOLOGY)\n\n")
+        f.write("> **Note**: This report supersedes Stage 10. It utilizes strict Train->Val->Test bounds, separated Basis/Funding PnL, Beta-Neutral sizing, and Leg-Specific Cost matching.\n\n")
         
         f.write("## Pairs Trading Validation\n")
         for p, res in pairs_results.items():
@@ -111,13 +111,13 @@ def run_phase10_1():
         viable_fund = [s for s, r in funding_results.items() if r.get('viable', False)]
         
         if viable_pairs or viable_fund:
-            f.write("We have mathematically proven out-of-sample edge. PROCEED to Phase 11.\n")
+            f.write("We have mathematically proven out-of-sample edge. PROCEED to Stage 11.\n")
         else:
             f.write("All strategies failed rigorous corrected evaluation. **DO NOT TRADE**.\n")
             
-    print("[PHASE 10.1] Complete.")
+    print("[Stage 10.1] Complete.")
 
 if __name__ == "__main__":
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
-    run_phase10_1()
+    run_stage10_1()

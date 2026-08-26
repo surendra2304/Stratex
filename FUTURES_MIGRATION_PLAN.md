@@ -102,8 +102,8 @@ This document outlines the complete architectural, execution, risk, and data mod
 
 ## 5. Migration Roadmap & Checklist
 
-- [ ] **Phase 1 (Harness & Data)**: Add futures market data client and download historical USDⓈ-M futures klines.
-- [ ] **Phase 2 (Protection & Execution)**: Implement `futures_create_order` with `STOP_MARKET` / `TAKE_PROFIT_MARKET` conditional bracket orders in `protection.py`.
-- [ ] **Phase 3 (State & Reconciler)**: Update `testnet_engine/service.py` position reconstruction for `futures_position_information` and negative-quantity short tracking.
-- [ ] **Phase 4 (Risk & Telemetry)**: Update `TelemetryManager` and `dashboard.py` to display Long/Short badges and leverage metrics.
-- [ ] **Phase 5 (Staging Testnet Soak)**: Execute 48-hour continuous bidirectional paper/testnet validation on Binance Futures Testnet.
+- [ ] **Stage 1 (Harness & Data)**: Add futures market data client and download historical USDⓈ-M futures klines.
+- [ ] **Stage 2 (Protection & Execution)**: Implement `futures_create_order` with `STOP_MARKET` / `TAKE_PROFIT_MARKET` conditional bracket orders in `protection.py`.
+- [ ] **Stage 3 (State & Reconciler)**: Update `testnet_engine/service.py` position reconstruction for `futures_position_information` and negative-quantity short tracking.
+- [ ] **Stage 4 (Risk & Telemetry)**: Update `TelemetryManager` and `dashboard.py` to display Long/Short badges and leverage metrics.
+- [ ] **Stage 5 (Staging Testnet Soak)**: Execute 48-hour continuous bidirectional paper/testnet validation on Binance Futures Testnet.

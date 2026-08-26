@@ -192,12 +192,12 @@ def generate_baseline(df):
     print(res_df.to_string(index=False))
     print("\nBaseline report generated in backtest_results/baseline_report.md")
 
-def generate_phase5_reports(df):
-    """Runs Phase 5 validation and exports comprehensive diagnostic reports with Cost Sensitivity."""
-    print("\n[PHASE 5] Generating Diagnostics & Reports...\n")
+def generate_stage5_reports(df):
+    """Runs Stage 5 validation and exports comprehensive diagnostic reports with Cost Sensitivity."""
+    print("\n[Stage 5] Generating Diagnostics & Reports...\n")
     strats_to_test = ["supertrend"]
     
-    os.makedirs('backtest_results/phase5', exist_ok=True)
+    os.makedirs('backtest_results/stage5', exist_ok=True)
     
     from backtest_engine import BacktestEngine
     from diagnostics import calculate_diagnostics
@@ -259,7 +259,7 @@ def generate_phase5_reports(df):
         return metrics, diag
 
     for s_name in strats_to_test:
-        print(f"\n[PHASE 5] Evaluating {s_name.upper()}...")
+        print(f"\n[Stage 5] Evaluating {s_name.upper()}...")
         full_results[s_name] = {}
         for tier_name, costs in cost_tiers.items():
             print(f"  -> Testing {tier_name} (Fee: {costs['fee']}, Slippage: {costs['slippage']})")
@@ -282,17 +282,17 @@ def generate_phase5_reports(df):
         return d
         
     safe_results = sanitize_inf(copy.deepcopy(full_results))
-    with open('backtest_results/phase5/experiment_log.json', 'w', encoding='utf-8') as f:
+    with open('backtest_results/stage5/experiment_log.json', 'w', encoding='utf-8') as f:
         json.dump(safe_results, f, indent=4)
         
     # Generate MD Reports
-    with open('backtest_results/phase5/validation_report.md', 'w', encoding='utf-8') as f:
-        f.write("# Phase 5: Validation Report\n\n")
+    with open('backtest_results/stage5/validation_report.md', 'w', encoding='utf-8') as f:
+        f.write("# Stage 5: Validation Report\n\n")
         f.write("Validation confirmed no look-ahead bias, explicit next-open execution timing, and exact mathematical accounting for slippage/fees.\n")
         f.write("All strict state isolation tests in `tests/test_backtest_engine.py` pass perfectly.\n\n")
         
-    with open('backtest_results/phase5/strategy_diagnostics.md', 'w', encoding='utf-8') as f:
-        f.write("# Phase 5: Strategy Diagnostics (Base Cost)\n\n")
+    with open('backtest_results/stage5/strategy_diagnostics.md', 'w', encoding='utf-8') as f:
+        f.write("# Stage 5: Strategy Diagnostics (Base Cost)\n\n")
         for s_name, data in full_results.items():
             dist = data['BASE_COST']['diagnostics'].get('trade_distribution', {})
             total_trades = dist.get('total_trades', 0)
@@ -306,8 +306,8 @@ def generate_phase5_reports(df):
             f.write(f"- Win/Loss Ratio: {dist.get('win_loss_ratio', 0):.2f}\n")
             f.write(f"- Avg R-Multiple: {dist.get('avg_r_multiple', 0):.2f}\n\n")
             
-    with open('backtest_results/phase5/cost_sensitivity.md', 'w', encoding='utf-8') as f:
-        f.write("# Phase 5: Cost Sensitivity Analysis\n\n")
+    with open('backtest_results/stage5/cost_sensitivity.md', 'w', encoding='utf-8') as f:
+        f.write("# Stage 5: Cost Sensitivity Analysis\n\n")
         for s_name, data in full_results.items():
             f.write(f"## {s_name.upper()}\n")
             for tier_name in ["LOW_COST", "BASE_COST", "HIGH_COST"]:
@@ -323,7 +323,7 @@ def generate_phase5_reports(df):
                 f.write(f"- Total Frictional Cost: ${cost.get('fees', 0) + cost.get('slippage', 0):.2f}\n")
                 f.write(f"- Net PnL: ${cost.get('net_pnl', 0):.2f}\n\n")
 
-    print("\nPhase 5 reports successfully generated in `backtest_results/phase5/`!")
+    print("\nStage 5 reports successfully generated in `backtest_results/stage5/`!")
 
 if __name__ == "__main__":
     import io
@@ -336,4 +336,4 @@ if __name__ == "__main__":
         from regime import classify_regimes
         data = classify_regimes(data)
         
-        generate_phase5_reports(data)
+        generate_stage5_reports(data)

@@ -1,6 +1,6 @@
 """
-tests/test_phase13_signal_integrity.py
-Phase 13.8: Signal adversarial tests — every invalid signal must be rejected.
+tests/test_stage13_signal_integrity.py
+Stage 13.8: Signal adversarial tests — every invalid signal must be rejected.
 """
 import math
 import time

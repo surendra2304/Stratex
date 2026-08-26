@@ -429,7 +429,7 @@ def generate_markdown_report(results: list[dict]):
         "---",
         "",
         "## 4. Key Recommendations",
-        "- If Net PF >= 1.20: The strategy proves resilient to realistic friction on 15m candles with 1h macro trend alignment. Safe for phased testnet soak.",
+        "- If Net PF >= 1.20: The strategy proves resilient to realistic friction on 15m candles with 1h macro trend alignment. Safe for gradual testnet soak.",
         "- If Net PF < 1.20: Strategy requires higher timeframes or additional volume/momentum filters."
     ])
     

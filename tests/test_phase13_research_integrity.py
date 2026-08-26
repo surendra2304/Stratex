@@ -1,6 +1,6 @@
 """
-tests/test_phase13_research_integrity.py
-Phase 13.22-13.30: Look-ahead audit, leakage, walk-forward, cost model,
+tests/test_stage13_research_integrity.py
+Stage 13.22-13.30: Look-ahead audit, leakage, walk-forward, cost model,
 parameter stability, and regime robustness.
 """
 import math

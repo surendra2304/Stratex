@@ -8,7 +8,7 @@ class PaperTradingEngine:
     Part 26: Forward Paper-Trading Architecture
     Logs theoretical signals and theoretical fills without interacting with the Binance Order API.
     """
-    def __init__(self, strategy_name, log_file="backtest_results/phase9/paper_trading_log.json"):
+    def __init__(self, strategy_name, log_file="backtest_results/stage9/paper_trading_log.json"):
         self.strategy_name = strategy_name
         self.log_file = log_file
         self.ledger = []

@@ -1,6 +1,6 @@
 """
-tests/test_phase13_corruption.py
-Phase 13.16-13.19: Corruption, crash, disk failure, and network failure tests.
+tests/test_stage13_corruption.py
+Stage 13.16-13.19: Corruption, crash, disk failure, and network failure tests.
 """
 import json
 import os

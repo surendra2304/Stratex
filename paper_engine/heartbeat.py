@@ -16,7 +16,7 @@ logger = get_logger("heartbeat")
 
 class ComponentStatus(str, Enum):
     OK = "OK"
-    HEALTHY = "HEALTHY"    # alias used by Phase 11/12 tests
+    HEALTHY = "HEALTHY"    # alias used by Stage 11/12 tests
     DEGRADED = "DEGRADED"
     CRITICAL = "CRITICAL"
     OFFLINE = "OFFLINE"
@@ -106,7 +106,7 @@ class HeartbeatState:
         except Exception as e:
             logger.error(f"Heartbeat write failed: {e}")
 
-    # ── Backward-compatible API (used by Phase 11/12 tests) ──────────────────
+    # ── Backward-compatible API (used by Stage 11/12 tests) ──────────────────
 
     def ping(self, component_name: str):
         """Record a heartbeat ping for a named component (old API)."""
@@ -120,7 +120,7 @@ class HeartbeatState:
     def get_overall_health(self) -> ComponentStatus:
         """
         Returns HEALTHY if all recent pings are within timeout, else OFFLINE.
-        Used by Phase 11/12 acceptance tests.
+        Used by Stage 11/12 acceptance tests.
         """
         if self.timeout_seconds is None:
             return ComponentStatus.HEALTHY

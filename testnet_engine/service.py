@@ -208,7 +208,7 @@ class TestnetService:
         self.observe_only = False
         self.cooldowns = {} # symbol -> timestamp (float)
         
-        # Phase 3: Restore daily risk state from ledger if restarting mid-day
+        # Stage 3: Restore daily risk state from ledger if restarting mid-day
         self._restore_daily_risk_state()
         
         self.sync_exchange_state(account)
@@ -216,7 +216,7 @@ class TestnetService:
         # Thread safety for concurrent websocket callbacks
         self.lock = threading.Lock()
         
-        # Phase 6: Multi-Asset Opportunity Ranking Queue
+        # Stage 6: Multi-Asset Opportunity Ranking Queue
         self.opportunity_pool = queue.Queue()
         self.pool_event = threading.Event()
         self._execution_thread = threading.Thread(target=self.execution_loop, daemon=True)
@@ -339,7 +339,7 @@ class TestnetService:
             logger.error(f"[SERVICE] Error restoring daily risk state: {e}")
 
     def sync_exchange_state(self, account):
-        """Phase 2: Reconcile local active_trades with Binance open orders and balances."""
+        """Stage 2: Reconcile local active_trades with Binance open orders and balances."""
         try:
             if TRADING_MODE == "FUTURES":
                 open_orders = self.client.futures_get_open_orders() if hasattr(self.client, "futures_get_open_orders") else []
@@ -869,7 +869,7 @@ class TestnetService:
             logger.error(f"[ON_CANDLE_CLOSED_ERROR] Uncaught error in on_candle_closed for {symbol} ({tf}): {outer_err}", exc_info=True)
 
     def execution_loop(self):
-        """Phase 6: Multi-Asset Opportunity Ranking and Execution"""
+        """Stage 6: Multi-Asset Opportunity Ranking and Execution"""
         while True:
             self.pool_event.wait()
             self.pool_event.clear()
@@ -1592,7 +1592,7 @@ class TestnetService:
                 except Exception as e:
                     logger.error(f"[SERVICE] Failed to sync active positions: {e}")
                 
-                # Phase 5: Degradation Control
+                # Stage 5: Degradation Control
                 self._check_degradation()
                 
                 with self.lock:
@@ -1894,7 +1894,7 @@ class TestnetService:
             return None, None, None
 
     def _check_degradation(self):
-        """Phase 5: Automatically switch to OBSERVE-ONLY if strategy degrades."""
+        """Stage 5: Automatically switch to OBSERVE-ONLY if strategy degrades."""
         window = getattr(config, "DEGRADATION_WINDOW", 20)
         min_win_rate = getattr(config, "MIN_WIN_RATE_THRESHOLD", 0.35)
         

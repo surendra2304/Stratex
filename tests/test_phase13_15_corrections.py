@@ -1,7 +1,7 @@
 """
-tests/test_phase13_15_corrections.py
+tests/test_stage13_15_corrections.py
 
-Regression tests for the Phase 13-15 correction pass.
+Regression tests for the Stage 13-15 correction pass.
 
 Tests added per requirements:
   - Realistic Monte Carlo costs (uses real CostEngine, not 0.002 magic number)

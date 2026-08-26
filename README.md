@@ -22,7 +22,7 @@ A robust, multi-strategy quantitative trading and statistical validation platfor
 > [!CAUTION]
 > **Live real-money trading is strictly BLOCKED.** Passing 289 software tests proves system correctness and risk-gate integrity only. It does **not** prove an economic edge. Live trading is gated until genuine out-of-sample forward validation criteria are satisfied.
 
-### Deployment Gate Checklist (from `backtest_results/phase15/FINAL_REPORT.md`)
+### Deployment Gate Checklist (from `backtest_results/stage15/FINAL_REPORT.md`)
 
 | Criterion / Deployment Gate | Required Status | Current State | Notes |
 |---|---|---|---|
@@ -155,12 +155,12 @@ The platform supports six modular quantitative strategies:
 │   ├── risk_gate.py            # Daily loss, drawdown, and position limits
 │   └── service.py              # Testnet orchestrator service
 │
-├── backtest_results/           # Research history & audit reports (Phases 4–15)
-│   └── phase15/                # Phase 15 Final Quantitative Audit Report
+├── backtest_results/           # Research history & audit reports (Stages 4-15)
+│   └── stage15/                # Stage 15 Final Quantitative Audit Report
 ├── experiments/                # Immutable frozen experiment JSON registry
-├── research_phase6/ – phase10/ # Phase-specific historical research notebooks & scripts
+├── research_stage6/ – stage10/ # Stage-specific historical research notebooks & scripts
 ├── static/                     # Dashboard frontend assets (JS, CSS, HTML templates)
-└── tests/                      # Pytest comprehensive test suite (289 tests)
+└── tests/                      # Pytest comprehensive test suite (548 tests)
 ```
 
 ---

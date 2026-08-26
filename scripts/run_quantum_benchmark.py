@@ -15,7 +15,7 @@ from quantum.validation import generate_markdown_report, run_full_benchmark
 
 def main():
     print("=" * 80)
-    print("STARTING QUANTUM RESEARCH PROFITABILITY BENCHMARK (PHASE 6 REMEDIATION)")
+    print("STARTING QUANTUM RESEARCH PROFITABILITY BENCHMARK (Stage 6 REMEDIATION)")
     print("=" * 80)
     
     symbol = "BTCUSDT"

@@ -1,6 +1,6 @@
 """
-tests/test_phase13_stress.py
-Phase 13.20-13.21: Long-run stress tests and property-based accounting tests.
+tests/test_stage13_stress.py
+Stage 13.20-13.21: Long-run stress tests and property-based accounting tests.
 """
 import random
 import uuid

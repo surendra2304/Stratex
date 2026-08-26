@@ -20,7 +20,7 @@ def generate_walk_forward_splits(df, num_windows=5, train_pct=0.50, val_pct=0.25
     splits = []
     
     for w in range(num_windows):
-        start_idx = w * test_step # Expanding implies start_idx=0 usually, but here we do rolling to match phase 6 or expanding?
+        start_idx = w * test_step # Expanding implies start_idx=0 usually, but here we do rolling to match Stage 6 or expanding?
         # Let's do strictly expanding train window to gather more data over time, or strictly rolling.
         # The prompt asks to document it. We will use ROLLING window to adapt to recent regimes.
         # Train window moves forward.
@@ -44,7 +44,7 @@ def generate_walk_forward_splits(df, num_windows=5, train_pct=0.50, val_pct=0.25
 
 def run_strict_walk_forward(splits, orchestrator_class, fee_rate, slippage_rate):
     """
-    Executes Phase 7 walk-forward architecture.
+    Executes Stage 7 walk-forward architecture.
     1. Orchestrator discovers mapping in TRAIN.
     2. Orchestrator validates/selects in VALIDATION.
     3. Engine evaluates strictly on TEST.

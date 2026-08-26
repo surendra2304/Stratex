@@ -1,6 +1,6 @@
 """
-tests/test_phase13_duplicate_events.py
-Phase 13.9-13.10: Idempotency and out-of-order event tests.
+tests/test_stage13_duplicate_events.py
+Stage 13.9-13.10: Idempotency and out-of-order event tests.
 """
 import uuid
 

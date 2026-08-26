@@ -39,7 +39,7 @@ def run_multi_timeframe_grid(df_1m):
     target_tfs = ['1m', '5m', '15m', '1h']
     
     for tf in target_tfs:
-        print(f"\n[PHASE 8] === EVALUATING TIMEFRAME: {tf} ===")
+        print(f"\n[Stage 8] === EVALUATING TIMEFRAME: {tf} ===")
         cfg = TIMEFRAME_CONFIGS[tf]
         
         # 1. Resample Data
@@ -156,5 +156,5 @@ if __name__ == "__main__":
     df = download_and_verify_data(days=90, use_cache=True)
     res = run_multi_timeframe_grid(df)
     
-    with open("backtest_results/phase8/temp_results.json", "w") as f:
+    with open("backtest_results/stage8/temp_results.json", "w") as f:
         json.dump(res, f, indent=4)

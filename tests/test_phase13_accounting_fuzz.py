@@ -1,6 +1,6 @@
 """
-tests/test_phase13_accounting_fuzz.py
-Phase 13.14-13.15: Portfolio accounting invariants and ledger reconciliation.
+tests/test_stage13_accounting_fuzz.py
+Stage 13.14-13.15: Portfolio accounting invariants and ledger reconciliation.
 
 Invariant:
     equity = cash + unrealized_pnl

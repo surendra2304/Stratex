@@ -2,7 +2,7 @@
 paper_engine/testing_simulators.py
 
 Lightweight, testable versions of PairsSimulator and FundingSimulator
-for use in Phase 13 adversarial tests. These are NOT the live simulators.
+for use in Stage 13 adversarial tests. These are NOT the live simulators.
 They track state deterministically without requiring a full portfolio/feed setup.
 """
 

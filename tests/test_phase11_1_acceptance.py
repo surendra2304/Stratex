@@ -12,9 +12,9 @@ from paper_engine.simulator import PaperSimulator
 from research_phase9.cost_engine import CostEngine
 
 
-def test_phase11_1_acceptance():
+def test_stage11_1_acceptance():
     """
-    Comprehensive acceptance test for Phase 11.1 updates.
+    Comprehensive acceptance test for Stage 11.1 updates.
     """
     # 1. Cleanup
     for f in ["test_port.json", "test_ledger.jsonl", "test_equity.jsonl", "test_heartbeat.json"]:

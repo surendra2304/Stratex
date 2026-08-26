@@ -32,7 +32,7 @@ def calculate_halflife(spread):
 
 class PairsEngine:
     """
-    Part 3-13: Proper Pairs Trading Methodology (Phase 10.1 Corrections)
+    Part 3-13: Proper Pairs Trading Methodology (Stage 10.1 Corrections)
     Implements Train -> Validation -> Test with zero lookahead,
     rolling stability checks, and Beta-Neutral position sizing.
     """

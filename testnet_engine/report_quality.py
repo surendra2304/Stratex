@@ -6,7 +6,7 @@ LEDGER_LOG = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
 
 def generate_report():
     print("========================================")
-    print("PHASE 5: LIVE TESTNET STRATEGY QUALITY CONTROL REPORT")
+    print("Stage 5: LIVE TESTNET STRATEGY QUALITY CONTROL REPORT")
     print("========================================")
     
     signals_evaluated = 0

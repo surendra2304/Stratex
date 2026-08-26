@@ -49,12 +49,12 @@ def fetch_funding_history(symbol):
         print(f"Error fetching funding for {symbol}: {e}")
         return pd.DataFrame()
 
-def run_phase10():
+def run_stage10():
     print("==============================================")
-    print("PHASE 10: PAIRS & FUNDING VALIDATION")
+    print("Stage 10: PAIRS & FUNDING VALIDATION")
     print("==============================================\n")
     
-    os.makedirs('backtest_results/phase10', exist_ok=True)
+    os.makedirs('backtest_results/stage10', exist_ok=True)
     
     symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
     data = {}
@@ -96,9 +96,9 @@ def run_phase10():
         funding_results[sym] = res
         print(f"  -> {sym}: Viable={res['viable']}, Trades={res['trades']}, Net PnL={res.get('total_net_pnl_pct', 0)*100:.2f}%, Liquidations={res['liquidations']}")
         
-    print("\n[PHASE 10] Generating Reports...")
-    with open('backtest_results/phase10/phase10_summary.md', 'w') as f:
-        f.write("# PHASE 10 EXECUTIVE SUMMARY\n\n")
+    print("\n[Stage 10] Generating Reports...")
+    with open('backtest_results/stage10/stage10_summary.md', 'w') as f:
+        f.write("# Stage 10 EXECUTIVE SUMMARY\n\n")
         f.write("## Pairs Trading Validation\n")
         for p, res in pairs_results.items():
             if res.get('status') == 'UNAVAILABLE':
@@ -126,4 +126,4 @@ def run_phase10():
 if __name__ == "__main__":
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
-    run_phase10()
+    run_stage10()

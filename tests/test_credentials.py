@@ -1,7 +1,7 @@
 """
 tests/test_credentials.py
 
-Credential Security Regression Tests — Phase 12.1.3
+Credential Security Regression Tests — Stage 12.1.3
 
 Verifies:
   - .env.example contains only placeholders

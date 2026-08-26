@@ -6,7 +6,7 @@ from paper_engine.heartbeat import ComponentStatus, HeartbeatState
 from paper_engine.session import SessionState
 
 
-def test_phase12_full_acceptance_scenario(tmp_path):
+def test_stage12_full_acceptance_scenario(tmp_path):
     """
     Final Acceptance Test
     Simulates:

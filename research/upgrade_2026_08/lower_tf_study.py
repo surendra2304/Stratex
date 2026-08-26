@@ -253,7 +253,7 @@ $$E_{{net}} = W \\times (R_{{gross}} - F) - (1 - W) \\times (L_{{gross}} + F) = 
 
 ## 4. Strategic Recommendations for 15m Feasibility
 
-To make a 15m strategy viable on crypto markets in future phases, the following architectural upgrades would be mandatory:
+To make a 15m strategy viable on crypto markets in future stages, the following architectural upgrades would be mandatory:
 
 1. **Maker-Only Execution (Limit Orders)**:
    - Eliminate 10 bps taker fee and 5 bps market slippage by using post-only limit orders (`LIMIT_MAKER`), earning Binance maker fee tier (0.02% or 0% rebate on VIP/FDUSD pairs).

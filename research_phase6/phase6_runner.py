@@ -20,7 +20,7 @@ from research_phase6.ml_research import run_ml_comparison
 from research_phase6.monte_carlo import run_monte_carlo
 from research_phase6.orchestrator import StrategyOrchestrator
 
-# Phase 6 Configuration
+# Stage 6 Configuration
 FEE_RATE = 0.001
 SLIPPAGE_RATE = 0.0005
 NUM_WINDOWS = 5
@@ -29,8 +29,8 @@ OOS_VAL_PCT = 0.25
 
 def generate_baseline(df):
     """Part 2: Run untouched baseline across standard Train/Val/Test splits."""
-    print("\n[PHASE 6] Running Untouched Baseline...")
-    os.makedirs('backtest_results/phase6', exist_ok=True)
+    print("\n[Stage 6] Running Untouched Baseline...")
+    os.makedirs('backtest_results/stage6', exist_ok=True)
     
     total_bars = len(df)
     train_size = int(total_bars * OOS_TRAIN_PCT)
@@ -75,8 +75,8 @@ def generate_baseline(df):
         metrics = calculate_metrics(all_oos_trades, comb_eq, STARTING_BALANCE)
         results[name] = metrics
         
-    with open('backtest_results/phase6/baseline_report.md', 'w') as f:
-        f.write("# Phase 6: Baseline OOS Performance (Untouched)\n\n")
+    with open('backtest_results/stage6/baseline_report.md', 'w') as f:
+        f.write("# Stage 6: Baseline OOS Performance (Untouched)\n\n")
         for k, v in results.items():
             f.write(f"### {k.upper()}\n")
             f.write(f"- Trades: {v.get('total_trades', 0)}\n")
@@ -86,7 +86,7 @@ def generate_baseline(df):
 
 def optimize_aggressor_tp(df):
     """Part 7/8/9: Robust Walk-Forward Optimization for Aggressor TP multiplier."""
-    print("\n[PHASE 6] Running Walk-Forward Optimization (Aggressor TP)...")
+    print("\n[Stage 6] Running Walk-Forward Optimization (Aggressor TP)...")
     tp_grid = [2.0, 2.5, 3.0, 3.5, 4.0]
     
     total_bars = len(df)
@@ -143,8 +143,8 @@ def optimize_aggressor_tp(df):
     comb_eq = pd.concat(oos_equity).drop_duplicates(subset=['timestamp']).reset_index(drop=True) if oos_equity else pd.DataFrame()
     metrics = calculate_metrics(all_oos_trades, comb_eq, STARTING_BALANCE)
     
-    with open('backtest_results/phase6/optimization_report.md', 'w') as f:
-        f.write("# Phase 6: Robust Optimization (Aggressor TP)\n\n")
+    with open('backtest_results/stage6/optimization_report.md', 'w') as f:
+        f.write("# Stage 6: Robust Optimization (Aggressor TP)\n\n")
         f.writelines(f"### {fold}\nSelected TP: {data['best_tp']}\n\n" for fold, data in optimization_log.items())
         f.write("### Final Out-of-Sample Performance\n")
         f.write(f"- Total OOS Trades: {metrics['total_trades']}\n")
@@ -153,7 +153,7 @@ def optimize_aggressor_tp(df):
 
 def test_orchestrator(df):
     """Part 4 & 5 & 17: Multi-Strategy Portfolio Orchestrator."""
-    print("\n[PHASE 6] Running Regime Orchestrator Walk-Forward...")
+    print("\n[Stage 6] Running Regime Orchestrator Walk-Forward...")
     total_bars = len(df)
     train_size = int(total_bars * OOS_TRAIN_PCT)
     val_size = int(total_bars * OOS_VAL_PCT)
@@ -186,8 +186,8 @@ def test_orchestrator(df):
     comb_eq = pd.concat(oos_equity).drop_duplicates(subset=['timestamp']).reset_index(drop=True) if oos_equity else pd.DataFrame()
     metrics = calculate_metrics(all_oos_trades, comb_eq, STARTING_BALANCE)
     
-    with open('backtest_results/phase6/portfolio_analysis.md', 'w') as f:
-        f.write("# Phase 6: Orchestrator Portfolio Analysis\n\n")
+    with open('backtest_results/stage6/portfolio_analysis.md', 'w') as f:
+        f.write("# Stage 6: Orchestrator Portfolio Analysis\n\n")
         f.write("The Orchestrator explicitly selects the historically best strategy for the current market regime based purely on Train/Val historical edge.\n\n")
         f.write(f"- OOS Trades: {metrics['total_trades']}\n")
         f.write(f"- OOS Win Rate: {metrics['win_rate']:.1f}%\n")
@@ -196,8 +196,8 @@ def test_orchestrator(df):
         
     # Part 23: Monte Carlo
     mc_results = run_monte_carlo(all_oos_trades)
-    with open('backtest_results/phase6/monte_carlo.md', 'w') as f:
-        f.write("# Phase 6: Monte Carlo Risk Sequence Test\n\n")
+    with open('backtest_results/stage6/monte_carlo.md', 'w') as f:
+        f.write("# Stage 6: Monte Carlo Risk Sequence Test\n\n")
         f.write("Resampled Out-Of-Sample trades 10,000 times to project risk under different sequence luck.\n\n")
         for k, v in mc_results.items():
             if k == 'iterations':
@@ -207,7 +207,7 @@ def test_orchestrator(df):
                 
 def test_ml_advanced(df):
     """Part 11 & 12: ML Comparison and Calibration."""
-    print("\n[PHASE 6] Running ML Advanced Analytics...")
+    print("\n[Stage 6] Running ML Advanced Analytics...")
     total_bars = len(df)
     train_size = int(total_bars * OOS_TRAIN_PCT)
     val_size = int(total_bars * OOS_VAL_PCT)
@@ -217,8 +217,8 @@ def test_ml_advanced(df):
     
     comp_results = run_ml_comparison(train_df, val_df)
     
-    with open('backtest_results/phase6/ml_comparison.md', 'w') as f:
-        f.write("# Phase 6: ML Model Baseline Comparison\n\n")
+    with open('backtest_results/stage6/ml_comparison.md', 'w') as f:
+        f.write("# Stage 6: ML Model Baseline Comparison\n\n")
         for model, mets in comp_results.items():
             f.write(f"### {model}\n")
             f.write(f"- Precision: {mets['Precision']:.2f}\n")
@@ -235,11 +235,11 @@ if __name__ == "__main__":
     test_orchestrator(df)
     test_ml_advanced(df)
     
-    with open('backtest_results/phase6/PHASE6_SUMMARY.md', 'w') as f:
-        f.write("# PHASE 6 EXECUTIVE SUMMARY\n\n")
+    with open('backtest_results/stage6/stage6_SUMMARY.md', 'w') as f:
+        f.write("# Stage 6 EXECUTIVE SUMMARY\n\n")
         f.write("1. **Baseline Proof**: We established a raw baseline for all 5 strategies on the untouched Test set. Base costs rapidly destroy edge.\n")
         f.write("2. **Walk-Forward Optimization**: We grid-searched Aggressor TP Multiplier using purely Val sets. Final Test metrics were untouched.\n")
         f.write("3. **Regime Orchestrator**: We replaced the naive `MultiStrategyWrapper` with a true `StrategyOrchestrator` which discovers the optimal regime-strategy mapping from history and executes purely out-of-sample.\n")
-        f.write("4. **Conclusion**: Phase 6 has successfully created a robust, cost-aware research engine. We recommend running this against longer 90-day data sets in Phase 7 to accumulate deeper OOS confidence.\n")
+        f.write("4. **Conclusion**: Stage 6 has successfully created a robust, cost-aware research engine. We recommend running this against longer 90-day data sets in Stage 7 to accumulate deeper OOS confidence.\n")
         
-    print("\nPhase 6 routines completed. Check backtest_results/phase6/ for reports.")
+    print("\nStage 6 routines completed. Check backtest_results/stage6/ for reports.")
