@@ -38,6 +38,25 @@ def add_header(response):
     response.headers['Expires'] = '0'
     return response
 
+def require_bot_api_key(f):
+    """
+    Decorator protecting sensitive modification endpoints (e.g. POST /api/panic, POST /api/settings).
+    Requires the X-BOT-API-KEY header to match the BOT_API_KEY environment variable.
+    """
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        expected_key = os.getenv("BOT_API_KEY", "").strip()
+        if expected_key:
+            incoming_key = (request.headers.get("X-BOT-API-KEY") or request.headers.get("X-Bot-Api-Key") or "").strip()
+            if not incoming_key or incoming_key != expected_key:
+                return jsonify({
+                    "status": "UNAUTHORIZED",
+                    "error": "Unauthorized: Missing or invalid X-BOT-API-KEY header"
+                }), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
 def safe_int_param(param_name: str, default: int = 100, min_val: int = 1, max_val: int = 1000) -> int:
     """Safely extracts and validates an integer query parameter from Flask request.args.
     Never raises unhandled exceptions. Falls back to default if missing, invalid, or malformed.
@@ -2925,6 +2944,7 @@ def api_recent_actions():
 
 
 @app.route('/api/panic', methods=['POST'])
+@require_bot_api_key
 def api_panic():
     """
     Upgrade 7: Manual kill-switch.
@@ -3000,6 +3020,15 @@ def api_config():
     try:
         import config
         if request.method == 'POST':
+            expected_key = os.getenv("BOT_API_KEY", "").strip()
+            if expected_key:
+                incoming_key = (request.headers.get("X-BOT-API-KEY") or request.headers.get("X-Bot-Api-Key") or "").strip()
+                if not incoming_key or incoming_key != expected_key:
+                    return jsonify({
+                        "status": "UNAUTHORIZED",
+                        "error": "Unauthorized: Missing or invalid X-BOT-API-KEY header"
+                    }), 401
+
             data = request.get_json(silent=True)
             if not isinstance(data, dict):
                 return jsonify({"status": "ERROR", "error": "Invalid request payload. Expected JSON object."}), 400
