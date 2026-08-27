@@ -3734,6 +3734,44 @@ def api_arbitrage_opportunities():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
+# ==============================================================================
+# PREDICTIVE INTELLIGENCE ENDPOINTS
+# ==============================================================================
+
+@app.route('/api/intelligence/predictions')
+def api_intelligence_predictions():
+    """Returns real-time deep learning / LLM multi-horizon forecasts."""
+    try:
+        from intelligence.prediction_client import PredictionClient
+        client = PredictionClient()
+        preds = {
+            "BTC/USDT": client.get_prediction("BTC/USDT"),
+            "ETH/USDT": client.get_prediction("ETH/USDT"),
+            "SOL/USDT": client.get_prediction("SOL/USDT")
+        }
+        from dataclasses import asdict
+        return jsonify({
+            "status": "OK",
+            "predictions": {k: asdict(v) for k, v in preds.items() if v},
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/intelligence/impact')
+def api_intelligence_impact():
+    """Returns performance attribution and veto rate statistics for predictive intelligence."""
+    try:
+        from intelligence.impact_tracking import PredictionImpactTracker
+        tracker = PredictionImpactTracker()
+        report = tracker.generate_impact_report()
+        return jsonify({
+            "status": "OK",
+            "impact_report": report
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)
