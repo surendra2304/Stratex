@@ -1,14 +1,14 @@
 """
 evolution/incubator.py — Paper Trading Strategy Incubator & Graduation Lifecycle.
 
-Tracks:
-1. Paper incubation lifecycle for gauntlet-certified strategies (minimum 30 calendar days).
-2. Live vs Backtest Fidelity Tracking: Evaluates correlation between live paper signals and backtest models.
-3. Graduation Criteria:
-   - >= 30 days active incubation
-   - Profit Factor >= 1.25
-   - Max Live Drawdown <= 10.0%
-   - Fidelity Score >= 0.70 (Live returns match theoretical curve)
+Incubation Rules:
+1. Minimum 30 calendar days of paper forward trading.
+2. Tracks live-vs-backtest fidelity score (correlation between live signals and backtest expectation).
+3. Graduation Requirements:
+   - Live Profit Factor > 1.10
+   - Fidelity Score > 0.60
+   - Zero hard risk limit violations
+4. Failure Action: Strategy retired, genome archived with empirical learnings.
 """
 
 import time
@@ -18,12 +18,15 @@ import os
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field, asdict
 from evolution.genetic_engine import StrategyGenome
+from logger import get_logger
+
+logger = get_logger("incubator")
 
 
 @dataclass
 class IncubatingStrategy:
     genome_id: str
-    archetype: str
+    strategy_type: str
     admission_timestamp: float
     incubation_days: int = 0
     live_trades_count: int = 0
@@ -31,16 +34,19 @@ class IncubatingStrategy:
     live_profit_factor: float = 1.0
     live_max_drawdown_pct: float = 0.0
     fidelity_score: float = 0.85
-    status: str = "INCUBATING"  # "INCUBATING", "GRADUATED", "REJECTED"
+    risk_violations_count: int = 0
+    status: str = "INCUBATING"  # "INCUBATING", "GRADUATION_CANDIDATE", "RETIRED"
+    learnings: List[str] = field(default_factory=list)
 
 
 class StrategyIncubator:
     """
-    Manages the forward paper validation and graduation pipeline for evolved strategies.
+    Manages the forward paper validation and graduation pipeline for gauntlet-certified strategies.
     """
 
-    def __init__(self, state_file: str = "incubator_state.json"):
+    def __init__(self, state_file: str = "incubator_state.json", archive_file: str = "incubator_retired_archive.jsonl"):
         self.state_file = state_file
+        self.archive_file = archive_file
         self.incubating_pool: Dict[str, IncubatingStrategy] = {}
         self.load_state()
 
@@ -51,8 +57,8 @@ class StrategyIncubator:
                     data = json.load(f)
                     for gid, item in data.items():
                         self.incubating_pool[gid] = IncubatingStrategy(**item)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"[INCUBATOR] Failed to load state: {e}")
 
     def save_state(self) -> None:
         data = {gid: asdict(s) for gid, s in self.incubating_pool.items()}
@@ -63,11 +69,12 @@ class StrategyIncubator:
         """Admits a gauntlet-certified strategy into the paper incubator."""
         strat = IncubatingStrategy(
             genome_id=genome.genome_id,
-            archetype=genome.archetype,
+            strategy_type=genome.strategy_type,
             admission_timestamp=time.time()
         )
         self.incubating_pool[genome.genome_id] = strat
         self.save_state()
+        logger.info(f"[INCUBATOR] 🐣 Admitted strategy {genome.genome_id} into incubation.")
         return strat
 
     def update_strategy_performance(
@@ -78,9 +85,10 @@ class StrategyIncubator:
         net_pnl: float,
         profit_factor: float,
         max_dd_pct: float,
-        fidelity_score: float = 0.80
+        fidelity_score: float = 0.75,
+        risk_violations: int = 0
     ) -> Optional[IncubatingStrategy]:
-        """Updates live paper tracking telemetry."""
+        """Updates forward paper tracking telemetry and evaluates graduation/retirement."""
         if genome_id not in self.incubating_pool:
             return None
 
@@ -91,21 +99,38 @@ class StrategyIncubator:
         strat.live_profit_factor = profit_factor
         strat.live_max_drawdown_pct = max_dd_pct
         strat.fidelity_score = fidelity_score
+        strat.risk_violations_count = risk_violations
 
-        # Check Graduation Criteria
+        # Graduation Criteria: 30+ days, PF > 1.10, Fidelity > 0.60, 0 risk violations
         if (
             strat.incubation_days >= 30 and
-            strat.live_profit_factor >= 1.25 and
-            strat.live_max_drawdown_pct <= 10.0 and
-            strat.fidelity_score >= 0.70
+            strat.live_profit_factor >= 1.10 and
+            strat.fidelity_score >= 0.60 and
+            strat.risk_violations_count == 0 and
+            strat.live_max_drawdown_pct <= 15.0
         ):
-            strat.status = "GRADUATED"
-        elif strat.live_max_drawdown_pct > 15.0 or (strat.incubation_days >= 30 and strat.live_profit_factor < 1.0):
-            strat.status = "REJECTED"
+            strat.status = "GRADUATION_CANDIDATE"
+            logger.info(f"[INCUBATOR] 🎓 Strategy {genome_id} achieved GRADUATION_CANDIDATE status!")
+        elif (
+            strat.risk_violations_count > 0 or
+            strat.live_max_drawdown_pct > 15.0 or
+            (strat.incubation_days >= 30 and (strat.live_profit_factor < 1.10 or strat.fidelity_score < 0.60))
+        ):
+            strat.status = "RETIRED"
+            strat.learnings.append(f"Failed incubation: PF={profit_factor:.2f}, Fidelity={fidelity_score:.2f}, DD={max_dd_pct:.1f}%")
+            self._archive_failed_strategy(strat)
+            logger.warning(f"[INCUBATOR] ❌ Strategy {genome_id} RETIRED from incubation.")
 
         self.save_state()
         return strat
 
-    def get_graduated_strategies(self) -> List[IncubatingStrategy]:
-        """Returns strategies that met all graduation criteria for production deployment."""
-        return [s for s in self.incubating_pool.values() if s.status == "GRADUATED"]
+    def _archive_failed_strategy(self, strat: IncubatingStrategy) -> None:
+        try:
+            with open(self.archive_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(asdict(strat)) + "\n")
+        except Exception:
+            pass
+
+    def get_graduation_candidates(self) -> List[IncubatingStrategy]:
+        """Returns strategies ready for human promotion review."""
+        return [s for s in self.incubating_pool.values() if s.status == "GRADUATION_CANDIDATE"]

@@ -1,10 +1,12 @@
 """
-tests/test_strategy_evolution.py — Tests for Strategy Genetic Engine, Validation Gauntlet & Incubator.
+tests/test_strategy_evolution.py — Tests for Complete Strategy Evolution Engine, 6 Gates, Incubator & Approval.
 
 Verifies:
-1. StrategyGeneticEngine genome initialization, Gaussian mutation, crossover, tournament selection, and generational evolution.
-2. ValidationGauntlet 6-gate evaluation (Profitability, WFE, Monte Carlo drawdown, Sensitivity, Regime robustness, Overfitting).
-3. StrategyIncubator admission, forward tracking, fidelity score correlation, and graduation criteria.
+1. StrategyGenome instantiation (strategy_type, indicators, parameters, entry/exit logic, risk_params).
+2. StrategyGeneticEngine mutation (±10-30%), crossover (preserving fitter parent strategy_type), tournament selection, and archival.
+3. ValidationGauntlet 6-gate sequential verification (PF > 1.3, Trades > 100, WFE > 0.5, MC 95th DD < 15%, Sensitivity < 30%, Regime > 60%, PBO < 30%).
+4. StrategyIncubator 30-day paper forward tracking, fidelity score correlation (> 0.60), and graduation threshold (Live PF > 1.10).
+5. HumanApprovalGate proposal creation, cryptographic signature generation, and approval workflow.
 """
 
 import tempfile
@@ -13,6 +15,7 @@ import pytest
 from evolution.genetic_engine import StrategyGeneticEngine, StrategyGenome
 from evolution.validation_gauntlet import ValidationGauntlet
 from evolution.incubator import StrategyIncubator
+from evolution.approval_gates import HumanApprovalGate
 
 
 def test_strategy_genetic_engine():
@@ -26,9 +29,12 @@ def test_strategy_genetic_engine():
     assert mutant.generation == 2
 
     # Test Crossover
+    parent.fitness = 2.5
     parent2 = engine.population[1]
+    parent2.fitness = 1.2
     child = engine.crossover(parent, parent2)
     assert child.generation == 2
+    assert child.strategy_type == parent.strategy_type  # Preserved from fitter parent
 
     # Set mock fitness and evolve next generation
     for i, g in enumerate(engine.population):
@@ -41,15 +47,19 @@ def test_strategy_genetic_engine():
 
 def test_validation_gauntlet_gates():
     gauntlet = ValidationGauntlet()
-    genome = StrategyGenome(genome_id="TEST_GENOME", archetype="trend")
+    genome = StrategyGenome(genome_id="TEST_GENOME", strategy_type="trend")
 
     metrics_pass = {
         "profit_factor": 1.65,
-        "trade_count": 80,
+        "trade_count": 120,
         "in_sample_sharpe": 1.8,
         "out_sample_sharpe": 1.2,
-        "trade_returns": [1.5, -0.5, 2.0, -0.8, 1.2, 0.9, -0.3, 1.8, 2.2, -0.7],
-        "regimes": {"BULL_TREND": 150.0, "BEAR_TREND": 60.0, "CHOP": -20.0, "HIGH_VOL": 40.0}
+        "trade_returns": [1.5, -0.5, 2.0, -0.8, 1.2, 0.9, -0.3, 1.8, 2.2, -0.7] * 12,
+        "base_return": 100.0,
+        "perturbed_returns": [88.0, 92.0, 84.0],
+        "regimes": {"TRENDING": 150.0, "RANGING": 60.0, "VOLATILE": -20.0},
+        "pbo_pct": 16.5,
+        "deflated_sharpe": 1.45
     }
 
     cert = gauntlet.run_full_gauntlet(genome, metrics_pass)
@@ -61,14 +71,16 @@ def test_validation_gauntlet_gates():
     assert cert["gates"]["gate_4"]["passed"] is True
     assert cert["gates"]["gate_5"]["passed"] is True
     assert cert["gates"]["gate_6"]["passed"] is True
+    assert genome.fitness > 0
 
 
 def test_strategy_incubator_lifecycle():
     with tempfile.TemporaryDirectory() as tmpdir:
         state_file = f"{tmpdir}/incubator.json"
-        incubator = StrategyIncubator(state_file=state_file)
+        archive_file = f"{tmpdir}/retired.jsonl"
+        incubator = StrategyIncubator(state_file=state_file, archive_file=archive_file)
 
-        genome = StrategyGenome(genome_id="INC_STRAT_1", archetype="momentum")
+        genome = StrategyGenome(genome_id="INC_STRAT_1", strategy_type="momentum")
         strat = incubator.admit_strategy(genome)
         assert strat.status == "INCUBATING"
 
@@ -84,7 +96,7 @@ def test_strategy_incubator_lifecycle():
         )
         assert incubator.incubating_pool["INC_STRAT_1"].status == "INCUBATING"
 
-        # Graduate at 30 days
+        # Graduate at 30 days (PF > 1.10, Fidelity > 0.60)
         grad = incubator.update_strategy_performance(
             genome_id="INC_STRAT_1",
             incubation_days=30,
@@ -94,12 +106,11 @@ def test_strategy_incubator_lifecycle():
             max_dd_pct=5.0,
             fidelity_score=0.85
         )
-        assert grad.status == "GRADUATED"
-        assert len(incubator.get_graduated_strategies()) == 1
+        assert grad.status == "GRADUATION_CANDIDATE"
+        assert len(incubator.get_graduation_candidates()) == 1
 
 
 def test_human_approval_gates():
-    from evolution.approval_gates import HumanApprovalGate
     with tempfile.TemporaryDirectory() as tmpdir:
         gate_file = f"{tmpdir}/approval_queue.json"
         gate = HumanApprovalGate(state_file=gate_file)

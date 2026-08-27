@@ -3852,9 +3852,43 @@ def api_evolution_status():
         return jsonify({
             "status": "OK",
             "generation": 1,
-            "population_size": 50,
+            "population_size": 80,
             "incubating_strategies_count": len(incubator.incubating_pool),
             "pending_approvals_count": len(gate.get_pending_proposals()),
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/evolution/population')
+def api_evolution_population():
+    """Returns the current active generation of strategy genomes."""
+    try:
+        from evolution.genetic_engine import StrategyGeneticEngine
+        from dataclasses import asdict
+        engine = StrategyGeneticEngine(population_size=80)
+        return jsonify({
+            "status": "OK",
+            "generation": engine.generation,
+            "population_size": len(engine.population),
+            "genomes": [asdict(g) for g in engine.population[:20]],
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/evolution/candidates')
+def api_evolution_candidates():
+    """Returns strategies that passed incubation and are candidates for promotion."""
+    try:
+        from evolution.incubator import StrategyIncubator
+        from dataclasses import asdict
+        incubator = StrategyIncubator()
+        candidates = incubator.get_graduation_candidates()
+        return jsonify({
+            "status": "OK",
+            "candidates_count": len(candidates),
+            "candidates": [asdict(c) for c in candidates],
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         })
     except Exception as e:
@@ -3870,6 +3904,20 @@ def api_evolution_approvals():
             "status": "OK",
             "pending_proposals": gate.get_pending_proposals(),
             "all_proposals": gate.get_all_proposals(),
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/evolution/history')
+def api_evolution_history():
+    """Returns historical generation trends and fitness evolution history."""
+    try:
+        from evolution.genetic_engine import StrategyGeneticEngine
+        engine = StrategyGeneticEngine(population_size=80)
+        return jsonify({
+            "status": "OK",
+            "history": engine.history,
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         })
     except Exception as e:
