@@ -3650,24 +3650,45 @@ def api_live_status():
     """Returns the live trading authorization state, capital tier level, and risk limits."""
     try:
         from deployment.live_authorization import LiveAuthorizationVerifier
+        from deployment.capital_levels import get_level_spec
+        from risk.live_enforcer import LiveRiskEnforcer
+
         verifier = LiveAuthorizationVerifier()
         auth_state = verifier.verify_all_authorizations()
+        spec = get_level_spec(auth_state.authorized_level)
+        enforcer = LiveRiskEnforcer(level=auth_state.authorized_level, initial_capital=auth_state.authorized_capital)
 
         return jsonify({
             "status": "OK",
             "is_authorized": auth_state.is_authorized,
+            "live_mode_authorized": auth_state.is_authorized,
             "authorized_level": auth_state.authorized_level,
+            "level_name": spec.name,
             "authorized_capital": auth_state.authorized_capital,
+            "authorized_capital_usd": auth_state.authorized_capital,
             "level_spec": {
-                "name": auth_state.spec.name,
-                "max_capital": auth_state.spec.max_capital,
-                "max_strategies": auth_state.spec.max_strategies,
-                "max_position_size_pct": auth_state.spec.max_position_size_pct * 100,
-                "max_daily_loss_pct": auth_state.spec.max_daily_loss_pct * 100,
-                "max_drawdown_limit_pct": auth_state.spec.max_drawdown_limit_pct * 100
+                "name": spec.name,
+                "min_capital": spec.min_capital,
+                "max_capital": spec.max_capital,
+                "max_strategies": spec.max_strategies,
+                "max_position_size_pct": spec.max_position_size_pct * 100.0,
+                "max_daily_loss_pct": spec.max_daily_loss_pct * 100.0,
+                "max_drawdown_limit_pct": spec.max_drawdown_limit_pct * 100.0,
+                "required_clean_days_for_next": spec.required_clean_days_for_next
+            },
+            "gate_verifications": {
+                "active_reasons": auth_state.active_reasons,
+                "blocking_errors": auth_state.blocking_errors
             },
             "active_reasons": auth_state.active_reasons,
             "blocking_errors": auth_state.blocking_errors,
+            "risk_enforcer": {
+                "is_halted": enforcer.status.is_halted,
+                "kill_switch_active": enforcer.status.kill_switch_active,
+                "halt_reason": enforcer.status.halt_reason,
+                "requires_reauthorization": enforcer.status.requires_reauthorization
+            },
+            "voice_summary": f"Live Capital Level {auth_state.authorized_level} ({spec.name}): Status {'Authorized' if auth_state.is_authorized else 'Locked'}. Capital allocation: ${auth_state.authorized_capital:.2f}.",
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         })
     except Exception as e:
@@ -3698,7 +3719,7 @@ def api_live_positions():
 
 @app.route('/api/live/emergency-flatten', methods=['POST'])
 @require_bot_api_key
-def api_live_emergency_flatten():
+def api_live_emergency_rollback_flatten():
     """Commands immediate liquidation of all live positions and halts live trading."""
     try:
         from deployment.live_rollback import LiveRollbackManager
@@ -4163,6 +4184,43 @@ def api_multiexchange_health():
         return jsonify({
             "status": "OK",
             **monitor.get_all_health_statuses()
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+# ==============================================================================
+# LIVE CAPITAL DEPLOYMENT & GRADUATED EXPOSURE EMERGENCY CONTROLS
+# ==============================================================================
+
+@app.route('/api/live/emergency/flatten', methods=['POST'])
+def api_live_emergency_flatten():
+    """Emergency endpoint: Flattens all live positions and halts live trading immediately."""
+    try:
+        from risk.live_enforcer import LiveRiskEnforcer
+        enforcer = LiveRiskEnforcer()
+        res = enforcer.trigger_kill_switch(source="DASHBOARD_UI_OPERATOR", rationale="Manual emergency kill switch activated")
+        return jsonify({
+            "status": "OK",
+            "message": "Emergency flatten initiated. Kill switch engaged.",
+            "enforcer_action": res,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/live/emergency/halt', methods=['POST'])
+def api_live_emergency_halt():
+    """Emergency endpoint: Halts new entries without liquidating existing bracket-protected positions."""
+    try:
+        from risk.live_enforcer import LiveRiskEnforcer
+        enforcer = LiveRiskEnforcer()
+        enforcer.status.is_halted = True
+        enforcer.status.halt_reason = "Manual trading halt requested via API"
+        return jsonify({
+            "status": "OK",
+            "message": "Live order entries halted.",
+            "halt_reason": enforcer.status.halt_reason,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         })
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
