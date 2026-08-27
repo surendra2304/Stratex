@@ -35,6 +35,11 @@ ADVISORY_SHADOW_MODE = os.getenv("ADVISORY_SHADOW_MODE", "True").lower() == "tru
 ADVISORY_AUTONOMY_CONFIRMED = os.getenv("ADVISORY_AUTONOMY_CONFIRMED", "False").lower() == "true"
 ADVISORY_INTERVAL_HOURS = float(os.getenv("ADVISORY_INTERVAL_HOURS", "4.0"))
 ADVISORY_TIMEOUT_SECONDS = int(os.getenv("ADVISORY_TIMEOUT_SECONDS", "120"))
+
+# --- Testnet AI Advisory Settings ---
+TESTNET_ADVISORY_ENABLED = os.getenv("TESTNET_ADVISORY_ENABLED", "False").lower() == "true"
+TESTNET_ADVISORY_SHADOW_MODE = os.getenv("TESTNET_ADVISORY_SHADOW_MODE", "True").lower() == "true"
+TESTNET_ADVISORY_MAX_DRAWDOWN_PCT = float(os.getenv("TESTNET_ADVISORY_MAX_DRAWDOWN_PCT", "0.15"))  # 15% hard cutoff for AI advisory
 BASE_URL = "https://testnet.binance.vision"
 WS_URL = "wss://ws-api.testnet.binance.vision/ws-api/v3"
 FUTURES_BASE_URL = "https://testnet.binancefuture.com"

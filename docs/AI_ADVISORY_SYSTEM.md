@@ -200,3 +200,87 @@ To promote AI advisory parameter modulations from Paper A/B testing into Binance
 | **Trade Sample Size** | $\ge 30$ Trades per Arm | Minimum sample for central limit statistical validity |
 | **Statistical Significance** | $p < 0.05$ (Welch's t-test or Mann-Whitney U) | Confirms performance delta is not random noise |
 | **Economic Advantage** | Treatment Profit Factor $\ge 1.20$ AND Treatment Return > Control Return | Confirms genuine positive edge after friction |
+
+---
+
+## 9. Binance Testnet Advisory Integration
+
+The AI Advisory subsystem integrates seamlessly into the live Testnet execution daemon (`bot.py` / `testnet_engine/service.py`) via `testnet_advisory_scheduler.py`.
+
+### Architecture & Control Flow
+
+```
+                               ┌────────────────────────────────┐
+                               │   bot.py (TestnetService)      │
+                               └───────────────┬────────────────┘
+                                               │
+                        ┌──────────────────────▼──────────────────────┐
+                        │   TESTNET_ADVISORY_ENABLED == True ?        │
+                        └──────────────┬──────────────────────────────┘
+                                       │
+                      ┌────────────────┴────────────────┐
+                      │ YES                             │ NO
+                      ▼                                 ▼
+       ┌──────────────────────────────┐   ┌──────────────────────────────┐
+       │ TestnetAdvisoryScheduler     │   │ Standard Testnet Operation   │
+       │ (testnet_advisory_scheduler) │   │ (No Advisory Calls)          │
+       └──────────────┬───────────────┘   └──────────────────────────────┘
+                      │
+                      ├───────────────────────────────────────────────┐
+                      ▼                                               ▼
+       ┌──────────────────────────────┐                ┌──────────────────────────────┐
+       │ Periodic Cycle (Every 4.0h)  │                │ Event/API Trigger:           │
+       │ • Gathers Testnet Telemetry  │                │ • POST /api/testnet/advisory │
+       │ • Calls AI-Universe Consult  │                │   /trigger                   │
+       └──────────────┬───────────────┘                └──────────────┬───────────────┘
+                      │                                               │
+                      └───────────────────────┬───────────────────────┘
+                                              ▼
+                               ┌──────────────────────────────┐
+                               │     AdvisoryGate Validation  │
+                               │  (±20% Delta, Forbidden List)│
+                               └──────────────┬───────────────┘
+                                              │
+                      ┌───────────────────────┴───────────────────────┐
+                      │                                               │
+                      ▼                                               ▼
+       ┌──────────────────────────────┐                ┌──────────────────────────────┐
+       │ If SHADOW Mode (Default):    │                │ If APPLY Mode:               │
+       │ • Append to advisory_log     │                │ • Apply to runtime overlay   │
+       │ • verdict=SHADOW_LOG_ONLY    │                │ • Dynamic parameter mutate   │
+       │ • Zero parameter mutation    │                │ • Circuit breaker active     │
+       └──────────────────────────────┘                └──────────────┬───────────────┘
+                                                                      │
+                                                       ┌──────────────▼───────────────┐
+                                                       │ Max Drawdown >= 15.0%?       │
+                                                       │ 🚨 Trip Circuit Breaker      │
+                                                       │ 🚨 Revert all overrides      │
+                                                       │ 🚨 Force back to SHADOW mode │
+                                                       └──────────────────────────────┘
+```
+
+### Configuration Variables (`.env`)
+
+```ini
+# Enable AI advisory background service in Testnet engine
+TESTNET_ADVISORY_ENABLED="False"
+
+# Shadow mode toggle (True = Log-only audit, False = Live parameter modulation)
+TESTNET_ADVISORY_SHADOW_MODE="True"
+
+# Hard drawdown ceiling for AI advisory on Testnet (15% default)
+TESTNET_ADVISORY_MAX_DRAWDOWN_PCT="0.15"
+```
+
+### Safety Invariants & Limits
+1. **Circuit Breaker**: If Testnet account drawdown reaches or exceeds **15.0%**, the circuit breaker trips immediately, disabling live AI advisory, forcing `shadow_mode=True`, and resetting all runtime parameters to clean baseline defaults (`overlay.reset_to_defaults()`).
+2. **Precedence Hierarchy**: Existing `RiskGate`, `ProfitabilityGate`, and daily loss limits take absolute priority and hard-block orders before parameter modulations take effect.
+3. **Sizing & Leverage**: Position sizing changes are clamped to $[0.5\times, 1.5\times]$, leverage increases are strictly blocked, and max delta is capped at $\pm 20.0\%$.
+4. **Forbidden Variables**: Core risk thresholds (`max_daily_loss`, `max_drawdown`, `live_trading_enabled`, `api_key`, `secret_key`) are permanently forbidden.
+
+### API Endpoints
+- `GET /api/testnet/advisory/status`: Current scheduler state, mode (`DISABLED`, `SHADOW`, `APPLY`), circuit breaker status, and live testnet equity/drawdown metrics.
+- `GET /api/testnet/advisory/log?limit=10`: Recent advisory decisions recorded for testnet.
+- `POST /api/testnet/advisory/trigger`: Triggers an instantaneous consultation cycle.
+- `POST /api/testnet/advisory/toggle`: Toggles between `SHADOW` and `APPLY` modes (requires `X-BOT-API-KEY`).
+

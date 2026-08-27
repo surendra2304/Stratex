@@ -3348,6 +3348,124 @@ def api_ab_results():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
+# ==============================================================================
+# TESTNET AI ADVISORY ENDPOINTS
+# ==============================================================================
+
+@app.route('/api/testnet/advisory/status')
+def api_testnet_advisory_status():
+    """Returns the live status of the Testnet AI Advisory Subsystem."""
+    try:
+        from testnet_advisory_scheduler import get_testnet_advisory_scheduler
+        from ai_universe_client import AIUniverseClient
+        scheduler = get_testnet_advisory_scheduler()
+        status_dict = scheduler.get_status()
+
+        base_url = getattr(config, "AI_UNIVERSE_BASE_URL", os.getenv("AI_UNIVERSE_BASE_URL", "http://localhost:8000"))
+        client = AIUniverseClient(base_url=base_url, timeout=3)
+        ai_healthy = client.health_check()
+
+        # Get testnet portfolio metrics
+        port_file = "testnet_portfolio.json"
+        equity = 10000.0
+        drawdown = 0.0
+        open_pos_count = 0
+        if os.path.exists(port_file):
+            try:
+                with open(port_file, "r", encoding="utf-8") as f:
+                    pdata = json.load(f)
+                    equity = float(pdata.get("equity", pdata.get("current_equity", 10000.0)))
+                    drawdown = float(pdata.get("max_drawdown", 0.0))
+                    positions = pdata.get("positions", {})
+                    open_pos_count = len(positions) if isinstance(positions, (dict, list)) else 0
+            except Exception:
+                pass
+
+        return jsonify({
+            "status": "OK",
+            "advisory_status": status_dict,
+            "ai_universe_healthy": ai_healthy,
+            "testnet_metrics": {
+                "equity": round(equity, 2),
+                "drawdown_pct": round(drawdown * 100 if drawdown <= 1.0 else drawdown, 2),
+                "open_positions": open_pos_count
+            },
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/testnet/advisory/log')
+def api_testnet_advisory_log():
+    """Returns recent advisory decisions recorded for the Testnet execution track."""
+    try:
+        from advisory_ledger import read_recent_advisory_entries
+        limit = safe_int_param('limit', default=10, min_val=1, max_val=100)
+        entries = read_recent_advisory_entries(limit=limit)
+        # Filter for testnet or recent entries
+        return jsonify({
+            "status": "OK",
+            "count": len(entries),
+            "advisories": entries,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/testnet/advisory/trigger', methods=['POST'])
+def api_testnet_advisory_trigger():
+    """Manually triggers an instantaneous advisory consultation cycle on Testnet."""
+    try:
+        from testnet_advisory_scheduler import get_testnet_advisory_scheduler
+        scheduler = get_testnet_advisory_scheduler()
+        if not scheduler.enabled:
+            return jsonify({
+                "status": "DISABLED",
+                "message": "TESTNET_ADVISORY_ENABLED is False. Enable it in configuration first."
+            }), 400
+
+        result = scheduler.trigger_manual_consultation()
+        if result:
+            return jsonify({
+                "status": "SUCCESS",
+                "message": f"Consultation executed. Decision ID: {result.get('decision_id')}",
+                "result": result
+            })
+        else:
+            return jsonify({
+                "status": "FAILED",
+                "message": "Consultation could not be completed (check logs or circuit breaker status)."
+            }), 502
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/testnet/advisory/toggle', methods=['POST'])
+@require_bot_api_key
+def api_testnet_advisory_toggle():
+    """Toggles Testnet Advisory between SHADOW mode and APPLY mode (protected)."""
+    try:
+        from testnet_advisory_scheduler import get_testnet_advisory_scheduler
+        scheduler = get_testnet_advisory_scheduler()
+        data = request.get_json() or {}
+        shadow_mode = data.get("shadow_mode", True)
+        if isinstance(shadow_mode, str):
+            shadow_mode = shadow_mode.lower() == "true"
+
+        success = scheduler.toggle_mode(bool(shadow_mode))
+        if success:
+            return jsonify({
+                "status": "SUCCESS",
+                "shadow_mode": scheduler.shadow_mode,
+                "mode": "SHADOW" if scheduler.shadow_mode else "APPLY"
+            })
+        else:
+            return jsonify({
+                "status": "FAILED",
+                "message": "Could not toggle mode (circuit breaker may be active)."
+            }), 400
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)

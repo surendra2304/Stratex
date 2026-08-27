@@ -203,6 +203,18 @@ class AdvisoryParameterOverlay:
             logger.info(f"[ADVISORY_PARAMS] Rolled back decision {decision_id} successfully.")
             return True
 
+    def reset_to_defaults(self, reason: str = "CIRCUIT_BREAKER_RESET") -> None:
+        """Clears all active overrides, reverting completely to config_strategy.py defaults."""
+        with self._lock:
+            self._overrides = {}
+            self._history.append({
+                "decision_id": f"RESET_{reason}",
+                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                "reason": reason
+            })
+            self._save_state()
+            logger.info(f"[ADVISORY_PARAMS] Reset all strategy parameter overlays to clean baseline defaults ({reason}).")
+
     def get_state(self) -> Dict[str, Any]:
         """Returns the full runtime overlay state."""
         with self._lock:

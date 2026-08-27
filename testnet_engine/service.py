@@ -2263,14 +2263,14 @@ class TestnetService:
         self._progress_thread = threading.Thread(target=self._progress_report_loop, daemon=True)
         self._progress_thread.start()
 
-        # 5b. Start AI-Universe Advisory Scheduler (Shadow/Live Parameter Advisory)
+        # 5b. Start AI-Universe Testnet Advisory Scheduler (gated by TESTNET_ADVISORY_ENABLED)
         try:
-            from advisory_scheduler import start_advisory_scheduler_if_enabled
-            self._advisory_scheduler = start_advisory_scheduler_if_enabled()
-            if self._advisory_scheduler:
-                logger.info("[ADVISORY_SCHEDULER] AI-Universe Advisory background scheduler started.")
+            from testnet_advisory_scheduler import start_testnet_advisory_if_enabled
+            self._testnet_advisory_scheduler = start_testnet_advisory_if_enabled()
+            if self._testnet_advisory_scheduler:
+                logger.info("[TESTNET_ADVISORY] Testnet AI-Universe Advisory background service initialized.")
         except Exception as e:
-            logger.error(f"[ADVISORY_SCHEDULER] Failed to start advisory scheduler (non-fatal): {e}")
+            logger.error(f"[TESTNET_ADVISORY] Failed to start testnet advisory scheduler (non-fatal): {e}")
 
         logger.info("[ENGINE_READY] Binance Testnet trading engine is fully initialized and operational.")
         

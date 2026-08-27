@@ -391,10 +391,32 @@ async function fetchDashboardData() {
 
 async function fetchAdvisoryDashboardData() {
     try {
-        const [advRecent, advState] = await Promise.all([
+        const [advRecent, advState, testnetAdv] = await Promise.all([
             apiClient.get('/api/advisory/recent?limit=10'),
-            apiClient.get('/api/advisory/state')
+            apiClient.get('/api/advisory/state'),
+            apiClient.get('/api/testnet/advisory/status')
         ]);
+
+        if (testnetAdv && testnetAdv.advisory_status) {
+            const tBadge = $('adv-testnet-mode-badge');
+            if (tBadge) {
+                const mode = testnetAdv.advisory_status.mode || 'DISABLED';
+                tBadge.innerText = `TESTNET: ${mode}`;
+                if (mode === 'APPLY') {
+                    tBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+                    tBadge.style.color = '#34D399';
+                    tBadge.style.borderColor = '#10B981';
+                } else if (mode === 'SHADOW') {
+                    tBadge.style.background = 'rgba(99, 102, 241, 0.15)';
+                    tBadge.style.color = '#A5B4FC';
+                    tBadge.style.borderColor = '#6366F1';
+                } else {
+                    tBadge.style.background = 'rgba(255, 255, 255, 0.05)';
+                    tBadge.style.color = 'var(--text-muted)';
+                    tBadge.style.borderColor = 'var(--border-medium)';
+                }
+            }
+        }
 
         if (advState) {
             const healthEl = $('adv-ai-health');
@@ -1666,12 +1688,32 @@ async function fetchABTestData() {
                 overlayBox.innerHTML = html;
             }
         }
+async function triggerManualAdvisoryConsultation() {
+    const btn = $('btn-trigger-advisory');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerText = 'CONSULTING...';
+    }
+    try {
+        const res = await apiClient.post('/api/testnet/advisory/trigger', {});
+        if (res && (res.status === 'SUCCESS' || res.result)) {
+            showToastNotification('AI Consultation Complete', 'success');
+            fetchAdvisoryDashboardData();
+        } else {
+            showToastNotification(res.message || 'Consultation failed', 'warning');
+        }
     } catch (e) {
-        console.warn('[AB_TEST] Error fetching A/B data:', e);
+        showToastNotification('Error triggering advisory: ' + (e.message || e), 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = '⚡ TRIGGER NOW';
+        }
     }
 }
 
 // Export functions to window
+window.triggerManualAdvisoryConsultation = triggerManualAdvisoryConsultation;
 window.fetchABTestData = fetchABTestData;
 window.toggleScannerFilterDropdown = toggleScannerFilterDropdown;
 window.applyScannerFilters = applyScannerFilters;
