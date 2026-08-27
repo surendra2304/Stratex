@@ -1,9 +1,9 @@
 """
-reporting/voice_summaries.py — Voice-Ready Natural Language Generator for FRIDAY.
+reporting/voice_summaries.py — Voice-Ready Natural Language Summary Generator.
 
-Converts complex trading metrics and alerts into conversational, spoken-language text:
+Generates conversational, spoken-language text for audio synthesis:
 - Numbers are rounded and formatted naturally for speech (e.g. "one point two percent").
-- Minimal jargon, clear cadence, and calibrated urgency.
+- No jargon, clear cadence, and calibrated urgency.
 """
 
 from typing import Dict, List, Optional, Any
@@ -15,7 +15,7 @@ def generate_daily_voice_summary(
     trades_count: int,
     risk_headroom_pct: float
 ) -> str:
-    """Produces 2-3 sentence conversational spoken summary of daily trading activity."""
+    """Produces a conversational spoken summary of daily trading performance."""
     pnl_text = f"gained {abs(net_pnl_pct):.1f} percent" if net_pnl_pct >= 0 else f"lost {abs(net_pnl_pct):.1f} percent"
     clean_strat = best_strategy.replace("strategy_", "").title()
 
