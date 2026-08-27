@@ -1,0 +1,44 @@
+{
+    "starting_capital": 10000.0,
+    "cash": 7112.465276812072,
+    "realized_pnl": -3.1727981175773863,
+    "used_margin": 2884.361925070351,
+    "cumulative_fees": 0.0,
+    "cumulative_slippage": 0.0,
+    "cumulative_spread": 0.0,
+    "cumulative_funding": 0.0,
+    "positions": {
+        "577449f4-cc2c-4caa-b27b-dc871c34b0f7": {
+            "symbol": "BTCUSDT",
+            "direction": "LONG",
+            "entry_price": 78580.480605,
+            "quantity": 0.018361749014301956,
+            "status": "OPEN",
+            "open_time": 1787772410.2904017,
+            "last_update_time": 1787772410.2904017,
+            "sl": 73095.10571428572,
+            "tp": 89433.41857142858
+        },
+        "81fd6e23-b2e6-49ee-a229-780f60edb5e7": {
+            "symbol": "BTCUSDT",
+            "direction": "LONG",
+            "entry_price": 78598.89980999999,
+            "quantity": 0.018358132839374326,
+            "status": "OPEN",
+            "open_time": 1787772471.6311243,
+            "last_update_time": 1787772471.6311243
+        }
+    },
+    "peak_equity": 10000.0,
+    "daily_loss": 3.1727981175773863,
+    "daily_realized_pnl": -3.1727981175773863,
+    "daily_fees": 0.0,
+    "daily_funding": 0.0,
+    "last_day_ts": 1787702400,
+    "processed_event_ids": [
+        "456b8794-c982-454d-8f15-e43dbbd6880b",
+        "bca84f98-aae4-4d72-90fa-77ccebfea686",
+        "6dfe6172-6701-4d8e-8286-fec5e562f78b",
+        "5708cc7d-e5d7-4b7f-99e4-b2a1b6366976"
+    ]
+}

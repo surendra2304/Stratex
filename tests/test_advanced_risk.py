@@ -22,7 +22,7 @@ import pytest
 
 from risk.dynamic_risk_manager import DynamicRiskManager, RiskBudget
 from optimization.portfolio_optimizer import PortfolioOptimizer
-from execution.advanced_executor import AdvancedOrderExecutor
+from execution_algos.advanced_executor import AdvancedOrderExecutor
 from analysis.multi_timeframe import MultiTimeframeAnalyzer
 from risk.volatility_sizing import VolatilitySizingEngine
 from risk.drawdown_controller import DrawdownController

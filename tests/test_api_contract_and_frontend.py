@@ -33,7 +33,7 @@ def test_approved_navigation_views_in_html():
 
     expected_views = [
         "dashboard", "scanner", "positions", "trades", "markets",
-        "strategies", "risk", "analytics", "system", "settings"
+        "strategies", "risk", "analytics", "abtest", "system", "settings"
     ]
 
     # Verify nav items
