@@ -593,6 +593,13 @@ def run():
         f"capital={cfg.starting_capital}"
     )
 
+    # Start AI-Universe Advisory background scheduler (Shadow/Live Mode)
+    try:
+        from advisory_scheduler import start_advisory_scheduler_if_enabled
+        start_advisory_scheduler_if_enabled()
+    except Exception as e:
+        logger.error(f"[PAPER_RUNNER] Failed to start advisory scheduler (non-fatal): {e}")
+
     POLL_INTERVAL_SECS = 60  # check every 60 seconds; 1H candles change hourly
 
     while True:

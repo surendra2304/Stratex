@@ -385,6 +385,50 @@
                             <li style="padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05);">Loading engine actions…</li>
                         </ul>
                     </div>
+
+                    <!-- AI-Universe Advisory Subsystem -->
+                    <div class="card" style="margin-top: 16px; border: 1px solid rgba(99, 102, 241, 0.3); background: rgba(99, 102, 241, 0.02);">
+                        <div class="card-header" style="display:flex; align-items:center; justify-content:space-between;">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <h3 style="margin:0; font-size:13px; letter-spacing:1px; color:var(--accent-primary, #6366F1);">🧠 AI-UNIVERSE ADVISORY INTELLIGENCE</h3>
+                                <span class="badge-indigo" id="adv-mode-badge" style="font-size:10px;">SHADOW MODE</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <span style="font-size:11px; color:var(--text-muted);">AI Health:</span>
+                                <span class="mono profit" id="adv-ai-health" style="font-size:11px; font-weight:700;">● ONLINE</span>
+                            </div>
+                        </div>
+                        <div style="display:grid; grid-template-columns: 1fr 340px; gap:16px; margin-top:12px;">
+                            <!-- Last 10 Decisions -->
+                            <div>
+                                <div style="font-size:10px; font-weight:700; color:var(--text-muted); margin-bottom:8px; letter-spacing:0.5px;">RECENT ADVISORY DECISIONS</div>
+                                <div style="max-height: 180px; overflow-y:auto;">
+                                    <table class="terminal-table table-dense" style="width:100%;">
+                                        <thead>
+                                            <tr>
+                                                <th>TIME</th>
+                                                <th>DECISION ID</th>
+                                                <th>REASON</th>
+                                                <th>CONF</th>
+                                                <th>VERDICT</th>
+                                                <th>CHANGES</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="adv-decisions-body">
+                                            <tr><td colspan="6" class="idle-state-row" style="text-align:center; color:var(--text-muted);">Awaiting advisory cycles...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <!-- Active Runtime Overrides -->
+                            <div style="border-left: 1px solid var(--border-medium); padding-left: 16px;">
+                                <div style="font-size:10px; font-weight:700; color:var(--text-muted); margin-bottom:8px; letter-spacing:0.5px;">ACTIVE RUNTIME OVERLAYS</div>
+                                <div id="adv-overlay-content" style="font-family:var(--font-mono); font-size:11px; color:var(--text-secondary); max-height:160px; overflow-y:auto;">
+                                    <span style="color:var(--text-muted);">No active parameter overrides (defaults active)</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </section>
             </div>
 

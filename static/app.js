@@ -381,6 +381,92 @@ async function fetchDashboardData() {
     if (actData && actData.activity) {
         renderDashboardEvents(actData.activity);
     }
+
+    // AI-Universe Advisory telemetry
+    fetchAdvisoryDashboardData();
+}
+
+async function fetchAdvisoryDashboardData() {
+    try {
+        const [advRecent, advState] = await Promise.all([
+            apiClient.get('/api/advisory/recent?limit=10'),
+            apiClient.get('/api/advisory/state')
+        ]);
+
+        if (advState) {
+            const healthEl = $('adv-ai-health');
+            if (healthEl) {
+                if (advState.ai_universe_healthy) {
+                    healthEl.className = 'mono profit';
+                    healthEl.innerText = '● ONLINE';
+                } else {
+                    healthEl.className = 'mono text-muted';
+                    healthEl.innerText = '○ OFFLINE (LAST VALIDATED PARAMS)';
+                }
+            }
+
+            const modeBadge = $('adv-mode-badge');
+            if (modeBadge) {
+                modeBadge.innerText = advState.shadow_mode ? 'SHADOW MODE' : 'LIVE APPLIED';
+                modeBadge.className = advState.shadow_mode ? 'badge-indigo' : 'badge-accepted';
+            }
+
+            const overlayContent = $('adv-overlay-content');
+            if (overlayContent && advState.state) {
+                const overrides = advState.state.active_overrides || {};
+                const keys = Object.keys(overrides);
+                if (keys.length === 0) {
+                    overlayContent.innerHTML = '<span style="color:var(--text-muted);">No active parameter overrides (defaults active)</span>';
+                } else {
+                    let html = '';
+                    for (const strat of keys) {
+                        html += `<div style="margin-bottom:6px;"><strong style="color:var(--accent-primary);">${strat.toUpperCase()}:</strong><br>`;
+                        for (const [pk, pv] of Object.entries(overrides[strat])) {
+                            html += `  • <span style="color:var(--text-secondary);">${pk}:</span> <strong style="color:var(--text-primary);">${pv}</strong><br>`;
+                        }
+                        html += `</div>`;
+                    }
+                    overlayContent.innerHTML = html;
+                }
+            }
+        }
+
+        if (advRecent && advRecent.advisories) {
+            renderAdvisoryDecisions(advRecent.advisories);
+        }
+    } catch (e) {
+        console.warn('[ADVISORY] Error fetching advisory dashboard data:', e);
+    }
+}
+
+function renderAdvisoryDecisions(advisories) {
+    const tbody = $('adv-decisions-body');
+    if (!tbody) return;
+    if (!advisories || advisories.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding: 12px;">Awaiting advisory cycles (every 4h or loss streak)...</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = advisories.map(a => {
+        const verd = String(a.verdict || 'REJECT').toUpperCase();
+        let verdClass = 'badge-rejected';
+        if (verd === 'APPLY') verdClass = 'badge-accepted';
+        else if (verd === 'SHADOW_LOG_ONLY') verdClass = 'badge-indigo';
+
+        const conf = a.confidence ? `${Math.round(a.confidence * 100)}%` : '-';
+        const changesCount = (a.applied_changes || []).length || (a.requested_changes || []).length || 0;
+
+        return `
+            <tr>
+                <td class="mono" style="font-size:10px; color:var(--text-muted);">${formatTime(a.timestamp)}</td>
+                <td class="mono" style="font-size:10px; color:var(--text-secondary);" title="${a.decision_id}">${(a.decision_id || '').slice(0, 12)}…</td>
+                <td style="font-size:10px;">${a.consultation_reason || 'SCHEDULED'}</td>
+                <td class="mono" style="font-size:10px; font-weight:700;">${conf}</td>
+                <td><span class="badge ${verdClass}" style="font-size:9px;">${verd}</span></td>
+                <td class="mono" style="font-size:10px;">${changesCount} change(s)</td>
+            </tr>
+        `;
+    }).join('');
 }
 
 function renderDashboardPositions(positions) {

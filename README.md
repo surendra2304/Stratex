@@ -124,6 +124,12 @@ The platform supports six modular quantitative strategies:
 ├── diagnostics.py              # System health and environment diagnostics
 ├── execution.py                # Low-level Binance order routing and safety gates
 ├── features.py                 # Backward-looking technical feature engineering
+├── advisory_gate.py            # Safety bounds gate for AI advisory parameter changes
+├── advisory_ledger.py          # Append-only durable audit ledger (advisory_log.jsonl)
+├── advisory_params.py          # Dynamic runtime parameter overlay and rollback manager
+├── advisory_scheduler.py       # Autonomous background periodic/event-driven AI consultant
+├── advisory_telemetry.py       # Telemetry collector assembling live metrics and regime data
+├── ai_universe_client.py       # Resilient HTTP client for AI-Universe (POST /v1/trading/consult)
 ├── logger.py                   # Structured JSON and CSV logging
 ├── metrics.py                  # PnL, Sharpe, Sortino, Drawdown calculation engine
 ├── ml_research.py              # Machine learning training and feature evaluation

@@ -51,26 +51,34 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
 def get_signal(df: pd.DataFrame, **kwargs) -> SignalResult:
     """
     Hyper-frequency price action signal generator:
-    - Candle closes GREEN (Close > Open) -> BUY (Long) with SL = Entry * 0.995, TP = Entry * 1.003
-    - Candle closes RED (Close < Open)   -> SELL (Short) with SL = Entry * 1.005, TP = Entry * 0.997
+    - Candle closes GREEN (Close > Open) -> BUY (Long) with SL = Entry * (1 - sl_pct), TP = Entry * (1 + tp_pct)
+    - Candle closes RED (Close < Open)   -> SELL (Short) with SL = Entry * (1 + sl_pct), TP = Entry * (1 - tp_pct)
     """
     _NO_SIGNAL = SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     if df is None or len(df) < 2:
         return _NO_SIGNAL
 
+    try:
+        from advisory_params import get_param
+        sl_pct = float(get_param("aggressive_scalper", "sl_pct", _SL_PCT))
+        tp_pct = float(get_param("aggressive_scalper", "tp_pct", _TP_PCT))
+    except Exception:
+        sl_pct = _SL_PCT
+        tp_pct = _TP_PCT
+
     last = df.iloc[-1]
     close_p = float(last['close'])
     open_p = float(last['open'])
 
     if close_p > open_p:
-        sl = round(close_p * (1.0 - _SL_PCT), 4)  # Entry * 0.995
-        tp = round(close_p * (1.0 + _TP_PCT), 4)  # Entry * 1.003
+        sl = round(close_p * (1.0 - sl_pct), 4)
+        tp = round(close_p * (1.0 + tp_pct), 4)
         return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     if close_p < open_p:
-        sl = round(close_p * (1.0 + _SL_PCT), 4)  # Entry * 1.005
-        tp = round(close_p * (1.0 - _TP_PCT), 4)  # Entry * 0.997
+        sl = round(close_p * (1.0 + sl_pct), 4)
+        tp = round(close_p * (1.0 - tp_pct), 4)
         return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     return _NO_SIGNAL

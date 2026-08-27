@@ -27,10 +27,13 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
 GEMINI_ENABLED = os.getenv("GEMINI_ENABLED", "True").lower() == "true"
 
-
-
-
-# --- Testnet Base URLs ---
+# --- AI-Universe Advisory Intelligence System ---
+AI_UNIVERSE_BASE_URL = os.getenv("AI_UNIVERSE_BASE_URL", "http://localhost:8000")
+AI_UNIVERSE_API_KEY = os.getenv("AI_UNIVERSE_API_KEY", os.getenv("FRIDAY_UNIVERSE_API_KEY", ""))
+AI_UNIVERSE_ENABLED = os.getenv("AI_UNIVERSE_ENABLED", "True").lower() == "true"
+ADVISORY_SHADOW_MODE = os.getenv("ADVISORY_SHADOW_MODE", "True").lower() == "true"
+ADVISORY_INTERVAL_HOURS = float(os.getenv("ADVISORY_INTERVAL_HOURS", "4.0"))
+ADVISORY_TIMEOUT_SECONDS = int(os.getenv("ADVISORY_TIMEOUT_SECONDS", "120"))
 BASE_URL = "https://testnet.binance.vision"
 WS_URL = "wss://ws-api.testnet.binance.vision/ws-api/v3"
 FUTURES_BASE_URL = "https://testnet.binancefuture.com"

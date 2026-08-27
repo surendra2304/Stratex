@@ -3201,6 +3201,46 @@ def api_ai_system_analysis():
         logger.warning(f"[API_AI_SYS] Error: {e}")
         return jsonify({"status": "SUCCESS", "analysis": {"system_summary": "Diagnostics unavailable", "ai_available": False}})
 
+@app.route('/api/advisory/recent')
+def api_advisory_recent():
+    """Returns the last N AI-Universe advisory decisions and validation audit entries."""
+    try:
+        from advisory_ledger import read_recent_advisory_entries
+        limit = safe_int_param('limit', default=10, min_val=1, max_val=100)
+        entries = read_recent_advisory_entries(limit=limit)
+        return jsonify({
+            "status": "OK",
+            "count": len(entries),
+            "advisories": entries,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/advisory/state')
+def api_advisory_state():
+    """Returns the current runtime parameter overlay state, overrides, and AI-Universe health."""
+    try:
+        from advisory_params import get_advisory_overlay
+        from ai_universe_client import AIUniverseClient
+        overlay = get_advisory_overlay()
+        state = overlay.get_state()
+
+        base_url = getattr(config, "AI_UNIVERSE_BASE_URL", os.getenv("AI_UNIVERSE_BASE_URL", "http://localhost:8000"))
+        client = AIUniverseClient(base_url=base_url, timeout=3)
+        ai_healthy = client.health_check()
+
+        return jsonify({
+            "status": "OK",
+            "ai_universe_url": base_url,
+            "ai_universe_healthy": ai_healthy,
+            "shadow_mode": getattr(config, "ADVISORY_SHADOW_MODE", True),
+            "state": state,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)
