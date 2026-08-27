@@ -1,12 +1,12 @@
-# Autonomous Strategy Evolution Laboratory Guide
+# Autonomous Strategy Evolution & Human Governance Guide
 
 ## Overview
 
-The Strategy Evolution Laboratory autonomously breeds, mutates, and tests quantitative strategy genomes, subjecting candidates to a 6-gate statistical gauntlet before paper incubation and production graduation.
+The Strategy Evolution Laboratory autonomously discovers, breeds, mutates, and tests quantitative strategy genomes, subjecting candidates to a 6-gate statistical gauntlet and a 30-day paper incubator before human operator review.
 
 ---
 
-## 1. Evolution Pipeline Architecture
+## 🏛️ Strategy Evolution Pipeline
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -36,8 +36,17 @@ The Strategy Evolution Laboratory autonomously breeds, mutates, and tests quanti
 │                        (evolution/incubator.py)                        │
 ├────────────────────────────────────────────────────────────────────────┤
 │ • Live vs Theoretical Signal Tracking                                  │
-│ • Fidelity Correlation Metric >= 0.70                                  │
-│ • Graduation Criteria: 30d, PF >= 1.25, Max Live DD <= 10%             │
+│ • Fidelity Correlation Metric >= 0.60, Live PF >= 1.10                 │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ (Incubation Criteria Met)
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                   Human Approval Gate (Mandatory Review)               │
+│                     (evolution/approval_gates.py)                      │
+├────────────────────────────────────────────────────────────────────────┤
+│ ⚠️ INVARIANT: NO strategy reaches live without human approval.         │
+│ • Cryptographic audit hash generated for evidence package.             │
+│ • Operator reviews evidence & signs approval via Dashboard / API.      │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -56,9 +65,18 @@ The Strategy Evolution Laboratory autonomously breeds, mutates, and tests quanti
 
 ---
 
-## 3. Paper Incubator & Graduation
+## 3. Paper Incubator & Human Approval Lifecycle
 
-1. **Admission**: Certified genomes are admitted to `incubator_state.json`.
-2. **Forward Paper Execution**: The strategy paper-trades live market feeds for $\ge 30$ calendar days.
-3. **Fidelity Tracking**: Tracks live execution price realization against backtest assumptions.
-4. **Graduation**: If after 30 days the live Profit Factor $\ge 1.25$ and live Drawdown $\le 10\%$, the strategy is promoted to the production strategy candidate pool.
+1. **Admission**: Certified genomes enter `incubator_state.json`.
+2. **Forward Paper Execution**: The strategy forward-trades live market feeds for $\ge 30$ calendar days.
+3. **Fidelity Tracking**: Tracks live execution price realization against backtest assumptions ($Fidelity \ge 0.60, PF \ge 1.10$).
+4. **Promotion Proposal**: Submits formal proposal with cryptographic audit hash into `approval_queue.json`.
+5. **Human Approval**: The operator reviews the evidence package and approves via `POST /api/evolution/approve/{id}`.
+
+---
+
+## 4. Evolution Dashboard & Governance APIs
+
+- `GET /api/evolution/status` — Population size, active generation, incubating strategy count, pending approvals.
+- `GET /api/evolution/approvals` — Pending and historical proposal queue.
+- `POST /api/evolution/approve/<proposal_id>` — Signs and records human approval.

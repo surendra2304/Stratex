@@ -96,3 +96,28 @@ def test_strategy_incubator_lifecycle():
         )
         assert grad.status == "GRADUATED"
         assert len(incubator.get_graduated_strategies()) == 1
+
+
+def test_human_approval_gates():
+    from evolution.approval_gates import HumanApprovalGate
+    with tempfile.TemporaryDirectory() as tmpdir:
+        gate_file = f"{tmpdir}/approval_queue.json"
+        gate = HumanApprovalGate(state_file=gate_file)
+
+        # 1. Propose promotion
+        prop = gate.submit_promotion_proposal(
+            genome_id="EVO_STRAT_007",
+            archetype="breakout",
+            evidence_summary={"pf": 1.45, "fidelity": 0.82},
+            incubation_days=31,
+            live_pf=1.42,
+            fidelity=0.82
+        )
+        assert prop.status == "PENDING_HUMAN_APPROVAL"
+        assert len(gate.get_pending_proposals()) == 1
+
+        # 2. Human approval
+        approved_prop = gate.approve_proposal(prop.proposal_id, approver="HUMAN_OPERATOR", rationale="Exceptional walk-forward fidelity.")
+        assert approved_prop.status == "APPROVED"
+        assert approved_prop.signature is not None
+        assert len(gate.get_pending_proposals()) == 0

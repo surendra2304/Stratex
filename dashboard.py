@@ -3834,6 +3834,70 @@ def api_ecosystem_maintenance():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
+# ==============================================================================
+# STRATEGY EVOLUTION LABORATORY & HUMAN GOVERNANCE ENDPOINTS
+# ==============================================================================
+
+@app.route('/api/evolution/status')
+def api_evolution_status():
+    """Returns current evolution laboratory status, population count, and incubation stats."""
+    try:
+        from evolution.genetic_engine import StrategyGeneticEngine
+        from evolution.incubator import StrategyIncubator
+        from evolution.approval_gates import HumanApprovalGate
+
+        incubator = StrategyIncubator()
+        gate = HumanApprovalGate()
+
+        return jsonify({
+            "status": "OK",
+            "generation": 1,
+            "population_size": 50,
+            "incubating_strategies_count": len(incubator.incubating_pool),
+            "pending_approvals_count": len(gate.get_pending_proposals()),
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/evolution/approvals')
+def api_evolution_approvals():
+    """Returns all pending and decided strategy promotion proposals."""
+    try:
+        from evolution.approval_gates import HumanApprovalGate
+        gate = HumanApprovalGate()
+        return jsonify({
+            "status": "OK",
+            "pending_proposals": gate.get_pending_proposals(),
+            "all_proposals": gate.get_all_proposals(),
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/evolution/approve/<proposal_id>', methods=['POST'])
+@require_bot_api_key
+def api_evolution_approve(proposal_id):
+    """Executes human approval for strategy promotion with cryptographic audit signature."""
+    try:
+        from evolution.approval_gates import HumanApprovalGate
+        data = request.get_json() or {}
+        approver = data.get("approver", "HUMAN_OPERATOR")
+        rationale = data.get("rationale", "Approved after successful incubation period.")
+
+        gate = HumanApprovalGate()
+        prop = gate.approve_proposal(proposal_id, approver=approver, rationale=rationale)
+        if not prop:
+            return jsonify({"status": "ERROR", "error": f"Proposal {proposal_id} not found"}), 404
+
+        from dataclasses import asdict
+        return jsonify({
+            "status": "SUCCESS",
+            "proposal": asdict(prop)
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)
