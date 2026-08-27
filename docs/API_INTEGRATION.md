@@ -1,8 +1,13 @@
-# Ecosystem Integration API Reference (v1)
+# System Integration API Reference (v1) — Consumer-Agnostic
 
 ## Overview
 
-The Ecosystem Integration API provides clean, secure endpoints for external platforms (**FRIDAY**, **FORGE dashboards**, and automated tooling) to inspect trading performance, monitor risk, export datasets, and safely issue control commands.
+The System Integration API provides clean, secure, consumer-agnostic REST endpoints for external dashboards, monitoring platforms, and supervisor services to inspect trading telemetry, query risk headroom, stream data exports, and issue control commands.
+
+**Architecture Rules:**
+- The trading bot is a pure standalone service that knows only **AI-Universe** (its advisory source).
+- The trading bot has **no knowledge of any external consumer systems or supervisors**.
+- Outbound webhooks are optional and configured strictly via environment variables.
 
 ---
 
@@ -14,11 +19,10 @@ All requests require authentication via the `X-API-Key` or `Authorization: Beare
 | Role | Environment Variable | Permissions |
 | :--- | :--- | :--- |
 | **READ** | `TRADING_BOT_API_KEY_READ` | Status, Positions, Trades, Strategies, Risk, Exports, Health |
-| **CONTROL** | `TRADING_BOT_API_KEY_CONTROL` | Read + Pause, Resume, Strategy Toggle, Limits Inspection |
-| **FRIDAY / ADMIN** | `TRADING_BOT_API_KEY_FRIDAY` | Full Control + Emergency Panic Stop (`POST /api/v1/control/panic`) |
+| **CONTROL** | `TRADING_BOT_API_KEY_CONTROL` | Read + Pause, Resume, Strategy Toggle, Limits, Emergency Panic Stop |
 
 ### Rate Limits:
-- **General / Read Endpoints**: 60 requests / minute per IP.
+- **Read Endpoints**: 60 requests / minute per IP.
 - **Control Endpoints**: 10 requests / minute per IP.
 
 ---
@@ -77,7 +81,7 @@ Returns complete rollup of bot mode, real-time equity, daily PnL, win rate, acti
 
 ## 3. Control API (`/api/v1/control/`)
 
-Requires `CONTROL` or `FRIDAY` API key.
+Requires `CONTROL` API key.
 
 ### `POST /api/v1/control/pause`
 Pauses opening new trades (existing open positions remain actively managed).
@@ -121,4 +125,4 @@ Dispatches signed JSON payloads with HMAC signatures in `X-Bot-Signature`:
 ### Health Probes:
 - `GET /api/v1/health` — Ultra-fast liveness probe (HTTP 200).
 - `GET /api/v1/health/detailed` — Resource diagnostics (CPU, Memory, Storage, Trading, Advisory).
-- `GET /api/v1/health/integrations` — External connectivity to AI-Universe, FRIDAY, and Binance.
+- `GET /api/v1/health/integrations` — External connectivity to AI-Universe and Exchange APIs.

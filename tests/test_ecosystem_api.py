@@ -1,13 +1,12 @@
 """
-tests/test_ecosystem_api.py — Comprehensive Tests for Ecosystem Integration API (v1).
+tests/test_ecosystem_api.py — Consumer-Agnostic Tests for Ecosystem Integration API (v1).
 
 Verifies:
 1. Public Status Endpoints (/api/v1/status, /positions, /trades, /strategies, /advisory, /risk, /history/equity).
 2. API Key Authentication:
    - Missing key -> 401 Unauthorized.
    - READ key cannot call /control endpoints -> 403 Forbidden.
-   - CONTROL key can call /pause, /resume, /strategy toggle.
-   - ADMIN/FRIDAY key can call /panic with {"confirm": true}.
+   - CONTROL key can call /pause, /resume, /strategy toggle, /panic.
 3. Control Endpoint Safety:
    - Panic without confirmation -> 400 Bad Request.
    - Panic with confirmation -> 200 OK & incident logged.
@@ -15,7 +14,6 @@ Verifies:
 4. Export Endpoints (/api/v1/export/trades, /equity, /advisory-log, /risk-events).
 5. Health Endpoints (/api/v1/health, /detailed, /integrations).
 6. Webhook Event Dispatching & Dead Letter Queue (DLQ).
-7. Rate Limiting.
 """
 
 import os
@@ -91,15 +89,15 @@ def test_api_key_role_permissions(client):
 
 
 def test_control_panic_confirmation_safety(client):
-    friday_headers = {"X-API-Key": "friday_key_default_secret_789"}
+    control_headers = {"X-API-Key": "control_key_default_secret_456"}
 
     # 1. Panic without confirmation payload -> 400 Bad Request
-    res = client.post("/api/v1/control/panic", json={}, headers=friday_headers)
+    res = client.post("/api/v1/control/panic", json={}, headers=control_headers)
     assert res.status_code == 400
     assert res.get_json()["error"] == "CONFIRMATION_REQUIRED"
 
     # 2. Panic with confirmation -> 200 OK
-    res = client.post("/api/v1/control/panic", json={"confirm": True}, headers=friday_headers)
+    res = client.post("/api/v1/control/panic", json={"confirm": True}, headers=control_headers)
     assert res.status_code == 200
     assert "EMERGENCY PANIC" in res.get_json()["data"]["message"]
 
@@ -150,5 +148,4 @@ def test_health_endpoints(client):
 def test_webhook_emitter():
     emitter = EcosystemWebhookEmitter()
     emitter.emit_event("trade.closed", {"symbol": "BTC/USDT", "pnl": 45.0})
-    # If no URLs configured, should exit gracefully without throwing
     assert True

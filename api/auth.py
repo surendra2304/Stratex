@@ -1,15 +1,13 @@
 """
-api/auth.py — Role-Based API Key Authentication & Access Control.
+api/auth.py — Consumer-Agnostic Role-Based API Key Authentication.
 
 Key Roles:
 - READ: Access to all /api/v1/status*, /api/v1/health*, and /api/v1/export* endpoints.
-- CONTROL: Access to read + /api/v1/control/pause, /api/v1/control/resume, /api/v1/control/strategy/*, /api/v1/control/risk-limits.
-- FRIDAY / ADMIN: Full access including /api/v1/control/panic and advisory overrides.
+- CONTROL: Access to read + all /api/v1/control/* endpoints (pause, resume, strategy toggling, emergency panic stop).
 
-Loads from environment variables:
+Loads strictly from environment variables:
 - TRADING_BOT_API_KEY_READ
 - TRADING_BOT_API_KEY_CONTROL
-- TRADING_BOT_API_KEY_FRIDAY
 """
 
 import os
@@ -19,21 +17,19 @@ from typing import Dict, Optional, Tuple
 from flask import request, jsonify
 from security_hardening import SecurityRateLimiter, mask_credential
 
-# Default dev keys for graceful testing/fallback if unset
+# Consumer-agnostic keys
 _DEFAULT_KEYS = {
     "READ": os.getenv("TRADING_BOT_API_KEY_READ", "read_key_default_secret_123"),
-    "CONTROL": os.getenv("TRADING_BOT_API_KEY_CONTROL", "control_key_default_secret_456"),
-    "FRIDAY": os.getenv("TRADING_BOT_API_KEY_FRIDAY", "friday_key_default_secret_789")
+    "CONTROL": os.getenv("TRADING_BOT_API_KEY_CONTROL", "control_key_default_secret_456")
 }
 
 # Key permissions hierarchy
 PERMISSIONS = {
     "READ": ["read"],
-    "CONTROL": ["read", "control"],
-    "FRIDAY": ["read", "control", "admin", "advisory_override"]
+    "CONTROL": ["read", "control", "admin"]
 }
 
-# Dedicated rate limiter for authentication & control endpoints (60 req/min for general, 10 req/min for control)
+# Dedicated rate limiters (60 req/min for general reads, 10 req/min for control)
 api_rate_limiter = SecurityRateLimiter(max_requests=60, window_seconds=60)
 control_rate_limiter = SecurityRateLimiter(max_requests=10, window_seconds=60)
 
@@ -63,7 +59,7 @@ def get_key_role(api_key: str) -> Optional[str]:
 
 
 def require_permission(required_perm: str):
-    """Decorator to enforce role-based access control on ecosystem endpoints."""
+    """Decorator to enforce consumer-agnostic role-based access control on API endpoints."""
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):

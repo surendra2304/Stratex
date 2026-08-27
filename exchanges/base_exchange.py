@@ -68,6 +68,10 @@ class BaseExchange(ABC):
         self.is_connected = False
         self.rate_limit_delay_ms = 100
 
+    def is_healthy(self) -> bool:
+        """Returns whether the exchange connection is operational."""
+        return True
+
     def normalize_symbol(self, raw_symbol: str) -> str:
         """Converts raw exchange symbols to unified BASE/QUOTE format (e.g. BTC/USDT)."""
         sym = raw_symbol.upper().replace("-", "/").replace("_", "")

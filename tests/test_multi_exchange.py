@@ -16,7 +16,7 @@ from exchanges.exchange_implementations import (
     BinanceExchangeAdapter, BybitExchangeAdapter, OKXExchangeAdapter, CoinbaseExchangeAdapter
 )
 from portfolio.unified_portfolio import UnifiedPortfolioManager
-from execution.exchange_router import MultiExchangeRouter
+from exchange_router import MultiExchangeRouter
 from exchanges.health_monitor import MultiExchangeHealthMonitor
 from strategies.arb_scanner import CrossExchangeArbitrageScanner
 

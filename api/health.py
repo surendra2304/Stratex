@@ -1,10 +1,10 @@
 """
-api/health.py — Multi-Level Health & Diagnostics API Blueprint.
+api/health.py — Consumer-Agnostic Multi-Level Health & Diagnostics API Blueprint.
 
 Endpoints:
 - GET /api/v1/health : Fast liveness probe.
-- GET /api/v1/health/detailed : Diagnostics across exchange connectivity, memory/CPU, storage, risk, and advisory subsystems.
-- GET /api/v1/health/integrations : Status of external dependencies (AI-Universe, FRIDAY webhooks, Binance).
+- GET /api/v1/health/detailed : Multi-pillar diagnostics across exchange connectivity, memory/CPU, storage, risk, and advisory subsystems.
+- GET /api/v1/health/integrations : Status of external dependencies (AI-Universe connectivity and Exchange APIs).
 """
 
 import os
@@ -52,15 +52,16 @@ def detailed_diagnostics():
 @health_bp.route("/integrations", methods=["GET"])
 @require_permission("read")
 def integration_dependencies():
-    """Checks external connectivity."""
+    """Checks external connectivity (AI-Universe advisory source and Exchange APIs)."""
+    ai_url = os.getenv("AI_UNIVERSE_URL", "http://localhost:8000")
     integrations = {
         "ai_universe": {
-            "target": "http://localhost:8000",
+            "target": ai_url,
             "status": "CONNECTED_OR_FALLBACK_ACTIVE"
         },
-        "friday_webhooks": {
+        "webhook_service": {
             "configured": bool(os.getenv("WEBHOOK_URLS")),
-            "status": "OPERATIONAL"
+            "status": "OPERATIONAL" if bool(os.getenv("WEBHOOK_URLS")) else "DISABLED"
         },
         "exchange_apis": {
             "binance": "HEALTHY",

@@ -1,15 +1,15 @@
 """
-api/control.py — Safe Control API Blueprint with Audit Trails.
+api/control.py — Safe Control API Blueprint with Cryptographic Audit Trails.
 
 Endpoints:
-- POST /api/v1/control/pause : Pauses new trade entries (existing positions remain open).
+- POST /api/v1/control/pause : Pauses opening new trade entries (existing positions remain open).
 - POST /api/v1/control/resume : Resumes trading execution.
 - POST /api/v1/control/panic : Emergency stop (flattens all positions & halts; requires {"confirm": true}).
 - POST /api/v1/control/strategy/<name>/toggle : Enables/disables individual quantitative strategies.
 - GET  /api/v1/control/risk-limits : Inspects current active risk constraints.
 
 Safety Rules:
-- All actions require CONTROL or FRIDAY role.
+- All actions require CONTROL role.
 - All actions are signed and logged to control_audit.jsonl.
 - Rate-limited to 10 requests / minute.
 """
@@ -81,7 +81,7 @@ def resume_trading():
 
 
 @control_bp.route("/panic", methods=["POST"])
-@require_permission("admin")  # FRIDAY or ADMIN key required
+@require_permission("control")
 def emergency_panic():
     """Emergency Panic Stop — requires {"confirm": true}."""
     data = request.get_json() or {}
@@ -99,7 +99,7 @@ def emergency_panic():
     try:
         from deployment.live_rollback import LiveRollbackManager
         r_mgr = LiveRollbackManager()
-        incident = r_mgr.execute_live_rollback(reason="ECOSYSTEM_API_PANIC_COMMAND", triggered_by="FRIDAY_CONTROL_API")
+        incident = r_mgr.execute_live_rollback(reason="ECOSYSTEM_API_PANIC_COMMAND", triggered_by="CONTROL_API")
         return jsonify(format_api_response({
             "message": "EMERGENCY PANIC EXECUTED: All positions flattened, trading locked.",
             "incident": incident,
