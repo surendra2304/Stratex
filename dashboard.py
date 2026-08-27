@@ -34,11 +34,13 @@ from api.public_status import public_status_bp
 from api.control import control_bp
 from api.export import export_bp
 from api.health import health_bp
+from api.reporting import reporting_bp
 
 app.register_blueprint(public_status_bp)
 app.register_blueprint(control_bp)
 app.register_blueprint(export_bp)
 app.register_blueprint(health_bp)
+app.register_blueprint(reporting_bp)
 
 LOG_FILE = "trade_log.csv"
 
