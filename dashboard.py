@@ -4050,6 +4050,123 @@ def api_risk_orchestration():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
+# ==============================================================================
+# MULTI-EXCHANGE EXPANSION & UNIFIED PORTFOLIO ENDPOINTS
+# ==============================================================================
+
+@app.route('/api/multiexchange/status')
+def api_multiexchange_status():
+    """Returns multi-exchange aggregated metrics, per-exchange P&L, balances, and health status."""
+    try:
+        from exchanges.exchange_implementations import BinanceExchangeAdapter, BybitExchangeAdapter, OKXExchangeAdapter, CoinbaseExchangeAdapter
+        from portfolio.unified_portfolio import UnifiedPortfolioManager
+        from exchanges.health_monitor import MultiExchangeHealthMonitor
+
+        exchanges = {
+            "binance": BinanceExchangeAdapter(),
+            "bybit": BybitExchangeAdapter(),
+            "okx": OKXExchangeAdapter(),
+            "coinbase": CoinbaseExchangeAdapter()
+        }
+        pm = UnifiedPortfolioManager(exchanges)
+        health_mon = MultiExchangeHealthMonitor(list(exchanges.keys()))
+
+        equity_data = pm.get_unified_equity()
+        pos_data = pm.get_cross_exchange_positions()
+        health_data = health_mon.get_all_health_statuses()
+
+        return jsonify({
+            "status": "OK",
+            "total_portfolio_equity": equity_data["total_portfolio_equity"],
+            "total_free_cash": equity_data["total_free_cash"],
+            "open_positions_count": pos_data["total_positions_count"],
+            "exchange_breakdown": equity_data["exchange_breakdown"],
+            "positions": pos_data["positions_list"],
+            "health_summary": health_data["exchanges"],
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/multiexchange/portfolio')
+def api_multiexchange_portfolio():
+    """Returns unified cross-exchange portfolio view, asset exposure matrix, and hedge diagnostics."""
+    try:
+        from exchanges.exchange_implementations import BinanceExchangeAdapter, BybitExchangeAdapter, OKXExchangeAdapter, CoinbaseExchangeAdapter
+        from portfolio.unified_portfolio import UnifiedPortfolioManager
+
+        exchanges = {
+            "binance": BinanceExchangeAdapter(),
+            "bybit": BybitExchangeAdapter(),
+            "okx": OKXExchangeAdapter(),
+            "coinbase": CoinbaseExchangeAdapter()
+        }
+        pm = UnifiedPortfolioManager(exchanges)
+        equity_data = pm.get_unified_equity()
+        pos_data = pm.get_cross_exchange_positions()
+        drift_needed, drifts = pm.check_allocation_drift()
+
+        return jsonify({
+            "status": "OK",
+            "equity": equity_data,
+            "net_asset_exposures": pos_data["net_asset_exposures"],
+            "positions": pos_data["positions_list"],
+            "allocation_drift": {
+                "rebalance_needed": drift_needed,
+                "drifts": drifts
+            },
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/multiexchange/router')
+def api_multiexchange_router():
+    """Returns intelligent order router execution telemetry and slippage stats."""
+    try:
+        from exchanges.exchange_implementations import BinanceExchangeAdapter, BybitExchangeAdapter, OKXExchangeAdapter, CoinbaseExchangeAdapter
+        from execution.exchange_router import MultiExchangeRouter
+        from exchanges.health_monitor import MultiExchangeHealthMonitor
+
+        exchanges = {
+            "binance": BinanceExchangeAdapter(),
+            "bybit": BybitExchangeAdapter(),
+            "okx": OKXExchangeAdapter(),
+            "coinbase": CoinbaseExchangeAdapter()
+        }
+        health_mon = MultiExchangeHealthMonitor(list(exchanges.keys()))
+        router = MultiExchangeRouter(exchanges, health_monitor=health_mon)
+
+        best_venue, exp_p, est_c, est_s = router.find_best_execution_venue("BTC/USDT", "BUY", 0.05)
+        telemetry = router.get_router_telemetry()
+
+        return jsonify({
+            "status": "OK",
+            "current_best_venue_btc": {
+                "exchange": best_venue,
+                "expected_price": exp_p,
+                "estimated_cost": est_c,
+                "estimated_slippage": est_s
+            },
+            "telemetry": telemetry,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/multiexchange/health')
+def api_multiexchange_health():
+    """Returns real-time multi-exchange health scores and circuit breaker statuses."""
+    try:
+        from exchanges.health_monitor import MultiExchangeHealthMonitor
+        monitor = MultiExchangeHealthMonitor(["binance", "bybit", "okx", "coinbase"])
+        return jsonify({
+            "status": "OK",
+            **monitor.get_all_health_statuses()
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)
