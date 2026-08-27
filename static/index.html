@@ -107,6 +107,10 @@
                     <span>Analytics</span>
                     <span class="nav-indicator"></span>
                 </a>
+                <a href="#abtest" class="nav-item" data-view="abtest" id="nav-abtest">
+                    <span>A/B Test</span>
+                    <span class="nav-indicator"></span>
+                </a>
                 <a href="#system" class="nav-item" data-view="system" id="nav-system">
                     <span>System</span>
                     <span class="nav-indicator"></span>
@@ -1172,6 +1176,81 @@
                     </div>
                     <div id="ai-perf-content" style="font-size: 11px; color: var(--text-secondary); line-height: 1.5;">
                         <span style="opacity: 0.7;">Synthesizing portfolio metrics and strategy distribution...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════════════════════
+                 VIEW: A/B TESTING (CONTROL VS AI TREATMENT)
+            ═══════════════════════════════════════════════════════════════ -->
+            <div class="view-container" id="view-abtest">
+                <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div class="page-title-wrap">
+                        <h1 class="page-title">A/B FORWARD VALIDATION</h1>
+                        <span style="font-size: 11px; color: var(--text-muted); margin-left: 12px;" id="ab-exp-label">EXPERIMENT: ab_ai_advisory_001</span>
+                    </div>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <span class="badge-indigo" id="ab-status-badge">A/B RUNNING</span>
+                        <button class="btn-terminal" onclick="fetchABTestData()" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">REFRESH ↻</button>
+                    </div>
+                </div>
+
+                <!-- 1. STATISTICAL SIGNIFICANCE & VERDICT BANNER -->
+                <div class="panel-card" style="margin-bottom: 16px; padding: 16px; border: 1px solid rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.02);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--color-profit); letter-spacing: 1px;">
+                            ⚖️ STATISTICAL INFERENCE & VERDICT
+                        </div>
+                        <span class="mono" id="ab-sample-count" style="font-size: 10px; color: var(--text-muted);">0 Control / 0 Treatment Trades (Min 30 required)</span>
+                    </div>
+                    <div id="ab-verdict-text" style="font-size: 12px; color: var(--text-primary); font-weight: 600; line-height: 1.5;">
+                        INSUFFICIENT_SAMPLE: Collecting forward validation data across both arms...
+                    </div>
+                    <div style="margin-top: 8px; font-size: 11px; color: var(--text-secondary);" id="ab-stats-pvalues">
+                        Welch's t-test p-value: <span class="mono" id="ab-t-pvalue">—</span> | Mann-Whitney U p-value: <span class="mono" id="ab-u-pvalue">—</span>
+                    </div>
+                </div>
+
+                <!-- 2. SIDE-BY-SIDE METRICS GRID -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <!-- ARM A: CONTROL -->
+                    <div class="terminal-card" style="border-top: 3px solid #3B82F6;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                            <div class="card-title" style="color: #60A5FA;">ARM A: CONTROL (BASELINE)</div>
+                            <span class="badge" style="background:rgba(59,130,246,0.1); color:#60A5FA; border:1px solid #3B82F6; font-size:9px;">STATIC PARAMS</span>
+                        </div>
+                        <div class="kv-row"><span>NET PNL</span><span class="mono" id="ab-a-pnl">$0.00</span></div>
+                        <div class="kv-row"><span>RETURN</span><span class="mono" id="ab-a-return">0.00%</span></div>
+                        <div class="kv-row"><span>WIN RATE</span><span class="mono" id="ab-a-winrate">0.00%</span></div>
+                        <div class="kv-row"><span>PROFIT FACTOR</span><span class="mono" id="ab-a-pf">0.00</span></div>
+                        <div class="kv-row"><span>MAX DRAWDOWN</span><span class="mono" id="ab-a-dd">0.00%</span></div>
+                        <div class="kv-row"><span>SHARPE RATIO</span><span class="mono" id="ab-a-sharpe">0.00</span></div>
+                        <div class="kv-row"><span>CLOSED TRADES</span><span class="mono" id="ab-a-trades">0</span></div>
+                    </div>
+
+                    <!-- ARM B: TREATMENT -->
+                    <div class="terminal-card" style="border-top: 3px solid #10B981;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                            <div class="card-title" style="color: #34D399;">ARM B: TREATMENT (AI-ADVISED)</div>
+                            <span class="badge" style="background:rgba(16,185,129,0.1); color:#34D399; border:1px solid #10B981; font-size:9px;">DYNAMIC ADVISORY</span>
+                        </div>
+                        <div class="kv-row"><span>NET PNL</span><span class="mono" id="ab-b-pnl">$0.00</span></div>
+                        <div class="kv-row"><span>RETURN</span><span class="mono" id="ab-b-return">0.00%</span></div>
+                        <div class="kv-row"><span>WIN RATE</span><span class="mono" id="ab-b-winrate">0.00%</span></div>
+                        <div class="kv-row"><span>PROFIT FACTOR</span><span class="mono" id="ab-b-pf">0.00</span></div>
+                        <div class="kv-row"><span>MAX DRAWDOWN</span><span class="mono" id="ab-b-dd">0.00%</span></div>
+                        <div class="kv-row"><span>SHARPE RATIO</span><span class="mono" id="ab-b-sharpe">0.00</span></div>
+                        <div class="kv-row"><span>CLOSED TRADES</span><span class="mono" id="ab-b-trades">0</span></div>
+                    </div>
+                </div>
+
+                <!-- 3. TREATMENT ACTIVE ADVISORY OVERLAY STATE -->
+                <div class="panel-card" style="margin-bottom: 16px; padding: 16px;">
+                    <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; letter-spacing: 1px;">
+                        🧠 TREATMENT ARM: LIVE PARAMETER MODULATIONS
+                    </div>
+                    <div id="ab-treatment-overlay-content" style="font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);">
+                        <span style="color:var(--text-muted);">No parameter deviations applied yet.</span>
                     </div>
                 </div>
             </div>

@@ -132,3 +132,71 @@ ADVISORY_AUTONOMY_CONFIRMED="True"
 - `GET /api/advisory/health`: Returns instantaneous connection status to AI-Universe.
 - `GET /api/advisory/stats`: Returns the full `advisory_quality_report.json` payload for client-side visualization.
 - **Live Alert Banner**: If `ADVISORY_SHADOW_MODE` is disabled, the dashboard renders an active red warning banner alerting operators that live parameter mutation is underway.
+
+---
+
+## 8. Parallel A/B Testing Infrastructure
+
+The platform provides a dual-arm forward validation framework (`paper_ab_runner.py` and `config_ab.py`) to benchmark AI-advised strategy execution against an unmodulated baseline under identical live market feeds.
+
+### Architecture Diagram
+
+```
+                        ┌─────────────────────────────────────┐
+                        │      Real-Time Market Candles       │
+                        │    (1H Feeds: BTC, ETH, SOL, ...)   │
+                        └──────────────────┬──────────────────┘
+                                           │ Identical Ingestion
+                                           ▼
+                 ┌─────────────────────────────────────────────────┐
+                 │       Parallel Dual Engine (paper_ab_runner.py) │
+                 └────────┬───────────────────────────────┬────────┘
+                          │                               │
+            ┌─────────────┴─────────────┐   ┌─────────────┴─────────────┐
+            ▼                           ▼   ▼                           ▼
+┌───────────────────────────────┐       ┌───────────────────────────────┐
+│     ARM A: CONTROL (BASELINE) │       │   ARM B: TREATMENT (AI-ADVISED│
+├───────────────────────────────┤       ├───────────────────────────────┤
+│ • Static Strategy Parameters  │       │ • Dynamic Strategy Overlay    │
+│ • Zero AI Consultations       │       │ • AI-Universe Consultations   │
+│ • State: paper_state_ctrl.json│       │ • State: paper_state_treat.json│
+│ • Ledger: ledger_ctrl.jsonl   │       │ • Ledger: ledger_treat.jsonl  │
+│ • Equity: equity_ctrl.jsonl   │       │ • Equity: equity_treat.jsonl  │
+│ • 10% Max Drawdown Hard Stop  │       │ • 10% Max Drawdown Hard Stop  │
+└──────────────┬────────────────┘       └──────────────┬────────────────┘
+               │                                       │
+               └───────────────────┬───────────────────┘
+                                   │
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│       Statistical Comparison Engine (scripts/compare_ab_performance) │
+├──────────────────────────────────────────────────────────────────────┤
+│ • Welch's Two-Sample t-test (p < 0.05)                               │
+│ • Mann-Whitney U Distribution Test (Rank Sum)                        │
+│ • Bootstrap 95% Confidence Intervals                                 │
+│ • Comparative Metrics: PnL, Profit Factor, Sharpe, Max Drawdown      │
+│ • Output: ab_test_report.md & /api/ab/results                        │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+### How to Run A/B Testing
+
+1. **Launch the Dual Paper Runner**:
+   ```bash
+   python paper_ab_runner.py
+   ```
+2. **Execute Performance & Statistical Evaluation**:
+   ```bash
+   python scripts/compare_ab_performance.py --plot
+   ```
+
+### Decision Matrix for Promoting AI Advisory to Testnet
+
+To promote AI advisory parameter modulations from Paper A/B testing into Binance Futures Testnet execution, all four criteria in the decision matrix must be satisfied simultaneously:
+
+| Criterion | Pre-Registered Target | Required Verification |
+| :--- | :--- | :--- |
+| **Minimum Duration** | $\ge 30$ Calendar Days | Pre-registered experiment duration |
+| **Trade Sample Size** | $\ge 30$ Trades per Arm | Minimum sample for central limit statistical validity |
+| **Statistical Significance** | $p < 0.05$ (Welch's t-test or Mann-Whitney U) | Confirms performance delta is not random noise |
+| **Economic Advantage** | Treatment Profit Factor $\ge 1.20$ AND Treatment Return > Control Return | Confirms genuine positive edge after friction |

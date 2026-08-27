@@ -3275,6 +3275,79 @@ def api_advisory_stats():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
+@app.route('/api/ab/status')
+def api_ab_status():
+    """Returns the live state and configuration of the A/B testing infrastructure."""
+    try:
+        from config_ab import get_default_ab_config
+        cfg = get_default_ab_config()
+
+        # Load live portfolios if present
+        def _get_portfolio_state(filename, default_cap=10000.0):
+            if os.path.exists(filename):
+                try:
+                    with open(filename, 'r', encoding='utf-8') as f:
+                        return json.load(f)
+                except Exception:
+                    pass
+            return {"cash": default_cap, "equity": default_cap, "positions": {}, "realized_pnl": 0.0}
+
+        state_ctrl = _get_portfolio_state(cfg.state_file_control, cfg.initial_capital_per_arm)
+        state_treat = _get_portfolio_state(cfg.state_file_treatment, cfg.initial_capital_per_arm)
+
+        return jsonify({
+            "status": "OK",
+            "experiment_id": cfg.experiment_id,
+            "experiment_name": cfg.experiment_name,
+            "strategy": cfg.strategy_name,
+            "symbols": cfg.symbols,
+            "timeframe": cfg.timeframe,
+            "planned_duration_days": cfg.planned_duration_days,
+            "min_trades_for_significance": cfg.min_trades_for_significance,
+            "max_drawdown_limit_pct": cfg.max_drawdown_limit_pct,
+            "arm_a_control": {
+                "name": cfg.arm_a_name,
+                "cash": state_ctrl.get("cash", cfg.initial_capital_per_arm),
+                "realized_pnl": state_ctrl.get("realized_pnl", 0.0),
+                "open_positions": len(state_ctrl.get("positions", {}))
+            },
+            "arm_b_treatment": {
+                "name": cfg.arm_b_name,
+                "cash": state_treat.get("cash", cfg.initial_capital_per_arm),
+                "realized_pnl": state_treat.get("realized_pnl", 0.0),
+                "open_positions": len(state_treat.get("positions", {}))
+            },
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/ab/results')
+def api_ab_results():
+    """Returns the statistical metrics, hypothesis tests, and equity curve points for both arms."""
+    try:
+        from scripts.compare_ab_performance import compute_ab_comparison, load_equity_curve
+        results = compute_ab_comparison()
+
+        # Load recent equity points
+        df_a = load_equity_curve("paper_equity_curve_control.jsonl")
+        df_b = load_equity_curve("paper_equity_curve_treatment.jsonl")
+
+        curve_a = df_a.tail(50).to_dict(orient="records") if not df_a.empty else []
+        curve_b = df_b.tail(50).to_dict(orient="records") if not df_b.empty else []
+
+        return jsonify({
+            "status": "OK",
+            "results": results,
+            "equity_curves": {
+                "control": curve_a,
+                "treatment": curve_b
+            },
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)

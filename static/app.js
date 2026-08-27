@@ -226,6 +226,9 @@ function loadActiveViewData(view) {
         case 'analytics':
             fetchAnalyticsViewData();
             break;
+        case 'abtest':
+            fetchABTestData();
+            break;
         case 'system':
             fetchSystemViewData();
             break;
@@ -1580,7 +1583,96 @@ async function renderModalCandleChart(symbol, tf) {
     });
 }
 
+// ==========================================
+// 12. VIEW: A/B TESTING ENGINE
+// ==========================================
+async function fetchABTestData() {
+    try {
+        const [abStatus, abResults, advState] = await Promise.all([
+            apiClient.get('/api/ab/status'),
+            apiClient.get('/api/ab/results'),
+            apiClient.get('/api/advisory/state')
+        ]);
+
+        if (abStatus) {
+            const expLabel = $('ab-exp-label');
+            if (expLabel) expLabel.innerText = `EXPERIMENT: ${abStatus.experiment_id || 'ab_ai_advisory_001'}`;
+        }
+
+        if (abResults && abResults.results) {
+            const r = abResults.results;
+            const a = r.arm_a_control || {};
+            const b = r.arm_b_treatment || {};
+            const stats = r.statistical_tests || {};
+            const ev = r.evaluation_summary || {};
+            const smp = r.sample_size || {};
+
+            // Sample & Verdict
+            const smpEl = $('ab-sample-count');
+            if (smpEl) smpEl.innerText = `${smp.control_trades || 0} Control / ${smp.treatment_trades || 0} Treatment Trades (Min ${smp.min_required_trades || 30} required)`;
+
+            const verdEl = $('ab-verdict-text');
+            if (verdEl) verdEl.innerText = ev.recommendation || 'INSUFFICIENT_SAMPLE: Collecting forward validation data across both arms...';
+
+            const tPval = $('ab-t-pvalue');
+            if (tPval) tPval.innerText = stats.welch_t_test ? String(stats.welch_t_test.p_value) : '—';
+
+            const uPval = $('ab-u-pvalue');
+            if (uPval) uPval.innerText = stats.mann_whitney_u_test ? String(stats.mann_whitney_u_test.p_value) : '—';
+
+            // Arm A
+            const pnlA = Number(a.net_pnl || 0);
+            if ($('ab-a-pnl')) {
+                $('ab-a-pnl').innerText = `${pnlA >= 0 ? '+' : ''}$${pnlA.toFixed(2)}`;
+                $('ab-a-pnl').className = `mono ${pnlA >= 0 ? 'profit' : 'loss'}`;
+            }
+            if ($('ab-a-return')) $('ab-a-return').innerText = `${Number(a.return_pct || 0).toFixed(2)}%`;
+            if ($('ab-a-winrate')) $('ab-a-winrate').innerText = `${Number(a.win_rate_pct || 0).toFixed(2)}%`;
+            if ($('ab-a-pf')) $('ab-a-pf').innerText = Number(a.profit_factor || 0).toFixed(2);
+            if ($('ab-a-dd')) $('ab-a-dd').innerText = `${Number(a.max_drawdown_pct || 0).toFixed(2)}%`;
+            if ($('ab-a-sharpe')) $('ab-a-sharpe').innerText = Number(a.sharpe_ratio || 0).toFixed(2);
+            if ($('ab-a-trades')) $('ab-a-trades').innerText = a.total_trades || 0;
+
+            // Arm B
+            const pnlB = Number(b.net_pnl || 0);
+            if ($('ab-b-pnl')) {
+                $('ab-b-pnl').innerText = `${pnlB >= 0 ? '+' : ''}$${pnlB.toFixed(2)}`;
+                $('ab-b-pnl').className = `mono ${pnlB >= 0 ? 'profit' : 'loss'}`;
+            }
+            if ($('ab-b-return')) $('ab-b-return').innerText = `${Number(b.return_pct || 0).toFixed(2)}%`;
+            if ($('ab-b-winrate')) $('ab-b-winrate').innerText = `${Number(b.win_rate_pct || 0).toFixed(2)}%`;
+            if ($('ab-b-pf')) $('ab-b-pf').innerText = Number(b.profit_factor || 0).toFixed(2);
+            if ($('ab-b-dd')) $('ab-b-dd').innerText = `${Number(b.max_drawdown_pct || 0).toFixed(2)}%`;
+            if ($('ab-b-sharpe')) $('ab-b-sharpe').innerText = Number(b.sharpe_ratio || 0).toFixed(2);
+            if ($('ab-b-trades')) $('ab-b-trades').innerText = b.total_trades || 0;
+        }
+
+        // Treatment Overrides
+        const overlayBox = $('ab-treatment-overlay-content');
+        if (overlayBox && advState && advState.state) {
+            const overrides = advState.state.active_overrides || {};
+            const keys = Object.keys(overrides);
+            if (keys.length === 0) {
+                overlayBox.innerHTML = '<span style="color:var(--text-muted);">No parameter deviations applied yet (defaults active).</span>';
+            } else {
+                let html = '';
+                for (const strat of keys) {
+                    html += `<div style="margin-bottom:6px;"><strong style="color:var(--color-profit);">${strat.toUpperCase()}:</strong><br>`;
+                    for (const [pk, pv] of Object.entries(overrides[strat])) {
+                        html += `  • <span style="color:var(--text-secondary);">${pk}:</span> <strong style="color:var(--text-primary);">${pv}</strong><br>`;
+                    }
+                    html += `</div>`;
+                }
+                overlayBox.innerHTML = html;
+            }
+        }
+    } catch (e) {
+        console.warn('[AB_TEST] Error fetching A/B data:', e);
+    }
+}
+
 // Export functions to window
+window.fetchABTestData = fetchABTestData;
 window.toggleScannerFilterDropdown = toggleScannerFilterDropdown;
 window.applyScannerFilters = applyScannerFilters;
 window.selectMarketSymbol = selectMarketSymbol;
