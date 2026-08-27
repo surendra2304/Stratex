@@ -3772,6 +3772,55 @@ def api_intelligence_impact():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
+# ==============================================================================
+# MASTER ECOSYSTEM ORCHESTRATION ENDPOINTS
+# ==============================================================================
+
+@app.route('/api/ecosystem/status')
+def api_ecosystem_status():
+    """Returns global ecosystem operational state, active autonomy level, and recent transitions."""
+    try:
+        from autonomy.operations_director import AutonomousOperationsDirector
+        director = AutonomousOperationsDirector()
+        return jsonify({
+            "status": "OK",
+            "autonomy_level": director.autonomy_level,
+            "ecosystem_state": director.state_machine.get_state_summary(),
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/ecosystem/decisions')
+def api_ecosystem_decisions():
+    """Returns recent autonomous multi-frequency decision records."""
+    try:
+        from autonomy.operations_director import AutonomousOperationsDirector
+        director = AutonomousOperationsDirector()
+        from dataclasses import asdict
+        return jsonify({
+            "status": "OK",
+            "decisions": [asdict(d) for d in director.decision_log[-20:]],
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/ecosystem/maintenance', methods=['POST'])
+@require_bot_api_key
+def api_ecosystem_maintenance():
+    """Executes on-demand maintenance window, garbage collection, and state snapshotting."""
+    try:
+        from autonomy.self_healing import SelfHealingEngine
+        healer = SelfHealingEngine()
+        result = healer.execute_maintenance_window()
+        return jsonify({
+            "status": "SUCCESS",
+            "maintenance_result": result
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)
