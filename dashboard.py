@@ -29,18 +29,19 @@ from quantum_endpoint import quantum_bp
 
 app.register_blueprint(quantum_bp, url_prefix='/api/quantum')
 
-# Register Ecosystem Integration API Blueprints (v1)
 from api.public_status import public_status_bp
 from api.control import control_bp
 from api.export import export_bp
 from api.health import health_bp
 from api.reporting import reporting_bp
+from api.master_control_api import master_control_bp
 
 app.register_blueprint(public_status_bp)
 app.register_blueprint(control_bp)
 app.register_blueprint(export_bp)
 app.register_blueprint(health_bp)
 app.register_blueprint(reporting_bp)
+app.register_blueprint(master_control_bp)
 
 LOG_FILE = "trade_log.csv"
 
