@@ -3655,6 +3655,85 @@ def api_live_daily_report():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
+# ==============================================================================
+# MULTI-EXCHANGE & UNIFIED PORTFOLIO ENDPOINTS
+# ==============================================================================
+
+@app.route('/api/portfolio/unified')
+def api_unified_portfolio():
+    """Returns cross-exchange aggregated equity, capital allocation, and net asset exposures."""
+    try:
+        from exchanges.exchange_implementations import (
+            BinanceExchangeAdapter, BybitExchangeAdapter, OKXExchangeAdapter, CoinbaseExchangeAdapter
+        )
+        from portfolio.unified_portfolio import UnifiedPortfolioManager
+
+        exchanges = {
+            "binance": BinanceExchangeAdapter(),
+            "bybit": BybitExchangeAdapter(),
+            "okx": OKXExchangeAdapter(),
+            "coinbase": CoinbaseExchangeAdapter()
+        }
+        manager = UnifiedPortfolioManager(exchanges)
+        eq_data = manager.get_unified_equity()
+        pos_data = manager.get_cross_exchange_positions()
+        drift, drift_map = manager.check_allocation_drift()
+
+        return jsonify({
+            "status": "OK",
+            "equity": eq_data,
+            "positions": pos_data,
+            "allocation_drift": {
+                "needs_rebalance": drift,
+                "drifts": drift_map
+            },
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/exchanges/health')
+def api_exchanges_health():
+    """Returns health scores, latencies, and circuit breaker states for all exchanges."""
+    try:
+        from exchanges.health_monitor import MultiExchangeHealthMonitor
+        monitor = MultiExchangeHealthMonitor(["binance", "bybit", "okx", "coinbase"])
+        return jsonify({
+            "status": "OK",
+            "health": monitor.get_all_health_statuses()
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/arbitrage/opportunities')
+def api_arbitrage_opportunities():
+    """Scans and returns live cross-exchange spatial and funding rate arbitrage opportunities."""
+    try:
+        from exchanges.exchange_implementations import (
+            BinanceExchangeAdapter, BybitExchangeAdapter, OKXExchangeAdapter, CoinbaseExchangeAdapter
+        )
+        from strategies.arb_scanner import CrossExchangeArbitrageScanner
+        from dataclasses import asdict
+
+        exchanges = {
+            "binance": BinanceExchangeAdapter(),
+            "bybit": BybitExchangeAdapter(),
+            "okx": OKXExchangeAdapter(),
+            "coinbase": CoinbaseExchangeAdapter()
+        }
+        scanner = CrossExchangeArbitrageScanner(exchanges)
+        spatial_opps = scanner.scan_spatial_arbitrage("BTC/USDT")
+        funding_opps = scanner.scan_funding_rate_arbitrage("BTC/USDT")
+
+        return jsonify({
+            "status": "OK",
+            "spatial_arbitrage": [asdict(o) for o in spatial_opps],
+            "funding_rate_arbitrage": funding_opps,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)
