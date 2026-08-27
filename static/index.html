@@ -1311,6 +1311,26 @@
                     </div>
                 </div>
 
+                <!-- PRODUCTION SYSTEM RESOURCES & ALERT MANAGER -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <div class="terminal-card" style="border-top: 3px solid var(--accent-primary);">
+                        <div class="card-title">HOST SYSTEM RESOURCES</div>
+                        <div class="kv-row"><span>CPU UTILIZATION</span><span class="mono" id="sys-res-cpu">0.0%</span></div>
+                        <div class="kv-row"><span>MEMORY USED</span><span class="mono" id="sys-res-mem">0.0% (0 MB)</span></div>
+                        <div class="kv-row"><span>DISK USAGE</span><span class="mono" id="sys-res-disk">0.0% (0 GB free)</span></div>
+                        <div class="kv-row"><span>PROMETHEUS ENDPOINT</span><span class="mono"><a href="/api/metrics" target="_blank" style="color:var(--accent-primary);">/api/metrics ↗</a></span></div>
+                    </div>
+                    <div class="terminal-card" style="border-top: 3px solid #F59E0B;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <div class="card-title" style="color:#F59E0B;">PRODUCTION ALERTS & HEALTH</div>
+                            <span class="badge" id="sys-alerts-count" style="font-size:9px; background:rgba(245,158,11,0.1); color:#F59E0B; border:1px solid #F59E0B;">0 ACTIVE</span>
+                        </div>
+                        <div id="sys-alerts-list" style="max-height:120px; overflow-y:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-secondary);">
+                            <span style="color:var(--text-muted);">No active system or trading alerts.</span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- DIAGNOSTICS & DEPLOYMENT -->
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
                     <div class="terminal-card">

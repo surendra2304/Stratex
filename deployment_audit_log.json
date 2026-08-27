@@ -1,0 +1,19 @@
+{
+  "deployment_id": "DEP_1787832472",
+  "timestamp": "2026-08-27T12:07:52.040742Z",
+  "version": "v2.5.0-prod",
+  "git_sha": "b1548c9e5bd5a38c0b4a1e2b16852b7a460b37ae",
+  "environment": "PRODUCTION",
+  "safety_checks": {
+    "debug_disabled": true,
+    "drawdown_limit_safe": true,
+    "daily_loss_limit_safe": true,
+    "param_delta_safe": true,
+    "leverage_invariant_enforced": true,
+    "safety_gates_active": true
+  },
+  "ai_advisory_mode": "SHADOW",
+  "max_drawdown_limit": 0.15,
+  "status": "DEPLOYED_SUCCESSFULLY",
+  "signature": "e74a1ad59e8e630b330266e51cee4293c04f52bbc692abd03fef59999bd17ff2"
+}

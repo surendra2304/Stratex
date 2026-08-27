@@ -1289,6 +1289,47 @@ async function fetchSystemViewData() {
             `).join('');
         }
     }
+
+    // Host System Resources & Production Alerts
+    try {
+        const [resData, alertsData] = await Promise.all([
+            apiClient.get('/api/health/system'),
+            apiClient.get('/api/alerts')
+        ]);
+
+        if (resData && resData.resources) {
+            const r = resData.resources;
+            safeSetText('sys-res-cpu', `${r.cpu_percent || 0}%`);
+            safeSetText('sys-res-mem', `${r.memory_percent || 0}% (${r.memory_used_mb || 0} MB / ${r.memory_total_mb || 0} MB)`);
+            safeSetText('sys-res-disk', `${r.disk_percent || 0}% (${r.disk_free_gb || 0} GB free)`);
+        }
+
+        if (alertsData && alertsData.alerts) {
+            const alts = alertsData.alerts;
+            const unack = alts.filter(a => !a.acknowledged);
+            safeSetText('sys-alerts-count', `${unack.length} ACTIVE`);
+
+            const listEl = $('sys-alerts-list');
+            if (listEl) {
+                if (alts.length === 0) {
+                    listEl.innerHTML = '<span style="color:var(--text-muted);">No active system or trading alerts.</span>';
+                } else {
+                    listEl.innerHTML = alts.slice(-5).reverse().map(a => `
+                        <div style="padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center;">
+                            <span>
+                                <strong style="color:${a.level === 'CRITICAL' ? '#EF4444' : (a.level === 'WARNING' ? '#F59E0B' : 'var(--text-secondary)')};">[${a.level}]</strong> 
+                                ${a.message}
+                            </span>
+                            ${!a.acknowledged ? `<button onclick="ackAlert('${a.id}')" style="background:none; border:1px solid var(--border-medium); color:var(--text-muted); font-size:9px; cursor:pointer; padding:1px 4px;">ACK</button>` : '<span style="color:var(--color-profit); font-size:9px;">✓ ACK</span>'}
+                        </div>
+                    `).join('');
+                }
+            }
+        }
+    } catch (err) {
+        console.warn('[SYSTEM] Error fetching production resources:', err);
+    }
+    }
 }
 
 // ==========================================
@@ -1712,7 +1753,20 @@ async function triggerManualAdvisoryConsultation() {
     }
 }
 
+async function ackAlert(alertId) {
+    try {
+        const res = await apiClient.post('/api/alerts', { alert_id: alertId });
+        if (res && res.status === 'SUCCESS') {
+            showToastNotification(`Alert ${alertId} acknowledged`, 'success');
+            fetchSystemViewData();
+        }
+    } catch (e) {
+        showToastNotification('Failed to acknowledge alert', 'error');
+    }
+}
+
 // Export functions to window
+window.ackAlert = ackAlert;
 window.triggerManualAdvisoryConsultation = triggerManualAdvisoryConsultation;
 window.fetchABTestData = fetchABTestData;
 window.toggleScannerFilterDropdown = toggleScannerFilterDropdown;

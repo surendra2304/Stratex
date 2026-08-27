@@ -3466,6 +3466,107 @@ def api_testnet_advisory_toggle():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
+# ==============================================================================
+# COMPREHENSIVE PRODUCTION HEALTH & MONITORING ENDPOINTS
+# ==============================================================================
+
+@app.route('/api/health')
+def api_overall_health():
+    """Overall system health status combining trading, advisory, and system resources."""
+    try:
+        from monitoring_system import get_monitoring_system
+        mon = get_monitoring_system()
+        res_m = mon.get_system_resource_metrics()
+        trade_m = mon.get_trading_health_metrics()
+        adv_m = mon.get_advisory_health_metrics()
+
+        overall_status = "HEALTHY"
+        if trade_m.get("status") == "CRITICAL":
+            overall_status = "CRITICAL"
+        elif trade_m.get("status") == "WARNING" or adv_m.get("status") == "WARNING":
+            overall_status = "WARNING"
+
+        return jsonify({
+            "status": overall_status,
+            "trading": trade_m,
+            "advisory": adv_m,
+            "system_resources": res_m,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/health/trading')
+def api_health_trading():
+    """Trading-specific health (positions, drawdown, daily loss)."""
+    try:
+        from monitoring_system import get_monitoring_system
+        mon = get_monitoring_system()
+        return jsonify({
+            "status": "OK",
+            "metrics": mon.get_trading_health_metrics(),
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/health/advisory')
+def api_health_advisory():
+    """AI advisory health (last consultation, latency, success rate)."""
+    try:
+        from monitoring_system import get_monitoring_system
+        mon = get_monitoring_system()
+        return jsonify({
+            "status": "OK",
+            "metrics": mon.get_advisory_health_metrics(),
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/health/system')
+def api_health_system():
+    """System resource health (CPU, memory, disk, process)."""
+    try:
+        from monitoring_system import get_monitoring_system
+        mon = get_monitoring_system()
+        return jsonify({
+            "status": "OK",
+            "resources": mon.get_system_resource_metrics(),
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/metrics')
+def api_prometheus_metrics():
+    """Prometheus / OpenMetrics plain text metrics scraper endpoint."""
+    try:
+        from monitoring_system import get_monitoring_system
+        mon = get_monitoring_system()
+        metrics_text = mon.generate_prometheus_metrics()
+        return Response(metrics_text, mimetype="text/plain; version=0.0.4; charset=utf-8")
+    except Exception as e:
+        return Response(f"# ERROR: {e}\n", status=500, mimetype="text/plain")
+
+@app.route('/api/alerts', methods=['GET', 'POST'])
+def api_alerts_manager():
+    """Get active alerts or acknowledge an alert."""
+    from monitoring_system import get_monitoring_system
+    mon = get_monitoring_system()
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        alert_id = data.get("alert_id")
+        if alert_id and mon.acknowledge_alert(alert_id):
+            return jsonify({"status": "SUCCESS", "message": f"Alert {alert_id} acknowledged."})
+        return jsonify({"status": "ERROR", "message": "Invalid alert ID"}), 400
+
+    return jsonify({
+        "status": "OK",
+        "alerts": mon.alerts_history,
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+    })
+
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)
