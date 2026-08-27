@@ -1765,8 +1765,51 @@ async function ackAlert(alertId) {
     }
 }
 
+async function emergencyFlattenLivePositions() {
+    if (!confirm("🚨 WARNING: Are you sure you want to IMMEDIATELY FLATTEN all live positions and halt trading?")) {
+        return;
+    }
+    try {
+        const res = await apiClient.post('/api/live/emergency-flatten', {});
+        if (res && res.status === 'SUCCESS') {
+            showToastNotification('All live positions flattened successfully!', 'error');
+            const badge = $('hdr-live-badge');
+            if (badge) {
+                badge.innerText = 'LIVE: HALTED (FLATTENED)';
+                badge.className = 'badge badge-rejected';
+            }
+        } else {
+            showToastNotification(res.message || 'Flatten failed', 'warning');
+        }
+    } catch (err) {
+        showToastNotification('Failed to execute emergency flatten: ' + (err.message || err), 'error');
+    }
+}
+
+async function openLiveStatusModal() {
+    try {
+        const res = await apiClient.get('/api/live/status');
+        if (res && res.status === 'OK') {
+            const authStr = res.is_authorized ? 'AUTHORIZED' : 'LOCKED (Gated)';
+            const spec = res.level_spec || {};
+            alert(`⚡ LIVE CAPITAL TIER STATUS\n\n` +
+                  `State: ${authStr}\n` +
+                  `Tier: ${spec.name || 'LEVEL 1'}\n` +
+                  `Max Capital: $${spec.max_capital || 1000}\n` +
+                  `Max Position Size: ${spec.max_position_size_pct || 5}%\n` +
+                  `Max Daily Loss: ${spec.max_daily_loss_pct || 2}%\n` +
+                  `Max Drawdown: ${spec.max_drawdown_limit_pct || 5}%\n\n` +
+                  (res.blocking_errors && res.blocking_errors.length > 0 ? `Missing Gates:\n- ${res.blocking_errors.join('\n- ')}` : 'All 6 Prerequisites Met.'));
+        }
+    } catch (err) {
+        showToastNotification('Failed to fetch live status: ' + (err.message || err), 'error');
+    }
+}
+
 // Export functions to window
 window.ackAlert = ackAlert;
+window.emergencyFlattenLivePositions = emergencyFlattenLivePositions;
+window.openLiveStatusModal = openLiveStatusModal;
 window.triggerManualAdvisoryConsultation = triggerManualAdvisoryConsultation;
 window.fetchABTestData = fetchABTestData;
 window.toggleScannerFilterDropdown = toggleScannerFilterDropdown;

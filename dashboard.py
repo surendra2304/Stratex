@@ -3567,6 +3567,94 @@ def api_alerts_manager():
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
     })
 
+# ==============================================================================
+# GRADUATED LIVE CAPITAL DEPLOYMENT ENDPOINTS
+# ==============================================================================
+
+@app.route('/api/live/status')
+def api_live_status():
+    """Returns the live trading authorization state, capital tier level, and risk limits."""
+    try:
+        from deployment.live_authorization import LiveAuthorizationVerifier
+        verifier = LiveAuthorizationVerifier()
+        auth_state = verifier.verify_all_authorizations()
+
+        return jsonify({
+            "status": "OK",
+            "is_authorized": auth_state.is_authorized,
+            "authorized_level": auth_state.authorized_level,
+            "authorized_capital": auth_state.authorized_capital,
+            "level_spec": {
+                "name": auth_state.spec.name,
+                "max_capital": auth_state.spec.max_capital,
+                "max_strategies": auth_state.spec.max_strategies,
+                "max_position_size_pct": auth_state.spec.max_position_size_pct * 100,
+                "max_daily_loss_pct": auth_state.spec.max_daily_loss_pct * 100,
+                "max_drawdown_limit_pct": auth_state.spec.max_drawdown_limit_pct * 100
+            },
+            "active_reasons": auth_state.active_reasons,
+            "blocking_errors": auth_state.blocking_errors,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/live/positions')
+def api_live_positions():
+    """Returns currently open live positions with unrealized PnL."""
+    try:
+        # Check if live state file exists
+        live_state_file = "live_bot_state.json"
+        positions = []
+        if os.path.exists(live_state_file):
+            try:
+                with open(live_state_file, "r", encoding="utf-8") as f:
+                    sdata = json.load(f)
+                    positions = sdata.get("positions", [])
+            except Exception:
+                pass
+        return jsonify({
+            "status": "OK",
+            "count": len(positions),
+            "positions": positions,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/live/emergency-flatten', methods=['POST'])
+@require_bot_api_key
+def api_live_emergency_flatten():
+    """Commands immediate liquidation of all live positions and halts live trading."""
+    try:
+        from deployment.live_rollback import LiveRollbackManager
+        manager = LiveRollbackManager()
+        incident = manager.execute_live_rollback(
+            reason="OPERATOR_MANUAL_EMERGENCY_FLATTEN",
+            triggered_by="API_COMMAND"
+        )
+        return jsonify({
+            "status": "SUCCESS",
+            "message": "All live positions flattened. Live trading locked.",
+            "incident": incident
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/live/daily-report')
+def api_live_daily_report():
+    """Returns today's live performance report JSON."""
+    try:
+        from telemetry.live_telemetry import LiveTelemetryReporter
+        reporter = LiveTelemetryReporter()
+        report = reporter.generate_daily_live_report()
+        return jsonify({
+            "status": "OK",
+            "report": report
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)
