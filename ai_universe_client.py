@@ -11,6 +11,7 @@ Advisory only:
 
 import json
 import logging
+import time
 from typing import Any, Dict, Optional
 import requests
 from requests.adapters import HTTPAdapter
@@ -66,6 +67,7 @@ class AIUniverseClient:
         the validated decision dictionary or None on any failure.
         """
         url = f"{self.base_url}/v1/trading/consult"
+        t0 = time.time()
         try:
             logger.info(f"[AI_UNIVERSE_CLIENT] Sending consultation request to {url}...")
             response = self.session.post(
@@ -74,6 +76,7 @@ class AIUniverseClient:
                 headers=self._get_headers(),
                 timeout=self.timeout
             )
+            elapsed_ms = round((time.time() - t0) * 1000.0, 2)
 
             if response.status_code != 200:
                 logger.warning(
@@ -101,8 +104,9 @@ class AIUniverseClient:
                 logger.warning(f"[AI_UNIVERSE_CLIENT] Malformed AIUniverseDecision: parameter_changes must be a list")
                 return None
 
+            data["latency_ms"] = elapsed_ms
             logger.info(
-                f"[AI_UNIVERSE_CLIENT] Received decision {data.get('decision_id')} | Status: {data.get('status')} | Confidence: {data.get('confidence')}"
+                f"[AI_UNIVERSE_CLIENT] Received decision {data.get('decision_id')} ({elapsed_ms}ms) | Status: {data.get('status')} | Confidence: {data.get('confidence')}"
             )
             return data
 

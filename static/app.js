@@ -411,6 +411,11 @@ async function fetchAdvisoryDashboardData() {
                 modeBadge.className = advState.shadow_mode ? 'badge-indigo' : 'badge-accepted';
             }
 
+            const warnBanner = $('adv-live-warning-banner');
+            if (warnBanner) {
+                warnBanner.style.display = advState.shadow_mode ? 'none' : 'flex';
+            }
+
             const overlayContent = $('adv-overlay-content');
             if (overlayContent && advState.state) {
                 const overrides = advState.state.active_overrides || {};

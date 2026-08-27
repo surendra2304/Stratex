@@ -39,6 +39,7 @@ def append_advisory_entry(entry: Dict[str, Any], filepath: Optional[str] = None)
         "rejected_changes": entry.get("rejected_changes", []),
         "ai_debate_summary": entry.get("ai_debate_summary", ""),
         "regime_analysis": entry.get("regime_analysis", {}),
+        "latency_ms": float(entry.get("latency_ms", 0.0)),
         "shadow_mode": bool(entry.get("shadow_mode", True)),
         "bounds_checked": entry.get("bounds_checked", {})
     }

@@ -1,0 +1,30 @@
+{
+  "generated_at": "2026-08-27T09:06:19.849463Z",
+  "consultations_summary": {
+    "total_lifetime": 0,
+    "last_24h": 0,
+    "last_7d": 0
+  },
+  "verdict_distribution": {
+    "SHADOW_LOG_ONLY": 0,
+    "APPLY": 0,
+    "REJECT": 0
+  },
+  "rejection_reasons_breakdown": {},
+  "parameter_changes_distribution": {},
+  "confidence_distribution_histogram": {
+    "0.00-0.20": 0,
+    "0.21-0.40": 0,
+    "0.41-0.60": 0,
+    "0.61-0.80": 0,
+    "0.81-1.00": 0
+  },
+  "latency_percentiles_ms": {
+    "p50": 0.0,
+    "p95": 0.0,
+    "p99": 0.0,
+    "sample_count": 0
+  },
+  "contested_advisories_count": 0,
+  "contested_advisories": []
+}

@@ -3241,6 +3241,40 @@ def api_advisory_state():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
+@app.route('/api/advisory/health')
+def api_advisory_health():
+    """Hits AI-Universe health check and returns connection metrics."""
+    try:
+        from ai_universe_client import AIUniverseClient
+        base_url = getattr(config, "AI_UNIVERSE_BASE_URL", os.getenv("AI_UNIVERSE_BASE_URL", "http://localhost:8000"))
+        client = AIUniverseClient(base_url=base_url, timeout=3)
+        healthy = client.health_check()
+        return jsonify({
+            "status": "OK",
+            "ai_universe_url": base_url,
+            "healthy": healthy,
+            "shadow_mode": getattr(config, "ADVISORY_SHADOW_MODE", True),
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "healthy": False, "error": str(e)}), 500
+
+@app.route('/api/advisory/stats')
+def api_advisory_stats():
+    """Returns the comprehensive AI Advisory quality and safety report JSON."""
+    try:
+        from scripts.analyze_advisory_log import load_advisory_log, generate_advisory_quality_report
+        log_file = getattr(config, "ADVISORY_LOG_FILE", os.getenv("ADVISORY_LOG_FILE", "advisory_log.jsonl"))
+        records = load_advisory_log(log_file)
+        report = generate_advisory_quality_report(records)
+        return jsonify({
+            "status": "OK",
+            "report": report,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)

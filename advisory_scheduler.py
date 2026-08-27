@@ -112,10 +112,15 @@ class AdvisoryScheduler:
                 "rejected_changes": result.rejected_changes,
                 "ai_debate_summary": decision.get("debate_summary", decision.get("recommendation", "")),
                 "regime_analysis": telemetry.get("market_regime", {}),
+                "latency_ms": decision.get("latency_ms", 0.0),
                 "shadow_mode": self.shadow_mode,
                 "bounds_checked": result.bounds_checked
             }
-            append_advisory_entry(ledger_entry)
+            appended = append_advisory_entry(ledger_entry)
+            if not appended:
+                logger.critical("[ADVISORY_SCHEDULER] 🚨 CRITICAL: Advisory ledger write failed (possible disk failure). Disabling advisory subsystem.")
+                self.stop()
+                return None
 
             # 5. Apply Changes if Validated and NOT in Shadow Mode
             if not self.shadow_mode and result.verdict == "APPLY":

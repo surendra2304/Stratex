@@ -32,6 +32,7 @@ AI_UNIVERSE_BASE_URL = os.getenv("AI_UNIVERSE_BASE_URL", "http://localhost:8000"
 AI_UNIVERSE_API_KEY = os.getenv("AI_UNIVERSE_API_KEY", os.getenv("FRIDAY_UNIVERSE_API_KEY", ""))
 AI_UNIVERSE_ENABLED = os.getenv("AI_UNIVERSE_ENABLED", "True").lower() == "true"
 ADVISORY_SHADOW_MODE = os.getenv("ADVISORY_SHADOW_MODE", "True").lower() == "true"
+ADVISORY_AUTONOMY_CONFIRMED = os.getenv("ADVISORY_AUTONOMY_CONFIRMED", "False").lower() == "true"
 ADVISORY_INTERVAL_HOURS = float(os.getenv("ADVISORY_INTERVAL_HOURS", "4.0"))
 ADVISORY_TIMEOUT_SECONDS = int(os.getenv("ADVISORY_TIMEOUT_SECONDS", "120"))
 BASE_URL = "https://testnet.binance.vision"
@@ -151,6 +152,15 @@ def validate_config():
         raise ValueError(
             f"Configuration Error: API_KEY and SECRET_KEY must be set via "
             f"environment variables or .env file for {TRADING_MODE} mode."
+        )
+
+    # Double-key safety check for AI Advisory live execution
+    if not ADVISORY_SHADOW_MODE and not ADVISORY_AUTONOMY_CONFIRMED:
+        raise ValueError(
+            "Configuration Error: ADVISORY_SHADOW_MODE is set to False (live parameter mutation enabled), "
+            "but ADVISORY_AUTONOMY_CONFIRMED is not set to True. "
+            "To disable shadow mode, you must explicitly provide double-key confirmation: "
+            "ADVISORY_SHADOW_MODE=False AND ADVISORY_AUTONOMY_CONFIRMED=True."
         )
 
 # Validate immediately upon import
