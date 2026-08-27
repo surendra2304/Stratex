@@ -231,12 +231,18 @@ def get_engine_health_data():
         is_healthy = worker_alive and age <= 90 and (pid_alive or pid is None)
         engine_status = "ONLINE" if is_healthy else "OFFLINE"
         
-        # Upgrade 3: supervised paper-runner status (additive, never affects engine_status)
+        # Upgrade 3: supervised paper-runner status (additive, never affects engine_status unless paper mode)
         try:
             from paper_runner_supervisor import get_status as paper_status
             _paper = paper_status()
         except Exception:
             _paper = {"paper_runner_status": "UNKNOWN"}
+
+        paper_alive = _paper.get("paper_runner_status") == "RUNNING" or _paper.get("alive") is True
+        if paper_alive and not is_healthy and getattr(config, "TRADING_MODE", "TESTNET").upper() in ["PAPER", "FUTURES"]:
+            is_healthy = True
+            engine_status = "ONLINE"
+            worker_alive = True
 
         return {
             "engine_status": engine_status,
@@ -244,8 +250,8 @@ def get_engine_health_data():
             "worker_alive": worker_alive,
             "heartbeat_age_seconds": round(age, 2),
             **_paper,
-            "pid": pid,
-            "pid_alive": pid_alive,
+            "pid": pid or _paper.get("pid"),
+            "pid_alive": pid_alive or paper_alive,
             "binance_connected": hb.get("binance_connected", True),
             "websocket_connected": hb.get("websocket_connected", True),
             "active_strategy": hb.get("strategy", "aggressor"),
@@ -253,10 +259,10 @@ def get_engine_health_data():
             "timeframes": hb.get("timeframes", ["1m", "5m", "15m", "1h", "4h"]),
             "symbols": hb.get("symbols", []),
             "symbol_count": hb.get("symbol_count", len(hb.get("symbols", []))),
-            "last_market_update": hb.get("last_market_update"),
+            "last_market_update": hb.get("last_market_update") or _paper.get("started_at"),
             "last_candle_close": hb.get("last_candle_close"),
             "last_strategy_evaluation": hb.get("last_strategy_evaluation"),
-            "service_start_time": hb.get("service_start_time"),
+            "service_start_time": hb.get("service_start_time") or _paper.get("started_at"),
             "timestamp": hb_ts_str or (datetime.datetime.utcnow().isoformat() + "Z")
         }
     except Exception as e:
@@ -265,10 +271,13 @@ def get_engine_health_data():
             _paper = paper_status()
         except Exception:
             _paper = {"paper_runner_status": "UNKNOWN"}
+        
+        paper_alive = _paper.get("paper_runner_status") == "RUNNING" or _paper.get("alive") is True
+        is_healthy = paper_alive and getattr(config, "TRADING_MODE", "TESTNET").upper() in ["PAPER", "FUTURES"]
         return {
-            "engine_status": "OFFLINE",
-            "healthy": False,
-            "worker_alive": False,
+            "engine_status": "ONLINE" if is_healthy else "OFFLINE",
+            "healthy": is_healthy,
+            "worker_alive": paper_alive,
             "heartbeat_age_seconds": None,
             "reason": f"READ_ERROR: {e!s}",
             **_paper,
@@ -535,65 +544,91 @@ def get_status():
     equity_change = None
     today_pnl_abs = 0.0
     
-    # 1. Read Testnet Portfolio
-    port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+    # 1. Read Testnet / Paper Portfolio
+    port_files = []
+    custom_port = os.getenv("TESTNET_PORTFOLIO_FILE")
+    if custom_port:
+        port_files.append(custom_port)
+    else:
+        for p_name in ["testnet_portfolio.json", "paper_portfolio.json"]:
+            if os.path.exists(p_name) and p_name not in port_files:
+                port_files.append(p_name)
+
     open_pos_list = []
-    if os.path.exists(port_file):
-        try:
-            with open(port_file, "r") as f:
-                port = json.load(f)
-            
-            bot_start_time = port.get("service_start_time")
-            safety_halt = port.get("safety_halt", False)
-            realized_pnl = float(port.get("realized_pnl", 0.0))
-            fees = float(port.get("fees", 0.0))
-            
-            # Compute unrealized PnL across active positions
-            for pos_sym, pos in port.get("positions", {}).items():
-                if not isinstance(pos, dict): continue
-                if pos.get('status', 'OPEN') != "OPEN": continue
-                try:
-                    sym = pos.get("symbol", pos_sym)
-                    entry_price = float(pos.get("entry_price", 0.0))
-                    quantity = float(pos.get("quantity", 0.0))
-                    direction = pos.get("direction", pos.get("side", "BUY"))
-                    
-                    current_price = entry_price
+    port = {}
+    for port_file in port_files:
+        if os.path.exists(port_file):
+            try:
+                with open(port_file, "r") as f:
+                    loaded_port = json.load(f)
+                if not port or (loaded_port.get("positions") and not port.get("positions")):
+                    port = loaded_port
+                
+                if loaded_port.get("service_start_time") and not bot_start_time:
+                    bot_start_time = loaded_port.get("service_start_time")
+                if loaded_port.get("safety_halt"):
+                    safety_halt = True
+                if realized_pnl == 0.0:
+                    realized_pnl = float(loaded_port.get("realized_pnl", 0.0))
+                if fees == 0.0:
+                    fees = float(loaded_port.get("fees", loaded_port.get("cumulative_fees", 0.0)))
+                
+                # Compute unrealized PnL across active positions
+                for pos_sym, pos in loaded_port.get("positions", {}).items():
+                    if not isinstance(pos, dict): continue
+                    if pos.get('status', 'OPEN') != "OPEN": continue
                     try:
-                        df = fetch_candles(sym, "1m", 1)
-                        if not df.empty:
-                            current_price = float(df['close'].iloc[-1])
-                    except Exception:
-                        pass
+                        sym = pos.get("symbol", pos_sym if "USDT" in pos_sym else "BTCUSDT")
+                        entry_price = float(pos.get("entry_price", 0.0))
+                        quantity = float(pos.get("quantity", 0.0))
+                        direction = pos.get("direction", pos.get("side", "BUY"))
                         
-                    u_pnl = 0.0
-                    if current_price > 0 and entry_price > 0 and quantity > 0:
-                        used_margin += entry_price * quantity
-                        if direction in ["LONG", "BUY"]:
-                            u_pnl = (current_price - entry_price) * quantity
-                        else:
-                            u_pnl = (entry_price - current_price) * quantity
-                    
-                    unrealized_pnl += u_pnl
-                    open_pos_list.append({
-                        "symbol": sym,
-                        "side": direction,
-                        "entry_price": entry_price,
-                        "current_price": current_price,
-                        "quantity": quantity,
-                        "unrealized_pnl": u_pnl,
-                        "sl": pos.get("sl_price", pos.get("sl", 0.0)),
-                        "tp": pos.get("tp_price", pos.get("tp", 0.0)),
-                        "strategy": pos.get("strategy", "aggressor"),
-                        "timestamp": pos.get("entry_timestamp", pos.get("timestamp", ""))
-                    })
-                except Exception as pos_err:
-                    logger.error(f"Error calculating open pos PnL: {pos_err}")
-            
-            open_positions = sum(1 for p in port.get("positions", {}).values() if isinstance(p, dict) and p.get("status") == "OPEN")
-            mdd = float(port.get("max_drawdown", 0.0)) * 100
-        except Exception as e:
-            logger.error(f"Failed to process testnet portfolio: {e}")
+                        current_price = entry_price
+                        try:
+                            df = fetch_candles(sym, "1m", 1)
+                            if not df.empty:
+                                current_price = float(df['close'].iloc[-1])
+                        except Exception:
+                            pass
+                            
+                        u_pnl = 0.0
+                        if current_price > 0 and entry_price > 0 and quantity > 0:
+                            used_margin += entry_price * quantity
+                            if direction in ["LONG", "BUY"]:
+                                u_pnl = (current_price - entry_price) * quantity
+                            else:
+                                u_pnl = (entry_price - current_price) * quantity
+                        
+                        unrealized_pnl += u_pnl
+                        
+                        # Timestamp resolution
+                        pos_ts = pos.get("entry_timestamp") or pos.get("timestamp")
+                        if not pos_ts and pos.get("open_time"):
+                            try:
+                                pos_ts = datetime.datetime.fromtimestamp(float(pos["open_time"]), datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                            except Exception:
+                                pos_ts = datetime.datetime.utcnow().isoformat() + "Z"
+                                
+                        open_pos_list.append({
+                            "symbol": sym,
+                            "side": direction,
+                            "entry_price": entry_price,
+                            "current_price": current_price,
+                            "quantity": quantity,
+                            "unrealized_pnl": u_pnl,
+                            "sl": pos.get("sl_price", pos.get("sl", 0.0)),
+                            "tp": pos.get("tp_price", pos.get("tp", 0.0)),
+                            "strategy": pos.get("strategy", "aggressive_scalper"),
+                            "timestamp": pos_ts or (datetime.datetime.utcnow().isoformat() + "Z")
+                        })
+                    except Exception as pos_err:
+                        logger.error(f"Error calculating open pos PnL: {pos_err}")
+                
+                open_positions = sum(1 for p in loaded_port.get("positions", {}).values() if isinstance(p, dict) and p.get("status") == "OPEN")
+                if loaded_port.get("max_drawdown"):
+                    mdd = max(mdd, float(loaded_port.get("max_drawdown", 0.0)) * 100)
+            except Exception as e:
+                logger.error(f"Failed to process portfolio file {port_file}: {e}")
 
     # For FUTURES mode, populate live open positions directly from Binance Futures account if portfolio file is empty
     if getattr(config, "TRADING_MODE", "TESTNET").upper() == "FUTURES" and account_holdings.get("holdings"):
@@ -772,9 +807,19 @@ def _get_trades_data():
     positions = []
     seen_trade_keys = set()
     
-    # 1. Parse closed trades from ledger
-    ledger_file = os.getenv("TESTNET_LEDGER_FILE", "paper_trade_ledger.jsonl" if getattr(config, "TRADING_MODE", "TESTNET").upper() == "PAPER" else "testnet_trade_ledger.jsonl")
-    if os.path.exists(ledger_file):
+    # 1. Parse closed trades from ledger (both paper and testnet)
+    ledger_files = []
+    custom_ledger = os.getenv("TESTNET_LEDGER_FILE")
+    if custom_ledger:
+        ledger_files.append(custom_ledger)
+    else:
+        for f_name in ["paper_trade_ledger.jsonl", "testnet_trade_ledger.jsonl"]:
+            if os.path.exists(f_name) and f_name not in ledger_files:
+                ledger_files.append(f_name)
+
+    for ledger_file in ledger_files:
+        if not os.path.exists(ledger_file):
+            continue
         with open(ledger_file, "r") as f:
             for line in f:
                 try:
@@ -791,6 +836,7 @@ def _get_trades_data():
                         continue
                     
                     symbol = trade.get("symbol", "")
+                    trade_id = str(trade.get("trade_id") or trade.get("id") or "")
                     entry_oid = str(trade.get("entry_order_id", ""))
                     exit_oid = str(trade.get("exit_order_id", ""))
                     
@@ -798,15 +844,17 @@ def _get_trades_data():
                         key = f"{symbol}_{exit_oid}"
                     elif entry_oid and entry_oid != "None":
                         key = f"{symbol}_{entry_oid}"
+                    elif trade_id and trade_id != "None":
+                        key = f"{symbol}_{trade_id}"
                     else:
-                        key = f"{symbol}_{trade.get('exit_timestamp', trade.get('timestamp', ''))}_{trade.get('pnl', '')}"
+                        key = f"{symbol}_{trade.get('exit_timestamp', trade.get('exit_time', trade.get('timestamp', '')))}_{trade.get('pnl', trade.get('net_pnl', ''))}"
                     
                     if key in seen_trade_keys:
                         continue
                     seen_trade_keys.add(key)
                     
                     pnl = float(trade.get("net_pnl", trade.get("pnl", trade.get("gross_pnl", 0.0))))
-                    fees = float(trade.get("total_fees", trade.get("fees", trade.get("entry_fee", 0.0) + trade.get("exit_fee", 0.0))))
+                    fees = float(trade.get("total_fees", trade.get("fees", trade.get("exit_fee", 0.0) + trade.get("entry_fee", 0.0))))
                     
                     if pnl > 0:
                         wins += 1
@@ -814,13 +862,25 @@ def _get_trades_data():
                     elif pnl < 0:
                         losses += 1
                         gross_loss += abs(pnl)
+                    
+                    # Format timestamp cleanly to ISO UTC string
+                    ts_val = trade.get("exit_timestamp") or trade.get("timestamp") or trade.get("entry_timestamp")
+                    if not ts_val:
+                        epoch_val = trade.get("exit_time") or trade.get("entry_time")
+                        if epoch_val:
+                            try:
+                                ts_val = datetime.datetime.fromtimestamp(float(epoch_val), datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                            except Exception:
+                                ts_val = str(epoch_val)
+                        else:
+                            ts_val = datetime.datetime.utcnow().isoformat() + "Z"
                         
                     positions.append({
-                        "timestamp": trade.get("exit_timestamp", trade.get("timestamp", trade.get("entry_timestamp", ""))),
+                        "timestamp": ts_val,
                         "symbol": symbol,
-                        "action": trade.get("side", trade.get("action", "BUY")).replace("CLOSED_", "").replace("CLOSE_", ""),
-                        "strategy": trade.get("strategy", "aggressor"),
-                        "source": source or trade.get("source", "BINANCE_EXECUTION"),
+                        "action": trade.get("direction", trade.get("side", trade.get("action", "BUY"))).replace("CLOSED_", "").replace("CLOSE_", ""),
+                        "strategy": trade.get("strategy", "aggressive_scalper"),
+                        "source": source or trade.get("source", "PAPER_ENGINE" if "paper" in ledger_file else "BINANCE_EXECUTION"),
                         "entry_price": float(trade.get("entry_price", 0.0)),
                         "exit_price": float(trade.get("exit_price", 0.0)),
                         "quantity": float(trade.get("quantity", trade.get("entry_executed_quantity", 0.0))),
@@ -828,8 +888,8 @@ def _get_trades_data():
                         "fees": fees,
                         "pnl": pnl,
                         "status": "CLOSED",
-                        "exit_reason": trade.get("exit_reason", "OCO_TARGET"),
-                        "order_id": trade.get("exit_order_id") or trade.get("entry_order_id") or trade.get("signal_id", "LIVE-TRADE")
+                        "exit_reason": trade.get("exit_reason", "TARGET_REACHED"),
+                        "order_id": trade_id or trade.get("exit_order_id") or trade.get("entry_order_id") or trade.get("signal_id", "PAPER-TRADE")
                     })
                 except Exception as e:
                     logger.error(f"Error parsing trade ledger line: {e}")
