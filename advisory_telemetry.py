@@ -142,7 +142,22 @@ def build_telemetry_payload(
     current_strategy = getattr(config, "ACTIVE_STRATEGY", "aggressive_scalper")
     current_params = overlay.get_current_params(current_strategy)
 
-    # 5. Assemble Payload
+    # 5. Integrate IntelX Market Context if available
+    market_context = None
+    try:
+        from intelligence.intelx_client import get_intelx_client
+        intelx = get_intelx_client()
+        market_context = intelx.get_latest_market_context()
+        if market_context:
+            try:
+                from monitoring.metrics import get_metrics_registry
+                get_metrics_registry().market_context_enriched_consultations_total += 1
+            except Exception:
+                pass
+    except Exception as e:
+        logger.debug(f"[ADVISORY_TELEMETRY] IntelX context lookup skipped: {e}")
+
+    # 6. Assemble Payload
     payload = {
         "timestamp": now_iso,
         "trading_mode": mode,
@@ -164,6 +179,7 @@ def build_telemetry_payload(
             "consecutive_losses": consecutive_losses
         },
         "market_regime": regime_data,
+        "market_context": market_context,
         "active_strategy": current_strategy,
         "current_parameters": current_params,
         "recent_trades": recent_closed_trades,

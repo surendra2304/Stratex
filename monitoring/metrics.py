@@ -38,6 +38,8 @@ class PrometheusMetricsRegistry:
         self.pnl_realized_total: float = 0.0
         self.trades_total: Dict[str, int] = {}  # key: (strategy, outcome)
         self.advisory_recommendations_total: Dict[str, int] = {}  # key: verdict
+        self.intelx_market_research_total: int = 0
+        self.market_context_enriched_consultations_total: int = 0
 
         # Histograms / Latency recordings
         self.exchange_latencies: Dict[str, List[float]] = {}
@@ -127,6 +129,14 @@ class PrometheusMetricsRegistry:
                 lines.append(f'trading_bot_advisory_recommendations_total{{verdict="{verdict}"}} {count}')
         else:
             lines.append('trading_bot_advisory_recommendations_total{verdict="APPROVED"} 0')
+
+        lines.append("# HELP intelx_market_research_total Total market research queries submitted to IntelX")
+        lines.append("# TYPE intelx_market_research_total counter")
+        lines.append(f"intelx_market_research_total {self.intelx_market_research_total}")
+
+        lines.append("# HELP market_context_enriched_consultations_total Total AI consultations enriched with IntelX market context")
+        lines.append("# TYPE market_context_enriched_consultations_total counter")
+        lines.append(f"market_context_enriched_consultations_total {self.market_context_enriched_consultations_total}")
 
         lines.append("# HELP trading_bot_strategy_allocation Portfolio weight allocation per strategy")
         lines.append("# TYPE trading_bot_strategy_allocation gauge")
