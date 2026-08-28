@@ -1,0 +1,27 @@
+{
+  "report_type": "WEEKLY_PERFORMANCE_REVIEW",
+  "week": "2026-W34",
+  "timestamp": "2026-08-28T04:02:52.612743Z",
+  "voice_summary": "Weekly review for 2026-W34: total return plus three point four percent, all risk metrics nominal.",
+  "metrics": {
+    "weekly_return_pct": 3.42,
+    "total_trades": 94,
+    "overall_win_rate_pct": 61.7,
+    "profit_factor": 1.78,
+    "max_drawdown_pct": 2.45
+  },
+  "strategy_consistency": {
+    "strategy_supertrend": {
+      "status": "TOP_PERFORMER",
+      "consistency_score": 0.88
+    },
+    "strategy_scalper": {
+      "status": "STABLE",
+      "consistency_score": 0.76
+    },
+    "strategy_adx_ema": {
+      "status": "STABLE",
+      "consistency_score": 0.72
+    }
+  }
+}
