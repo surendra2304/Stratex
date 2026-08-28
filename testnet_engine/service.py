@@ -184,7 +184,7 @@ class TestnetService:
                     pass
                     
             self.service_start_time = datetime.datetime.utcnow().isoformat() + "Z"
-            self.starting_equity = self.initial_deposit # Keep for compatibility
+            self.starting_equity = actual_binance_balance
             self.last_equity_snapshot = 0.0
             logger.info(f"[SERVICE] Actual Binance Balance: {actual_binance_balance} | Local Initial Deposit: {self.initial_deposit}")
         except Exception as e:

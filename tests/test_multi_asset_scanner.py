@@ -30,6 +30,7 @@ class TestMultiAssetEngine:
         gate.calculate_position_size(10000.0, 50000.0, 49900.0, filters)
         
         # Let's test the rejection
+        config.MAX_TESTNET_EXPOSURE = 0.05
         active_high = {
             "POS1": {"quantity": 0.01, "entry_price": 51000.0, "side": "LONG"} # $510 exposure
         }
