@@ -2073,18 +2073,22 @@ class TestnetService:
 
         # Balances by asset (free + locked), ignoring dust
         balances = {}
+        position_sides = {}
         if TRADING_MODE == "FUTURES":
             for p in account.get("positions", []):
-                amt = abs(float(p.get("positionAmt", 0.0)))
+                raw_amt = float(p.get("positionAmt", 0.0))
+                amt = abs(raw_amt)
                 if amt > 0.0:
                     sym = p.get("symbol", "")
                     base = sym[:-4] if sym.endswith("USDT") else sym
                     balances[base] = amt
+                    position_sides[base] = "BUY" if raw_amt > 0 else "SELL"
         else:
             for b in account.get("balances", []):
                 total = float(b.get("free", 0.0)) + float(b.get("locked", 0.0))
                 if total > 0.0:
                     balances[b["asset"]] = total
+                    position_sides[b["asset"]] = "BUY"
 
         # Orders grouped by symbol
         orders_by_symbol = {}
@@ -2103,6 +2107,7 @@ class TestnetService:
         for sym in sorted(candidates):
             base = sym[:-4] if sym.endswith("USDT") else sym
             held_qty = balances.get(base, 0.0)
+            entry_side = position_sides.get(base, "BUY")
             resting = orders_by_symbol.get(sym, [])
 
             if held_qty > 0.0 and not resting:
@@ -2125,14 +2130,18 @@ class TestnetService:
                         raise RuntimeError(f"Could not fetch market price for {sym}")
 
                     if TRADING_MODE == "FUTURES":
-                        sl_price = round(last_close * 0.995, 6)
-                        tp_price = round(last_close * 1.003, 6)
+                        if entry_side == "BUY":
+                            sl_price = round(last_close * 0.995, 6)
+                            tp_price = round(last_close * 1.003, 6)
+                        else:
+                            sl_price = round(last_close * 1.005, 6)
+                            tp_price = round(last_close * 0.997, 6)
                         qty = round(held_qty, 4)
                         from testnet_engine.protection import place_futures_bracket_protection
                         prot = place_futures_bracket_protection(
                             client=self.client,
                             symbol=sym,
-                            entry_side="BUY",
+                            entry_side=entry_side,
                             executed_qty=qty,
                             actual_fill_price=last_close,
                             sl_price=sl_price,
@@ -2155,7 +2164,7 @@ class TestnetService:
                         )
                     summary["naked_positions_protected"].append(sym)
                     logger.warning(
-                        f"[RECONCILE] 🛡️ Naked position {sym} ({qty}) protected: "
+                        f"[RECONCILE] 🛡️ Naked position {sym} ({qty} {entry_side}) protected: "
                         f"SL={sl_price} TP={tp_price} result={prot}"
                     )
                 except Exception as e:
