@@ -68,6 +68,32 @@ def api_v1_security_status():
     """Returns auth configuration, rate limit status, recent auth failures, and webhook verification status."""
     return jsonify(get_security_status_report())
 
+@app.route('/api/v1/futuris/forecast')
+def api_v1_futuris_forecast():
+    """Returns latest Futuris market forecasts with confidence bands."""
+    try:
+        from intelligence.futuris_client import get_futuris_client
+        futuris = get_futuris_client()
+        sym = request.args.get("symbol", "BTCUSDT").upper().strip()
+        forecast = futuris.fetch_forecast(sym)
+        return jsonify({
+            "status": "OK",
+            "forecast": forecast.to_advisory_context(),
+            "accuracy": futuris.get_accuracy_metrics()
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/v1/futuris/accuracy')
+def api_v1_futuris_accuracy():
+    """Returns historical accuracy tracking for Futuris predictions."""
+    try:
+        from intelligence.futuris_client import get_futuris_client
+        futuris = get_futuris_client()
+        return jsonify(futuris.get_accuracy_metrics())
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 def require_bot_api_key(f):
     """
     Decorator protecting sensitive modification endpoints (e.g. POST /api/panic, POST /api/settings).

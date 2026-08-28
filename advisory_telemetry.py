@@ -157,6 +157,15 @@ def build_telemetry_payload(
     except Exception as e:
         logger.debug(f"[ADVISORY_TELEMETRY] IntelX context lookup skipped: {e}")
 
+    # 5b. Integrate Futuris Market Forecast Context if available
+    futuris_context = None
+    try:
+        from intelligence.futuris_client import get_futuris_client
+        futuris = get_futuris_client()
+        futuris_context = futuris.get_latest_futuris_context()
+    except Exception as e:
+        logger.debug(f"[ADVISORY_TELEMETRY] Futuris context lookup skipped: {e}")
+
     # 6. Assemble Payload
     payload = {
         "timestamp": now_iso,
@@ -180,6 +189,7 @@ def build_telemetry_payload(
         },
         "market_regime": regime_data,
         "market_context": market_context,
+        "futuris_context": futuris_context,
         "active_strategy": current_strategy,
         "current_parameters": current_params,
         "recent_trades": recent_closed_trades,
