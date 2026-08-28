@@ -3916,6 +3916,52 @@ def api_ecosystem_maintenance():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
+@app.route('/api/ecosystem/health')
+def api_ecosystem_health():
+    """Returns multi-pillar health matrix of all subsystems (AI, Exchange, Storage, Risk, Dashboard)."""
+    try:
+        from autonomy.degradation_matrix import DegradationPolicyMatrix
+        matrix = DegradationPolicyMatrix()
+        return jsonify({
+            "status": "OK",
+            "matrix": matrix.get_matrix_status(),
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/ecosystem/mode', methods=['POST'])
+@require_bot_api_key
+def api_ecosystem_mode():
+    """Configures autonomy level (LEVEL 1, 2, or 3)."""
+    try:
+        from autonomy.operations_director import AutonomousOperationsDirector
+        data = request.get_json() or {}
+        level = int(data.get("level", 2))
+        director = AutonomousOperationsDirector()
+        new_lvl = director.set_autonomy_level(level)
+        return jsonify({
+            "status": "SUCCESS",
+            "autonomy_level": new_lvl,
+            "message": f"Autonomy level set to LEVEL_{new_lvl}"
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+@app.route('/api/ecosystem/report')
+def api_ecosystem_report():
+    """Returns latest daily performance and ecosystem operations report."""
+    try:
+        import os, json
+        report_path = "reports/daily/report_2026-08-28.json"
+        if os.path.exists(report_path):
+            with open(report_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return jsonify({"status": "OK", "report": data})
+        return jsonify({"status": "OK", "message": "No report found for today"})
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 # ==============================================================================
 # STRATEGY EVOLUTION LABORATORY & HUMAN GOVERNANCE ENDPOINTS
 # ==============================================================================
