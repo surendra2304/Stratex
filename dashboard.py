@@ -52,24 +52,28 @@ def add_header(response):
     response.headers['Expires'] = '0'
     return response
 
+from security_hardening import (
+    require_api_scope,
+    get_security_status_report,
+    log_control_action,
+    authenticate_request,
+    SCOPE_READ,
+    SCOPE_CONTROL,
+    SCOPE_FRIDAY,
+    SCOPE_ADMIN
+)
+
+@app.route('/api/v1/security/status')
+def api_v1_security_status():
+    """Returns auth configuration, rate limit status, recent auth failures, and webhook verification status."""
+    return jsonify(get_security_status_report())
+
 def require_bot_api_key(f):
     """
     Decorator protecting sensitive modification endpoints (e.g. POST /api/panic, POST /api/settings).
-    Requires the X-BOT-API-KEY header to match the BOT_API_KEY environment variable.
+    Enforces SCOPE_CONTROL via security_hardening with rate limiting and audit logging.
     """
-    from functools import wraps
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        expected_key = os.getenv("BOT_API_KEY", "").strip()
-        if expected_key:
-            incoming_key = (request.headers.get("X-BOT-API-KEY") or request.headers.get("X-Bot-Api-Key") or "").strip()
-            if not incoming_key or incoming_key != expected_key:
-                return jsonify({
-                    "status": "UNAUTHORIZED",
-                    "error": "Unauthorized: Missing or invalid X-BOT-API-KEY header"
-                }), 401
-        return f(*args, **kwargs)
-    return decorated_function
+    return require_api_scope(scope=SCOPE_CONTROL, is_control=True)(f)
 
 def safe_int_param(param_name: str, default: int = 100, min_val: int = 1, max_val: int = 1000) -> int:
     """Safely extracts and validates an integer query parameter from Flask request.args.
