@@ -163,6 +163,15 @@ def build_telemetry_payload(
         from intelligence.futuris_client import get_futuris_client
         futuris = get_futuris_client()
         futuris_context = futuris.get_latest_futuris_context()
+        if futuris_context:
+            try:
+                from monitoring.metrics import get_metrics_registry
+                reg = get_metrics_registry()
+                reg.futuris_context_included_consultations_total += 1
+                acc_info = futuris.get_accuracy_metrics()
+                reg.forecast_accuracy_pct = float(acc_info.get("accuracy_pct", 100.0))
+            except Exception:
+                pass
     except Exception as e:
         logger.debug(f"[ADVISORY_TELEMETRY] Futuris context lookup skipped: {e}")
 

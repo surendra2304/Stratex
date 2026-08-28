@@ -40,6 +40,8 @@ class PrometheusMetricsRegistry:
         self.advisory_recommendations_total: Dict[str, int] = {}  # key: verdict
         self.intelx_market_research_total: int = 0
         self.market_context_enriched_consultations_total: int = 0
+        self.futuris_context_included_consultations_total: int = 0
+        self.forecast_accuracy_pct: float = 100.0
 
         # Histograms / Latency recordings
         self.exchange_latencies: Dict[str, List[float]] = {}
@@ -137,6 +139,14 @@ class PrometheusMetricsRegistry:
         lines.append("# HELP market_context_enriched_consultations_total Total AI consultations enriched with IntelX market context")
         lines.append("# TYPE market_context_enriched_consultations_total counter")
         lines.append(f"market_context_enriched_consultations_total {self.market_context_enriched_consultations_total}")
+
+        lines.append("# HELP futuris_context_included_consultations_total Total AI consultations enriched with Futuris forecast context")
+        lines.append("# TYPE futuris_context_included_consultations_total counter")
+        lines.append(f"futuris_context_included_consultations_total {self.futuris_context_included_consultations_total}")
+
+        lines.append("# HELP forecast_accuracy_pct Historical accuracy percentage of Futuris volatility forecasts")
+        lines.append("# TYPE forecast_accuracy_pct gauge")
+        lines.append(f"forecast_accuracy_pct {self.forecast_accuracy_pct:.2f}")
 
         lines.append("# HELP trading_bot_strategy_allocation Portfolio weight allocation per strategy")
         lines.append("# TYPE trading_bot_strategy_allocation gauge")
