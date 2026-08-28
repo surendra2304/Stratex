@@ -2258,7 +2258,7 @@ class TestnetService:
         self.scanner = MarketScanner(symbol_list, timeframes=tfs, is_futures=(TRADING_MODE == "FUTURES"))
         self.scanner.register_callback(self.on_candle_closed)
         self.scanner.start()
-        logger.info(f"[MARKET_DATA_CONNECTED] Multiplex WebSocket streaming active for {len(symbol_list)} symbols.")
+        logger.info(f"[MARKET_DATA_CONNECTED] Multi-timeframe REST polling engine active for {len(symbol_list)} symbols across {len(tfs)} timeframes.")
         
         # 4. Start Position Monitor Thread
         monitor_thread = threading.Thread(target=self.position_monitor_loop, daemon=True)
