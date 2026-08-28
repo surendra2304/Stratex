@@ -171,32 +171,45 @@ function initNavigation() {
     const navItems = document.querySelectorAll('.nav-item');
     const views = document.querySelectorAll('.view-container');
 
+    function switchView(targetView) {
+        if (!targetView) return;
+        activeViewName = targetView;
+
+        navItems.forEach(nav => {
+            if (nav.getAttribute('data-view') === targetView) {
+                nav.classList.add('active');
+            } else {
+                nav.classList.remove('active');
+            }
+        });
+
+        views.forEach(view => {
+            if (view.id === `view-${targetView}`) {
+                view.classList.add('active');
+            } else {
+                view.classList.remove('active');
+            }
+        });
+
+        loadActiveViewData(targetView);
+    }
+
     navItems.forEach(item => {
         item.addEventListener('click', (e) => {
-            e.preventDefault();
             const targetView = item.getAttribute('data-view');
             if (!targetView) return;
-            activeViewName = targetView;
-
-            navItems.forEach(nav => nav.classList.remove('active'));
-            item.classList.add('active');
-
-            views.forEach(view => {
-                if (view.id === `view-${targetView}`) {
-                    view.classList.add('active');
-                } else {
-                    view.classList.remove('active');
-                }
-            });
-
-            loadActiveViewData(targetView);
+            switchView(targetView);
         });
     });
 
-    const hash = (window.location.hash || '').replace('#', '').trim();
-    if (hash) {
-        const match = document.querySelector(`.nav-item[data-view="${hash}"]`);
-        if (match) match.click();
+    window.addEventListener('hashchange', () => {
+        const hash = (window.location.hash || '').replace('#', '').trim();
+        if (hash) switchView(hash);
+    });
+
+    const initialHash = (window.location.hash || '').replace('#', '').trim();
+    if (initialHash) {
+        switchView(initialHash);
     }
 }
 
