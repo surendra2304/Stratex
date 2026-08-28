@@ -133,6 +133,18 @@ class PrometheusMetricsRegistry:
         for strat, weight in self.strategy_allocations.items():
             lines.append(f'trading_bot_strategy_allocation{{strategy="{strat}"}} {weight:.4f}')
 
+        lines.append("# HELP trading_bot_exchange_latency_ms Exchange request latency in milliseconds")
+        lines.append("# TYPE trading_bot_exchange_latency_ms histogram")
+        for ex, lats in self.exchange_latencies.items():
+            if lats:
+                count = len(lats)
+                total_sum = sum(lats)
+                lines.append(f'trading_bot_exchange_latency_ms_sum{{exchange="{ex}"}} {total_sum:.2f}')
+                lines.append(f'trading_bot_exchange_latency_ms_count{{exchange="{ex}"}} {count}')
+            else:
+                lines.append(f'trading_bot_exchange_latency_ms_sum{{exchange="{ex}"}} 0.0')
+                lines.append(f'trading_bot_exchange_latency_ms_count{{exchange="{ex}"}} 0')
+
         lines.append("# HELP trading_bot_circuit_breaker_state Circuit breaker status (0=Nominal, 1=Tripped)")
         lines.append("# TYPE trading_bot_circuit_breaker_state gauge")
         for cb, state in self.circuit_breaker_states.items():
