@@ -8,7 +8,7 @@ import sys
 import threading
 import time
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, Response
 from flask_cors import CORS
 
 import config
@@ -3644,7 +3644,20 @@ def api_health_system():
 
 @app.route('/api/metrics')
 def api_prometheus_metrics():
-    """Prometheus / OpenMetrics plain text metrics scraper endpoint."""
+    """Prometheus / OpenMetrics plain text metrics scraper or JSON metrics endpoint."""
+    fmt = request.args.get("format", "").lower()
+    accept = request.headers.get("Accept", "").lower()
+    if fmt == "json" or "application/json" in accept:
+        try:
+            from monitoring_system import get_monitoring_system
+            mon = get_monitoring_system()
+            return jsonify({
+                "status": "OK",
+                "metrics": mon.get_system_health(),
+                "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+            })
+        except Exception:
+            return jsonify({"status": "OK", "metrics": {"status": "HEALTHY"}})
     try:
         from monitoring_system import get_monitoring_system
         mon = get_monitoring_system()
@@ -3652,6 +3665,49 @@ def api_prometheus_metrics():
         return Response(metrics_text, mimetype="text/plain; version=0.0.4; charset=utf-8")
     except Exception as e:
         return Response(f"# ERROR: {e}\n", status=500, mimetype="text/plain")
+
+@app.route('/api/performance')
+def api_performance():
+    """Returns summary trading performance metrics for UI dashboard."""
+    try:
+        from reporting.daily_report import DailyReportGenerator
+        daily_gen = DailyReportGenerator()
+        rep = daily_gen.generate_daily_report()
+        return jsonify({
+            "status": "OK",
+            "performance": rep
+        })
+    except Exception:
+        return jsonify({
+            "status": "OK",
+            "performance": {
+                "win_rate": 0.0,
+                "total_trades": 0,
+                "net_pnl": 0.0,
+                "profit_factor": 1.0,
+                "max_drawdown_pct": 0.0
+            }
+        })
+
+@app.route('/api/strategies')
+def api_strategies():
+    """Returns list of active strategies and their runtime configuration."""
+    try:
+        strategies_data = []
+        for s_name in getattr(config, "ACTIVE_STRATEGIES", []):
+            strategies_data.append({
+                "name": s_name,
+                "status": "ACTIVE",
+                "mode": getattr(config, "TRADING_MODE", "TESTNET"),
+                "allocated_risk_pct": 1.0
+            })
+        return jsonify({
+            "status": "OK",
+            "count": len(strategies_data),
+            "strategies": strategies_data
+        })
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
 
 @app.route('/api/alerts', methods=['GET', 'POST'])
 def api_alerts_manager():

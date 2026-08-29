@@ -9,6 +9,7 @@ Advisory only:
 - Zero downtime tolerance: trading loop is never blocked or crashed.
 """
 
+import os
 import json
 import logging
 import time
@@ -29,15 +30,15 @@ class AIUniverseClient:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8000",
+        base_url: Optional[str] = None,
         timeout: int = 120,
         max_retries: int = 2,
         api_key: Optional[str] = None
     ) -> None:
-        self.base_url = (base_url or "http://localhost:8000").rstrip("/")
+        self.base_url = (base_url or os.getenv("AI_UNIVERSE_URL") or "https://ai-universe-lu6p.onrender.com").rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
-        self.api_key = api_key
+        self.api_key = api_key or os.getenv("AI_UNIVERSE_API_KEY") or "ai_universe_api"
 
         # Configure resilient session with retries on transient errors (5xx, connection reset)
         self.session = requests.Session()
