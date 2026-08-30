@@ -175,34 +175,55 @@ def build_telemetry_payload(
     except Exception as e:
         logger.debug(f"[ADVISORY_TELEMETRY] Futuris context lookup skipped: {e}")
 
-    # 6. Assemble Payload
+    # 6. Normalize consultation reason to valid Enum
+    valid_reasons = {"SCHEDULED", "DRAWDOWN_EVENT", "LOSS_STREAK", "MANUAL"}
+    reason_clean = consultation_reason.upper().strip()
+    if "STARTUP" in reason_clean or reason_clean not in valid_reasons:
+        reason_clean = "SCHEDULED"
+
+    # 7. Normalize trading mode to PAPER or TESTNET
+    normalized_mode = "TESTNET" if mode in ["TESTNET", "FUTURES"] else "PAPER"
+
+    # 8. Assemble Payload adhering strictly to TradingConsultRequest schema
     payload = {
-        "timestamp": now_iso,
-        "trading_mode": mode,
-        "consultation_reason": consultation_reason,
-        "portfolio": {
+        "bot_id": "stratex_bot_01",
+        "trading_mode": normalized_mode,
+        "consultation_reason": reason_clean,
+        "telemetry": {
             "equity": round(equity, 2),
-            "cash": round(cash, 2),
-            "realized_pnl": round(realized_pnl, 2),
             "unrealized_pnl": round(unrealized_pnl, 2),
+            "realized_pnl": round(realized_pnl, 2),
+            "win_rate": round(min(max(win_rate / 100.0 if win_rate > 1.0 else win_rate, 0.0), 1.0), 4),
+            "profit_factor": round(max(profit_factor, 0.0), 2),
             "max_drawdown_pct": round(max_drawdown * 100 if max_drawdown <= 1.0 else max_drawdown, 2),
-            "open_positions": open_positions_count
+            "consecutive_losses": int(max(consecutive_losses, 0)),
+            "total_trades": int(max(total_trades, 0)),
+            "sharpe_ratio": None
         },
-        "performance_metrics": {
-            "total_trades": total_trades,
-            "win_rate": round(win_rate, 2),
-            "profit_factor": round(profit_factor, 2),
-            "winning_trades": winning_trades,
-            "losing_trades": losing_trades,
-            "consecutive_losses": consecutive_losses
+        "strategy_performance": [
+            {
+                "strategy_name": current_strategy,
+                "trade_count": int(max(total_trades, 0)),
+                "win_rate": round(min(max(win_rate / 100.0 if win_rate > 1.0 else win_rate, 0.0), 1.0), 4),
+                "profit_factor": round(max(profit_factor, 0.0), 2),
+                "net_pnl": round(realized_pnl, 2),
+                "avg_win": round(gross_profit / max(winning_trades, 1), 2),
+                "avg_loss": round(gross_loss / max(losing_trades, 1), 2),
+                "consecutive_losses": int(max(consecutive_losses, 0))
+            }
+        ],
+        "current_parameters": {
+            current_strategy: current_params if isinstance(current_params, dict) else {}
         },
-        "market_regime": regime_data,
-        "market_context": market_context,
-        "futuris_context": futuris_context,
-        "active_strategy": current_strategy,
-        "current_parameters": current_params,
+        "regime_data": regime_data,
         "recent_trades": recent_closed_trades,
-        "runtime_overlay_active": overlay.get_state().get("active_overrides", {})
+        "testnet_specific": {
+            "testnet_equity": round(equity, 2),
+            "testnet_drawdown_pct": round(max_drawdown * 100 if max_drawdown <= 1.0 else max_drawdown, 2),
+            "testnet_daily_loss": 0.0,
+            "testnet_open_positions": open_positions_count,
+            "testnet_margin_level": 100.0
+        } if normalized_mode == "TESTNET" else None
     }
 
     return payload
