@@ -1,10 +1,11 @@
-# Quantitative Algorithmic Trading & Forward Validation Framework
+# STRATEX — Quantitative Algorithmic Trading & Forward Validation Framework
 
 A robust, multi-strategy quantitative trading and statistical validation platform built in Python. Designed with strict risk controls, zero-credential-leak architecture, reproducible backtesting, and two distinct execution tracks (**Paper Engine** and **Binance Testnet Engine**).
 
+![Platform](https://img.shields.io/badge/Platform-STRATEX-blue?logo=crystal)
 ![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
 ![Exchange](https://img.shields.io/badge/Exchange-Binance%20Testnet-yellow?logo=binance)
-![Tests](https://img.shields.io/badge/Tests-289%20Passing-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-690%20Passing-brightgreen)
 ![Status](https://img.shields.io/badge/Live%20Trading-BLOCKED-red)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
