@@ -184,22 +184,47 @@ def build_telemetry_payload(
     # 7. Normalize trading mode to PAPER or TESTNET
     normalized_mode = "TESTNET" if mode in ["TESTNET", "FUTURES"] else "PAPER"
 
-    # 8. Assemble Payload adhering strictly to TradingConsultRequest schema
+    # 8. Assemble Payload adhering strictly to TradingConsultRequest schema with backward-compatible aliases
+    telemetry_stats = {
+        "equity": round(equity, 2),
+        "unrealized_pnl": round(unrealized_pnl, 2),
+        "realized_pnl": round(realized_pnl, 2),
+        "win_rate": round(min(max(win_rate / 100.0 if win_rate > 1.0 else win_rate, 0.0), 1.0), 4),
+        "profit_factor": round(max(profit_factor, 0.0), 2),
+        "max_drawdown_pct": round(max_drawdown * 100 if max_drawdown <= 1.0 else max_drawdown, 2),
+        "consecutive_losses": int(max(consecutive_losses, 0)),
+        "total_trades": int(max(total_trades, 0)),
+        "sharpe_ratio": None
+    }
+
+    portfolio_compat = {
+        "equity": round(equity, 2),
+        "cash": round(cash, 2),
+        "realized_pnl": round(realized_pnl, 2),
+        "unrealized_pnl": round(unrealized_pnl, 2),
+        "max_drawdown_pct": round(max_drawdown * 100 if max_drawdown <= 1.0 else max_drawdown, 2),
+        "open_positions": open_positions_count
+    }
+
+    performance_metrics_compat = {
+        "total_trades": int(max(total_trades, 0)),
+        "win_rate": round(win_rate, 2),
+        "profit_factor": round(max(profit_factor, 0.0), 2),
+        "winning_trades": int(winning_trades),
+        "losing_trades": int(losing_trades),
+        "consecutive_losses": int(max(consecutive_losses, 0))
+    }
+
     payload = {
         "bot_id": "stratex_bot_01",
         "trading_mode": normalized_mode,
         "consultation_reason": reason_clean,
-        "telemetry": {
-            "equity": round(equity, 2),
-            "unrealized_pnl": round(unrealized_pnl, 2),
-            "realized_pnl": round(realized_pnl, 2),
-            "win_rate": round(min(max(win_rate / 100.0 if win_rate > 1.0 else win_rate, 0.0), 1.0), 4),
-            "profit_factor": round(max(profit_factor, 0.0), 2),
-            "max_drawdown_pct": round(max_drawdown * 100 if max_drawdown <= 1.0 else max_drawdown, 2),
-            "consecutive_losses": int(max(consecutive_losses, 0)),
-            "total_trades": int(max(total_trades, 0)),
-            "sharpe_ratio": None
-        },
+        "telemetry": telemetry_stats,
+        "portfolio": portfolio_compat,
+        "performance_metrics": performance_metrics_compat,
+        "market_context": market_context,
+        "futuris_context": futuris_context,
+        "market_regime": regime_data,
         "strategy_performance": [
             {
                 "strategy_name": current_strategy,

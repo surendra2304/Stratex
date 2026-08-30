@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the production architecture, security invariants, deployment procedure, monitoring mechanisms, and emergency protocols for the algorithmic trading bot framework.
+This document outlines the production architecture, security invariants, deployment procedure, monitoring mechanisms, and emergency protocols for the STRATEX framework.
 
 ---
 

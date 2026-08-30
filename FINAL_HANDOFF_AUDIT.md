@@ -1,9 +1,9 @@
 # FINAL HANDOFF AUDIT REPORT
 
-> **Repository**: `https://github.com/surendra2304/algorithmic-trading-bot.git`  
+> **Repository**: `https://github.com/surendra2304/stratex.git`  
 > **Local Workspace**: `D:/MT5/python_bot`  
 > **Target Branch**: `master`  
-> **Production / Render Service**: `https://algorithmic-trading-bot-fra.onrender.com`  
+> **Production / Render Service**: `https://stratex-fra.onrender.com`  
 > **Audit Date**: 2026-08-21  
 
 ---

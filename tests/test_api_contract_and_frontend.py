@@ -45,11 +45,11 @@ def test_approved_navigation_views_in_html():
     assert container_views == expected_views, f"View container mismatch: got {container_views}, expected {expected_views}"
 
 def test_global_header_elements_in_html():
-    """Verifies global header contains ALGORITHMIC TRADING BOT, ENGINE, MODE, UPTIME, and Clock."""
+    """Verifies global header contains STRATEX, ENGINE, MODE, UPTIME, and Clock."""
     with open("static/index.html", "r", encoding="utf-8") as f:
         html = f.read()
 
-    assert "ALGORITHMIC TRADING BOT" in html
+    assert "STRATEX" in html
     assert 'id="engine-status"' in html
     assert 'id="hdr-uptime"' in html
     assert 'id="live-clock"' in html

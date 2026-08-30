@@ -21,7 +21,7 @@ logger = get_logger("dashboard")
 
 app = Flask(__name__, static_folder='static')
 # Hardened CORS configuration: Whitelist Render production, local dev servers, and localhost
-ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "https://algorithmic-trading-bot-fra.onrender.com,http://localhost:5000,http://127.0.0.1:5000,http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()]
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "https://stratex-fra.onrender.com,http://localhost:5000,http://127.0.0.1:5000,http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()]
 CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}, r"/health": {"origins": "*"}})
 
 # Register Quantum advisory blueprint (research only, no execution)

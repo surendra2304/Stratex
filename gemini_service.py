@@ -1,5 +1,5 @@
 """
-gemini_service.py - Centralized Gemini AI Analysis Layer for Algorithmic Trading Bot.
+gemini_service.py - Centralized Gemini AI Analysis Layer for STRATEX.
 
 Security & Architecture Invariants:
 1. Pure Advisory Layer: Gemini produces explanatory and diagnostic text only.

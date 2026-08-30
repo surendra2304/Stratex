@@ -1,6 +1,6 @@
 # Live System Architecture
 
-This document describes the production deployment and the core trading pipeline of the algorithmic trading bot.
+This document describes the production deployment and the core trading pipeline of the STRATEX.
 
 ## Trading Pipeline Flow
 
@@ -31,9 +31,9 @@ The bot operates on a strict event-driven pipeline, primarily triggering on comp
 
 ## Live Endpoints
 
-- **Frontend UI**: https://algorithmic-trading-bot-fra.onrender.com
-- **Web Health**: https://algorithmic-trading-bot-fra.onrender.com/health
-- **Engine Diagnostic**: https://algorithmic-trading-bot-fra.onrender.com/api/engine-health
-- **System Status**: https://algorithmic-trading-bot-fra.onrender.com/api/status
-- **Scanner Stats**: https://algorithmic-trading-bot-fra.onrender.com/api/scanner
-- **Trade Ledger**: https://algorithmic-trading-bot-fra.onrender.com/api/trades
+- **Frontend UI**: https://stratex-fra.onrender.com
+- **Web Health**: https://stratex-fra.onrender.com/health
+- **Engine Diagnostic**: https://stratex-fra.onrender.com/api/engine-health
+- **System Status**: https://stratex-fra.onrender.com/api/status
+- **Scanner Stats**: https://stratex-fra.onrender.com/api/scanner
+- **Trade Ledger**: https://stratex-fra.onrender.com/api/trades

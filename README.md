@@ -180,8 +180,8 @@ The platform supports six modular quantitative strategies:
 ### 2. Installation
 ```bash
 # Clone repository
-git clone https://github.com/surendra2304/algorithmic-trading-bot.git
-cd algorithmic-trading-bot
+git clone https://github.com/surendra2304/stratex.git
+cd stratex
 
 # Install dependencies
 pip install -r requirements.txt

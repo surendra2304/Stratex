@@ -47,7 +47,7 @@ def main():
     acquire_singleton_lock(port=48888)
     
     print("=" * 60)
-    print("  ALGORITHMIC TRADING BOT FRAMEWORK")
+    print("  STRATEX FRAMEWORK")
     print("  [ACTIVE] TESTNET SERVICE (SINGLETON DAEMON)")
     print(f"  [PID] {os.getpid()}")
     print("=" * 60)

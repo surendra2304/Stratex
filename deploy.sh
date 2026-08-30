@@ -10,7 +10,7 @@
 set -e
 
 echo "=========================================================="
-echo "🚀 Algorithmic Trading Bot - Automated VPS Deployment"
+echo "🚀 STRATEX - Automated VPS Deployment"
 echo "=========================================================="
 
 # 1. System Updates & Core Dependencies

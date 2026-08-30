@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary & Zero-Trust Audit Findings
 
-A complete, line-by-line forensic re-audit of the `algorithmic-trading-bot` repository was conducted without assuming the validity of previous test counts or diary claims. While the test suite passes under controlled mock harnesses in `pytest` (due to test fixtures injecting environment variables like `TESTNET_ONLY="TRUE"` and ignoring unused frontend code), inspecting the **live runtime code paths, mathematical formulas, frontend-backend contracts, and configuration boundaries** revealed multiple critical, high, medium, and low defects.
+A complete, line-by-line forensic re-audit of the `stratex` repository was conducted without assuming the validity of previous test counts or diary claims. While the test suite passes under controlled mock harnesses in `pytest` (due to test fixtures injecting environment variables like `TESTNET_ONLY="TRUE"` and ignoring unused frontend code), inspecting the **live runtime code paths, mathematical formulas, frontend-backend contracts, and configuration boundaries** revealed multiple critical, high, medium, and low defects.
 
 ### Defect Inventory Summary
 

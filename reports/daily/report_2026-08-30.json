@@ -1,8 +1,8 @@
 {
   "report_date": "2026-08-30",
-  "timestamp": "2026-08-30T02:15:00.000000Z",
-  "voice_summary": "Dashboard REST routes for performance metrics and strategy configurations are operational. All 690 validation tests passed with 100 percent reliability.",
-  "executive_summary": "Platform maintenance and dashboard route expansion completed. Added /api/performance and /api/strategies endpoints, resolved /api/metrics response formatting, and confirmed clean operation of all security and market intelligence modules.",
+  "timestamp": "2026-08-30T11:28:44.909104Z",
+  "voice_summary": "Today you gained 0.9 percent across 18 trades. Supertrend was your strongest performing strategy. Your risk budget for tomorrow is 14 percent available.",
+  "executive_summary": "Net PnL +0.91% ($45.50) with 66.7% win rate across 18 executions.",
   "financial_metrics": {
     "starting_equity": 5000.0,
     "ending_equity": 5045.5,
@@ -12,11 +12,59 @@
     "win_rate_pct": 66.7,
     "profit_factor": 1.74
   },
-  "production_verification": {
-    "total_tests": 690,
-    "passed_tests": 690,
-    "pass_rate_pct": 100.0,
-    "deployment_target": "Render",
-    "health_status": "200 OK"
+  "risk_metrics": {
+    "max_drawdown_pct": 1.4,
+    "max_drawdown_limit_pct": 15.0,
+    "daily_loss_pct": 0.5,
+    "daily_loss_limit_pct": 5.0,
+    "risk_budget_remaining_pct": 13.6
+  },
+  "strategy_breakdown": {
+    "strategy_supertrend": {
+      "trades": 8,
+      "pnl": 28.5,
+      "win_rate": 75.0
+    },
+    "strategy_scalper": {
+      "trades": 6,
+      "pnl": 12.0,
+      "win_rate": 66.7
+    },
+    "strategy_adx_ema": {
+      "trades": 4,
+      "pnl": 5.0,
+      "win_rate": 50.0
+    }
+  },
+  "advisory_attribution": {
+    "total_decisions_applied": 14,
+    "net_alpha_contribution_pct": 2.15,
+    "category_breakdown": {
+      "stop_loss_adjustments": {
+        "alpha_pct": 1.2,
+        "count": 6
+      },
+      "take_profit_scaling": {
+        "alpha_pct": 0.65,
+        "count": 5
+      },
+      "volatility_sizing_modulation": {
+        "alpha_pct": 0.3,
+        "count": 3
+      }
+    },
+    "overall_efficacy_score": 0.78
+  },
+  "notable_trades": {
+    "largest_win": {
+      "symbol": "BTC/USDT",
+      "pnl": 18.2,
+      "strategy": "strategy_supertrend"
+    },
+    "largest_loss": {
+      "symbol": "ETH/USDT",
+      "pnl": -6.5,
+      "strategy": "strategy_scalper"
+    }
   }
 }

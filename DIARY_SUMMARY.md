@@ -1,4 +1,4 @@
-# Algorithmic Trading Bot - Diary Summary & Master Development Journal
+# STRATEX - Diary Summary & Master Development Journal
 
 This document serves as the central index and comprehensive development journal for my automated cryptocurrency trading bot operating on Binance Futures. Project development began on August 14, 2026, progressing daily through core indicators, high-frequency execution, forensic reconciliation, AI-Universe advisory intelligence, multi-exchange abstraction, strategy genetic evolution, and external predictive market intelligence.
 

@@ -1,17 +1,17 @@
-# ALGORITHMIC TRADING BOT — PROJECT HANDOFF
+# STRATEX — PROJECT HANDOFF
 
 > **Target Audience**: Incoming AI Engineering Agent (Claude, Codex, Gemini, GPT, etc.)  
-> **Repository**: `https://github.com/surendra2304/algorithmic-trading-bot.git`  
+> **Repository**: `https://github.com/surendra2304/stratex.git`  
 > **Local Workspace**: `D:/MT5/python_bot`  
 > **Active Branch**: `master`  
-> **Production / Render Dashboard**: `https://algorithmic-trading-bot-fra.onrender.com`  
+> **Production / Render Dashboard**: `https://stratex-fra.onrender.com`  
 > **System State**: TESTNET / PAPER ONLY — Live Trading Permanently Locked (`LIVE_TRADING_ENABLED = False`)
 
 ---
 
 ## 1. Executive Summary & Purpose
 
-### What This Algorithmic Trading Bot Is:
+### What This STRATEX Is:
 - A production-grade, asynchronous **Algorithmic Trading Research, Backtesting, Paper Trading & Binance Testnet Execution Platform**.
 - A multi-strategy evaluation framework supporting technical indicator strategies, machine learning models, quantum-inspired optimization research, and Gemini AI advisory analytics.
 - A real-time telemetry, risk management, and web dashboard monitoring system served via Flask with a vanilla JavaScript / Chart.js frontend.

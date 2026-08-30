@@ -1,6 +1,6 @@
 # FINAL CURRENT-REPOSITORY VERIFICATION REPORT
 
-**Repository**: `surendra2304/algorithmic-trading-bot`  
+**Repository**: `surendra2304/stratex`  
 **Latest Verification Pass**: 2 consecutive runs of `pytest` passing **417/417 (100%)**  
 **Trading Engine Mode**: Binance Testnet Spot Execution (Zero Mocking in Production)  
 

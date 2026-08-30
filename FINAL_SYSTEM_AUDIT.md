@@ -4,7 +4,7 @@
 **Deployment Region**: `Frankfurt (Render Docker Services)`  
 **Production Commit**: `Current HEAD (Hardened)`  
 **Test Suite Verdict**: `421 passed / 421 tests (100% SUCCESS across 2 consecutive full runs)`  
-**Live Endpoint**: `https://algorithmic-trading-bot-fra.onrender.com`
+**Live Endpoint**: `https://stratex-fra.onrender.com`
 
 ---
 
@@ -83,4 +83,4 @@ UNVERIFIED:  0
 
 ## 5. Certification of Production Readiness
 
-The Algorithmic Trading Bot deployment stack on Binance Spot Testnet (Frankfurt) has completed all verification protocols with **ZERO FAILURES** and **ZERO UNVERIFIED SUBSYSTEMS**.
+The STRATEX deployment stack on Binance Spot Testnet (Frankfurt) has completed all verification protocols with **ZERO FAILURES** and **ZERO UNVERIFIED SUBSYSTEMS**.

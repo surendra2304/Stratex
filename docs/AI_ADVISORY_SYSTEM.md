@@ -2,7 +2,7 @@
 
 ## 1. Architectural Overview & Intent
 
-The **AI-Universe Advisory Subsystem** provides deliberative multi-agent quantitative advisory for the Algorithmic Trading Bot. It allows external intelligence from **AI-Universe** (a multi-agent deliberative reasoning platform with specialized roles such as `Trading Analyst`, `Strategist`, and `Critic`) to evaluate live trading telemetry and recommend strategy parameter calibrations.
+The **AI-Universe Advisory Subsystem** provides deliberative multi-agent quantitative advisory for the STRATEX. It allows external intelligence from **AI-Universe** (a multi-agent deliberative reasoning platform with specialized roles such as `Trading Analyst`, `Strategist`, and `Critic`) to evaluate live trading telemetry and recommend strategy parameter calibrations.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -13,7 +13,7 @@ The **AI-Universe Advisory Subsystem** provides deliberative multi-agent quantit
                                       │ (Schedule: 4h / Trigger: Loss Streak)
                                       ▼
 ┌────────────────────────────────────────────────────────────────────────────┐
-│                    ALGORITHMIC TRADING BOT: ADVISORY INGRESS               │
+│                    STRATEX: ADVISORY INGRESS               │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ 1. Telemetry Collector (advisory_telemetry.py)                             │
 │    └─ Gathers Equity, PnL, Win Rate, Profit Factor, Regimes, Active Params │

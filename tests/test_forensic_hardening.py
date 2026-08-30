@@ -91,8 +91,8 @@ class TestForensicHardening:
         client = app.test_client()
 
         # Trusted Render production origin
-        res = client.get('/api/config', headers={"Origin": "https://algorithmic-trading-bot-fra.onrender.com"})
-        assert res.headers.get("Access-Control-Allow-Origin") == "https://algorithmic-trading-bot-fra.onrender.com"
+        res = client.get('/api/config', headers={"Origin": "https://stratex-fra.onrender.com"})
+        assert res.headers.get("Access-Control-Allow-Origin") == "https://stratex-fra.onrender.com"
 
         # Local development origin
         res = client.get('/api/config', headers={"Origin": "http://localhost:5000"})
