@@ -43,9 +43,9 @@ class AdvisoryScheduler:
         shadow_mode: Optional[bool] = None,
         interval_hours: Optional[float] = None
     ) -> None:
-        base_url = getattr(config, "AI_UNIVERSE_BASE_URL", os.getenv("AI_UNIVERSE_BASE_URL", "http://localhost:8000"))
+        base_url = getattr(config, "INFERENCE_URL", os.getenv("INFERENCE_URL", getattr(config, "AI_UNIVERSE_BASE_URL", os.getenv("AI_UNIVERSE_URL", "https://inference-3i2b.onrender.com"))))
         timeout = int(getattr(config, "ADVISORY_TIMEOUT_SECONDS", os.getenv("ADVISORY_TIMEOUT_SECONDS", "120")))
-        api_key = getattr(config, "AI_UNIVERSE_API_KEY", os.getenv("AI_UNIVERSE_API_KEY", os.getenv("FRIDAY_UNIVERSE_API_KEY", "")))
+        api_key = getattr(config, "INFERENCE_API_KEY", os.getenv("INFERENCE_API_KEY", getattr(config, "AI_UNIVERSE_API_KEY", os.getenv("AI_UNIVERSE_API_KEY", "inference_api"))))
 
         self.client = client or AIUniverseClient(base_url=base_url, timeout=timeout, api_key=api_key)
         self.gate = gate or AdvisoryGate()

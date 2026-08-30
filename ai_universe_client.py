@@ -35,10 +35,10 @@ class AIUniverseClient:
         max_retries: int = 2,
         api_key: Optional[str] = None
     ) -> None:
-        self.base_url = (base_url or os.getenv("AI_UNIVERSE_URL") or "https://ai-universe-lu6p.onrender.com").rstrip("/")
+        self.base_url = (base_url or os.getenv("INFERENCE_URL") or os.getenv("AI_UNIVERSE_URL") or "https://inference-3i2b.onrender.com").rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
-        self.api_key = api_key or os.getenv("AI_UNIVERSE_API_KEY") or "ai_universe_api"
+        self.api_key = api_key or os.getenv("INFERENCE_API_KEY") or os.getenv("AI_UNIVERSE_API_KEY") or "inference_api"
 
         # Configure resilient session with retries on transient errors (5xx, connection reset)
         self.session = requests.Session()

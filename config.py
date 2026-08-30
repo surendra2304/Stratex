@@ -27,9 +27,11 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
 GEMINI_ENABLED = os.getenv("GEMINI_ENABLED", "True").lower() == "true"
 
-# --- AI-Universe Advisory Intelligence System ---
-AI_UNIVERSE_BASE_URL = os.getenv("AI_UNIVERSE_BASE_URL", "http://localhost:8000")
-AI_UNIVERSE_API_KEY = os.getenv("AI_UNIVERSE_API_KEY", os.getenv("FRIDAY_UNIVERSE_API_KEY", ""))
+# --- Inference Advisory Intelligence System ---
+INFERENCE_URL = os.getenv("INFERENCE_URL", os.getenv("AI_UNIVERSE_URL", os.getenv("AI_UNIVERSE_BASE_URL", "https://inference-3i2b.onrender.com")))
+INFERENCE_API_KEY = os.getenv("INFERENCE_API_KEY", os.getenv("AI_UNIVERSE_API_KEY", "inference_api"))
+AI_UNIVERSE_BASE_URL = INFERENCE_URL
+AI_UNIVERSE_API_KEY = INFERENCE_API_KEY
 AI_UNIVERSE_ENABLED = os.getenv("AI_UNIVERSE_ENABLED", "True").lower() == "true"
 ADVISORY_SHADOW_MODE = os.getenv("ADVISORY_SHADOW_MODE", "True").lower() == "true"
 ADVISORY_AUTONOMY_CONFIRMED = os.getenv("ADVISORY_AUTONOMY_CONFIRMED", "False").lower() == "true"
