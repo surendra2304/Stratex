@@ -360,58 +360,63 @@ async function fetchGlobalStatus() {
 // 5. VIEW 1: DASHBOARD
 // ==========================================
 async function fetchDashboardData() {
-    const statusData = await apiClient.get('/api/status');
-    const tradesData = await apiClient.get('/api/trades');
-    const scannerData = await apiClient.get('/api/scanner');
+    try {
+        const [statusData, tradesData, scannerData, actData] = await Promise.all([
+            apiClient.get('/api/status'),
+            apiClient.get('/api/trades'),
+            apiClient.get('/api/scanner'),
+            apiClient.get('/api/activity?limit=6')
+        ]);
 
-    if (statusData) {
-        safeSetText('db-equity', formatCurrency(statusData.equity));
-        safeSetText('db-cash', formatCurrency(statusData.cash));
-        safeSetText('db-managed', formatCurrency(statusData.crypto_holdings_value));
-        safeSetText('db-avail-bal', formatCurrency(statusData.cash));
+        if (statusData) {
+            safeSetText('db-equity', formatCurrency(statusData.equity));
+            safeSetText('db-cash', formatCurrency(statusData.cash));
+            safeSetText('db-managed', formatCurrency(statusData.crypto_holdings_value));
+            safeSetText('db-avail-bal', formatCurrency(statusData.cash));
 
-        const rPnl = Number(statusData.realized_pnl || 0);
-        const todayRealized = Number(statusData.today_realized_pnl !== undefined ? statusData.today_realized_pnl : rPnl);
-        const uPnl = Number(statusData.unrealized_pnl || 0);
-        const tPnl = Number(statusData.today_pnl !== undefined ? statusData.today_pnl : (todayRealized + uPnl));
+            const rPnl = Number(statusData.realized_pnl || 0);
+            const todayRealized = Number(statusData.today_realized_pnl !== undefined ? statusData.today_realized_pnl : rPnl);
+            const uPnl = Number(statusData.unrealized_pnl || 0);
+            const tPnl = Number(statusData.today_pnl !== undefined ? statusData.today_pnl : (todayRealized + uPnl));
 
-        safeSetText('db-realized-pnl', (rPnl >= 0 ? '+' : '') + formatCurrency(rPnl));
-        safeSetText('db-unrealized-pnl', (uPnl >= 0 ? '+' : '') + formatCurrency(uPnl));
-        safeSetText('db-today-pnl', (tPnl >= 0 ? '+' : '') + formatCurrency(tPnl));
+            safeSetText('db-realized-pnl', (rPnl >= 0 ? '+' : '') + formatCurrency(rPnl));
+            safeSetText('db-unrealized-pnl', (uPnl >= 0 ? '+' : '') + formatCurrency(uPnl));
+            safeSetText('db-today-pnl', (tPnl >= 0 ? '+' : '') + formatCurrency(tPnl));
 
-        const rEl = $('db-realized-pnl'); if (rEl) rEl.style.color = rPnl >= 0 ? 'var(--profit-green)' : 'var(--loss-red)';
-        const uEl = $('db-unrealized-pnl'); if (uEl) uEl.style.color = uPnl >= 0 ? 'var(--profit-green)' : 'var(--loss-red)';
-        const tEl = $('db-today-pnl'); if (tEl) tEl.style.color = tPnl >= 0 ? 'var(--profit-green)' : 'var(--loss-red)';
+            const rEl = $('db-realized-pnl'); if (rEl) rEl.style.color = rPnl >= 0 ? 'var(--profit-green)' : 'var(--loss-red)';
+            const uEl = $('db-unrealized-pnl'); if (uEl) uEl.style.color = uPnl >= 0 ? 'var(--profit-green)' : 'var(--loss-red)';
+            const tEl = $('db-today-pnl'); if (tEl) tEl.style.color = tPnl >= 0 ? 'var(--profit-green)' : 'var(--loss-red)';
 
-        // Open positions table on dashboard
-        const posList = statusData.open_positions_data || [];
-        renderDashboardPositions(posList);
-    }
+            // Open positions table on dashboard
+            const posList = statusData.open_positions_data || [];
+            renderDashboardPositions(posList);
+        }
 
-    if (tradesData) {
-        safeSetText('db-perf-trades', tradesData.total_trades || 0);
-        safeSetText('db-perf-winrate', (tradesData.win_rate || 0).toFixed(1) + '%');
-        const net = Number(tradesData.net_pnl || 0);
-        safeSetText('db-perf-netpnl', (net >= 0 ? '+' : '') + formatCurrency(net));
-        const netEl = $('db-perf-netpnl'); if (netEl) netEl.style.color = net >= 0 ? 'var(--profit-green)' : 'var(--loss-red)';
-        safeSetText('db-perf-pf', tradesData.profit_factor || '1.00');
-        safeSetText('db-perf-mdd', (statusData?.max_drawdown || 0).toFixed(2) + '%');
-    }
+        if (tradesData) {
+            safeSetText('db-perf-trades', tradesData.total_trades || 0);
+            safeSetText('db-perf-winrate', (tradesData.win_rate || 0).toFixed(1) + '%');
+            const net = Number(tradesData.net_pnl || 0);
+            safeSetText('db-perf-netpnl', (net >= 0 ? '+' : '') + formatCurrency(net));
+            const netEl = $('db-perf-netpnl'); if (netEl) netEl.style.color = net >= 0 ? 'var(--profit-green)' : 'var(--loss-red)';
+            safeSetText('db-perf-pf', tradesData.profit_factor || '1.00');
+            safeSetText('db-perf-mdd', (statusData?.max_drawdown || 0).toFixed(2) + '%');
+        }
 
-    if (scannerData) {
-        safeSetText('db-stat-conn', 'BINANCE REST/WS');
-        safeSetText('db-stat-mkt', `${scannerData.symbols_scanned || 12} Pairs`);
-        safeSetText('db-stat-scan', `${scannerData.strategy_evaluations || scannerData.TOTAL_CANDLES || 0} Evals`);
-        safeSetText('db-stat-candle', 'Live 1m/5m/15m');
-        safeSetText('db-stat-latency', '18ms / 4ms');
+        if (scannerData) {
+            safeSetText('db-stat-conn', 'BINANCE REST/WS');
+            safeSetText('db-stat-mkt', `${scannerData.symbols_scanned || 12} Pairs`);
+            safeSetText('db-stat-scan', `${scannerData.strategy_evaluations || scannerData.TOTAL_CANDLES || 0} Evals`);
+            safeSetText('db-stat-candle', 'Live 1m/5m/15m');
+            safeSetText('db-stat-latency', '18ms / 4ms');
 
-        renderDashboardSignals(scannerData.recent_signals || scannerData.top_opportunities || []);
-    }
+            renderDashboardSignals(scannerData.recent_signals || scannerData.top_opportunities || []);
+        }
 
-    // Activity feed
-    const actData = await apiClient.get('/api/activity?limit=6');
-    if (actData && actData.activity) {
-        renderDashboardEvents(actData.activity);
+        if (actData && actData.activity) {
+            renderDashboardEvents(actData.activity);
+        }
+    } catch (e) {
+        console.error('[DASHBOARD] Fetch error:', e);
     }
 
     // AI-Universe Advisory telemetry
