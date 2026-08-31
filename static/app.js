@@ -143,29 +143,45 @@ window.showView = function(viewName) {
     if (navBtn) navBtn.click();
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-    initNavigation();
-    initGlobalHeader();
-    initDrawersAndModals();
-    initMarketsToolbar();
+function initializeTerminal() {
+    try { initNavigation(); } catch (e) { console.warn('[INIT] Navigation init error:', e); }
+    try { initGlobalHeader(); } catch (e) { console.warn('[INIT] Header init error:', e); }
+    try { initDrawersAndModals(); } catch (e) { console.warn('[INIT] Modals init error:', e); }
+    try { initMarketsToolbar(); } catch (e) { console.warn('[INIT] Markets toolbar init error:', e); }
     
     // Initial Load & Polling
     fetchGlobalStatus();
     loadActiveViewData(activeViewName);
     
+    if (fastPollTimer) clearInterval(fastPollTimer);
     fastPollTimer = setInterval(() => {
-        fetchGlobalStatus();
-        if (['dashboard', 'scanner', 'positions', 'markets', 'risk'].includes(activeViewName)) {
-            loadActiveViewData(activeViewName);
+        try {
+            fetchGlobalStatus();
+            if (['dashboard', 'scanner', 'positions', 'markets', 'risk'].includes(activeViewName)) {
+                loadActiveViewData(activeViewName);
+            }
+        } catch (err) {
+            console.error('[POLL] Fast poll error:', err);
         }
     }, 3000);
     
+    if (slowPollTimer) clearInterval(slowPollTimer);
     slowPollTimer = setInterval(() => {
-        if (['trades', 'strategies', 'analytics', 'system', 'settings'].includes(activeViewName)) {
-            loadActiveViewData(activeViewName);
+        try {
+            if (['trades', 'strategies', 'analytics', 'system', 'settings'].includes(activeViewName)) {
+                loadActiveViewData(activeViewName);
+            }
+        } catch (err) {
+            console.error('[POLL] Slow poll error:', err);
         }
     }, 10000);
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeTerminal);
+} else {
+    initializeTerminal();
+}
 
 function initNavigation() {
     const navItems = document.querySelectorAll('.nav-item');
