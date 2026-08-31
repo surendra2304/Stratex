@@ -8,6 +8,7 @@ Constraints:
 - Graceful soft fallback if AI-Universe prediction endpoint is offline or times out.
 """
 
+import os
 import time
 import datetime
 import requests
@@ -39,11 +40,11 @@ class PredictionClient:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8000",
+        base_url: Optional[str] = None,
         cache_ttl_seconds: int = 900,  # 15 minutes
         timeout_seconds: int = 5
     ):
-        self.base_url = base_url.rstrip("/")
+        self.base_url = (os.getenv("INFERENCE_URL") or os.getenv("AI_UNIVERSE_URL") or base_url or "https://inference-3i2b.onrender.com").rstrip("/")
         self.cache_ttl_seconds = cache_ttl_seconds
         self.timeout_seconds = timeout_seconds
         self.cache: Dict[str, AssetPrediction] = {}

@@ -27,8 +27,8 @@ class FuturisForecastContext:
         }
 
 class FuturisMarketClient:
-    def __init__(self, base_url='http://localhost:8000', cache_ttl_seconds=1800, timeout_seconds=5):
-        self.base_url = (os.getenv('FUTURIS_BASE_URL', base_url) or 'http://localhost:8000').rstrip('/')
+    def __init__(self, base_url='https://futuris-x4f4.onrender.com', cache_ttl_seconds=1800, timeout_seconds=5):
+        self.base_url = (os.getenv('FUTURIS_URL') or os.getenv('FUTURIS_BASE_URL') or base_url or 'https://futuris-x4f4.onrender.com').rstrip('/')
         self.cache_ttl_seconds = cache_ttl_seconds
         self.timeout_seconds = timeout_seconds
         self.cache: Dict[str, FuturisForecastContext] = {}

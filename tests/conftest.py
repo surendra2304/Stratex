@@ -20,3 +20,7 @@ os.environ["ACTIVE_TRADES_FILE"] = os.path.join(test_dir, "active_trades.json")
 os.environ["FORWARD_RECONCILIATION_FILE"] = os.path.join(test_dir, "forward_reconciliation.jsonl")
 os.environ["TRADING_MODE"] = "TESTNET"
 os.environ["TESTNET_ONLY"] = "TRUE"
+
+# Clear any secret keys for unauthenticated local test client assertions
+for k in ["BOT_API_KEY", "API_KEY_CONTROL", "API_KEY_READONLY", "API_KEY_FRIDAY"]:
+    os.environ[k] = ""

@@ -1,5 +1,5 @@
 /**
- * ALGORITHMIC TRADING BOT - UNIFIED PRODUCTION FRONTEND CONTROLLER
+ * STRATEX - UNIFIED 24/7 QUANTITATIVE TRADING TERMINAL
  * Institutional Black Quantitative Terminal (Vanilla ES6 + Chart.js)
  */
 
@@ -1342,7 +1342,6 @@ async function fetchSystemViewData() {
     } catch (err) {
         console.warn('[SYSTEM] Error fetching production resources:', err);
     }
-    }
 }
 
 // ==========================================
@@ -1742,6 +1741,11 @@ async function fetchABTestData() {
                 overlayBox.innerHTML = html;
             }
         }
+    } catch (e) {
+        console.warn('[AB_TEST] Error fetching AB test data:', e);
+    }
+}
+
 async function triggerManualAdvisoryConsultation() {
     const btn = $('btn-trigger-advisory');
     if (btn) {
