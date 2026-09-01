@@ -27,6 +27,7 @@ This document serves as the central index and comprehensive development journal 
 | Day 17 — 2026-08-30 | Dashboard Performance & Strategy APIs, Bugfixes & Production Sync | Verified | [2026-08-30](diary/2026-08-30.md) |
 | Day 18 — 2026-08-31 | Multi-System Ecosystem Alignment, STRATEX Rebrand & Verification | Verified | [2026-08-31](diary/2026-08-31.md) |
 | Day 19 — 2026-09-01 | Full Codebase Scan, Legacy URL Cleanup & Terminal v2.0.0 Upgrade | Verified | [2026-09-01](diary/2026-09-01.md) |
+| Day 20 — 2026-09-02 | Forensic Loss Attribution, RiskGate Drawdown Fix & High-Expectancy Strategy Upgrade | Verified | [2026-09-02](diary/2026-09-02.md) |
 
 ---
 
