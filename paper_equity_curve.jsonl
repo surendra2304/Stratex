@@ -144,3 +144,5 @@
 {"timestamp": 1788235200.0, "cash": 7112.465276812072, "unrealized_pnl": 9.338626037185069, "realized_pnl": -3.1727981175773863, "fees": 0.0, "funding": 0.0, "equity": 10006.165827919607}
 {"timestamp": 1788235200.0, "cash": 7112.465276812072, "unrealized_pnl": 5.885855546483931, "realized_pnl": -3.1727981175773863, "fees": 0.0, "funding": 0.0, "equity": 10002.713057428906}
 {"timestamp": 1788235200.0, "cash": 7112.465276812072, "unrealized_pnl": 5.310822196655767, "realized_pnl": -3.1727981175773863, "fees": 0.0, "funding": 0.0, "equity": 10002.138024079079}
+{"timestamp": 1788267600.0, "cash": 7112.465276812072, "unrealized_pnl": -29.224226686726777, "realized_pnl": -3.1727981175773863, "fees": 0.0, "funding": 0.0, "equity": 9967.602975195696}
+{"timestamp": 1788267600.0, "cash": 7112.465276812072, "unrealized_pnl": -28.18982761490878, "realized_pnl": -3.1727981175773863, "fees": 0.0, "funding": 0.0, "equity": 9968.637374267513}
