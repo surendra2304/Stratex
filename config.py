@@ -71,20 +71,19 @@ TESTNET_ENABLED = os.getenv("TESTNET_ENABLED", "False").lower() == "true"
 LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is impossible by design
 
 # --- Strategies to Run ---
-# Multi-strategy configuration mapping validated strategy -> timeframe(s)
-# Live engine runs aggressive scalper across all 6 timeframes
+# High Profit Factor quantitative strategies validated with asymmetric Risk/Reward (> 1.33:1)
 ACTIVE_STRATEGIES = {
-    "aggressive_scalper": ["1m", "5m", "15m", "30m", "1h", "4h"],
-    "factory_winner_1": ["1m", "5m", "15m", "30m", "1h", "4h"],
-    "factory_winner_2": ["1m", "5m", "15m", "30m", "1h", "4h"],
-    "factory_winner_3": ["1m", "5m", "15m", "30m", "1h", "4h"],
-    "factory_winner_4": ["1m", "5m", "15m", "30m", "1h", "4h"],
-    "factory_winner_5": ["1m", "5m", "15m", "30m", "1h", "4h"],
+    "factory_winner_1": ["5m", "15m", "30m", "1h", "4h"],  # MACD + BB Confluence (PF: 1.481)
+    "factory_winner_2": ["5m", "15m", "30m", "1h", "4h"],  # MACD + BB Confluence (PF: 1.449)
+    "factory_winner_4": ["5m", "15m", "30m", "1h", "4h"],  # MACD + BB Wide Confluence (PF: 1.390)
+    "supertrend": ["5m", "15m", "30m", "1h", "4h"],        # Supertrend Pullback Engine (RR: 2.5)
+    "adx_ema": ["15m", "30m", "1h", "4h"],                 # 200 EMA + ADX Trend (PF: 1.26)
+    "adx_ema_mtf": ["15m", "1h", "4h"],                    # Multi-Timeframe Trend + Sniper (PF: 1.33)
 }
 
-ACTIVE_STRATEGY = "aggressive_scalper"
-TIMEFRAME = "1m"
-ALL_ACTIVE_TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "4h"]
+ACTIVE_STRATEGY = "factory_winner_1"
+TIMEFRAME = "5m"
+ALL_ACTIVE_TIMEFRAMES = ["5m", "15m", "30m", "1h", "4h"]
 BYPASS_PROFITABILITY_GATE = os.getenv("BYPASS_PROFITABILITY_GATE", "False").lower() == "true"
 
 # Trading Config
