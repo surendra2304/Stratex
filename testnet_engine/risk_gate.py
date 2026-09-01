@@ -74,9 +74,9 @@ class RiskGate:
                 try:
                     q = float(p.get('quantity', 0.0))
                     ep = float(p.get('entry_price', 0.0))
-                    current_exposure += q * ep
-                except (ValueError, TypeError):
-                    pass
+                    current_exposure += (q * ep)
+                except (ValueError, TypeError, Exception):
+                    continue
                     
         new_trade_value = proposed_qty * entry_price
         total_exposure = current_exposure + new_trade_value
@@ -85,26 +85,28 @@ class RiskGate:
         # 4. Total Exposure Limit
         max_exp = 999.0 if is_aggressive else config.MAX_TESTNET_EXPOSURE
         if total_exposure_pct > max_exp:
-            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_EXPOSURE_REACHED | Exp: {total_exposure_pct:.2%} > {max_exp:.2%}")
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_EXPOSURE_REACHED | Total: {total_exposure_pct:.2%} > {max_exp:.2%}")
             return False, "MAX_EXPOSURE_REACHED", f"New exposure {total_exposure_pct:.2%} exceeds {max_exp:.2%}"
             
         # 5. Single Asset Exposure
-        # Existing plus new if same symbol, but OCO normally prevents duplicate symbols. Checked anyway for safety.
-        existing_val = 0.0
-        pos_entry = active_positions.get(symbol)
-        if isinstance(pos_entry, dict):
-            try:
-                existing_val = float(pos_entry.get('quantity', 0.0)) * float(pos_entry.get('entry_price', 0.0))
-            except (ValueError, TypeError):
-                pass
-                
-        single_asset_exposure_pct = (existing_val + new_trade_value) / current_equity
-        max_single_exp = 999.0 if is_aggressive else config.MAX_SINGLE_ASSET_EXPOSURE
-        if single_asset_exposure_pct > max_single_exp:
-            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_SINGLE_ASSET_EXPOSURE | AssetExp: {single_asset_exposure_pct:.2%} > {max_single_exp:.2%}")
-            return False, "MAX_SINGLE_ASSET_EXPOSURE", f"Asset exposure {single_asset_exposure_pct:.2%} exceeds {max_single_exp:.2%}"
+        existing_asset_exposure = 0.0
+        for pos_k, p in active_positions.items():
+            if isinstance(p, dict) and (pos_k == symbol or p.get('symbol') == symbol):
+                try:
+                    q = float(p.get('quantity', 0.0))
+                    ep = float(p.get('entry_price', 0.0))
+                    existing_asset_exposure += (q * ep)
+                except (ValueError, TypeError, Exception):
+                    continue
+                    
+        single_asset_exposure = existing_asset_exposure + new_trade_value
+        single_asset_pct = single_asset_exposure / current_equity
+        max_asset_exp = 999.0 if is_aggressive else config.MAX_SINGLE_ASSET_EXPOSURE
+        if single_asset_pct > max_asset_exp:
+            logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_SINGLE_ASSET_EXPOSURE | Asset: {single_asset_pct:.2%} > {max_asset_exp:.2%}")
+            return False, "MAX_SINGLE_ASSET_EXPOSURE", f"Asset exposure {single_asset_pct:.2%} exceeds {max_asset_exp:.2%}"
 
-        # 6. Correlated / Net Directional Exposure
+        # 6. Directional Correlation Limit (Net Directional Exposure)
         net_exposure = 0.0
         for p in active_positions.values():
             if not isinstance(p, dict):
@@ -134,6 +136,10 @@ class RiskGate:
             return False, "MAX_CORRELATION_EXPOSURE", f"Net directional {net_directional_pct:.2%} exceeds {max_dir_exp:.2%}"
 
         # 7. Drawdown Limit
+        # Update peak equity if current equity establishes a new watermark
+        if current_equity > self.peak_equity:
+            self.peak_equity = current_equity
+
         drawdown_pct = (self.peak_equity - current_equity) / self.peak_equity if self.peak_equity > 0 else 0.0
         max_dd = 999.0 if is_aggressive else config.MAX_TESTNET_DRAWDOWN_PCT
         if drawdown_pct >= max_dd:
