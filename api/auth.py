@@ -11,10 +11,10 @@ Loads strictly from environment variables:
 """
 
 import os
-import time
 from functools import wraps
-from typing import Dict, Optional, Tuple
-from flask import request, jsonify
+
+from flask import jsonify, request
+
 from security_hardening import SecurityRateLimiter, mask_credential
 
 # Consumer-agnostic keys
@@ -34,7 +34,7 @@ api_rate_limiter = SecurityRateLimiter(max_requests=60, window_seconds=60)
 control_rate_limiter = SecurityRateLimiter(max_requests=10, window_seconds=60)
 
 
-def extract_api_key() -> Optional[str]:
+def extract_api_key() -> str | None:
     """Extracts API key from X-API-Key or Authorization header."""
     key = request.headers.get("X-API-Key")
     if not key:
@@ -44,7 +44,7 @@ def extract_api_key() -> Optional[str]:
     return key
 
 
-def get_key_role(api_key: str) -> Optional[str]:
+def get_key_role(api_key: str) -> str | None:
     """Identifies role of the provided API key."""
     if not api_key:
         return None

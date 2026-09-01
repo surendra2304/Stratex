@@ -1,6 +1,12 @@
-import os, time, datetime, threading, requests
-from typing import Dict, List, Optional, Any, Tuple
+import datetime
+import os
+import threading
+import time
 from dataclasses import dataclass, field
+from typing import Any
+
+import requests
+
 from logger import get_logger
 
 logger = get_logger('futuris_client')
@@ -8,16 +14,16 @@ logger = get_logger('futuris_client')
 @dataclass
 class FuturisForecastContext:
     symbol: str
-    volatility_forecast: Dict[str, Any]
-    drawdown_risk: Dict[str, Any]
-    regime_outlook: Dict[str, Any]
+    volatility_forecast: dict[str, Any]
+    drawdown_risk: dict[str, Any]
+    regime_outlook: dict[str, Any]
     timestamp: float = field(default_factory=time.time)
     expires_at: float = 0.0
 
     def is_valid(self) -> bool:
         return time.time() < self.expires_at
 
-    def to_advisory_context(self) -> Dict[str, Any]:
+    def to_advisory_context(self) -> dict[str, Any]:
         return {
             'symbol': self.symbol,
             'volatility_forecast': self.volatility_forecast,
@@ -31,9 +37,9 @@ class FuturisMarketClient:
         self.base_url = (os.getenv('FUTURIS_URL') or os.getenv('FUTURIS_BASE_URL') or base_url or 'https://futuris-x4f4.onrender.com').rstrip('/')
         self.cache_ttl_seconds = cache_ttl_seconds
         self.timeout_seconds = timeout_seconds
-        self.cache: Dict[str, FuturisForecastContext] = {}
-        self.forecast_history: List[FuturisForecastContext] = []
-        self.accuracy_records: List[Dict[str, Any]] = []
+        self.cache: dict[str, FuturisForecastContext] = {}
+        self.forecast_history: list[FuturisForecastContext] = []
+        self.accuracy_records: list[dict[str, Any]] = []
         self._lock = threading.Lock()
 
     def fetch_forecast(self, symbol: str = 'BTCUSDT') -> FuturisForecastContext:
@@ -84,7 +90,7 @@ class FuturisMarketClient:
             expires_at=time.time() + self.cache_ttl_seconds
         )
 
-    def record_actual_outcome(self, symbol: str, actual_volatility_spike: bool, actual_drawdown_pct: float) -> Dict[str, Any]:
+    def record_actual_outcome(self, symbol: str, actual_volatility_spike: bool, actual_drawdown_pct: float) -> dict[str, Any]:
         with self._lock:
             forecast = self.cache.get(symbol)
             predicted_vol_prob = forecast.volatility_forecast.get('probability', 0.5) if forecast else 0.5
@@ -104,7 +110,7 @@ class FuturisMarketClient:
                 self.accuracy_records.pop(0)
             return record
 
-    def get_accuracy_metrics(self) -> Dict[str, Any]:
+    def get_accuracy_metrics(self) -> dict[str, Any]:
         with self._lock:
             if not self.accuracy_records:
                 return {
@@ -123,7 +129,7 @@ class FuturisMarketClient:
                 'status': 'ACTIVE'
             }
 
-    def get_latest_futuris_context(self, symbol: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def get_latest_futuris_context(self, symbol: str | None = None) -> dict[str, Any] | None:
         with self._lock:
             sym = symbol or 'BTCUSDT'
             if sym in self.cache:

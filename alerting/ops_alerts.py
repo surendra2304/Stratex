@@ -13,12 +13,11 @@ Monitors non-trading operational health:
 Channels: Webhook, Dashboard Banner, and Critical Notification Dispatch.
 """
 
-import time
-import os
-import json
 import datetime
-from typing import Dict, List, Optional, Tuple, Any
+import time
 from dataclasses import dataclass, field
+from typing import Any
+
 from logger import get_logger
 
 logger = get_logger("ops_alerts")
@@ -40,9 +39,9 @@ class OperationalAlertEngine:
     """
 
     def __init__(self):
-        self.active_alerts: List[OperationalAlert] = []
-        self.alert_history: List[OperationalAlert] = []
-        self.rss_history: List[Tuple[float, float]] = []  # (timestamp, rss_mb)
+        self.active_alerts: list[OperationalAlert] = []
+        self.alert_history: list[OperationalAlert] = []
+        self.rss_history: list[tuple[float, float]] = []  # (timestamp, rss_mb)
         self.last_evolution_ts: float = time.time()
         self.last_advisory_heartbeat_ts: float = time.time()
 
@@ -63,7 +62,7 @@ class OperationalAlertEngine:
         log_fn(f"[OPS_ALERT] [{severity}] [{category}] {message}")
         return alert
 
-    def check_exchange_latency(self, exchange_id: str, p95_latency_ms: float) -> Optional[OperationalAlert]:
+    def check_exchange_latency(self, exchange_id: str, p95_latency_ms: float) -> OperationalAlert | None:
         """Alerts if p95 latency > 1000ms."""
         if p95_latency_ms > 1000.0:
             return self.raise_alert(
@@ -73,7 +72,7 @@ class OperationalAlertEngine:
             )
         return None
 
-    def check_websocket_disconnect(self, exchange_id: str, is_connected: bool) -> Optional[OperationalAlert]:
+    def check_websocket_disconnect(self, exchange_id: str, is_connected: bool) -> OperationalAlert | None:
         """Alerts on WebSocket disconnection."""
         if not is_connected:
             return self.raise_alert(
@@ -83,7 +82,7 @@ class OperationalAlertEngine:
             )
         return None
 
-    def check_disk_space(self, disk_usage_pct: float) -> Optional[OperationalAlert]:
+    def check_disk_space(self, disk_usage_pct: float) -> OperationalAlert | None:
         """Alerts if disk space exceeds 85%."""
         if disk_usage_pct > 85.0:
             return self.raise_alert(
@@ -93,7 +92,7 @@ class OperationalAlertEngine:
             )
         return None
 
-    def check_memory_leak(self, current_rss_mb: float) -> Optional[OperationalAlert]:
+    def check_memory_leak(self, current_rss_mb: float) -> OperationalAlert | None:
         """Alerts if process memory grows > 100MB in a 1-hour window."""
         now = time.time()
         self.rss_history.append((now, current_rss_mb))
@@ -111,7 +110,7 @@ class OperationalAlertEngine:
                 )
         return None
 
-    def check_evolution_engine_stall(self, last_generation_ts: float) -> Optional[OperationalAlert]:
+    def check_evolution_engine_stall(self, last_generation_ts: float) -> OperationalAlert | None:
         """Alerts if evolution lab hasn't evolved for 48 hours."""
         elapsed_hours = (time.time() - last_generation_ts) / 3600.0
         if elapsed_hours > 48.0:
@@ -122,7 +121,7 @@ class OperationalAlertEngine:
             )
         return None
 
-    def check_advisory_scheduler_liveness(self, last_heartbeat_ts: float) -> Optional[OperationalAlert]:
+    def check_advisory_scheduler_liveness(self, last_heartbeat_ts: float) -> OperationalAlert | None:
         """Alerts if advisory scheduler heartbeat is older than 15 minutes."""
         elapsed_sec = time.time() - last_heartbeat_ts
         if elapsed_sec > 900:
@@ -133,7 +132,7 @@ class OperationalAlertEngine:
             )
         return None
 
-    def get_dashboard_alert_banners(self) -> List[Dict[str, Any]]:
+    def get_dashboard_alert_banners(self) -> list[dict[str, Any]]:
         """Returns active high-priority alerts for rendering in UI banners."""
         return [
             {

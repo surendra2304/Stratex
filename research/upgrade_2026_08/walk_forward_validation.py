@@ -21,7 +21,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from expansion_study import BASE, FEE, SLIP, load, run  # noqa: E402
+from expansion_study import BASE, load, run
 
 FOLDS = [
     ("2021", "2022-01-01", "2023-01-01"),

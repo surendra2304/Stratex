@@ -4,15 +4,14 @@ import io
 import json
 import os
 import sys
-
 import threading
 import time
 
-from flask import Flask, jsonify, request, send_from_directory, Response
+from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 import config
-from config import ACTIVE_STRATEGIES, TRADING_MODE
+from config import ACTIVE_STRATEGIES
 from data import get_candles as fetch_candles
 from logger import get_logger
 
@@ -29,12 +28,12 @@ from quantum_endpoint import quantum_bp
 
 app.register_blueprint(quantum_bp, url_prefix='/api/quantum')
 
-from api.public_status import public_status_bp
 from api.control import control_bp
 from api.export import export_bp
 from api.health import health_bp
-from api.reporting import reporting_bp
 from api.master_control_api import master_control_bp
+from api.public_status import public_status_bp
+from api.reporting import reporting_bp
 
 app.register_blueprint(public_status_bp)
 app.register_blueprint(control_bp)
@@ -53,15 +52,11 @@ def add_header(response):
     return response
 
 from security_hardening import (
-    require_api_scope,
-    get_security_status_report,
-    log_control_action,
-    authenticate_request,
-    SCOPE_READ,
     SCOPE_CONTROL,
-    SCOPE_FRIDAY,
-    SCOPE_ADMIN
+    get_security_status_report,
+    require_api_scope,
 )
+
 
 @app.route('/api/v1/security/status')
 def api_v1_security_status():
@@ -3367,7 +3362,10 @@ def api_advisory_health():
 def api_advisory_stats():
     """Returns the comprehensive AI Advisory quality and safety report JSON."""
     try:
-        from scripts.analyze_advisory_log import load_advisory_log, generate_advisory_quality_report
+        from scripts.analyze_advisory_log import (
+            generate_advisory_quality_report,
+            load_advisory_log,
+        )
         log_file = getattr(config, "ADVISORY_LOG_FILE", os.getenv("ADVISORY_LOG_FILE", "advisory_log.jsonl"))
         records = load_advisory_log(log_file)
         report = generate_advisory_quality_report(records)
@@ -3430,7 +3428,10 @@ def api_ab_status():
 def api_ab_results():
     """Returns the statistical metrics, hypothesis tests, and equity curve points for both arms."""
     try:
-        from scripts.compare_ab_performance import compute_ab_comparison, load_equity_curve
+        from scripts.compare_ab_performance import (
+            compute_ab_comparison,
+            load_equity_curve,
+        )
         results = compute_ab_comparison()
 
         # Load recent equity points
@@ -3460,8 +3461,8 @@ def api_ab_results():
 def api_testnet_advisory_status():
     """Returns the live status of the Testnet AI Advisory Subsystem."""
     try:
-        from testnet_advisory_scheduler import get_testnet_advisory_scheduler
         from ai_universe_client import AIUniverseClient
+        from testnet_advisory_scheduler import get_testnet_advisory_scheduler
         scheduler = get_testnet_advisory_scheduler()
         status_dict = scheduler.get_status()
 
@@ -3735,8 +3736,8 @@ def api_alerts_manager():
 def api_live_status():
     """Returns the live trading authorization state, capital tier level, and risk limits."""
     try:
-        from deployment.live_authorization import LiveAuthorizationVerifier
         from deployment.capital_levels import get_level_spec
+        from deployment.live_authorization import LiveAuthorizationVerifier
         from risk.live_enforcer import LiveRiskEnforcer
 
         verifier = LiveAuthorizationVerifier()
@@ -3845,7 +3846,10 @@ def api_unified_portfolio():
     """Returns cross-exchange aggregated equity, capital allocation, and net asset exposures."""
     try:
         from exchanges.exchange_implementations import (
-            BinanceExchangeAdapter, BybitExchangeAdapter, OKXExchangeAdapter, CoinbaseExchangeAdapter
+            BinanceExchangeAdapter,
+            BybitExchangeAdapter,
+            CoinbaseExchangeAdapter,
+            OKXExchangeAdapter,
         )
         from portfolio.unified_portfolio import UnifiedPortfolioManager
 
@@ -3890,11 +3894,15 @@ def api_exchanges_health():
 def api_arbitrage_opportunities():
     """Scans and returns live cross-exchange spatial and funding rate arbitrage opportunities."""
     try:
+        from dataclasses import asdict
+
         from exchanges.exchange_implementations import (
-            BinanceExchangeAdapter, BybitExchangeAdapter, OKXExchangeAdapter, CoinbaseExchangeAdapter
+            BinanceExchangeAdapter,
+            BybitExchangeAdapter,
+            CoinbaseExchangeAdapter,
+            OKXExchangeAdapter,
         )
         from strategies.arb_scanner import CrossExchangeArbitrageScanner
-        from dataclasses import asdict
 
         exchanges = {
             "binance": BinanceExchangeAdapter(),
@@ -4038,7 +4046,8 @@ def api_ecosystem_mode():
 def api_ecosystem_report():
     """Returns latest daily performance and ecosystem operations report."""
     try:
-        import os, json
+        import json
+        import os
         report_path = "reports/daily/report_2026-08-28.json"
         if os.path.exists(report_path):
             with open(report_path, "r", encoding="utf-8") as f:
@@ -4056,9 +4065,8 @@ def api_ecosystem_report():
 def api_evolution_status():
     """Returns current evolution laboratory status, population count, and incubation stats."""
     try:
-        from evolution.genetic_engine import StrategyGeneticEngine
-        from evolution.incubator import StrategyIncubator
         from evolution.approval_gates import HumanApprovalGate
+        from evolution.incubator import StrategyIncubator
 
         incubator = StrategyIncubator()
         gate = HumanApprovalGate()
@@ -4078,8 +4086,9 @@ def api_evolution_status():
 def api_evolution_population():
     """Returns the current active generation of strategy genomes."""
     try:
-        from evolution.genetic_engine import StrategyGeneticEngine
         from dataclasses import asdict
+
+        from evolution.genetic_engine import StrategyGeneticEngine
         engine = StrategyGeneticEngine(population_size=80)
         return jsonify({
             "status": "OK",
@@ -4095,8 +4104,9 @@ def api_evolution_population():
 def api_evolution_candidates():
     """Returns strategies that passed incubation and are candidates for promotion."""
     try:
-        from evolution.incubator import StrategyIncubator
         from dataclasses import asdict
+
+        from evolution.incubator import StrategyIncubator
         incubator = StrategyIncubator()
         candidates = incubator.get_graduation_candidates()
         return jsonify({
@@ -4168,9 +4178,9 @@ def api_evolution_approve(proposal_id):
 def api_risk_orchestration():
     """Returns real-time portfolio heat, VaR/CVaR, correlation matrix, and strategy allocations."""
     try:
+        from risk.circuit_breakers import CircuitBreakerEngine
         from risk.risk_orchestrator import RiskOrchestrator
         from risk.strategy_coordinator import StrategyCoordinator
-        from risk.circuit_breakers import CircuitBreakerEngine
 
         orchestrator = RiskOrchestrator()
         coordinator = StrategyCoordinator()
@@ -4211,9 +4221,14 @@ def api_risk_orchestration():
 def api_multiexchange_status():
     """Returns multi-exchange aggregated metrics, per-exchange P&L, balances, and health status."""
     try:
-        from exchanges.exchange_implementations import BinanceExchangeAdapter, BybitExchangeAdapter, OKXExchangeAdapter, CoinbaseExchangeAdapter
-        from portfolio.unified_portfolio import UnifiedPortfolioManager
+        from exchanges.exchange_implementations import (
+            BinanceExchangeAdapter,
+            BybitExchangeAdapter,
+            CoinbaseExchangeAdapter,
+            OKXExchangeAdapter,
+        )
         from exchanges.health_monitor import MultiExchangeHealthMonitor
+        from portfolio.unified_portfolio import UnifiedPortfolioManager
 
         exchanges = {
             "binance": BinanceExchangeAdapter(),
@@ -4245,7 +4260,12 @@ def api_multiexchange_status():
 def api_multiexchange_portfolio():
     """Returns unified cross-exchange portfolio view, asset exposure matrix, and hedge diagnostics."""
     try:
-        from exchanges.exchange_implementations import BinanceExchangeAdapter, BybitExchangeAdapter, OKXExchangeAdapter, CoinbaseExchangeAdapter
+        from exchanges.exchange_implementations import (
+            BinanceExchangeAdapter,
+            BybitExchangeAdapter,
+            CoinbaseExchangeAdapter,
+            OKXExchangeAdapter,
+        )
         from portfolio.unified_portfolio import UnifiedPortfolioManager
 
         exchanges = {
@@ -4277,9 +4297,14 @@ def api_multiexchange_portfolio():
 def api_multiexchange_router():
     """Returns intelligent order router execution telemetry and slippage stats."""
     try:
-        from exchanges.exchange_implementations import BinanceExchangeAdapter, BybitExchangeAdapter, OKXExchangeAdapter, CoinbaseExchangeAdapter
-        from execution.exchange_router import MultiExchangeRouter
+        from exchanges.exchange_implementations import (
+            BinanceExchangeAdapter,
+            BybitExchangeAdapter,
+            CoinbaseExchangeAdapter,
+            OKXExchangeAdapter,
+        )
         from exchanges.health_monitor import MultiExchangeHealthMonitor
+        from execution.exchange_router import MultiExchangeRouter
 
         exchanges = {
             "binance": BinanceExchangeAdapter(),
@@ -4365,8 +4390,9 @@ def api_live_emergency_halt():
 def prometheus_metrics_endpoint():
     """Prometheus exposition format exporter endpoint for Grafana/Prometheus scraping."""
     try:
-        from monitoring.metrics import get_metrics_registry
         from flask import Response
+
+        from monitoring.metrics import get_metrics_registry
         registry = get_metrics_registry()
 
         # Update registry with latest live/paper statistics

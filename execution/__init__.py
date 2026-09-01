@@ -1,7 +1,7 @@
 """Execution package init."""
+import importlib.util
 import os
 import sys
-import importlib.util
 
 # Ensure execution package shares exact same module object
 try:

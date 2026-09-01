@@ -11,8 +11,8 @@ ARCHITECTURE:
 """
 
 from collections import namedtuple
+
 import pandas as pd
-import numpy as np
 
 
 class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_type", "win_rate_prior", "rr_ratio"])):

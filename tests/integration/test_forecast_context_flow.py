@@ -1,7 +1,7 @@
-import pytest
-from intelligence.futuris_client import get_futuris_client, FuturisMarketClient
 from advisory_telemetry import build_telemetry_payload
+from intelligence.futuris_client import get_futuris_client
 from monitoring.metrics import get_metrics_registry
+
 
 def test_forecast_context_enrichment_flow():
     client = get_futuris_client()

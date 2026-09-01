@@ -1,9 +1,9 @@
 import os
-import json
-import pytest
-from monitoring.metrics import PrometheusMetricsRegistry, get_metrics_registry
-from alerting.ops_alerts import OperationalAlertEngine, get_ops_alert_engine
-from logger.structured import scrub_sensitive_data, get_structured_logger
+
+from alerting.ops_alerts import OperationalAlertEngine
+from logger.structured import get_structured_logger, scrub_sensitive_data
+from monitoring.metrics import PrometheusMetricsRegistry
+
 
 def test_prometheus_metrics_registry():
     reg = PrometheusMetricsRegistry()

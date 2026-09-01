@@ -9,7 +9,7 @@ import datetime
 import json
 import os
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from logger import get_logger
 
@@ -19,7 +19,7 @@ ADVISORY_LOG_FILE = os.getenv("ADVISORY_LOG_FILE", "advisory_log.jsonl")
 _ledger_lock = threading.Lock()
 
 
-def append_advisory_entry(entry: Dict[str, Any], filepath: Optional[str] = None) -> bool:
+def append_advisory_entry(entry: dict[str, Any], filepath: str | None = None) -> bool:
     """
     Appends a consultation record to the JSONL advisory log atomically.
     Ensures required schema fields are present.
@@ -57,7 +57,7 @@ def append_advisory_entry(entry: Dict[str, Any], filepath: Optional[str] = None)
             return False
 
 
-def read_recent_advisory_entries(limit: int = 50, filepath: Optional[str] = None) -> List[Dict[str, Any]]:
+def read_recent_advisory_entries(limit: int = 50, filepath: str | None = None) -> list[dict[str, Any]]:
     """
     Reads the last N records from the advisory ledger in reverse chronological order.
     """

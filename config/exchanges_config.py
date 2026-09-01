@@ -9,7 +9,6 @@ Features:
 """
 
 import os
-from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 
 
@@ -24,10 +23,10 @@ class ExchangeConfigSpec:
     taker_fee_pct: float = 0.0006
     maker_fee_pct: float = 0.0002
     max_drawdown_limit_pct: float = 0.15
-    pairs_whitelist: List[str] = field(default_factory=lambda: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT"])
+    pairs_whitelist: list[str] = field(default_factory=lambda: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT"])
 
 
-def load_multi_exchange_config() -> Dict[str, ExchangeConfigSpec]:
+def load_multi_exchange_config() -> dict[str, ExchangeConfigSpec]:
     """Loads and validates multi-exchange specifications from environment variables."""
     raw_enabled = os.getenv("EXCHANGES_ENABLED", "binance,bybit,okx,coinbase")
     enabled_list = [e.strip().lower() for e in raw_enabled.split(",") if e.strip()]

@@ -7,13 +7,13 @@
 #   Binance public kline/ticker endpoints do NOT require authentication.
 #   Do NOT pass API_KEY or SECRET_KEY to this client.
 # ==============================================================================
+import logging
+import time
+
 from binance.client import Client
+from binance.exceptions import BinanceAPIException
 
 from config import TRADING_MODE
-
-import time
-import logging
-from binance.exceptions import BinanceAPIException
 
 logger = logging.getLogger("data_client")
 

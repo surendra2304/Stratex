@@ -13,15 +13,15 @@ Capabilities:
    - LEVEL 3 (Full Autonomy): Autonomous self-healing, failover routing, and defensive liquidation with mandatory audit reporting.
 """
 
+import datetime
 import os
 import time
-import datetime
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass
+from typing import Any
 
+from autonomy.degradation_matrix import DegradationPolicyMatrix
 from autonomy.ecosystem_state import EcosystemStateMachine
 from autonomy.self_healing import SelfHealingEngine
-from autonomy.degradation_matrix import DegradationPolicyMatrix, SubsystemHealth
 from logger import get_logger
 
 logger = get_logger("operations_director")
@@ -43,13 +43,13 @@ class AutonomousOperationsDirector:
     Master orchestrator commanding multi-frequency decisions across strategies, risk, and infrastructure.
     """
 
-    def __init__(self, autonomy_level: Optional[int] = None):
+    def __init__(self, autonomy_level: int | None = None):
         default_lvl = int(os.getenv("OPERATIONS_AUTONOMY_LEVEL", "2"))
         self.autonomy_level = min(3, max(1, autonomy_level if autonomy_level is not None else default_lvl))
         self.state_machine = EcosystemStateMachine()
         self.self_healing = SelfHealingEngine()
         self.degradation = DegradationPolicyMatrix()
-        self.decision_log: List[AutonomousDecisionRecord] = []
+        self.decision_log: list[AutonomousDecisionRecord] = []
 
     def set_autonomy_level(self, level: int) -> int:
         """Sets autonomy level (1, 2, or 3)."""
@@ -71,7 +71,7 @@ class AutonomousOperationsDirector:
         logger.info(f"[AUTONOMY_DIR] 🧠 [{freq_tier}] {action} on {component}: {rationale}")
         return rec
 
-    def run_high_frequency_cycle(self, current_drawdown_pct: float, active_positions_count: int) -> Dict[str, Any]:
+    def run_high_frequency_cycle(self, current_drawdown_pct: float, active_positions_count: int) -> dict[str, Any]:
         """Runs 5-minute health and risk check."""
         if current_drawdown_pct >= 12.0:
             self.state_machine.transition_to("DEFENSIVE", f"Drawdown ceiling {current_drawdown_pct:.1f}% >= 12%")
@@ -90,7 +90,7 @@ class AutonomousOperationsDirector:
                 self.state_machine.transition_to("FULL_AUTONOMY", "Drawdown recovered to nominal bounds")
             return {"status": "NOMINAL", "action": "CONTINUE_TRADING"}
 
-    def run_medium_frequency_cycle(self, strategy_sharpes: Dict[str, float]) -> Dict[str, float]:
+    def run_medium_frequency_cycle(self, strategy_sharpes: dict[str, float]) -> dict[str, float]:
         """Runs hourly strategy weighting adjustments within ±20% bounds."""
         if self.autonomy_level < 2:
             return {"status": "SKIPPED_AUTONOMY_LEVEL_1"}
@@ -105,12 +105,12 @@ class AutonomousOperationsDirector:
         self.log_decision("MEDIUM_1H", "REBALANCE_WEIGHTS", "strategy_coordinator", f"Rebalanced weights: {new_weights}")
         return new_weights
 
-    def run_daily_cycle(self) -> Dict[str, Any]:
+    def run_daily_cycle(self) -> dict[str, Any]:
         """Runs daily capital distribution review and evolution generation review."""
         rec = self.log_decision("LOW_24H", "REVIEW_CAPITAL_AND_EVOLUTION", "evolution_lab", "Triggered daily review cycle")
         return {"status": "DAILY_CYCLE_COMPLETE", "record": asdict(rec)}
 
-    def get_ecosystem_status(self) -> Dict[str, Any]:
+    def get_ecosystem_status(self) -> dict[str, Any]:
         """Rolls up comprehensive system status."""
         return {
             "autonomy_level": self.autonomy_level,

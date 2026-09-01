@@ -8,11 +8,9 @@ Features:
 4. Risk Metrics & Stress Testing: Historical/Parametric VaR (95%/99%), CVaR (Expected Shortfall), and simulated market shock scenarios.
 """
 
-import math
+from dataclasses import dataclass
+
 import numpy as np
-import pandas as pd
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field
 
 
 @dataclass
@@ -33,7 +31,7 @@ class DynamicRiskManager:
     and enforces hard budget limits.
     """
 
-    def __init__(self, budget: Optional[RiskBudget] = None):
+    def __init__(self, budget: RiskBudget | None = None):
         self.budget = budget or RiskBudget()
 
     def calculate_fixed_fractional_size(
@@ -41,7 +39,7 @@ class DynamicRiskManager:
         equity: float,
         entry_price: float,
         stop_loss_price: float,
-        fraction_pct: Optional[float] = None
+        fraction_pct: float | None = None
     ) -> float:
         """
         Fixed fractional sizing: Risk = Equity * fraction_pct.
@@ -108,7 +106,7 @@ class DynamicRiskManager:
         qty = notional / entry_price
         return float(round(qty, 6))
 
-    def calculate_risk_parity_weights(self, volatilities: Dict[str, float]) -> Dict[str, float]:
+    def calculate_risk_parity_weights(self, volatilities: dict[str, float]) -> dict[str, float]:
         """
         Inverse volatility risk parity weight allocation.
         Weight_i = (1 / Vol_i) / Sum(1 / Vol_j).
@@ -124,10 +122,10 @@ class DynamicRiskManager:
 
     def compute_var_cvar(
         self,
-        returns: List[float],
+        returns: list[float],
         confidence_level: float = 0.95,
         portfolio_value: float = 10000.0
-    ) -> Tuple[float, float, float, float]:
+    ) -> tuple[float, float, float, float]:
         """
         Computes Historical Value at Risk (VaR) and Conditional VaR (Expected Shortfall).
         Returns: (var_pct, var_dollar, cvar_pct, cvar_dollar)
@@ -145,7 +143,7 @@ class DynamicRiskManager:
         cvar_dollar = round(portfolio_value * cvar_pct, 2)
         return round(var_pct * 100.0, 2), var_dollar, round(cvar_pct * 100.0, 2), cvar_dollar
 
-    def run_stress_tests(self, portfolio_notional: float) -> Dict[str, float]:
+    def run_stress_tests(self, portfolio_notional: float) -> dict[str, float]:
         """
         Calculates impact of predefined market shock scenarios.
         """
@@ -163,7 +161,7 @@ class DynamicRiskManager:
         self,
         base_size: float,
         current_drawdown_pct: float
-    ) -> Tuple[float, float]:
+    ) -> tuple[float, float]:
         """
         Dynamically scales down position sizes as account drawdown increases:
         - 0% - 5% DD: 100% sizing

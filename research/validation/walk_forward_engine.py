@@ -1,7 +1,7 @@
 import pandas as pd
-import numpy as np
-from features import add_features
+
 from backtest_engine import BacktestEngine
+from features import add_features
 from metrics import calculate_metrics
 
 

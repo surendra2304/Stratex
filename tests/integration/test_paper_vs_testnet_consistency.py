@@ -1,6 +1,3 @@
-import os
-import json
-import pytest
 
 def test_paper_vs_testnet_consistency():
     # Simulated trade events

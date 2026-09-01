@@ -7,11 +7,12 @@ Aggregates:
 3. System reliability telemetry: API latency, error frequency, and memory footprint.
 """
 
-import time
 import datetime
+from typing import Any
+
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional, Tuple, Any
+
 from advisory_telemetry import build_telemetry_payload
 
 
@@ -20,7 +21,7 @@ class EnhancedTelemetryCollector:
     Constructs high-dimension operational telemetry for AI-Universe and monitoring engines.
     """
 
-    def compute_market_breadth(self, candle_dfs: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
+    def compute_market_breadth(self, candle_dfs: dict[str, pd.DataFrame]) -> dict[str, Any]:
         """
         Computes market breadth indicators across tracked symbols:
         - % of assets trading above 20 EMA
@@ -60,9 +61,9 @@ class EnhancedTelemetryCollector:
 
     def build_full_telemetry_snapshot(
         self,
-        candle_dfs: Optional[Dict[str, pd.DataFrame]] = None,
-        trade_history: Optional[List[Dict[str, Any]]] = None
-    ) -> Dict[str, Any]:
+        candle_dfs: dict[str, pd.DataFrame] | None = None,
+        trade_history: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
         """
         Constructs unified telemetry payload incorporating market breadth and performance metrics.
         """

@@ -1,6 +1,12 @@
-import os, time, datetime, threading, requests
-from typing import Dict, List, Optional, Any, Tuple
+import datetime
+import os
+import threading
+import time
 from dataclasses import dataclass, field
+from typing import Any
+
+import requests
+
 from logger import get_logger
 
 logger = get_logger('intelx_client')
@@ -10,18 +16,18 @@ class MarketResearchReport:
     symbol: str
     trigger_reason: str
     query: str
-    findings: Dict[str, Any]
+    findings: dict[str, Any]
     summary: str
-    sentiment_drivers: List[str]
-    regulatory_changes: List[str]
-    macro_events: List[str]
+    sentiment_drivers: list[str]
+    regulatory_changes: list[str]
+    macro_events: list[str]
     timestamp: float = field(default_factory=time.time)
     expires_at: float = 0.0
 
     def is_valid(self) -> bool:
         return time.time() < self.expires_at
 
-    def to_market_context(self) -> Dict[str, Any]:
+    def to_market_context(self) -> dict[str, Any]:
         return {
             'symbol': self.symbol,
             'trigger_reason': self.trigger_reason,
@@ -37,12 +43,12 @@ class IntelXMarketClient:
         self.base_url = (os.getenv('INTELX_URL') or os.getenv('INTELX_BASE_URL') or base_url or 'https://intelx-3cz1.onrender.com').rstrip('/')
         self.cache_ttl_seconds = cache_ttl_seconds
         self.timeout_seconds = timeout_seconds
-        self.cache: Dict[str, MarketResearchReport] = {}
-        self.research_history: List[MarketResearchReport] = []
+        self.cache: dict[str, MarketResearchReport] = {}
+        self.research_history: list[MarketResearchReport] = []
         self._lock = threading.Lock()
         self.total_queries_submitted = 0
 
-    def should_trigger_research(self, symbol: str, volatility_z_score: float = 0.0, advisory_confidence: float = 1.0, current_drawdown_pct: float = 0.0) -> Tuple[bool, str]:
+    def should_trigger_research(self, symbol: str, volatility_z_score: float = 0.0, advisory_confidence: float = 1.0, current_drawdown_pct: float = 0.0) -> tuple[bool, str]:
         if volatility_z_score >= 2.0:
             return True, f'VOLATILITY_2_SIGMA ({volatility_z_score:.2f} >= 2.0)'
         if advisory_confidence < 0.60:
@@ -112,7 +118,7 @@ class IntelXMarketClient:
             expires_at=time.time() + self.cache_ttl_seconds
         )
 
-    def get_latest_market_context(self, symbol: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def get_latest_market_context(self, symbol: str | None = None) -> dict[str, Any] | None:
         with self._lock:
             if symbol and symbol in self.cache:
                 return self.cache[symbol].to_market_context()

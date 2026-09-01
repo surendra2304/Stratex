@@ -11,13 +11,16 @@ Verifies:
 """
 
 import pytest
-from exchanges.base_exchange import UnifiedTicker, UnifiedBalance
-from exchanges.exchange_implementations import (
-    BinanceExchangeAdapter, BybitExchangeAdapter, OKXExchangeAdapter, CoinbaseExchangeAdapter
-)
-from portfolio.unified_portfolio import UnifiedPortfolioManager
+
 from exchange_router import MultiExchangeRouter
+from exchanges.exchange_implementations import (
+    BinanceExchangeAdapter,
+    BybitExchangeAdapter,
+    CoinbaseExchangeAdapter,
+    OKXExchangeAdapter,
+)
 from exchanges.health_monitor import MultiExchangeHealthMonitor
+from portfolio.unified_portfolio import UnifiedPortfolioManager
 from strategies.arb_scanner import CrossExchangeArbitrageScanner
 
 

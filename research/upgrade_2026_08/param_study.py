@@ -9,7 +9,11 @@ Methodology (matches BACKTEST_ASSUMPTIONS in config_strategy.py):
 - In-sample: 2021-01-01 .. 2024-01-01 ; OOS holdout: 2024-01-01 .. present
 - Risk sizing: fixed 1% of $10k per trade
 """
-import json, itertools, numpy as np, pandas as pd
+import itertools
+import json
+
+import numpy as np
+import pandas as pd
 
 DATA_DIR = "research/upgrade_2026_08/data"
 SYMS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT"]

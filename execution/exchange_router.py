@@ -10,8 +10,9 @@ Features:
 """
 
 import time
-from typing import Dict, List, Optional, Tuple, Any
-from exchanges.base_exchange import BaseExchange, UnifiedOrderResult, UnifiedTicker
+from typing import Any
+
+from exchanges.base_exchange import BaseExchange, UnifiedOrderResult
 from logger import get_logger
 
 logger = get_logger("exchange_router")
@@ -21,7 +22,7 @@ class RateLimiter:
     """Token-bucket rate limiter per exchange connection."""
     def __init__(self, max_requests_per_sec: float = 10.0):
         self.interval = 1.0 / max_requests_per_sec
-        self.last_call_time: Dict[str, float] = {}
+        self.last_call_time: dict[str, float] = {}
 
     def throttle(self, exchange_id: str) -> None:
         now = time.time()
@@ -40,19 +41,19 @@ class MultiExchangeRouter:
 
     def __init__(
         self,
-        exchanges: Dict[str, BaseExchange],
-        health_monitor: Optional[Any] = None,
+        exchanges: dict[str, BaseExchange],
+        health_monitor: Any | None = None,
         large_order_threshold_usd: float = 10000.0
     ):
         self.exchanges = exchanges
         self.health_monitor = health_monitor
         self.large_order_threshold_usd = large_order_threshold_usd
         self.rate_limiter = RateLimiter(max_requests_per_sec=10.0)
-        self.unhealthy_exchanges: List[str] = []
-        self.slippage_records: Dict[str, List[float]] = {ex_id: [] for ex_id in exchanges}
-        self.split_orders_history: List[Dict[str, Any]] = []
+        self.unhealthy_exchanges: list[str] = []
+        self.slippage_records: dict[str, list[float]] = {ex_id: [] for ex_id in exchanges}
+        self.split_orders_history: list[dict[str, Any]] = []
 
-    def _estimate_slippage(self, orderbook: Dict[str, List[List[float]]], side: str, quantity: float) -> float:
+    def _estimate_slippage(self, orderbook: dict[str, list[list[float]]], side: str, quantity: float) -> float:
         """
         Estimates market slippage percentage based on orderbook depth traversal.
         """
@@ -85,7 +86,7 @@ class MultiExchangeRouter:
         symbol: str,
         side: str,
         quantity: float
-    ) -> Tuple[str, float, float, float]:
+    ) -> tuple[str, float, float, float]:
         """
         Analyzes all eligible exchanges considering:
         - Best price
@@ -156,7 +157,7 @@ class MultiExchangeRouter:
         side: str,
         order_type: str,
         quantity: float,
-        price: Optional[float] = None
+        price: float | None = None
     ) -> UnifiedOrderResult:
         """
         Main execution entry point:
@@ -193,7 +194,7 @@ class MultiExchangeRouter:
         order_type: str,
         total_quantity: float,
         benchmark_price: float,
-        eligible_venues: List[str]
+        eligible_venues: list[str]
     ) -> UnifiedOrderResult:
         """
         Splits large block orders proportionally to venue orderbook depths.
@@ -201,7 +202,7 @@ class MultiExchangeRouter:
         logger.info(f"[ROUTER] ⚡ LARGE ORDER DETECTED (${total_quantity * benchmark_price:.2f} > ${self.large_order_threshold_usd}). Slicing across venues {eligible_venues}...")
 
         # Calculate relative liquidity depth
-        depth_weights: Dict[str, float] = {}
+        depth_weights: dict[str, float] = {}
         for ex_id in eligible_venues:
             try:
                 ob = self.exchanges[ex_id].get_orderbook(symbol, limit=10)
@@ -212,7 +213,7 @@ class MultiExchangeRouter:
                 depth_weights[ex_id] = 1.0
 
         total_depth = sum(depth_weights.values())
-        child_results: List[UnifiedOrderResult] = []
+        child_results: list[UnifiedOrderResult] = []
         executed_qty_sum = 0.0
         weighted_price_sum = 0.0
         total_fee_sum = 0.0
@@ -268,7 +269,7 @@ class MultiExchangeRouter:
         quantity: float,
         target_price: float,
         primary_venue: str,
-        candidate_venues: List[str]
+        candidate_venues: list[str]
     ) -> UnifiedOrderResult:
         """Executes order on preferred venue with automatic failover cascade."""
         attempted_venues = []
@@ -301,7 +302,7 @@ class MultiExchangeRouter:
 
         raise RuntimeError(f"All candidate execution venues {attempted_venues} failed for {symbol}")
 
-    def get_router_telemetry(self) -> Dict[str, Any]:
+    def get_router_telemetry(self) -> dict[str, Any]:
         """Returns comprehensive router diagnostics and performance statistics."""
         return {
             "slippage_by_venue": {

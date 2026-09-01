@@ -1,10 +1,8 @@
-import os
-import json
-import pytest
-from evolution.genetic_engine import StrategyGenome
-from evolution.validation_gauntlet import ValidationGauntlet
-from evolution.incubator import StrategyIncubator
 from evolution.approval_gates import HumanApprovalGate
+from evolution.genetic_engine import StrategyGenome
+from evolution.incubator import StrategyIncubator
+from evolution.validation_gauntlet import ValidationGauntlet
+
 
 def test_full_evolution_pipeline_stages(tmp_path):
     # 1. Genome creation

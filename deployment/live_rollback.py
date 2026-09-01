@@ -7,11 +7,12 @@ Capabilities:
 3. State Recovery & Re-Reconciliation.
 """
 
-import time
 import datetime
 import json
 import os
-from typing import Dict, List, Optional, Tuple, Any
+import time
+from typing import Any
+
 from logger import get_logger
 from security_hardening import sign_audit_record
 
@@ -33,8 +34,8 @@ class LiveRollbackManager:
         self,
         reason: str,
         triggered_by: str = "SYSTEM_AUTOMATIC",
-        open_positions: Optional[List[Dict[str, Any]]] = None
-    ) -> Dict[str, Any]:
+        open_positions: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
         """
         Flattens live positions, writes incident report, and commands fallback to Testnet.
         """

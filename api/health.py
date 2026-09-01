@@ -9,7 +9,9 @@ Endpoints:
 
 import os
 import time
+
 from flask import Blueprint, jsonify
+
 from api.auth import require_permission
 from api.data_shapes import format_api_response
 from monitoring_system import get_monitoring_system

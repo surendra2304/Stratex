@@ -8,11 +8,9 @@ Features:
 4. Automated Alert Dispatching with multi-tier severity.
 """
 
-import time
 import datetime
-import json
-import os
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Any
+
 from monitoring_system import get_monitoring_system
 
 
@@ -24,7 +22,7 @@ class EnterpriseProductionMonitor:
     def __init__(self):
         self.base_monitor = get_monitoring_system()
 
-    def get_full_operational_status(self) -> Dict[str, Any]:
+    def get_full_operational_status(self) -> dict[str, Any]:
         """Gathers complete multi-pillar operational telemetry."""
         sys_res = self.base_monitor.get_system_resource_metrics()
         trading_m = self.base_monitor.get_trading_health_metrics()

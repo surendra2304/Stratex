@@ -16,15 +16,14 @@ ZERO DOWNTIME TOLERANCE: All exceptions are caught, logged, and NEVER propagate 
 import datetime
 import os
 import threading
-import time
-from typing import Any, Dict, Optional
+from typing import Any
 
+import config
 from advisory_gate import AdvisoryGate
 from advisory_ledger import append_advisory_entry
 from advisory_params import get_advisory_overlay
 from advisory_telemetry import build_telemetry_payload
 from ai_universe_client import AIUniverseClient
-import config
 from logger import get_logger
 
 logger = get_logger("advisory_scheduler")
@@ -37,11 +36,11 @@ class AdvisoryScheduler:
 
     def __init__(
         self,
-        client: Optional[AIUniverseClient] = None,
-        gate: Optional[AdvisoryGate] = None,
-        trading_mode: Optional[str] = None,
-        shadow_mode: Optional[bool] = None,
-        interval_hours: Optional[float] = None
+        client: AIUniverseClient | None = None,
+        gate: AdvisoryGate | None = None,
+        trading_mode: str | None = None,
+        shadow_mode: bool | None = None,
+        interval_hours: float | None = None
     ) -> None:
         base_url = getattr(config, "INFERENCE_URL", os.getenv("INFERENCE_URL", getattr(config, "AI_UNIVERSE_BASE_URL", os.getenv("AI_UNIVERSE_URL", "https://inference-3i2b.onrender.com"))))
         timeout = int(getattr(config, "ADVISORY_TIMEOUT_SECONDS", os.getenv("ADVISORY_TIMEOUT_SECONDS", "120")))
@@ -62,12 +61,12 @@ class AdvisoryScheduler:
 
         self._running = False
         self._stop_event = threading.Event()
-        self._thread: Optional[threading.Thread] = None
-        self._last_consultation_time: Optional[datetime.datetime] = None
+        self._thread: threading.Thread | None = None
+        self._last_consultation_time: datetime.datetime | None = None
         self._last_consecutive_losses_alerted: int = 0
         self._lock = threading.Lock()
 
-    def run_consultation_cycle(self, reason: str = "SCHEDULED") -> Optional[Dict[str, Any]]:
+    def run_consultation_cycle(self, reason: str = "SCHEDULED") -> dict[str, Any] | None:
         """
         Executes one full consultation cycle safely. Returns consultation result dict or None on failure.
         """
@@ -83,7 +82,7 @@ class AdvisoryScheduler:
             # 2. Consult AI-Universe
             decision = self.client.consult(telemetry)
             if not decision:
-                logger.warning(f"[ADVISORY_SCHEDULER] AI-Universe returned no decision. Retaining last validated parameters.")
+                logger.warning("[ADVISORY_SCHEDULER] AI-Universe returned no decision. Retaining last validated parameters.")
                 return None
 
             # 3. Validate against AdvisoryGate bounds
@@ -141,7 +140,7 @@ class AdvisoryScheduler:
             logger.error(f"[ADVISORY_SCHEDULER] Error during consultation cycle: {e}", exc_info=True)
             return None
 
-    def _should_trigger_event(self) -> Optional[str]:
+    def _should_trigger_event(self) -> str | None:
         """
         Checks if event-based consultation trigger conditions are met:
         - Drawdown exceeds safety threshold.
@@ -160,7 +159,7 @@ class AdvisoryScheduler:
             # Max drawdown check
             dd_pct = port.get("max_drawdown_pct", 0.0)
             threshold = float(getattr(config, "MAX_TESTNET_DRAWDOWN_PCT", 0.05)) * 100.0
-            if dd_pct > threshold and threshold > 0:
+            if dd_pct > threshold > 0:
                 return f"DRAWDOWN_BREACH_TRIGGER (dd={dd_pct:.1f}% > {threshold:.1f}%)"
 
         except Exception as e:
@@ -233,7 +232,7 @@ class AdvisoryScheduler:
 
 
 # Singleton supervisor instance
-_scheduler_instance: Optional[AdvisoryScheduler] = None
+_scheduler_instance: AdvisoryScheduler | None = None
 _scheduler_lock = threading.Lock()
 
 
@@ -247,7 +246,7 @@ def get_advisory_scheduler() -> AdvisoryScheduler:
     return _scheduler_instance
 
 
-def start_advisory_scheduler_if_enabled() -> Optional[AdvisoryScheduler]:
+def start_advisory_scheduler_if_enabled() -> AdvisoryScheduler | None:
     """Helper to start the scheduler if AI_UNIVERSE_ENABLED is True."""
     enabled = getattr(config, "AI_UNIVERSE_ENABLED", os.getenv("AI_UNIVERSE_ENABLED", "True").lower() == "true")
     if enabled:

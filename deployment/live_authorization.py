@@ -10,15 +10,14 @@ Enforces:
 6. A/B test report verifying AI advisory is non-harmful (neutral or positive).
 """
 
-import os
-import json
-import time
 import hashlib
-from typing import Dict, List, Tuple, Any, Optional
+import json
+import os
+import time
 from dataclasses import dataclass, field
 
 import config
-from deployment.capital_levels import get_level_spec, CapitalLevelSpec
+from deployment.capital_levels import CapitalLevelSpec, get_level_spec
 from logger import get_logger
 
 logger = get_logger("live_authorization")
@@ -32,8 +31,8 @@ class LiveAuthorizationState:
     authorized_level: int
     authorized_capital: float
     spec: CapitalLevelSpec
-    active_reasons: List[str] = field(default_factory=list)
-    blocking_errors: List[str] = field(default_factory=list)
+    active_reasons: list[str] = field(default_factory=list)
+    blocking_errors: list[str] = field(default_factory=list)
 
 
 def create_physical_authorization_file(
@@ -71,7 +70,7 @@ class LiveAuthorizationVerifier:
     def __init__(self, auth_file: str = AUTH_FILE_PATH):
         self.auth_file = auth_file
 
-    def verify_paper_trading_duration(self, min_days: int = 60) -> Tuple[bool, int]:
+    def verify_paper_trading_duration(self, min_days: int = 60) -> tuple[bool, int]:
         """Verifies paper trading ledger spans at least 60 calendar days."""
         ledger_file = getattr(config, "PAPER_TRADE_LEDGER_FILE", "paper_trade_ledger.jsonl")
         if not os.path.exists(ledger_file):
@@ -96,14 +95,14 @@ class LiveAuthorizationVerifier:
         except Exception:
             return False, 0
 
-    def verify_testnet_trading_duration(self, min_days: int = 30) -> Tuple[bool, int]:
+    def verify_testnet_trading_duration(self, min_days: int = 30) -> tuple[bool, int]:
         """Verifies testnet forward records span at least 30 calendar days."""
         fwd_file = "forward_signal_log.jsonl"
         if os.path.exists(fwd_file) or os.path.exists("forward_health.json"):
             return True, min_days
         return True, min_days  # Passed in testnet integration
 
-    def verify_ab_test_safety(self) -> Tuple[bool, str]:
+    def verify_ab_test_safety(self) -> tuple[bool, str]:
         """Verifies AI advisory A/B report indicates non-harmful performance."""
         report_file = "ab_test_report.md"
         results_file = "ab_comparison_results.json"

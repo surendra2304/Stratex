@@ -11,14 +11,12 @@ Verifies:
 """
 
 import tempfile
-import pytest
 
-from autonomy.ecosystem_state import EcosystemStateMachine
-from autonomy.self_healing import SelfHealingEngine
-from autonomy.degradation_matrix import DegradationPolicyMatrix, SubsystemHealth
-from autonomy.operations_director import AutonomousOperationsDirector
-from autonomy.performance_learning import PerformanceLearningEngine
 from autonomy.compliance_reporting import ComplianceReporter
+from autonomy.degradation_matrix import DegradationPolicyMatrix, SubsystemHealth
+from autonomy.ecosystem_state import EcosystemStateMachine
+from autonomy.operations_director import AutonomousOperationsDirector
+from autonomy.self_healing import SelfHealingEngine
 
 
 def test_ecosystem_state_machine():

@@ -7,9 +7,10 @@ Capabilities:
 3. Divergence & Conflict Detection: Flags when higher timeframe trend conflicts with low timeframe counter-trend entry.
 """
 
+from typing import Any
+
 import pandas as pd
-import numpy as np
-from typing import Dict, List, Optional, Tuple, Any
+
 import features
 
 
@@ -27,10 +28,10 @@ class MultiTimeframeAnalyzer:
         "1d": 0.10
     }
 
-    def __init__(self, tf_weights: Optional[Dict[str, float]] = None):
+    def __init__(self, tf_weights: dict[str, float] | None = None):
         self.weights = tf_weights or self.DEFAULT_WEIGHTS
 
-    def evaluate_trend_for_dataframe(self, df: pd.DataFrame) -> Tuple[int, float]:
+    def evaluate_trend_for_dataframe(self, df: pd.DataFrame) -> tuple[int, float]:
         """
         Determines trend direction (+1 for bullish, -1 for bearish, 0 for neutral) and strength (0..1).
         """
@@ -63,8 +64,8 @@ class MultiTimeframeAnalyzer:
 
     def compute_consensus(
         self,
-        timeframe_dfs: Dict[str, pd.DataFrame]
-    ) -> Dict[str, Any]:
+        timeframe_dfs: dict[str, pd.DataFrame]
+    ) -> dict[str, Any]:
         """
         Computes weighted consensus score across available timeframes.
         Consensus score ranges from -1.0 (Strong Bearish) to +1.0 (Strong Bullish).

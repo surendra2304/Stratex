@@ -10,10 +10,9 @@ Advisory only:
 """
 
 import os
-import json
-import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any
+
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -30,10 +29,10 @@ class AIUniverseClient:
 
     def __init__(
         self,
-        base_url: Optional[str] = None,
+        base_url: str | None = None,
         timeout: int = 120,
         max_retries: int = 2,
-        api_key: Optional[str] = None
+        api_key: str | None = None
     ) -> None:
         self.base_url = (base_url or os.getenv("INFERENCE_URL") or os.getenv("AI_UNIVERSE_URL") or "https://inference-3i2b.onrender.com").rstrip("/")
         self.timeout = timeout
@@ -52,7 +51,7 @@ class AIUniverseClient:
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
@@ -62,7 +61,7 @@ class AIUniverseClient:
             headers["X-FRIDAY-API-Key"] = self.api_key
         return headers
 
-    def consult(self, telemetry_payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def consult(self, telemetry_payload: dict[str, Any]) -> dict[str, Any] | None:
         """
         Submits trading telemetry to AI-Universe (POST /v1/trading/consult) and returns
         the validated decision dictionary or None on any failure.
@@ -102,7 +101,7 @@ class AIUniverseClient:
                 return None
 
             if not isinstance(data.get("parameter_changes"), list):
-                logger.warning(f"[AI_UNIVERSE_CLIENT] Malformed AIUniverseDecision: parameter_changes must be a list")
+                logger.warning("[AI_UNIVERSE_CLIENT] Malformed AIUniverseDecision: parameter_changes must be a list")
                 return None
 
             data["latency_ms"] = elapsed_ms

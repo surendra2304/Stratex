@@ -1,0 +1,2 @@
+{"id": "ALT_1788236677516", "timestamp": "2026-09-01T04:24:37.516507Z", "level": "WARNING", "category": "RESOURCE", "message": "High CPU utilization: 93.5%", "acknowledged": false, "metadata": {}}
+{"id": "ALT_1788236702540", "timestamp": "2026-09-01T04:25:02.540497Z", "level": "WARNING", "category": "RESOURCE", "message": "High CPU utilization: 81.8%", "acknowledged": false, "metadata": {}}

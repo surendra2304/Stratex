@@ -9,13 +9,14 @@ Emits:
 """
 
 import os
-import json
-import time
-import requests
 import threading
-from typing import Dict, List, Optional, Any
-from security_hardening import sign_audit_record
+import time
+from typing import Any
+
+import requests
+
 from logger import get_logger
+from security_hardening import sign_audit_record
 
 logger = get_logger("webhooks")
 
@@ -28,9 +29,9 @@ class EcosystemWebhookEmitter:
     def __init__(self):
         urls_str = os.getenv("WEBHOOK_URLS", "")
         self.webhook_urls = [u.strip() for u in urls_str.split(",") if u.strip()]
-        self.dead_letter_queue: List[Dict[str, Any]] = []
+        self.dead_letter_queue: list[dict[str, Any]] = []
 
-    def emit_event(self, event_type: str, data: Dict[str, Any]) -> None:
+    def emit_event(self, event_type: str, data: dict[str, Any]) -> None:
         """Asynchronously dispatches webhook payload to registered endpoints."""
         payload = {
             "event": event_type,
@@ -47,7 +48,7 @@ class EcosystemWebhookEmitter:
         thread = threading.Thread(target=self._dispatch_with_retry, args=(payload,), daemon=True)
         thread.start()
 
-    def _dispatch_with_retry(self, payload: Dict[str, Any], max_retries: int = 3) -> None:
+    def _dispatch_with_retry(self, payload: dict[str, Any], max_retries: int = 3) -> None:
         headers = {
             "Content-Type": "application/json",
             "X-Bot-Signature": payload.get("signature", "")
@@ -61,7 +62,7 @@ class EcosystemWebhookEmitter:
                     if resp.status_code in [200, 201, 202, 204]:
                         success = True
                         break
-                except Exception as e:
+                except Exception:
                     time.sleep(0.5 * (2 ** attempt))
 
             if not success:

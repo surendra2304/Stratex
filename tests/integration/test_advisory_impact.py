@@ -1,6 +1,3 @@
-import os
-import json
-import pytest
 
 def test_advisory_impact_attribution():
     # 20 known trades: 10 with advisory approval/modification, 10 without

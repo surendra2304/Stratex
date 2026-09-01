@@ -1,7 +1,7 @@
-import pytest
-from intelligence.intelx_client import get_intelx_client, IntelXMarketClient, MarketResearchReport
 from advisory_telemetry import build_telemetry_payload
+from intelligence.intelx_client import IntelXMarketClient, get_intelx_client
 from monitoring.metrics import get_metrics_registry
+
 
 def test_intelx_trigger_conditions():
     client = IntelXMarketClient()

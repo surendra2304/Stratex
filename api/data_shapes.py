@@ -8,16 +8,16 @@ Formats:
 """
 
 import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any
 
 
-def format_iso_timestamp(ts: Optional[float] = None) -> str:
+def format_iso_timestamp(ts: float | None = None) -> str:
     """Returns ISO 8601 UTC timestamp string."""
     dt = datetime.datetime.utcfromtimestamp(ts) if ts else datetime.datetime.utcnow()
     return dt.isoformat() + "Z"
 
 
-def create_display_hint(value: float, positive_is_good: bool = True) -> Dict[str, str]:
+def create_display_hint(value: float, positive_is_good: bool = True) -> dict[str, str]:
     """Generates UI color and trend hints for numeric indicators."""
     if value > 0:
         return {
@@ -39,9 +39,9 @@ def create_display_hint(value: float, positive_is_good: bool = True) -> Dict[str
 def format_api_response(
     data: Any,
     status: str = "OK",
-    error: Optional[str] = None,
-    pagination: Optional[Dict[str, int]] = None
-) -> Dict[str, Any]:
+    error: str | None = None,
+    pagination: dict[str, int] | None = None
+) -> dict[str, Any]:
     """Wraps endpoint responses in consistent envelope."""
     payload = {
         "status": status,

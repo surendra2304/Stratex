@@ -5,7 +5,10 @@ The optimizer respects hard constraints via penalty terms and falls back to a
 simple classical heuristic when the quantum backend is unavailable or fails.
 """
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from qiskit_optimization import QuadraticProgram
 
 from .config import DEFAULT_SHOTS, USE_QISKIT
 

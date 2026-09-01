@@ -8,11 +8,13 @@ Endpoints:
 - GET /api/v1/export/risk-events : Exports risk triggers and events.
 """
 
-import os
-import json
 import csv
 import io
-from flask import Blueprint, request, Response, jsonify
+import json
+import os
+
+from flask import Blueprint, Response, jsonify, request
+
 from api.auth import require_permission
 
 export_bp = Blueprint("export_api", __name__, url_prefix="/api/v1/export")

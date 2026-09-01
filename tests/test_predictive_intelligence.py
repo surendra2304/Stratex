@@ -12,11 +12,10 @@ Verifies:
 """
 
 import tempfile
-import pytest
 
-from intelligence.prediction_client import PredictionClient, AssetPrediction
-from strategies.prediction_enhanced import PredictionEnhancedStrategyFilter
 from intelligence.impact_tracking import PredictionImpactTracker
+from intelligence.prediction_client import AssetPrediction, PredictionClient
+from strategies.prediction_enhanced import PredictionEnhancedStrategyFilter
 
 
 def test_prediction_client_caching():

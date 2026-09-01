@@ -5,10 +5,8 @@ Unit tests for the Multi-Timeframe (1h / 5m) ADX+EMA Futures Strategy.
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from strategy_adx_ema_mtf import (
-    SignalResult,
     add_features,
     get_htf_trend_bias,
     get_signal,

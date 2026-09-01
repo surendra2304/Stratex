@@ -21,8 +21,9 @@ Policies:
    - Alert operator via secondary backup channels.
 """
 
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
+from typing import Any
+
 from logger import get_logger
 
 logger = get_logger("degradation_matrix")
@@ -41,7 +42,7 @@ class DegradationPolicyMatrix:
     Evaluates subsystem health matrices and outputs defensive trading adjustments.
     """
 
-    def evaluate_degradation_policy(self, health: SubsystemHealth) -> Dict[str, Any]:
+    def evaluate_degradation_policy(self, health: SubsystemHealth) -> dict[str, Any]:
         """Calculates defensive adjustments based on subsystem status."""
         position_size_multiplier = 1.0
         stop_loss_multiplier = 1.0

@@ -8,19 +8,15 @@ Injects and validates recovery from:
 5. Zero price, negative quantity, NaN/Infinity inputs.
 6. Clock skew and simultaneous multi-threaded execution.
 """
-import os
 import json
-import time
-import uuid
 import threading
-import pytest
-import numpy as np
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from paper_engine.portfolio import PaperPortfolio
-from testnet_engine.service import TestnetService
 from testnet_engine.risk_gate import RiskGate
-import execution
+
 
 @pytest.fixture
 def tmp_chaos_dir(tmp_path):

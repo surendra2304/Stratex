@@ -7,11 +7,12 @@ Verifies:
 4. Graceful degradation when optional dependencies or API keys are missing.
 5. Inability of advisory layers to mutate risk limits, trade signals, or live state.
 """
-import os
 import pytest
+
+from dashboard import app
 from gemini_service import GeminiService, get_gemini_service
 from quantum.service import QuantumService
-from dashboard import app
+
 
 @pytest.fixture
 def client():

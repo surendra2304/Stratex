@@ -1,7 +1,11 @@
 import os
-import pytest
-from deployment.live_authorization import LiveAuthorizationVerifier, create_physical_authorization_file
+
+from deployment.live_authorization import (
+    LiveAuthorizationVerifier,
+    create_physical_authorization_file,
+)
 from risk.live_enforcer import LiveRiskEnforcer
+
 
 def test_live_authorization_and_enforcement_cycle(tmp_path):
     auth_file = str(tmp_path / '.live_trading_authorized')

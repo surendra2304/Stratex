@@ -15,9 +15,8 @@ Verifications:
 import datetime
 import os
 from unittest.mock import patch
-import pytest
 
-from advisory_gate import AdvisoryGate, AdvisoryResult
+from advisory_gate import AdvisoryGate
 
 
 def test_bounds_are_hardcoded_constants_unaffected_by_env():

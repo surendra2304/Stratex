@@ -12,13 +12,10 @@ CRITICAL INVARIANTS:
 4. Automatic safety termination if either arm breaches max drawdown (default 10%).
 """
 
-import datetime
 import json
 import os
 import time
-import uuid
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
 
 from logger import get_logger
 
@@ -39,16 +36,16 @@ class ABExperimentConfig:
     created_at: float = field(default_factory=time.time)
     git_sha: str = "UNKNOWN"
     status: str = "INITIALIZED"  # "INITIALIZED" | "RUNNING" | "COMPLETED" | "HALTED"
-    started_at: Optional[float] = None
-    ended_at: Optional[float] = None
-    termination_reason: Optional[str] = None
+    started_at: float | None = None
+    ended_at: float | None = None
+    termination_reason: str | None = None
 
     # Arms
     arm_a_name: str = "CONTROL_BASELINE"
     arm_b_name: str = "TREATMENT_AI_ADVISED"
 
     # Common Market Parameters
-    symbols: List[str] = field(default_factory=lambda: [
+    symbols: list[str] = field(default_factory=lambda: [
         "BTCUSDT", "ETHUSDT", "SOLUSDT", "LINKUSDT",
         "BNBUSDT", "DOGEUSDT", "ADAUSDT", "DOTUSDT"
     ])
@@ -63,7 +60,7 @@ class ABExperimentConfig:
     leverage: float = 1.0
 
     # Cost Model (Binance Taker fees & realistic slippage)
-    cost_config: Dict[str, float] = field(default_factory=lambda: {
+    cost_config: dict[str, float] = field(default_factory=lambda: {
         "entry_fee": 0.001,
         "exit_fee": 0.001,
         "entry_slip": 0.0005,
@@ -101,7 +98,7 @@ class ABExperimentConfig:
         self.ended_at = time.time()
         self.termination_reason = reason
 
-    def save(self, directory: Optional[str] = None) -> str:
+    def save(self, directory: str | None = None) -> str:
         d = directory or AB_EXPERIMENT_DIR
         os.makedirs(d, exist_ok=True)
         path = os.path.join(d, f"{self.experiment_id}.json")

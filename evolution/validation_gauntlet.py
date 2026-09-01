@@ -10,10 +10,11 @@ Gates:
 - GATE 6 (Overfitting Detection): Deflated Sharpe Ratio > 0 and Probability of Backtest Overfitting (PBO) < 30%.
 """
 
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
 import numpy as np
-import pandas as pd
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field, asdict
+
 from evolution.genetic_engine import StrategyGenome
 
 
@@ -23,7 +24,7 @@ class GauntletGateResult:
     passed: bool
     score: float
     threshold: float
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
     feedback: str = ""
 
 
@@ -57,7 +58,7 @@ class ValidationGauntlet:
             feedback=feedback
         )
 
-    def evaluate_gate3_monte_carlo(self, trade_returns: List[float], num_simulations: int = 1000) -> GauntletGateResult:
+    def evaluate_gate3_monte_carlo(self, trade_returns: list[float], num_simulations: int = 1000) -> GauntletGateResult:
         if not trade_returns:
             return GauntletGateResult("GATE_3_MONTE_CARLO_SURVIVAL", False, 100.0, 15.0, feedback="GATE_3_FAIL: No trade return distribution available.")
 
@@ -81,7 +82,7 @@ class ValidationGauntlet:
             feedback=feedback
         )
 
-    def evaluate_gate4_parameter_sensitivity(self, base_return: float, perturbed_returns: List[float]) -> GauntletGateResult:
+    def evaluate_gate4_parameter_sensitivity(self, base_return: float, perturbed_returns: list[float]) -> GauntletGateResult:
         if not perturbed_returns or base_return <= 0:
             return GauntletGateResult("GATE_4_PARAMETER_SENSITIVITY", False, 100.0, 30.0, feedback="GATE_4_FAIL: Invalid base return metric.")
 
@@ -98,7 +99,7 @@ class ValidationGauntlet:
             feedback=feedback
         )
 
-    def evaluate_gate5_regime_robustness(self, regime_pnls: Dict[str, float]) -> GauntletGateResult:
+    def evaluate_gate5_regime_robustness(self, regime_pnls: dict[str, float]) -> GauntletGateResult:
         if not regime_pnls:
             return GauntletGateResult("GATE_5_REGIME_ROBUSTNESS", False, 0.0, 60.0, feedback="GATE_5_FAIL: No market regime telemetry provided.")
 
@@ -131,8 +132,8 @@ class ValidationGauntlet:
     def run_full_gauntlet(
         self,
         genome: StrategyGenome,
-        backtest_metrics: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        backtest_metrics: dict[str, Any]
+    ) -> dict[str, Any]:
         """Runs all 6 sequential gauntlet gates and records feedback notes on the genome."""
         pf = backtest_metrics.get("profit_factor", 1.45)
         trades = backtest_metrics.get("trade_count", 115)

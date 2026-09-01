@@ -8,11 +8,10 @@ Manages:
 4. Drift analysis and rebalance recommendation generation.
 """
 
-from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
-import datetime
+from typing import Any
 
-from exchanges.base_exchange import BaseExchange, UnifiedPosition, UnifiedBalance
+from exchanges.base_exchange import BaseExchange, UnifiedBalance
 from exchanges_config import ExchangeConfigSpec, load_multi_exchange_config
 from logger import get_logger
 
@@ -24,7 +23,7 @@ class AssetNetExposure:
     symbol: str
     net_quantity: float
     net_notional: float
-    exchange_positions: Dict[str, float] = field(default_factory=dict)
+    exchange_positions: dict[str, float] = field(default_factory=dict)
     is_hedged: bool = False
     is_doubled_exposure: bool = False
 
@@ -44,15 +43,15 @@ class UnifiedPortfolioManager:
 
     def __init__(
         self,
-        exchanges: Dict[str, BaseExchange],
-        risk_limits: Optional[UnifiedRiskLimits] = None
+        exchanges: dict[str, BaseExchange],
+        risk_limits: UnifiedRiskLimits | None = None
     ):
         self.exchanges = exchanges
         self.config_specs = load_multi_exchange_config()
         self.risk_limits = risk_limits or UnifiedRiskLimits()
         self.peak_equity = 0.0
 
-    def get_unified_equity(self) -> Dict[str, Any]:
+    def get_unified_equity(self) -> dict[str, Any]:
         """Calculates total combined portfolio equity across all connected venues."""
         total_equity = 0.0
         total_free_cash = 0.0
@@ -77,8 +76,7 @@ class UnifiedPortfolioManager:
                 logger.error(f"[UNIFIED_PORTFOLIO] Error fetching balance from {ex_id}: {e}")
                 exchange_balances[ex_id] = {"total_equity": 0.0, "free_cash": 0.0}
 
-        if total_equity > self.peak_equity:
-            self.peak_equity = total_equity
+        self.peak_equity = max(self.peak_equity, total_equity)
 
         current_dd = 0.0
         if self.peak_equity > 0:
@@ -92,10 +90,10 @@ class UnifiedPortfolioManager:
             "exchange_breakdown": exchange_balances
         }
 
-    def get_cross_exchange_positions(self) -> Dict[str, Any]:
+    def get_cross_exchange_positions(self) -> dict[str, Any]:
         """Gathers all open positions across all exchanges and computes net asset exposure."""
-        all_positions: List[Dict[str, Any]] = []
-        asset_exposures: Dict[str, AssetNetExposure] = {}
+        all_positions: list[dict[str, Any]] = []
+        asset_exposures: dict[str, AssetNetExposure] = {}
 
         for ex_id, ex in self.exchanges.items():
             try:
@@ -159,7 +157,7 @@ class UnifiedPortfolioManager:
         proposed_symbol: str,
         proposed_side: str,
         proposed_notional: float
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """
         Enforces unified risk limits at the PORTFOLIO level (total exposure, per-asset cap, drawdown cap).
         Returns: (is_allowed, reason)
@@ -193,7 +191,7 @@ class UnifiedPortfolioManager:
 
         return True, "Risk checks passed."
 
-    def check_allocation_drift(self, threshold_pct: float = 0.08) -> Tuple[bool, Dict[str, float]]:
+    def check_allocation_drift(self, threshold_pct: float = 0.08) -> tuple[bool, dict[str, float]]:
         """
         Computes deviation of current exchange balances from target capital allocation percentages.
         Returns: (needs_rebalance, drift_deltas)

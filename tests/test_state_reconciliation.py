@@ -10,7 +10,6 @@ Scenarios:
 """
 
 import pandas as pd
-import pytest
 
 import testnet_engine.service as svc
 from testnet_engine.service import TestnetService

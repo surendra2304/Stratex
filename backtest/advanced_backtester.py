@@ -8,10 +8,11 @@ Features:
 """
 
 import math
+from collections.abc import Callable
+from typing import Any
+
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional, Tuple, Any, Callable
-from metrics import calculate_metrics, calculate_drawdown
 
 
 class AdvancedBacktester:
@@ -39,7 +40,7 @@ class AdvancedBacktester:
         quantity: float,
         bar_volume: float,
         is_taker: bool = True
-    ) -> Tuple[float, float]:
+    ) -> tuple[float, float]:
         """
         Computes effective execution price and fee with linear square-root market impact:
         Impact = base_slippage + impact_constant * sqrt(quantity / bar_volume)
@@ -54,11 +55,11 @@ class AdvancedBacktester:
     def run_walk_forward_analysis(
         self,
         df: pd.DataFrame,
-        signal_generator_fn: Callable[[pd.DataFrame, Dict[str, Any]], pd.Series],
-        param_grid: List[Dict[str, Any]],
+        signal_generator_fn: Callable[[pd.DataFrame, dict[str, Any]], pd.Series],
+        param_grid: list[dict[str, Any]],
         train_window_bars: int = 500,
         test_window_bars: int = 150
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Walk-Forward Analysis (WFA) rolling across historical bars to prevent overfitting.
         """

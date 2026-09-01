@@ -2,6 +2,7 @@
 
 from collections import namedtuple
 
+
 class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_type", "win_rate_prior", "rr_ratio"])):
     @property
     def confidence(self):

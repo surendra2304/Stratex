@@ -8,9 +8,9 @@ Scans:
 4. Net Profit Filtering: Deducts taker fees, estimated transfer costs, and execution slippage (minimum > 0.5% net).
 """
 
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field
 import time
+from dataclasses import dataclass, field
+from typing import Any
 
 from exchanges.base_exchange import BaseExchange, UnifiedTicker
 
@@ -35,16 +35,16 @@ class CrossExchangeArbitrageScanner:
     Identifies high-probability price discrepancies across connected venues.
     """
 
-    def __init__(self, exchanges: Dict[str, BaseExchange], min_net_profit_pct: float = 0.005):
+    def __init__(self, exchanges: dict[str, BaseExchange], min_net_profit_pct: float = 0.005):
         self.exchanges = exchanges
         self.min_net_profit_pct = min_net_profit_pct  # 0.5% default net profit hurdle
 
-    def scan_spatial_arbitrage(self, symbol: str) -> List[ArbitrageOpportunity]:
+    def scan_spatial_arbitrage(self, symbol: str) -> list[ArbitrageOpportunity]:
         """
         Compares bids and asks across all exchange pairs for the same asset.
         """
-        tickers: Dict[str, UnifiedTicker] = {}
-        fees: Dict[str, Tuple[float, float]] = {}
+        tickers: dict[str, UnifiedTicker] = {}
+        fees: dict[str, tuple[float, float]] = {}
 
         for ex_id, ex in self.exchanges.items():
             try:
@@ -53,7 +53,7 @@ class CrossExchangeArbitrageScanner:
             except Exception:
                 continue
 
-        opportunities: List[ArbitrageOpportunity] = []
+        opportunities: list[ArbitrageOpportunity] = []
         exchange_ids = list(tickers.keys())
 
         for i in range(len(exchange_ids)):
@@ -66,7 +66,7 @@ class CrossExchangeArbitrageScanner:
                 ask_price = tickers[buy_ex].ask   # Price to buy
                 bid_price = tickers[sell_ex].bid   # Price to sell
 
-                if bid_price > ask_price and ask_price > 0:
+                if bid_price > ask_price > 0:
                     raw_spread_pct = (bid_price - ask_price) / ask_price
                     total_fees_pct = fees[buy_ex][1] + fees[sell_ex][1] + 0.001  # Taker fees + 0.1% slippage buffer
                     net_profit = raw_spread_pct - total_fees_pct
@@ -87,7 +87,7 @@ class CrossExchangeArbitrageScanner:
 
         return opportunities
 
-    def scan_funding_rate_arbitrage(self, symbol: str) -> List[Dict[str, Any]]:
+    def scan_funding_rate_arbitrage(self, symbol: str) -> list[dict[str, Any]]:
         """
         Scans perpetual futures funding rate disparities.
         """

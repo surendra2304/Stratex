@@ -11,7 +11,6 @@ Provides:
 7. Credential masking, rotation support without downtime, and encryption at rest utilities.
 """
 
-import base64
 import datetime
 import hashlib
 import hmac
@@ -20,10 +19,12 @@ import os
 import re
 import threading
 import time
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Dict, List, Optional, Tuple, Callable
+from typing import Any
 
-from flask import request, jsonify, g
+from flask import jsonify, request
+
 from logger import get_logger
 
 logger = get_logger("security_hardening")
@@ -44,14 +45,14 @@ class SecurityRateLimiter:
     Tracks requests per key (or IP) with configurable limits.
     """
 
-    def __init__(self, default_limit: int = 60, window_seconds: int = 60, max_requests: Optional[int] = None):
+    def __init__(self, default_limit: int = 60, window_seconds: int = 60, max_requests: int | None = None):
         self.default_limit = max_requests if max_requests is not None else default_limit
         self.max_requests = self.default_limit
         self.window_seconds = window_seconds
-        self.records: Dict[str, List[float]] = {}
+        self.records: dict[str, list[float]] = {}
         self._lock = threading.Lock()
 
-    def is_allowed(self, identifier: str, limit: Optional[int] = None) -> Tuple[bool, int, int]:
+    def is_allowed(self, identifier: str, limit: int | None = None) -> tuple[bool, int, int]:
         """
         Returns (is_allowed, remaining_requests, retry_after_seconds).
         """
@@ -76,7 +77,7 @@ class SecurityRateLimiter:
                 retry_after = int(self.window_seconds - (now - oldest)) + 1
                 return False, 0, max(1, retry_after)
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         with self._lock:
             now = time.time()
             cutoff = now - self.window_seconds
@@ -103,10 +104,10 @@ class SecurityMonitor:
     """
 
     def __init__(self):
-        self.failed_auth_attempts: Dict[str, List[float]] = {}
-        self.recent_auth_failures: List[Dict[str, Any]] = []
+        self.failed_auth_attempts: dict[str, list[float]] = {}
+        self.recent_auth_failures: list[dict[str, Any]] = []
         self.known_control_ips: set = {"127.0.0.1", "localhost", "::1"}
-        self.alerts: List[Dict[str, Any]] = []
+        self.alerts: list[dict[str, Any]] = []
         self._lock = threading.Lock()
 
     def record_auth_failure(self, ip_address: str, endpoint: str, key_provided: str = ""):
@@ -167,7 +168,7 @@ class SecurityMonitor:
                 return True
             return False
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         with self._lock:
             return {
                 "recent_auth_failures": self.recent_auth_failures[-20:],
@@ -180,14 +181,14 @@ class SecurityMonitor:
 _security_monitor = SecurityMonitor()
 
 
-def get_configured_api_keys() -> Dict[str, Dict[str, Any]]:
+def get_configured_api_keys() -> dict[str, dict[str, Any]]:
     """
     Returns valid active API keys mapped to their allowed scopes.
     Supports comma-separated keys for seamless zero-downtime key rotation.
     """
     keys_map = {}
 
-    def add_keys(env_var: str, role: str, scopes: List[str]):
+    def add_keys(env_var: str, role: str, scopes: list[str]):
         raw_val = os.getenv(env_var, "").strip()
         if not raw_val:
             return
@@ -226,14 +227,14 @@ def mask_credential(credential: str) -> str:
     return f"{credential[:4]}****{credential[-4:]}"
 
 
-def sign_audit_record(data_dict: Dict[str, Any], prev_hash: str = "") -> str:
+def sign_audit_record(data_dict: dict[str, Any], prev_hash: str = "") -> str:
     """Computes SHA-256 HMAC digest for audit trail tamper-proofing."""
     serialized = json.dumps(data_dict, sort_keys=True)
-    message = f"{prev_hash}:{serialized}".encode("utf-8")
+    message = f"{prev_hash}:{serialized}".encode()
     return hmac.new(_SECRET_KEY, message, hashlib.sha256).hexdigest()
 
 
-def log_control_action(action: str, user_or_key: str, details: Dict[str, Any], status: str = "SUCCESS") -> Dict[str, Any]:
+def log_control_action(action: str, user_or_key: str, details: dict[str, Any], status: str = "SUCCESS") -> dict[str, Any]:
     """Appends cryptographically signed audit record to control_audit.jsonl."""
     try:
         prev_hash = ""
@@ -270,7 +271,7 @@ def log_control_action(action: str, user_or_key: str, details: Dict[str, Any], s
         return {}
 
 
-def verify_audit_chain(records: List[Dict[str, Any]]) -> bool:
+def verify_audit_chain(records: list[dict[str, Any]]) -> bool:
     """Verifies that an audit log ledger has not been tampered with or truncated."""
     prev_hash = ""
     for r in records:
@@ -286,7 +287,7 @@ def verify_audit_chain(records: List[Dict[str, Any]]) -> bool:
     return True
 
 
-def verify_webhook_signature(payload_bytes: bytes, signature_header: str, secret: Optional[str] = None) -> bool:
+def verify_webhook_signature(payload_bytes: bytes, signature_header: str, secret: str | None = None) -> bool:
     """
     Verifies HMAC-SHA256 signature on incoming webhook payloads.
     Signature header format can be hex digest or 'sha256=<hex>'.
@@ -300,7 +301,7 @@ def verify_webhook_signature(payload_bytes: bytes, signature_header: str, secret
     return hmac.compare_digest(expected, clean_sig)
 
 
-def authenticate_request(required_scope: str = SCOPE_READ) -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
+def authenticate_request(required_scope: str = SCOPE_READ) -> tuple[bool, str | None, dict[str, Any] | None]:
     """
     Validates X-API-KEY / X-BOT-API-KEY header and checks required scope.
     If no keys are configured in environment (open demo / dev mode), allows read gracefully.
@@ -398,7 +399,7 @@ def require_api_scope(scope: str = SCOPE_READ, is_control: bool = False):
     return decorator
 
 
-def get_security_status_report() -> Dict[str, Any]:
+def get_security_status_report() -> dict[str, Any]:
     """Generates complete status report for GET /api/v1/security/status."""
     configured_keys = get_configured_api_keys()
     keys_summary = {
@@ -434,15 +435,15 @@ def get_security_status_report() -> Dict[str, Any]:
 
 
 # Backwards compatibility wrappers
-def check_rate_limit(ip_address: str) -> Tuple[bool, int, int]:
+def check_rate_limit(ip_address: str) -> tuple[bool, int, int]:
     return _ip_rate_limiter.is_allowed(ip_address)
 
 class TradingAnomalyDetector:
     def __init__(self):
-        self.order_timestamps: List[float] = []
+        self.order_timestamps: list[float] = []
         self._lock = threading.Lock()
 
-    def record_order(self, notional: float) -> Tuple[bool, str]:
+    def record_order(self, notional: float) -> tuple[bool, str]:
         now = time.time()
         with self._lock:
             self.order_timestamps = [t for t in self.order_timestamps if now - t < 60.0]
@@ -462,5 +463,5 @@ class TradingAnomalyDetector:
 
 _anomaly_detector = TradingAnomalyDetector()
 
-def check_order_anomaly(notional: float) -> Tuple[bool, str]:
+def check_order_anomaly(notional: float) -> tuple[bool, str]:
     return _anomaly_detector.record_order(notional)

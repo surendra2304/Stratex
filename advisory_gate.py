@@ -7,9 +7,9 @@ CRITICAL INVARIANTS:
 3. Hardcoded validation bounds cannot be overridden from environment variables.
 """
 
-from dataclasses import dataclass, field
 import datetime
-from typing import Any, Dict, List, Optional, Set, Tuple
+from dataclasses import dataclass, field
+from typing import Any
 
 from logger import get_logger
 
@@ -21,12 +21,12 @@ class AdvisoryResult:
     verdict: str  # "APPLY" | "REJECT" | "SHADOW_LOG_ONLY"
     decision_id: str
     rationale: str
-    applied_changes: List[Dict[str, Any]] = field(default_factory=list)
-    rejected_changes: List[Dict[str, Any]] = field(default_factory=list)
-    bounds_checked: Dict[str, Any] = field(default_factory=dict)
+    applied_changes: list[dict[str, Any]] = field(default_factory=list)
+    rejected_changes: list[dict[str, Any]] = field(default_factory=list)
+    bounds_checked: dict[str, Any] = field(default_factory=dict)
     timestamp: str = field(default_factory=lambda: datetime.datetime.utcnow().isoformat() + "Z")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "verdict": self.verdict,
             "decision_id": self.decision_id,
@@ -50,7 +50,7 @@ class AdvisoryGate:
     MAX_CHANGES_PER_DECISION: int = 2   # Maximum 2 parameter changes per consultation
     COOLDOWN_HOURS: float = 4.0          # Minimum 4 hours between applied parameter modifications
 
-    FORBIDDEN_PARAMS: Set[str] = {
+    FORBIDDEN_PARAMS: set[str] = {
         "max_daily_loss",
         "max_daily_loss_pct",
         "max_drawdown",
@@ -66,7 +66,7 @@ class AdvisoryGate:
     }
 
     # Identifying parameter families
-    POSITION_SIZE_KEYWORDS: Set[str] = {
+    POSITION_SIZE_KEYWORDS: set[str] = {
         "trade_qty",
         "position_size",
         "max_position_size",
@@ -74,7 +74,7 @@ class AdvisoryGate:
         "sizing"
     }
 
-    LEVERAGE_KEYWORDS: Set[str] = {
+    LEVERAGE_KEYWORDS: set[str] = {
         "leverage",
         "futures_leverage",
         "max_leverage"
@@ -82,9 +82,9 @@ class AdvisoryGate:
 
     def validate(
         self,
-        decision: Dict[str, Any],
-        current_params: Dict[str, Any],
-        last_applied_time: Optional[datetime.datetime] = None,
+        decision: dict[str, Any],
+        current_params: dict[str, Any],
+        last_applied_time: datetime.datetime | None = None,
         shadow_mode: bool = True
     ) -> AdvisoryResult:
         """

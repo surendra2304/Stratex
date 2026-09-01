@@ -9,22 +9,20 @@ Evaluates 4 critical gating pillars:
 """
 
 import os
-import sys
 import time
-import json
-from typing import Dict, List, Tuple, Any
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 import config
-from security_hardening import verify_audit_chain, sign_audit_record
+from security_hardening import sign_audit_record
 
 
 @dataclass
 class GateResult:
     gate_name: str
     passed: bool
-    details: Dict[str, Any] = field(default_factory=dict)
-    blocking_reasons: List[str] = field(default_factory=list)
+    details: dict[str, Any] = field(default_factory=dict)
+    blocking_reasons: list[str] = field(default_factory=list)
 
 
 class LiveDeploymentGates:
@@ -85,7 +83,7 @@ class LiveDeploymentGates:
         }
         return GateResult("COMPLIANCE_READINESS", True, details, [])
 
-    def evaluate_all_gates(self) -> Dict[str, Any]:
+    def evaluate_all_gates(self) -> dict[str, Any]:
         """
         Runs all 4 gates and produces a signed readiness evaluation payload.
         """

@@ -8,10 +8,9 @@ Implements:
 """
 
 import time
-import json
-import os
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
+from typing import Any
+
 from logger import get_logger
 
 logger = get_logger("live_trading_prep")
@@ -33,10 +32,10 @@ class LiveTradingPreparer:
     Coordinates pre-launch capital allocation and emergency halt procedures.
     """
 
-    def __init__(self, plan: Optional[LiveCapitalPlan] = None):
+    def __init__(self, plan: LiveCapitalPlan | None = None):
         self.plan = plan or LiveCapitalPlan()
 
-    def generate_capital_allocation_plan(self) -> Dict[str, Any]:
+    def generate_capital_allocation_plan(self) -> dict[str, Any]:
         """Produces structured capital management breakdown."""
         return {
             "timestamp": time.time(),
@@ -47,7 +46,7 @@ class LiveTradingPreparer:
             }
         }
 
-    def execute_emergency_halt_protocol(self) -> Dict[str, Any]:
+    def execute_emergency_halt_protocol(self) -> dict[str, Any]:
         """
         Commands full emergency liquidation and halts all order execution.
         """

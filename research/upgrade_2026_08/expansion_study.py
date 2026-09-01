@@ -11,8 +11,12 @@ Same cost model as param_study.py: 31 bps round trip, next-candle-open
 entries, SL-first intrabar resolution, BTC-regime gate for longs.
 IS = 2021..2024, OOS = 2024..present.
 """
-import json, os, itertools
-import numpy as np, pandas as pd
+import itertools
+import json
+import os
+
+import numpy as np
+import pandas as pd
 
 DATA = "research/upgrade_2026_08/data"
 FEE, SLIP = 0.001, 0.0005

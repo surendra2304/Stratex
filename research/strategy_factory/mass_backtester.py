@@ -10,9 +10,9 @@ Fast vectorized/event backtester for all strategy variations in strategy_variati
 """
 
 import json
-import os
 import sys
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -292,13 +292,12 @@ def run_mass_backtest():
     with open(report_file, "w", encoding="utf-8") as f:
         f.write("# Strategy Factory Mass Backtest Report\n\n")
         f.write(f"**Total Variations Tested**: {len(variations)}\n")
-        f.write(f"**Assets**: BTCUSDT, ETHUSDT, SOLUSDT\n")
-        f.write(f"**Friction Model**: 8 bps round-trip Maker/Taker Futures model\n\n")
+        f.write("**Assets**: BTCUSDT, ETHUSDT, SOLUSDT\n")
+        f.write("**Friction Model**: 8 bps round-trip Maker/Taker Futures model\n\n")
         f.write("## Top 10 Winning Strategies\n\n")
         f.write("| Rank | Strategy Name | Timeframe | Type | Trades | Win Rate | Net PF | Net Return % |\n")
         f.write("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
-        for rank, r in enumerate(results[:10], 1):
-            f.write(f"| {rank} | `{r['name']}` | {r['timeframe']} | {r['type']} | {r['total_trades']} | {r['win_rate']*100:.1f}% | **{r['net_pf']:.2f}** | {r['total_return_pct']:+.1f}% |\n")
+        f.writelines(f"| {rank} | `{r['name']}` | {r['timeframe']} | {r['type']} | {r['total_trades']} | {r['win_rate']*100:.1f}% | **{r['net_pf']:.2f}** | {r['total_return_pct']:+.1f}% |\n" for rank, r in enumerate(results[:10], 1))
 
         f.write("\n\n## Top 5 Strategies Selected for Live Deployment\n\n")
         for rank, r in enumerate(results[:5], 1):

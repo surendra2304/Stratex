@@ -22,21 +22,17 @@ Tests covered:
 """
 
 import datetime
-import json
 import os
 import tempfile
-import time
 from unittest.mock import MagicMock, patch
-import pytest
+
 import requests
 
-from advisory_gate import AdvisoryGate, AdvisoryResult
+from advisory_gate import AdvisoryGate
 from advisory_ledger import append_advisory_entry, read_recent_advisory_entries
 from advisory_params import AdvisoryParameterOverlay
 from advisory_scheduler import AdvisoryScheduler
-from advisory_telemetry import build_telemetry_payload
 from ai_universe_client import AIUniverseClient
-
 
 # ==============================================================================
 # 1. ADVISORY GATE BOUNDS TESTS

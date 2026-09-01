@@ -15,19 +15,17 @@ Performs rigorous statistical evaluation between Arm A (Control) and Arm B (Trea
 import argparse
 import datetime
 import json
-import math
 import os
-import sys
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
 from scipy import stats
 
-from metrics import calculate_drawdown, calculate_metrics
+from metrics import calculate_metrics
 
 
-def load_trade_ledger(ledger_path: str) -> List[Dict[str, Any]]:
+def load_trade_ledger(ledger_path: str) -> list[dict[str, Any]]:
     """Loads closed trade records from JSONL ledger."""
     if not os.path.exists(ledger_path):
         return []
@@ -64,7 +62,7 @@ def load_equity_curve(equity_path: str) -> pd.DataFrame:
     return df
 
 
-def bootstrap_ci(data: List[float], n_bootstrap: int = 2000, ci: float = 0.95) -> Tuple[float, float]:
+def bootstrap_ci(data: list[float], n_bootstrap: int = 2000, ci: float = 0.95) -> tuple[float, float]:
     """Computes bootstrap confidence interval for the mean."""
     if len(data) < 5:
         mean_val = float(np.mean(data)) if data else 0.0
@@ -91,7 +89,7 @@ def compute_ab_comparison(
     equity_treatment: str = "paper_equity_curve_treatment.jsonl",
     initial_capital: float = 10000.0,
     min_trades_for_sig: int = 30
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Computes comparative metrics and hypothesis tests.
     """
@@ -207,7 +205,7 @@ def compute_ab_comparison(
     }
 
 
-def generate_markdown_report(data: Dict[str, Any], output_path: str = "ab_test_report.md") -> str:
+def generate_markdown_report(data: dict[str, Any], output_path: str = "ab_test_report.md") -> str:
     """Renders comprehensive Markdown report document."""
     ctrl = data["arm_a_control"]
     treat = data["arm_b_treatment"]

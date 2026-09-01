@@ -11,14 +11,19 @@ Endpoints:
 - GET /api/v1/history/equity : Historical equity curve data points.
 """
 
-import os
 import json
-from flask import Blueprint, request, jsonify, make_response
-from api.auth import require_permission
-from api.data_shapes import format_api_response, format_iso_timestamp, create_display_hint
+import os
+
+from flask import Blueprint, jsonify, request
+
 from advisory_ledger import read_recent_advisory_entries
 from advisory_params import get_advisory_overlay
-from metrics import calculate_metrics
+from api.auth import require_permission
+from api.data_shapes import (
+    create_display_hint,
+    format_api_response,
+    format_iso_timestamp,
+)
 
 public_status_bp = Blueprint("public_status", __name__, url_prefix="/api/v1")
 

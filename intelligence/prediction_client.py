@@ -10,10 +10,11 @@ Constraints:
 
 import os
 import time
-import datetime
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
 import requests
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field, asdict
+
 from logger import get_logger
 
 logger = get_logger("prediction_client")
@@ -40,17 +41,17 @@ class PredictionClient:
 
     def __init__(
         self,
-        base_url: Optional[str] = None,
+        base_url: str | None = None,
         cache_ttl_seconds: int = 900,  # 15 minutes
         timeout_seconds: int = 5
     ):
         self.base_url = (os.getenv("INFERENCE_URL") or os.getenv("AI_UNIVERSE_URL") or base_url or "https://inference-3i2b.onrender.com").rstrip("/")
         self.cache_ttl_seconds = cache_ttl_seconds
         self.timeout_seconds = timeout_seconds
-        self.cache: Dict[str, AssetPrediction] = {}
-        self.history: List[Dict[str, Any]] = []
+        self.cache: dict[str, AssetPrediction] = {}
+        self.history: list[dict[str, Any]] = []
 
-    def get_prediction(self, symbol: str) -> Optional[AssetPrediction]:
+    def get_prediction(self, symbol: str) -> AssetPrediction | None:
         """Returns cached prediction if valid, otherwise fetches fresh from AI-Universe."""
         cached = self.cache.get(symbol)
         if cached and cached.is_valid():
@@ -58,7 +59,7 @@ class PredictionClient:
 
         return self.fetch_prediction(symbol)
 
-    def fetch_prediction(self, symbol: str) -> Optional[AssetPrediction]:
+    def fetch_prediction(self, symbol: str) -> AssetPrediction | None:
         """Polls prediction endpoint with graceful degradation."""
         endpoint = f"{self.base_url}/v1/trading/predictions/{symbol}"
         now = time.time()
@@ -95,7 +96,7 @@ class PredictionClient:
         self.cache[symbol] = fallback_pred
         return fallback_pred
 
-    def get_all_cached_predictions(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_cached_predictions(self) -> dict[str, dict[str, Any]]:
         """Returns snapshot of current cached predictions."""
         return {
             sym: asdict(pred) for sym, pred in self.cache.items() if pred.is_valid()

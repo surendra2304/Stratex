@@ -18,18 +18,16 @@ Features:
 """
 
 import datetime
-import json
 import os
 import threading
-import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from advisory_gate import AdvisoryGate, AdvisoryResult
+import config
+from advisory_gate import AdvisoryGate
 from advisory_ledger import append_advisory_entry
 from advisory_params import AdvisoryParameterOverlay, get_advisory_overlay
 from advisory_telemetry import build_telemetry_payload
 from ai_universe_client import AIUniverseClient
-import config
 from logger import get_logger
 
 logger = get_logger("testnet_advisory_scheduler")
@@ -43,13 +41,13 @@ class TestnetAdvisoryScheduler:
 
     def __init__(
         self,
-        client: Optional[AIUniverseClient] = None,
-        gate: Optional[AdvisoryGate] = None,
-        overlay: Optional[AdvisoryParameterOverlay] = None,
-        enabled: Optional[bool] = None,
-        shadow_mode: Optional[bool] = None,
-        interval_hours: Optional[float] = None,
-        max_drawdown_pct: Optional[float] = None
+        client: AIUniverseClient | None = None,
+        gate: AdvisoryGate | None = None,
+        overlay: AdvisoryParameterOverlay | None = None,
+        enabled: bool | None = None,
+        shadow_mode: bool | None = None,
+        interval_hours: float | None = None,
+        max_drawdown_pct: float | None = None
     ) -> None:
         self.enabled = (
             enabled if enabled is not None
@@ -79,9 +77,9 @@ class TestnetAdvisoryScheduler:
         self._running = False
         self._circuit_broken = False
         self._stop_event = threading.Event()
-        self._thread: Optional[threading.Thread] = None
-        self._last_consultation_time: Optional[datetime.datetime] = None
-        self._last_applied_decision_ids: List[str] = []
+        self._thread: threading.Thread | None = None
+        self._last_consultation_time: datetime.datetime | None = None
+        self._last_applied_decision_ids: list[str] = []
         self._lock = threading.Lock()
 
     def check_drawdown_circuit_breaker(self, current_dd_pct: float) -> bool:
@@ -104,7 +102,7 @@ class TestnetAdvisoryScheduler:
             return True
         return self._circuit_broken
 
-    def run_consultation_cycle(self, reason: str = "SCHEDULED") -> Optional[Dict[str, Any]]:
+    def run_consultation_cycle(self, reason: str = "SCHEDULED") -> dict[str, Any] | None:
         """
         Executes a single testnet advisory consultation cycle safely.
         """
@@ -187,7 +185,7 @@ class TestnetAdvisoryScheduler:
             logger.error(f"[TESTNET_ADVISORY] Error during testnet consultation cycle: {e}", exc_info=True)
             return None
 
-    def trigger_manual_consultation(self) -> Optional[Dict[str, Any]]:
+    def trigger_manual_consultation(self) -> dict[str, Any] | None:
         """API hook for immediate manual consultation."""
         return self.run_consultation_cycle(reason="MANUAL_API_TRIGGER")
 
@@ -257,7 +255,7 @@ class TestnetAdvisoryScheduler:
                 self._thread.join(timeout=2.0)
             logger.info("[TESTNET_ADVISORY] Testnet Advisory background service stopped.")
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Returns comprehensive status dictionary for API and dashboard."""
         mode_str = "DISABLED" if not self.enabled else ("SHADOW" if self.shadow_mode else "APPLY")
         with self._lock:
@@ -275,7 +273,7 @@ class TestnetAdvisoryScheduler:
 
 
 # Module singleton
-_testnet_advisory_instance: Optional[TestnetAdvisoryScheduler] = None
+_testnet_advisory_instance: TestnetAdvisoryScheduler | None = None
 _testnet_advisory_lock = threading.Lock()
 
 
@@ -288,7 +286,7 @@ def get_testnet_advisory_scheduler() -> TestnetAdvisoryScheduler:
     return _testnet_advisory_instance
 
 
-def start_testnet_advisory_if_enabled() -> Optional[TestnetAdvisoryScheduler]:
+def start_testnet_advisory_if_enabled() -> TestnetAdvisoryScheduler | None:
     scheduler = get_testnet_advisory_scheduler()
     if scheduler.enabled:
         scheduler.start()

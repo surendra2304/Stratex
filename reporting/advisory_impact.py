@@ -7,8 +7,8 @@ Tracks:
 3. Feedback formatting for AI-Universe consultation quality improvement.
 """
 
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -47,7 +47,7 @@ class AdvisoryImpactAnalyzer:
             status=status
         )
 
-    def get_monthly_advisory_attribution_summary(self) -> Dict[str, Any]:
+    def get_monthly_advisory_attribution_summary(self) -> dict[str, Any]:
         """Returns monthly rollup of advisory effectiveness."""
         return {
             "total_decisions_applied": 14,

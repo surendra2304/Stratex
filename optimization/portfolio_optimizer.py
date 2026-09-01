@@ -8,9 +8,9 @@ Implements:
 4. Dynamic Rebalancing triggers: Threshold-based, Periodic, and Volatility regime shifts.
 """
 
+
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional, Tuple, Any
 
 
 class PortfolioOptimizer:
@@ -23,11 +23,11 @@ class PortfolioOptimizer:
 
     def optimize_mean_variance(
         self,
-        expected_returns: Dict[str, float],
+        expected_returns: dict[str, float],
         covariance_matrix: pd.DataFrame,
         min_weight: float = 0.05,
         max_weight: float = 0.40
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Calculates optimal asset weights maximizing Sharpe ratio via quadratic approximation.
         """
@@ -64,10 +64,10 @@ class PortfolioOptimizer:
 
     def black_litterman_allocation(
         self,
-        prior_weights: Dict[str, float],
-        views: Dict[str, float],
+        prior_weights: dict[str, float],
+        views: dict[str, float],
         confidence: float = 0.70
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Blends baseline equilibrium weights with subjective AI/quantitative views.
         new_weight_i = (1 - confidence) * prior_i + confidence * view_i
@@ -90,10 +90,10 @@ class PortfolioOptimizer:
 
     def check_rebalance_trigger(
         self,
-        current_weights: Dict[str, float],
-        target_weights: Dict[str, float],
+        current_weights: dict[str, float],
+        target_weights: dict[str, float],
         threshold_pct: float = 0.05
-    ) -> Tuple[bool, Dict[str, float]]:
+    ) -> tuple[bool, dict[str, float]]:
         """
         Checks if any asset's deviation from target exceeds threshold (e.g. 5%).
         Returns: (needs_rebalance, weight_deviations)

@@ -8,14 +8,12 @@ Features:
 4. Daily Log Rotation with 30-day retention cleanup.
 """
 
+import datetime
+import json
+import logging
 import os
 import re
-import json
-import time
-import datetime
-import logging
 from logging.handlers import TimedRotatingFileHandler
-from typing import Dict, List, Optional, Any
 
 SECRET_PATTERNS = [
     re.compile(r'(api[_-]?key["\']?\s*[:=]\s*["\'])([^"\']{4,})(["\'])', re.IGNORECASE),

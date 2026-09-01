@@ -20,6 +20,7 @@ import pandas as pd
 
 from config_strategy import ADX_EMA_STRATEGY_V2 as _CFG
 
+
 # ------------------------------------------------------------------
 # Signal metadata — carried through execution pipeline
 # ------------------------------------------------------------------

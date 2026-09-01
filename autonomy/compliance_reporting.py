@@ -9,13 +9,13 @@ Generates:
 5. All reports generated in JSON, Markdown, and HTML formats with a voice_summary field and 90-day retention.
 """
 
-import time
 import datetime
 import json
 import os
-from typing import Dict, List, Optional, Tuple, Any
-from security_hardening import sign_audit_record
+from typing import Any
+
 from reporting.voice_summaries import generate_daily_voice_summary
+from security_hardening import sign_audit_record
 
 
 class ComplianceReporter:
@@ -34,7 +34,7 @@ class ComplianceReporter:
         daily_pnl: float,
         max_drawdown_reached: float,
         decisions_count: int
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Produces signed daily compliance certificate in JSON, Markdown, and HTML."""
         now_str = datetime.datetime.utcnow().isoformat() + "Z"
         voice_summary = generate_daily_voice_summary(
@@ -97,7 +97,7 @@ class ComplianceReporter:
 
         return dossier
 
-    def generate_quarterly_audit_package(self, quarter: str = "Q3_2026") -> Dict[str, Any]:
+    def generate_quarterly_audit_package(self, quarter: str = "Q3_2026") -> dict[str, Any]:
         """Produces quarterly audit package."""
         pkg = {
             "package_id": f"AUDIT_PACKAGE_{quarter}",

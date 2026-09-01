@@ -6,8 +6,6 @@ and sets conservative risk tolerances for production deployment.
 """
 
 import os
-from dataclasses import dataclass, field
-from typing import Dict, List, Set
 
 from config import *  # Inherit base settings and exchange definitions
 
@@ -28,7 +26,7 @@ MAX_PARAMETER_DELTA_PCT = 0.20          # Maximum ±20.0% parameter variance all
 LEVERAGE_DECREASE_ONLY = True           # Leverage is forbidden from increasing
 
 # --- Forbidden Parameters in Production ---
-PRODUCTION_FORBIDDEN_PARAMS: Set[str] = {
+PRODUCTION_FORBIDDEN_PARAMS: set[str] = {
     "max_daily_loss",
     "max_drawdown",
     "live_trading_enabled",
@@ -65,7 +63,7 @@ PROD_ALERTS_LOG_FILE = "production_alerts.jsonl"
 PROD_DEPLOYMENT_LOG_FILE = "deployment_audit_log.json"
 
 
-def validate_production_security() -> Dict[str, bool]:
+def validate_production_security() -> dict[str, bool]:
     """Validates that no production safety gates are bypassed or insecurely configured."""
     checks = {
         "debug_disabled": DEBUG is False,

@@ -1,4 +1,5 @@
 import pandas as pd
+
 import config
 from data_client import MarketDataClient
 from logger import get_logger

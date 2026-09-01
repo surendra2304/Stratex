@@ -1,6 +1,6 @@
-import pytest
-from risk.live_enforcer import LiveRiskEnforcer
 from autonomy.operations_director import AutonomousOperationsDirector
+from risk.live_enforcer import LiveRiskEnforcer
+
 
 def test_emergency_procedures_scenarios():
     enforcer = LiveRiskEnforcer(level=1, initial_capital=1000.0)

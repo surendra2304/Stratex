@@ -20,11 +20,10 @@ import datetime
 import json
 import math
 import os
-import sys
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
-def load_advisory_log(filepath: str) -> List[Dict[str, Any]]:
+def load_advisory_log(filepath: str) -> list[dict[str, Any]]:
     """Loads and parses all records from the advisory JSONL log."""
     if not os.path.exists(filepath):
         return []
@@ -41,7 +40,7 @@ def load_advisory_log(filepath: str) -> List[Dict[str, Any]]:
     return records
 
 
-def calculate_percentile(data: List[float], percentile: float) -> float:
+def calculate_percentile(data: list[float], percentile: float) -> float:
     """Calculates percentile for a list of floats."""
     if not data:
         return 0.0
@@ -57,9 +56,9 @@ def calculate_percentile(data: List[float], percentile: float) -> float:
 
 
 def generate_advisory_quality_report(
-    records: List[Dict[str, Any]],
-    now_dt: Optional[datetime.datetime] = None
-) -> Dict[str, Any]:
+    records: list[dict[str, Any]],
+    now_dt: datetime.datetime | None = None
+) -> dict[str, Any]:
     """Generates the structured statistical quality report from parsed records."""
     now = now_dt or datetime.datetime.utcnow()
     one_day_ago = now - datetime.timedelta(days=1)
@@ -69,14 +68,14 @@ def generate_advisory_quality_report(
     count_24h = 0
     count_7d = 0
 
-    verdict_dist: Dict[str, int] = {"SHADOW_LOG_ONLY": 0, "APPLY": 0, "REJECT": 0}
-    rejection_reasons: Dict[str, int] = {}
-    param_changes_summary: Dict[str, Dict[str, Any]] = {}
-    confidences: List[float] = []
-    latencies: List[float] = []
-    contested_advisories: List[Dict[str, Any]] = []
+    verdict_dist: dict[str, int] = {"SHADOW_LOG_ONLY": 0, "APPLY": 0, "REJECT": 0}
+    rejection_reasons: dict[str, int] = {}
+    param_changes_summary: dict[str, dict[str, Any]] = {}
+    confidences: list[float] = []
+    latencies: list[float] = []
+    contested_advisories: list[dict[str, Any]] = []
 
-    confidence_buckets: Dict[str, int] = {
+    confidence_buckets: dict[str, int] = {
         "0.00-0.20": 0,
         "0.21-0.40": 0,
         "0.41-0.60": 0,
@@ -208,7 +207,7 @@ def generate_advisory_quality_report(
     return report
 
 
-def print_human_readable_report(report: Dict[str, Any]) -> None:
+def print_human_readable_report(report: dict[str, Any]) -> None:
     """Prints a clean, institutional ASCII summary of the advisory quality report."""
     print("=" * 80)
     print(" [AI-UNIVERSE] ADVISORY LOG QUALITY & SAFETY AUDIT REPORT")
@@ -216,17 +215,17 @@ def print_human_readable_report(report: Dict[str, Any]) -> None:
     print("=" * 80)
 
     summary = report["consultations_summary"]
-    print(f"\n[1] CONSULTATIONS SUMMARY")
+    print("\n[1] CONSULTATIONS SUMMARY")
     print(f"  - Total Lifetime Consultations: {summary['total_lifetime']}")
     print(f"  - Last 24 Hours:               {summary['last_24h']}")
     print(f"  - Last 7 Days:                 {summary['last_7d']}")
 
-    print(f"\n[2] VERDICT DISTRIBUTION")
+    print("\n[2] VERDICT DISTRIBUTION")
     for k, v in report["verdict_distribution"].items():
         pct = (v / max(1, summary["total_lifetime"])) * 100.0
         print(f"  - {k:<18}: {v:>4} ({pct:>5.1f}%)")
 
-    print(f"\n[3] REJECTION REASONS BREAKDOWN")
+    print("\n[3] REJECTION REASONS BREAKDOWN")
     rejections = report["rejection_reasons_breakdown"]
     if not rejections:
         print("  - No rejected proposals found in log.")
@@ -234,7 +233,7 @@ def print_human_readable_report(report: Dict[str, Any]) -> None:
         for r_reason, r_count in rejections.items():
             print(f"  - {r_reason:<45}: {r_count:>3}")
 
-    print(f"\n[4] PARAMETER MODIFICATIONS (SHADOW / LIVE)")
+    print("\n[4] PARAMETER MODIFICATIONS (SHADOW / LIVE)")
     params = report["parameter_changes_distribution"]
     if not params:
         print("  - No parameter modifications proposed.")
@@ -242,13 +241,13 @@ def print_human_readable_report(report: Dict[str, Any]) -> None:
         for p_key, p_info in params.items():
             print(f"  - {p_key:<35} | Count: {p_info['proposal_count']:>2} | Avg Delta: {p_info['avg_change_pct']:>5.2f}% | Max Delta: {p_info['max_change_pct']:>5.2f}%")
 
-    print(f"\n[5] AI CONFIDENCE HISTOGRAM")
+    print("\n[5] AI CONFIDENCE HISTOGRAM")
     for b_range, b_cnt in report["confidence_distribution_histogram"].items():
         bar = "#" * int(b_cnt * 20 / max(1, summary["total_lifetime"]))
         print(f"  - [{b_range}]: {b_cnt:>4} {bar}")
 
     lat = report["latency_percentiles_ms"]
-    print(f"\n[6] CONSULTATION LATENCY")
+    print("\n[6] CONSULTATION LATENCY")
     print(f"  - p50: {lat['p50']} ms | p95: {lat['p95']} ms | p99: {lat['p99']} ms (samples: {lat['sample_count']})")
 
     contested = report["contested_advisories"]

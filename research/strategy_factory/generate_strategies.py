@@ -11,8 +11,8 @@ Programmatically generates 100+ systematic strategy variations across indicators
 - Dynamic SL/TP ATR multipliers
 """
 
-import json
 import itertools
+import json
 from pathlib import Path
 
 

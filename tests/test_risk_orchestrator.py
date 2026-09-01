@@ -22,13 +22,13 @@ Verifies:
 """
 
 import tempfile
-import pytest
+
 import numpy as np
 
-from risk.risk_orchestrator import RiskOrchestrator
-from risk.strategy_coordinator import StrategyCoordinator, StrategyProfile
-from risk.drawdown_controller import DrawdownController
 from risk.circuit_breakers import CircuitBreakerEngine
+from risk.drawdown_controller import DrawdownController
+from risk.risk_orchestrator import RiskOrchestrator
+from risk.strategy_coordinator import StrategyCoordinator
 
 
 def test_circuit_breakers_engine():

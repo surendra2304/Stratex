@@ -7,8 +7,10 @@ Detects:
 3. System Anomalies: REST latency spikes or memory growth patterns.
 """
 
+from typing import Any
+
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Any
+
 from alerting.intelligent_alerts import IntelligentAlertEngine
 
 
@@ -17,15 +19,15 @@ class AnomalyDetectionEngine:
     Evaluates rolling metrics against statistical baselines to surface anomalies.
     """
 
-    def __init__(self, alert_engine: Optional[IntelligentAlertEngine] = None):
+    def __init__(self, alert_engine: IntelligentAlertEngine | None = None):
         self.alert_engine = alert_engine or IntelligentAlertEngine()
 
     def check_strategy_performance_anomaly(
         self,
         strategy_name: str,
         current_win_rate: float,
-        historical_win_rates: List[float]
-    ) -> Optional[Dict[str, Any]]:
+        historical_win_rates: list[float]
+    ) -> dict[str, Any] | None:
         """Flags strategy underperformance when current win rate drops below 2 sigma."""
         if len(historical_win_rates) < 10:
             return None
@@ -52,8 +54,8 @@ class AnomalyDetectionEngine:
         self,
         symbol: str,
         current_atr: float,
-        historical_atrs: List[float]
-    ) -> Optional[Dict[str, Any]]:
+        historical_atrs: list[float]
+    ) -> dict[str, Any] | None:
         """Flags extreme market volatility expansion (> 3 sigma)."""
         if len(historical_atrs) < 15:
             return None

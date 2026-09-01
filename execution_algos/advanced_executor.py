@@ -8,10 +8,10 @@ Implements:
 4. Dynamic Limit Pricing & Spread Optimization.
 """
 
-import time
 import math
-from typing import Dict, List, Optional, Tuple, Any
+import time
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -20,8 +20,8 @@ class ExecutionSlice:
     quantity: float
     target_time: float
     price_limit: float
-    executed_price: Optional[float] = None
-    executed_time: Optional[float] = None
+    executed_price: float | None = None
+    executed_time: float | None = None
     slippage: float = 0.0
 
 
@@ -41,7 +41,7 @@ class AdvancedOrderExecutor:
         current_price: float,
         duration_seconds: int = 300,
         num_slices: int = 5
-    ) -> List[ExecutionSlice]:
+    ) -> list[ExecutionSlice]:
         """
         Builds Time-Weighted Average Price execution tranches.
         """
@@ -69,7 +69,7 @@ class AdvancedOrderExecutor:
         self,
         total_quantity: float,
         display_fraction: float = 0.20
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generates Iceberg order parameters.
         """
@@ -85,10 +85,10 @@ class AdvancedOrderExecutor:
     def compute_implementation_shortfall(
         self,
         arrival_price: float,
-        executed_fills: List[Tuple[float, float]],  # (qty, price)
+        executed_fills: list[tuple[float, float]],  # (qty, price)
         direction: str,
         fees_paid: float = 0.0
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Computes Implementation Shortfall (IS):
         IS = (Average Execution Price - Arrival Price) * Direction + Fees

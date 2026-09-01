@@ -5,8 +5,10 @@ Safely tests Binance Futures Testnet API credentials without printing or logging
 """
 
 import os
-from dotenv import load_dotenv
+
 from binance.client import Client
+from dotenv import load_dotenv
+
 
 def verify_connection():
     load_dotenv('.env', override=True)

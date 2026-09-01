@@ -1,7 +1,11 @@
 import pytest
-from intelligence.futuris_client import get_futuris_client, FuturisMarketClient, FuturisForecastContext
+
 from advisory_telemetry import build_telemetry_payload
 from dashboard import app
+from intelligence.futuris_client import (
+    FuturisMarketClient,
+)
+
 
 @pytest.fixture
 def client():

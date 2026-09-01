@@ -6,7 +6,6 @@ Generates conversational, spoken-language text for audio synthesis:
 - No jargon, clear cadence, and calibrated urgency.
 """
 
-from typing import Dict, List, Optional, Any
 
 
 def generate_daily_voice_summary(
@@ -27,7 +26,7 @@ def generate_daily_voice_summary(
     return summary
 
 
-def generate_trade_voice_snippet(event_type: str, symbol: str, side: str, price: float, pnl_pct: Optional[float] = None) -> str:
+def generate_trade_voice_snippet(event_type: str, symbol: str, side: str, price: float, pnl_pct: float | None = None) -> str:
     """Generates short spoken updates for real-time trade fills and exits."""
     clean_symbol = symbol.split("/")[0] if "/" in symbol else symbol
     price_str = f"{price:,.0f}"
@@ -42,7 +41,7 @@ def generate_trade_voice_snippet(event_type: str, symbol: str, side: str, price:
     return f"Trade update on {clean_symbol}."
 
 
-def generate_alert_voice_snippet(severity: str, title: str, recommendation: Optional[str] = None) -> str:
+def generate_alert_voice_snippet(severity: str, title: str, recommendation: str | None = None) -> str:
     """Produces speech text for urgent system and risk alerts."""
     urgency_prefix = {
         "CRITICAL": "Critical Alert! Immediate attention needed: ",

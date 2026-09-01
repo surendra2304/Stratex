@@ -17,10 +17,11 @@ Verifies:
 """
 
 import os
-import json
+
 import pytest
-from dashboard import app
+
 from api.webhooks import EcosystemWebhookEmitter
+from dashboard import app
 
 
 @pytest.fixture

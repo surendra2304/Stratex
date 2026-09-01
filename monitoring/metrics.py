@@ -16,9 +16,6 @@ Metrics tracked:
 - trading_bot_circuit_breaker_state (gauge by type)
 """
 
-import time
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field
 
 
 class PrometheusMetricsRegistry:
@@ -31,21 +28,21 @@ class PrometheusMetricsRegistry:
         self.positions_open: int = 0
         self.risk_daily_loss_pct: float = 0.0
         self.drawdown_pct: float = 0.0
-        self.strategy_allocations: Dict[str, float] = {}
-        self.circuit_breaker_states: Dict[str, int] = {}  # 0=nominal, 1=tripped
+        self.strategy_allocations: dict[str, float] = {}
+        self.circuit_breaker_states: dict[str, int] = {}  # 0=nominal, 1=tripped
 
         # Counters
         self.pnl_realized_total: float = 0.0
-        self.trades_total: Dict[str, int] = {}  # key: (strategy, outcome)
-        self.advisory_recommendations_total: Dict[str, int] = {}  # key: verdict
+        self.trades_total: dict[str, int] = {}  # key: (strategy, outcome)
+        self.advisory_recommendations_total: dict[str, int] = {}  # key: verdict
         self.intelx_market_research_total: int = 0
         self.market_context_enriched_consultations_total: int = 0
         self.futuris_context_included_consultations_total: int = 0
         self.forecast_accuracy_pct: float = 100.0
 
         # Histograms / Latency recordings
-        self.exchange_latencies: Dict[str, List[float]] = {}
-        self.ai_universe_latencies: List[float] = []
+        self.exchange_latencies: dict[str, list[float]] = {}
+        self.ai_universe_latencies: list[float] = []
 
     def set_equity(self, value: float) -> None:
         self.equity = float(value)

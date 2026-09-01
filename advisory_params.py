@@ -14,7 +14,7 @@ import datetime
 import json
 import os
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import config_strategy
 from logger import get_logger
@@ -29,12 +29,12 @@ class AdvisoryParameterOverlay:
     Manages live strategy parameter overrides applied through validated AI-Universe advisories.
     """
 
-    def __init__(self, state_file: Optional[str] = None) -> None:
+    def __init__(self, state_file: str | None = None) -> None:
         self.state_file = state_file or ADVISORY_PARAMS_FILE
         self._lock = threading.RLock()
-        self._overrides: Dict[str, Dict[str, Any]] = {}  # { "strategy_name": { "param_name": value } }
-        self._history: List[Dict[str, Any]] = []         # History of applied batches
-        self._last_applied_time: Optional[datetime.datetime] = None
+        self._overrides: dict[str, dict[str, Any]] = {}  # { "strategy_name": { "param_name": value } }
+        self._history: list[dict[str, Any]] = []         # History of applied batches
+        self._last_applied_time: datetime.datetime | None = None
         self._load_state()
 
     def _load_state(self) -> None:
@@ -98,12 +98,12 @@ class AdvisoryParameterOverlay:
 
         return default
 
-    def get_current_params(self, strategy: Optional[str] = None) -> Dict[str, Any]:
+    def get_current_params(self, strategy: str | None = None) -> dict[str, Any]:
         """
         Constructs a snapshot of all active parameters (defaults + active overrides).
         """
         strat_key = (strategy or "aggressive_scalper").strip().lower()
-        params: Dict[str, Any] = {}
+        params: dict[str, Any] = {}
 
         # Load from config_strategy
         if strat_key == "adx_ema":
@@ -123,7 +123,7 @@ class AdvisoryParameterOverlay:
 
         return params
 
-    def apply_changes(self, decision_id: str, changes: List[Dict[str, Any]]) -> bool:
+    def apply_changes(self, decision_id: str, changes: list[dict[str, Any]]) -> bool:
         """
         Applies a validated list of parameter changes to the overlay and persists state.
         """
@@ -215,7 +215,7 @@ class AdvisoryParameterOverlay:
             self._save_state()
             logger.info(f"[ADVISORY_PARAMS] Reset all strategy parameter overlays to clean baseline defaults ({reason}).")
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         """Returns the full runtime overlay state."""
         with self._lock:
             return {
@@ -227,7 +227,7 @@ class AdvisoryParameterOverlay:
 
 
 # Singleton instance
-_advisory_overlay: Optional[AdvisoryParameterOverlay] = None
+_advisory_overlay: AdvisoryParameterOverlay | None = None
 _overlay_init_lock = threading.Lock()
 
 

@@ -11,12 +11,11 @@ Incubation Rules:
 4. Failure Action: Strategy retired, genome archived with empirical learnings.
 """
 
-import time
-import datetime
 import json
 import os
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field, asdict
+import time
+from dataclasses import asdict, dataclass, field
+
 from evolution.genetic_engine import StrategyGenome
 from logger import get_logger
 
@@ -36,7 +35,7 @@ class IncubatingStrategy:
     fidelity_score: float = 0.85
     risk_violations_count: int = 0
     status: str = "INCUBATING"  # "INCUBATING", "GRADUATION_CANDIDATE", "RETIRED"
-    learnings: List[str] = field(default_factory=list)
+    learnings: list[str] = field(default_factory=list)
 
 
 class StrategyIncubator:
@@ -47,7 +46,7 @@ class StrategyIncubator:
     def __init__(self, state_file: str = "incubator_state.json", archive_file: str = "incubator_retired_archive.jsonl"):
         self.state_file = state_file
         self.archive_file = archive_file
-        self.incubating_pool: Dict[str, IncubatingStrategy] = {}
+        self.incubating_pool: dict[str, IncubatingStrategy] = {}
         self.load_state()
 
     def load_state(self) -> None:
@@ -87,7 +86,7 @@ class StrategyIncubator:
         max_dd_pct: float,
         fidelity_score: float = 0.75,
         risk_violations: int = 0
-    ) -> Optional[IncubatingStrategy]:
+    ) -> IncubatingStrategy | None:
         """Updates forward paper tracking telemetry and evaluates graduation/retirement."""
         if genome_id not in self.incubating_pool:
             return None
@@ -131,6 +130,6 @@ class StrategyIncubator:
         except Exception:
             pass
 
-    def get_graduation_candidates(self) -> List[IncubatingStrategy]:
+    def get_graduation_candidates(self) -> list[IncubatingStrategy]:
         """Returns strategies ready for human promotion review."""
         return [s for s in self.incubating_pool.values() if s.status == "GRADUATION_CANDIDATE"]

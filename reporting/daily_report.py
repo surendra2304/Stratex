@@ -9,12 +9,13 @@ Generates:
 - Output formats: JSON, Markdown, HTML (persisted in reports/daily/)
 """
 
-import os
-import json
 import datetime
-from typing import Dict, List, Optional, Any
-from reporting.voice_summaries import generate_daily_voice_summary
+import json
+import os
+from typing import Any
+
 from reporting.advisory_impact import AdvisoryImpactAnalyzer
+from reporting.voice_summaries import generate_daily_voice_summary
 
 
 class DailyReportGenerator:
@@ -29,7 +30,7 @@ class DailyReportGenerator:
 
     def generate_daily_report(
         self,
-        date_str: Optional[str] = None,
+        date_str: str | None = None,
         net_pnl: float = 45.50,
         net_pnl_pct: float = 0.91,
         starting_equity: float = 5000.0,
@@ -38,7 +39,7 @@ class DailyReportGenerator:
         win_rate: float = 66.7,
         max_drawdown_pct: float = 1.4,
         best_strategy: str = "strategy_supertrend"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         target_date = date_str or datetime.datetime.utcnow().strftime("%Y-%m-%d")
         voice_summary = generate_daily_voice_summary(
             net_pnl_pct=net_pnl_pct,
@@ -99,7 +100,7 @@ class DailyReportGenerator:
 
         return report_payload
 
-    def _render_markdown(self, data: Dict[str, Any]) -> str:
+    def _render_markdown(self, data: dict[str, Any]) -> str:
         return f"""# Daily Performance Report — {data['report_date']}
 
 **Voice Summary (FRIDAY)**: {data['voice_summary']}
@@ -118,7 +119,7 @@ class DailyReportGenerator:
 - Estimated Net Alpha: +{data['advisory_attribution']['net_alpha_contribution_pct']}%
 """
 
-    def _render_html(self, data: Dict[str, Any]) -> str:
+    def _render_html(self, data: dict[str, Any]) -> str:
         return f"""<!DOCTYPE html>
 <html>
 <head><title>Daily Trading Report - {data['report_date']}</title></head>

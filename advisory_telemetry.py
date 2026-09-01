@@ -8,18 +8,18 @@ recent trades, risk states, and regime classifications for AI-Universe analysis.
 import datetime
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
+
+import pandas as pd
 
 import config
-import config_strategy
 from advisory_params import get_advisory_overlay
 from logger import get_logger
-import pandas as pd
 
 logger = get_logger("advisory_telemetry")
 
 
-def _read_recent_trades_from_ledger(ledger_file: str, limit: int = 15) -> List[Dict[str, Any]]:
+def _read_recent_trades_from_ledger(ledger_file: str, limit: int = 15) -> list[dict[str, Any]]:
     """Reads the last N closed trades from a JSONL trade ledger."""
     if not os.path.exists(ledger_file):
         return []
@@ -46,10 +46,10 @@ def _read_recent_trades_from_ledger(ledger_file: str, limit: int = 15) -> List[D
 
 
 def build_telemetry_payload(
-    trading_mode: Optional[str] = None,
+    trading_mode: str | None = None,
     consultation_reason: str = "SCHEDULED",
-    current_df: Optional[pd.DataFrame] = None
-) -> Dict[str, Any]:
+    current_df: pd.DataFrame | None = None
+) -> dict[str, Any]:
     """
     Constructs the structured telemetry dictionary sent to AI-Universe.
     """

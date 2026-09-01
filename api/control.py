@@ -14,14 +14,14 @@ Safety Rules:
 - Rate-limited to 10 requests / minute.
 """
 
-import os
 import json
-import time
-from flask import Blueprint, request, jsonify
+
+from flask import Blueprint, jsonify, request
+
 from api.auth import require_permission
 from api.data_shapes import format_api_response, format_iso_timestamp
-from security_hardening import sign_audit_record
 from logger import get_logger
+from security_hardening import sign_audit_record
 
 logger = get_logger("control_api")
 control_bp = Blueprint("control_api", __name__, url_prefix="/api/v1/control")
@@ -105,7 +105,7 @@ def emergency_panic():
             "incident": incident,
             "audit": audit
         }))
-    except Exception as e:
+    except Exception:
         return jsonify(format_api_response({"message": "Panic executed.", "audit": audit}))
 
 

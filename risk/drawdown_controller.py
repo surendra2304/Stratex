@@ -12,9 +12,9 @@ Recovery Protocol:
 """
 
 import time
-import datetime
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
+from typing import Any
+
 from logger import get_logger
 
 logger = get_logger("drawdown_controller")
@@ -48,7 +48,7 @@ class DrawdownController:
         initial_equity: float = 5000.0,
         warning_drawdown_pct: float = 0.05,
         critical_drawdown_pct: float = 0.12,
-        initial_capital: Optional[float] = None
+        initial_capital: float | None = None
     ):
         start_cap = initial_capital or initial_equity
         self.peak_equity = start_cap
@@ -61,13 +61,12 @@ class DrawdownController:
             drawdown_pct=0.0,
             level="NOMINAL"
         )
-        self.last_critical_event_time: Optional[float] = None
+        self.last_critical_event_time: float | None = None
 
     def update_equity(self, current_equity: float) -> DrawdownStatus:
         """Calculates current peak-to-trough drawdown and assigns risk level."""
         self.current_equity = current_equity
-        if current_equity > self.peak_equity:
-            self.peak_equity = current_equity
+        self.peak_equity = max(self.peak_equity, current_equity)
 
         dd_pct = ((self.peak_equity - current_equity) / max(self.peak_equity, 1.0)) * 100.0
         self.status.peak_equity = round(self.peak_equity, 2)
@@ -100,7 +99,7 @@ class DrawdownController:
 
         return self.status
 
-    def get_defensive_action(self) -> Dict[str, Any]:
+    def get_defensive_action(self) -> dict[str, Any]:
         """Returns defensive action dict for backward compatibility with test_advanced_risk.py."""
         if self.status.drawdown_pct >= self.critical_threshold_pct:
             return {"action": "HALT_AND_FLAT", "sizing_factor": 0.0}
@@ -108,7 +107,7 @@ class DrawdownController:
             return {"action": "THROTTLE_SIZING", "sizing_factor": 0.5}
         return {"action": "NONE", "sizing_factor": 1.0}
 
-    def progress_recovery_paper_trading(self, hours_elapsed: float) -> Tuple[bool, float]:
+    def progress_recovery_paper_trading(self, hours_elapsed: float) -> tuple[bool, float]:
         """Tracks 48h mandatory paper validation before testnet resumption."""
         if not self.status.in_recovery_mode:
             return True, 1.0

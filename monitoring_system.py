@@ -19,7 +19,7 @@ import os
 import shutil
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     import psutil
@@ -28,10 +28,10 @@ except ImportError:
     psutil = None
     _HAS_PSUTIL = False
 
+import config
 from advisory_ledger import read_recent_advisory_entries
 from advisory_params import get_advisory_overlay
 from ai_universe_client import AIUniverseClient
-import config
 from logger import get_logger
 
 logger = get_logger("monitoring_system")
@@ -44,10 +44,10 @@ class ProductionMonitoringSystem:
 
     def __init__(self, alerts_file: str = "production_alerts.jsonl"):
         self.alerts_file = alerts_file
-        self.alerts_history: List[Dict[str, Any]] = []
+        self.alerts_history: list[dict[str, Any]] = []
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
 
         self.last_ai_health_time: float = time.time()
         self.ai_unreachable_duration_sec: float = 0.0
@@ -71,7 +71,7 @@ class ProductionMonitoringSystem:
             except Exception as e:
                 logger.warning(f"[MONITOR] Could not load alerts history: {e}")
 
-    def emit_alert(self, level: str, category: str, message: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def emit_alert(self, level: str, category: str, message: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Emits a structured alert to history and persistent log.
         Levels: INFO, WARNING, CRITICAL.
@@ -111,7 +111,7 @@ class ProductionMonitoringSystem:
                     return True
         return False
 
-    def get_system_resource_metrics(self) -> Dict[str, Any]:
+    def get_system_resource_metrics(self) -> dict[str, Any]:
         """Collects CPU, memory, disk, and process utilization."""
         if _HAS_PSUTIL and psutil is not None:
             try:
@@ -147,7 +147,7 @@ class ProductionMonitoringSystem:
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         }
 
-    def get_trading_health_metrics(self) -> Dict[str, Any]:
+    def get_trading_health_metrics(self) -> dict[str, Any]:
         """Collects live trading engine metrics and checks drawdown thresholds."""
         equity = 10000.0
         drawdown_pct = 0.0
@@ -185,7 +185,7 @@ class ProductionMonitoringSystem:
             "status": "CRITICAL" if drawdown_pct >= 15.0 else ("WARNING" if drawdown_pct >= 10.0 else "HEALTHY")
         }
 
-    def get_advisory_health_metrics(self) -> Dict[str, Any]:
+    def get_advisory_health_metrics(self) -> dict[str, Any]:
         """Collects AI Advisory health, latency, acceptance rates, and uptime."""
         is_healthy = self.ai_client.health_check()
         now = time.time()
@@ -270,7 +270,7 @@ class ProductionMonitoringSystem:
 
 
 # Singleton monitoring instance
-_monitoring_system: Optional[ProductionMonitoringSystem] = None
+_monitoring_system: ProductionMonitoringSystem | None = None
 _monitoring_lock = threading.Lock()
 
 

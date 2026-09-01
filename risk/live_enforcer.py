@@ -8,11 +8,13 @@ Circuit Breakers:
 4. API Latency Breaker: Exchange API response latency > 2.0s median = reduce order frequency / throttle.
 """
 
-import time
 import datetime
+import time
+from dataclasses import asdict, dataclass
+from typing import Any
+
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field, asdict
+
 from logger import get_logger
 
 logger = get_logger("circuit_breakers")
@@ -22,8 +24,8 @@ logger = get_logger("circuit_breakers")
 class CircuitBreakerStatus:
     name: str
     is_tripped: bool
-    tripped_at: Optional[float] = None
-    reset_at: Optional[float] = None
+    tripped_at: float | None = None
+    reset_at: float | None = None
     reason: str = ""
     severity: str = "HIGH"  # "CRITICAL", "HIGH", "MEDIUM"
 
@@ -34,19 +36,19 @@ class CircuitBreakerEngine:
     """
 
     def __init__(self):
-        self.breakers: Dict[str, CircuitBreakerStatus] = {
+        self.breakers: dict[str, CircuitBreakerStatus] = {
             "volatility": CircuitBreakerStatus(name="volatility", is_tripped=False),
             "correlation_breakdown": CircuitBreakerStatus(name="correlation_breakdown", is_tripped=False),
             "execution_quality": CircuitBreakerStatus(name="execution_quality", is_tripped=False),
             "api_latency": CircuitBreakerStatus(name="api_latency", is_tripped=False)
         }
         self.consecutive_slippage_breaches = 0
-        self.recent_latencies: List[float] = []
+        self.recent_latencies: list[float] = []
 
     def check_volatility_circuit_breaker(
         self,
         current_24h_vol: float,
-        historical_vols: List[float]
+        historical_vols: list[float]
     ) -> bool:
         """Checks if realized volatility is > 4 sigma above baseline."""
         now = time.time()
@@ -114,7 +116,7 @@ class CircuitBreakerEngine:
             self.breakers["api_latency"].is_tripped = False
             return False
 
-    def get_status_summary(self) -> Dict[str, Any]:
+    def get_status_summary(self) -> dict[str, Any]:
         """Returns snapshot of all circuit breakers."""
         any_tripped = any(b.is_tripped for b in self.breakers.values())
         return {
@@ -127,7 +129,7 @@ class CircuitBreakerEngine:
 class LiveEnforcerStatus:
     is_halted: bool = False
     halt_reason: str = ""
-    halt_until: Optional[float] = None
+    halt_until: float | None = None
     requires_reauthorization: bool = False
     daily_realized_loss: float = 0.0
     current_drawdown_pct: float = 0.0
@@ -145,10 +147,10 @@ class LiveRiskEnforcer:
         self,
         level: int = 1,
         initial_capital: float = 1000.0,
-        trading_window_hours: Optional[Tuple[int, int]] = None,
+        trading_window_hours: tuple[int, int] | None = None,
         max_volatility_threshold_pct: float = 8.5
     ):
-        from deployment.capital_levels import get_level_spec, CapitalLevelSpec
+        from deployment.capital_levels import CapitalLevelSpec, get_level_spec
         self.level = level
         self.spec: CapitalLevelSpec = get_level_spec(level)
         self.initial_capital = initial_capital
@@ -161,7 +163,7 @@ class LiveRiskEnforcer:
             ("ETH/USDT", "SOL/USDT"): 0.85
         }
 
-    def trigger_kill_switch(self, source: str = "OPERATOR_API", rationale: str = "Emergency halt requested") -> Dict[str, Any]:
+    def trigger_kill_switch(self, source: str = "OPERATOR_API", rationale: str = "Emergency halt requested") -> dict[str, Any]:
         """Immediately activates kill switch and halts all live operations."""
         self.status.is_halted = True
         self.status.kill_switch_active = True
@@ -175,7 +177,7 @@ class LiveRiskEnforcer:
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         }
 
-    def evaluate_daily_loss(self, today_realized_pnl: float, current_equity: float) -> Tuple[bool, str]:
+    def evaluate_daily_loss(self, today_realized_pnl: float, current_equity: float) -> tuple[bool, str]:
         """
         Checks if today's net loss exceeds the level max daily loss limit.
         If breached, halts trading for 24 hours and flags FLATTEN_ALL.
@@ -189,7 +191,7 @@ class LiveRiskEnforcer:
             return False, self.status.halt_reason
         return True, "Daily loss within tolerance"
 
-    def evaluate_drawdown(self, peak_equity: float, current_equity: float) -> Tuple[bool, str]:
+    def evaluate_drawdown(self, peak_equity: float, current_equity: float) -> tuple[bool, str]:
         """
         Checks if total drawdown exceeds level threshold.
         If breached, flattens all positions and requires physical re-authorization.
@@ -208,7 +210,7 @@ class LiveRiskEnforcer:
             return False, self.status.halt_reason
         return True, "Drawdown within tolerance"
 
-    def check_correlation_limit(self, proposed_symbol: str, current_open_symbols: List[str]) -> Tuple[bool, str]:
+    def check_correlation_limit(self, proposed_symbol: str, current_open_symbols: list[str]) -> tuple[bool, str]:
         """
         Ensures no more than 2 highly-correlated (> 0.85) assets are held simultaneously.
         """
@@ -223,14 +225,14 @@ class LiveRiskEnforcer:
             return False, f"Correlation limit reached: {proposed_symbol} is highly correlated with {correlated_count} active positions (Max 2 allowed)."
         return True, "Correlation nominal"
 
-    def check_volatility_circuit_breaker(self, rolling_vol_pct: float) -> Tuple[bool, str]:
+    def check_volatility_circuit_breaker(self, rolling_vol_pct: float) -> tuple[bool, str]:
         """Halts new entry orders if rolling market volatility spikes above threshold."""
         self.status.volatility_24h_pct = rolling_vol_pct
         if rolling_vol_pct > self.max_volatility_threshold_pct:
             return False, f"Volatility circuit breaker active: Realized 24h vol {rolling_vol_pct:.2f}% > {self.max_volatility_threshold_pct}% threshold."
         return True, "Volatility nominal"
 
-    def check_time_window_restrictions(self) -> Tuple[bool, str]:
+    def check_time_window_restrictions(self) -> tuple[bool, str]:
         """Checks if current UTC hour is within permitted trading window."""
         if not self.trading_window_hours:
             return True, "24/7 trading window"
@@ -244,11 +246,11 @@ class LiveRiskEnforcer:
         self,
         symbol: str,
         notional: float,
-        current_open_positions: List[Dict[str, Any]],
+        current_open_positions: list[dict[str, Any]],
         current_equity: float,
         today_realized_loss: float = 0.0,
         rolling_vol_pct: float = 3.5
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """
         Comprehensive pre-trade gate validating all live risk invariants.
         """

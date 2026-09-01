@@ -9,10 +9,11 @@ Manages the global operational lifecycle across 5 distinct states:
 5. HALTED: Complete system lockout, zero orders, awaiting human operator intervention.
 """
 
-import time
 import datetime
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field, asdict
+import time
+from dataclasses import asdict, dataclass
+from typing import Any
+
 from logger import get_logger
 
 logger = get_logger("ecosystem_state")
@@ -37,7 +38,7 @@ class EcosystemStateMachine:
 
     def __init__(self, initial_state: str = "FULL_AUTONOMY"):
         self.current_state = initial_state if initial_state in self.STATES else "FULL_AUTONOMY"
-        self.transition_history: List[StateTransitionRecord] = []
+        self.transition_history: list[StateTransitionRecord] = []
         self.last_transition_time = time.time()
 
     def transition_to(self, new_state: str, reason: str, operator: str = "SYSTEM_AUTOMATIC") -> bool:
@@ -65,7 +66,7 @@ class EcosystemStateMachine:
         logger.info(f"[ECOSYSTEM_STATE] 🔄 TRANSITION: {old_state} -> {new_state} | Reason: {reason}")
         return True
 
-    def get_state_summary(self) -> Dict[str, Any]:
+    def get_state_summary(self) -> dict[str, Any]:
         """Returns snapshot of current state and recent transition history."""
         return {
             "current_state": self.current_state,

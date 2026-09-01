@@ -13,18 +13,18 @@ Features:
 5. All decisions appended to risk_orchestration_log.jsonl with full reasoning.
 """
 
-import os
+import datetime
 import json
 import time
-import datetime
-import numpy as np
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
+import numpy as np
+
+from logger import get_logger
 from risk.circuit_breakers import CircuitBreakerEngine
 from risk.drawdown_controller import DrawdownController
 from risk.strategy_coordinator import StrategyCoordinator
-from logger import get_logger
 
 logger = get_logger("risk_orchestrator")
 
@@ -58,13 +58,13 @@ class RiskOrchestrator:
         self.circuit_breakers = CircuitBreakerEngine()
         self.drawdown_ctrl = DrawdownController(initial_equity=initial_equity)
         self.strategy_coordinator = StrategyCoordinator()
-        self.decisions_log: List[RiskOrchestratorDecision] = []
+        self.decisions_log: list[RiskOrchestratorDecision] = []
 
     def calculate_var_and_cvar(
         self,
-        portfolio_returns: List[float],
+        portfolio_returns: list[float],
         confidence_level: float = 0.95
-    ) -> Tuple[float, float]:
+    ) -> tuple[float, float]:
         """Calculates 95% Historical Value at Risk (VaR) and Conditional VaR (Expected Shortfall)."""
         if not portfolio_returns or len(portfolio_returns) < 10:
             return 2.0, 3.0  # Conservative default values
@@ -80,8 +80,8 @@ class RiskOrchestrator:
 
     def calculate_portfolio_heat(
         self,
-        open_positions: List[Dict[str, Any]],
-        correlation_matrix: Optional[np.ndarray] = None
+        open_positions: list[dict[str, Any]],
+        correlation_matrix: np.ndarray | None = None
     ) -> float:
         """
         Calculates correlation-adjusted portfolio heat.
@@ -108,8 +108,8 @@ class RiskOrchestrator:
         requested_size: float,
         current_equity: float,
         portfolio_heat_pct: float,
-        portfolio_returns: Optional[List[float]] = None
-    ) -> Tuple[bool, float, str]:
+        portfolio_returns: list[float] | None = None
+    ) -> tuple[bool, float, str]:
         """
         Evaluates dynamic sizing and gate authority for new trade entries.
         Returns: (allow_entry, final_size, reason)

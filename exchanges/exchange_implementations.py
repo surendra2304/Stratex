@@ -5,17 +5,17 @@ Implements concrete subclasses of BaseExchange with full normalization of symbol
 Provides ccxt-based integration when available, with resilient native REST/mock fallbacks.
 """
 
-import time
 import os
-import datetime
-from typing import Dict, List, Optional, Tuple, Any
+import time
+from typing import Any
+
 from exchanges.base_exchange import (
     BaseExchange,
-    UnifiedTicker,
+    ExchangeCapabilities,
     UnifiedBalance,
-    UnifiedPosition,
     UnifiedOrderResult,
-    ExchangeCapabilities
+    UnifiedPosition,
+    UnifiedTicker,
 )
 from logger import get_logger
 
@@ -54,7 +54,7 @@ class BinanceExchangeAdapter(BaseExchange):
                 logger.warning(f"[BINANCE_ADAPTER] python-binance client init skipped: {e}")
         return self._client
 
-    def get_balance(self) -> Dict[str, UnifiedBalance]:
+    def get_balance(self) -> dict[str, UnifiedBalance]:
         client = self._get_client()
         if client:
             try:
@@ -77,7 +77,7 @@ class BinanceExchangeAdapter(BaseExchange):
             "BTC": UnifiedBalance("BTC", free=0.05, used=0.0, total=0.05)
         }
 
-    def get_positions(self) -> List[UnifiedPosition]:
+    def get_positions(self) -> list[UnifiedPosition]:
         return [
             UnifiedPosition(
                 symbol="BTC/USDT",
@@ -107,7 +107,7 @@ class BinanceExchangeAdapter(BaseExchange):
                 pass
         return UnifiedTicker(symbol=u_sym, bid=60490.0, ask=60510.0, last=60500.0, volume_24h=15000.0)
 
-    def get_orderbook(self, symbol: str, limit: int = 20) -> Dict[str, List[List[float]]]:
+    def get_orderbook(self, symbol: str, limit: int = 20) -> dict[str, list[list[float]]]:
         client = self._get_client()
         if client:
             try:
@@ -130,8 +130,8 @@ class BinanceExchangeAdapter(BaseExchange):
         side: str,
         order_type: str,
         quantity: float,
-        price: Optional[float] = None,
-        stop_price: Optional[float] = None
+        price: float | None = None,
+        stop_price: float | None = None
     ) -> UnifiedOrderResult:
         u_sym = self.normalize_symbol(symbol)
         fill_price = price or 60500.0
@@ -152,7 +152,7 @@ class BinanceExchangeAdapter(BaseExchange):
     def cancel_order(self, symbol: str, order_id: str) -> bool:
         return True
 
-    def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> List[Dict[str, Any]]:
+    def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> list[dict[str, Any]]:
         now_ts = int(time.time())
         step = 900 if timeframe == "15m" else 300
         return [
@@ -167,7 +167,7 @@ class BinanceExchangeAdapter(BaseExchange):
             for i in range(min(limit, 100))
         ]
 
-    def get_fees(self, symbol: str) -> Tuple[float, float]:
+    def get_fees(self, symbol: str) -> tuple[float, float]:
         return 0.0002, 0.0004
 
 
@@ -210,7 +210,7 @@ class BybitExchangeAdapter(BaseExchange):
         except Exception:
             self._ccxt_client = None
 
-    def get_balance(self) -> Dict[str, UnifiedBalance]:
+    def get_balance(self) -> dict[str, UnifiedBalance]:
         if self._ccxt_client and self.api_key:
             try:
                 b = self._ccxt_client.fetch_balance()
@@ -225,7 +225,7 @@ class BybitExchangeAdapter(BaseExchange):
             "USDT": UnifiedBalance("USDT", free=2500.0, used=200.0, total=2700.0)
         }
 
-    def get_positions(self) -> List[UnifiedPosition]:
+    def get_positions(self) -> list[UnifiedPosition]:
         return [
             UnifiedPosition(
                 symbol="ETH/USDT",
@@ -255,7 +255,7 @@ class BybitExchangeAdapter(BaseExchange):
                 pass
         return UnifiedTicker(symbol=u_sym, bid=60495.0, ask=60515.0, last=60505.0, volume_24h=12000.0)
 
-    def get_orderbook(self, symbol: str, limit: int = 20) -> Dict[str, List[List[float]]]:
+    def get_orderbook(self, symbol: str, limit: int = 20) -> dict[str, list[list[float]]]:
         if self._ccxt_client:
             try:
                 ob = self._ccxt_client.fetch_order_book(self.normalize_symbol(symbol), limit=limit)
@@ -276,8 +276,8 @@ class BybitExchangeAdapter(BaseExchange):
         side: str,
         order_type: str,
         quantity: float,
-        price: Optional[float] = None,
-        stop_price: Optional[float] = None
+        price: float | None = None,
+        stop_price: float | None = None
     ) -> UnifiedOrderResult:
         u_sym = self.normalize_symbol(symbol)
         fill_price = price or 60505.0
@@ -298,7 +298,7 @@ class BybitExchangeAdapter(BaseExchange):
     def cancel_order(self, symbol: str, order_id: str) -> bool:
         return True
 
-    def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> List[Dict[str, Any]]:
+    def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> list[dict[str, Any]]:
         now_ts = int(time.time())
         step = 900 if timeframe == "15m" else 300
         return [
@@ -313,7 +313,7 @@ class BybitExchangeAdapter(BaseExchange):
             for i in range(min(limit, 100))
         ]
 
-    def get_fees(self, symbol: str) -> Tuple[float, float]:
+    def get_fees(self, symbol: str) -> tuple[float, float]:
         return 0.0002, 0.00055
 
 
@@ -362,7 +362,7 @@ class OKXExchangeAdapter(BaseExchange):
         # OKX uses hyphen: BTC-USDT
         return unified_symbol.replace("/", "-")
 
-    def get_balance(self) -> Dict[str, UnifiedBalance]:
+    def get_balance(self) -> dict[str, UnifiedBalance]:
         if self._ccxt_client and self.api_key:
             try:
                 b = self._ccxt_client.fetch_balance()
@@ -377,7 +377,7 @@ class OKXExchangeAdapter(BaseExchange):
             "USDT": UnifiedBalance("USDT", free=1500.0, used=0.0, total=1500.0)
         }
 
-    def get_positions(self) -> List[UnifiedPosition]:
+    def get_positions(self) -> list[UnifiedPosition]:
         return []
 
     def get_ticker(self, symbol: str) -> UnifiedTicker:
@@ -396,7 +396,7 @@ class OKXExchangeAdapter(BaseExchange):
                 pass
         return UnifiedTicker(symbol=u_sym, bid=60485.0, ask=60505.0, last=60495.0, volume_24h=9500.0)
 
-    def get_orderbook(self, symbol: str, limit: int = 20) -> Dict[str, List[List[float]]]:
+    def get_orderbook(self, symbol: str, limit: int = 20) -> dict[str, list[list[float]]]:
         if self._ccxt_client:
             try:
                 ob = self._ccxt_client.fetch_order_book(self.normalize_symbol(symbol), limit=limit)
@@ -417,8 +417,8 @@ class OKXExchangeAdapter(BaseExchange):
         side: str,
         order_type: str,
         quantity: float,
-        price: Optional[float] = None,
-        stop_price: Optional[float] = None
+        price: float | None = None,
+        stop_price: float | None = None
     ) -> UnifiedOrderResult:
         u_sym = self.normalize_symbol(symbol)
         fill_price = price or 60495.0
@@ -439,7 +439,7 @@ class OKXExchangeAdapter(BaseExchange):
     def cancel_order(self, symbol: str, order_id: str) -> bool:
         return True
 
-    def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> List[Dict[str, Any]]:
+    def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> list[dict[str, Any]]:
         now_ts = int(time.time())
         step = 900 if timeframe == "15m" else 300
         return [
@@ -454,7 +454,7 @@ class OKXExchangeAdapter(BaseExchange):
             for i in range(min(limit, 100))
         ]
 
-    def get_fees(self, symbol: str) -> Tuple[float, float]:
+    def get_fees(self, symbol: str) -> tuple[float, float]:
         return 0.0002, 0.0005
 
 
@@ -482,19 +482,19 @@ class CoinbaseExchangeAdapter(BaseExchange):
         )
         self.is_connected = True
 
-    def get_balance(self) -> Dict[str, UnifiedBalance]:
+    def get_balance(self) -> dict[str, UnifiedBalance]:
         return {
             "USD": UnifiedBalance("USD", free=1000.0, used=0.0, total=1000.0)
         }
 
-    def get_positions(self) -> List[UnifiedPosition]:
+    def get_positions(self) -> list[UnifiedPosition]:
         return []
 
     def get_ticker(self, symbol: str) -> UnifiedTicker:
         u_sym = self.normalize_symbol(symbol)
         return UnifiedTicker(symbol=u_sym, bid=60520.0, ask=60540.0, last=60530.0, volume_24h=5000.0)
 
-    def get_orderbook(self, symbol: str, limit: int = 20) -> Dict[str, List[List[float]]]:
+    def get_orderbook(self, symbol: str, limit: int = 20) -> dict[str, list[list[float]]]:
         return {
             "bids": [[60520.0, 0.8]],
             "asks": [[60540.0, 0.9]]
@@ -506,8 +506,8 @@ class CoinbaseExchangeAdapter(BaseExchange):
         side: str,
         order_type: str,
         quantity: float,
-        price: Optional[float] = None,
-        stop_price: Optional[float] = None
+        price: float | None = None,
+        stop_price: float | None = None
     ) -> UnifiedOrderResult:
         u_sym = self.normalize_symbol(symbol)
         fill_price = price or 60530.0
@@ -528,7 +528,7 @@ class CoinbaseExchangeAdapter(BaseExchange):
     def cancel_order(self, symbol: str, order_id: str) -> bool:
         return True
 
-    def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> List[Dict[str, Any]]:
+    def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> list[dict[str, Any]]:
         now_ts = int(time.time())
         step = 900 if timeframe == "15m" else 300
         return [
@@ -543,7 +543,7 @@ class CoinbaseExchangeAdapter(BaseExchange):
             for i in range(min(limit, 100))
         ]
 
-    def get_fees(self, symbol: str) -> Tuple[float, float]:
+    def get_fees(self, symbol: str) -> tuple[float, float]:
         return 0.004, 0.006
 
 

@@ -8,9 +8,10 @@ Capabilities:
 4. Report Generation: Daily and lifetime attribution summaries.
 """
 
+from typing import Any
+
 import pandas as pd
-import numpy as np
-from typing import Dict, List, Optional, Tuple, Any
+
 from metrics import calculate_metrics
 
 
@@ -19,7 +20,7 @@ class PerformanceAttributionEngine:
     Decomposes aggregate trading performance across strategies, symbols, and risk regimes.
     """
 
-    def analyze_strategy_contributions(self, trade_records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def analyze_strategy_contributions(self, trade_records: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Groups closed trades by strategy and calculates isolated performance metrics.
         """
@@ -54,7 +55,7 @@ class PerformanceAttributionEngine:
             "strategy_breakdown": strategy_results
         }
 
-    def analyze_symbol_contributions(self, trade_records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def analyze_symbol_contributions(self, trade_records: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Decomposes performance by coin symbol.
         """

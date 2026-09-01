@@ -7,11 +7,11 @@ Tracks:
 3. Automatic Circuit Breaker: Automatically flags or disables prediction filtering if predictions degrade performance over 30 days.
 """
 
-import os
-import json
-import time
 import datetime
-from typing import Dict, List, Optional, Tuple, Any
+import json
+import os
+from typing import Any
+
 from logger import get_logger
 
 logger = get_logger("prediction_impact")
@@ -34,7 +34,7 @@ class PredictionImpactTracker:
         prediction_direction: str,
         prediction_confidence: float,
         filter_action: str,  # "APPROVED", "VETOED", "REDUCED"
-        realized_pnl: Optional[float] = None
+        realized_pnl: float | None = None
     ) -> None:
         """Records trade event with associated prediction metadata."""
         record = {
@@ -51,7 +51,7 @@ class PredictionImpactTracker:
         with open(self.ledger_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(record) + "\n")
 
-    def generate_impact_report(self) -> Dict[str, Any]:
+    def generate_impact_report(self) -> dict[str, Any]:
         """Calculates value-add metrics comparing prediction filtered vs baseline cohorts."""
         if not os.path.exists(self.ledger_file):
             return {

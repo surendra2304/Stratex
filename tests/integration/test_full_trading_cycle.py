@@ -1,8 +1,6 @@
-import os
-import json
-import pytest
-from risk.risk_orchestrator import RiskOrchestrator
 from advisory_gate import AdvisoryGate
+from risk.risk_orchestrator import RiskOrchestrator
+
 
 def test_complete_trading_cycle_simulation():
     # 1. Simulate Strategy Signal

@@ -9,7 +9,6 @@ import time
 import uuid
 
 import pandas as pd
-
 from binance.exceptions import BinanceAPIException
 
 import config
@@ -2080,7 +2079,7 @@ class TestnetService:
                 amt = abs(raw_amt)
                 if amt > 0.0:
                     sym = p.get("symbol", "")
-                    base = sym[:-4] if sym.endswith("USDT") else sym
+                    base = sym.removesuffix("USDT")
                     balances[base] = amt
                     position_sides[base] = "BUY" if raw_amt > 0 else "SELL"
         else:
@@ -2099,13 +2098,13 @@ class TestnetService:
         validated_assets = governance_validated_assets(self.strategies)
         candidates = set()
         for sym in validated_assets:
-            base = sym[:-4] if sym.endswith("USDT") else sym
+            base = sym.removesuffix("USDT")
             if balances.get(base, 0.0) > 0.0 or sym in orders_by_symbol:
                 candidates.add(sym)
         summary["checked_symbols"] = len(candidates)
 
         for sym in sorted(candidates):
-            base = sym[:-4] if sym.endswith("USDT") else sym
+            base = sym.removesuffix("USDT")
             held_qty = balances.get(base, 0.0)
             entry_side = position_sides.get(base, "BUY")
             resting = orders_by_symbol.get(sym, [])
@@ -2113,9 +2112,8 @@ class TestnetService:
             if held_qty > 0.0 and not resting:
                 # Naked position: protect it with fixed percentage SL/TP or 3xATR
                 try:
-                    import pandas as _pd
                     from data import get_candles
-                    from strategy_adx_ema import add_features, compute_atr
+                    from strategy_adx_ema import compute_atr
                     df = get_candles(sym, "4h", 60)
                     last_close = 0.0
                     if df is not None and not getattr(df, "empty", True) and len(df) >= 1:
@@ -2137,7 +2135,9 @@ class TestnetService:
                             sl_price = round(last_close * 1.005, 6)
                             tp_price = round(last_close * 0.997, 6)
                         qty = round(held_qty, 4)
-                        from testnet_engine.protection import place_futures_bracket_protection
+                        from testnet_engine.protection import (
+                            place_futures_bracket_protection,
+                        )
                         prot = place_futures_bracket_protection(
                             client=self.client,
                             symbol=sym,

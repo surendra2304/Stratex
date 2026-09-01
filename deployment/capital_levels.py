@@ -9,8 +9,7 @@ Defines:
 - Automatic Demotion triggers on consecutive loss days or drawdown breach.
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Any
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -27,7 +26,7 @@ class CapitalLevelSpec:
     allow_custom_params: bool = False
 
 
-GRADUATED_LEVELS: Dict[int, CapitalLevelSpec] = {
+GRADUATED_LEVELS: dict[int, CapitalLevelSpec] = {
     1: CapitalLevelSpec(
         level=1,
         name="LEVEL_1_PILOT",
@@ -85,7 +84,7 @@ def check_demotion_trigger(
     current_level: int,
     current_drawdown_pct: float,
     consecutive_loss_days: int
-) -> Tuple[bool, Optional[int], str]:
+) -> tuple[bool, int | None, str]:
     """
     Evaluates if account performance requires demoting to a lower capital tier.
     Returns (should_demote, new_level, reason).

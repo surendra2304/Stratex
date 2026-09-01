@@ -8,10 +8,10 @@ Normalizes:
 - Capability flags per exchange (supports_futures, supports_shorting, supports_margin).
 """
 
-from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field
 import time
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -41,7 +41,7 @@ class UnifiedPosition:
     mark_price: float
     unrealized_pnl: float
     leverage: float = 1.0
-    liquidation_price: Optional[float] = None
+    liquidation_price: float | None = None
     exchange: str = ""
 
 
@@ -80,13 +80,13 @@ class BaseExchange(ABC):
     def __init__(
         self,
         exchange_id: str,
-        capabilities: Optional[ExchangeCapabilities] = None
+        capabilities: ExchangeCapabilities | None = None
     ):
         self.exchange_id = exchange_id.lower()
         self.capabilities = capabilities or ExchangeCapabilities()
         self.is_connected = False
         self.rate_limit_delay_ms = 100
-        self.slippage_history: List[float] = []
+        self.slippage_history: list[float] = []
 
     def is_healthy(self) -> bool:
         """Returns whether the exchange connection is operational."""
@@ -124,24 +124,20 @@ class BaseExchange(ABC):
         return unified_symbol.replace("/", "")
 
     @abstractmethod
-    def get_balance(self) -> Dict[str, UnifiedBalance]:
+    def get_balance(self) -> dict[str, UnifiedBalance]:
         """Fetches account balances keyed by currency symbol (e.g. 'USDT', 'BTC')."""
-        pass
 
     @abstractmethod
-    def get_positions(self) -> List[UnifiedPosition]:
+    def get_positions(self) -> list[UnifiedPosition]:
         """Fetches currently open positions."""
-        pass
 
     @abstractmethod
     def get_ticker(self, symbol: str) -> UnifiedTicker:
         """Fetches latest bid/ask/last ticker data."""
-        pass
 
     @abstractmethod
-    def get_orderbook(self, symbol: str, limit: int = 20) -> Dict[str, List[List[float]]]:
+    def get_orderbook(self, symbol: str, limit: int = 20) -> dict[str, list[list[float]]]:
         """Fetches top-of-book depth {'bids': [[price, qty], ...], 'asks': [[price, qty], ...]}."""
-        pass
 
     @abstractmethod
     def place_order(
@@ -150,28 +146,24 @@ class BaseExchange(ABC):
         side: str,
         order_type: str,
         quantity: float,
-        price: Optional[float] = None,
-        stop_price: Optional[float] = None
+        price: float | None = None,
+        stop_price: float | None = None
     ) -> UnifiedOrderResult:
         """Submits a new order to the exchange."""
-        pass
 
     @abstractmethod
     def cancel_order(self, symbol: str, order_id: str) -> bool:
         """Cancels an existing pending order."""
-        pass
 
     @abstractmethod
-    def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> List[Dict[str, Any]]:
+    def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> list[dict[str, Any]]:
         """Fetches historical OHLCV candle records."""
-        pass
 
     @abstractmethod
-    def get_fees(self, symbol: str) -> Tuple[float, float]:
+    def get_fees(self, symbol: str) -> tuple[float, float]:
         """Returns (maker_fee_pct, taker_fee_pct)."""
-        pass
 
-    def get_trading_fees(self, symbol: str) -> Tuple[float, float]:
+    def get_trading_fees(self, symbol: str) -> tuple[float, float]:
         """Alias for get_fees()."""
         return self.get_fees(symbol)
 

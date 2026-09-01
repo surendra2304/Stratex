@@ -12,6 +12,7 @@ import pandas as pd
 import xgboost as xgb
 from sklearn.preprocessing import StandardScaler
 
+
 class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_type", "confidence", "rr_ratio"])):
     @property
     def win_rate_prior(self):

@@ -8,10 +8,11 @@ Tracks:
 4. Automatic Degradation: Proportional flow reduction based on dynamic Health Score (0 - 100).
 """
 
-import time
 import datetime
-from typing import Dict, List, Optional, Tuple, Any
+import time
 from dataclasses import dataclass, field
+from typing import Any
+
 from logger import get_logger
 
 logger = get_logger("exchange_health")
@@ -30,7 +31,7 @@ class ExchangeHealthMetrics:
     order_fill_rate: float = 1.0
     websocket_connected: bool = True
     circuit_breaker_active: bool = False
-    circuit_breaker_tripped_at: Optional[float] = None
+    circuit_breaker_tripped_at: float | None = None
     circuit_breaker_cooldown_seconds: float = 600.0  # 10 minutes
     last_ping_time: float = field(default_factory=time.time)
 
@@ -40,9 +41,9 @@ class MultiExchangeHealthMonitor:
     Monitors reliability across connected exchanges and manages venue-specific circuit breakers.
     """
 
-    def __init__(self, exchange_ids: List[str], max_failures_threshold: int = 3):
+    def __init__(self, exchange_ids: list[str], max_failures_threshold: int = 3):
         self.max_failures_threshold = max_failures_threshold
-        self.metrics: Dict[str, ExchangeHealthMetrics] = {
+        self.metrics: dict[str, ExchangeHealthMetrics] = {
             ex_id: ExchangeHealthMetrics(exchange_id=ex_id) for ex_id in exchange_ids
         }
 
@@ -136,7 +137,7 @@ class MultiExchangeHealthMonitor:
             return 1.0
         return round(m.health_score / 100.0, 2)
 
-    def get_all_health_statuses(self) -> Dict[str, Any]:
+    def get_all_health_statuses(self) -> dict[str, Any]:
         """Gathers multi-exchange health telemetry snapshot."""
         return {
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z",

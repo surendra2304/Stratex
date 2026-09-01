@@ -1,21 +1,21 @@
 """
 Comprehensive Test Suite for All Strategies and Feature/ML Pipeline
 """
-import os
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
 
 import features
 import strategy_adx_ema
-import strategy_supertrend
-import strategy_swing
-import strategy_scalper
 import strategy_aggressor
-import strategy_ml
 import strategy_bollinger
 import strategy_breakout_vol
 import strategy_hybrid
+import strategy_ml
+import strategy_scalper
+import strategy_supertrend
+import strategy_swing
+
 
 @pytest.fixture
 def ohlcv_series():
@@ -63,7 +63,7 @@ def test_all_strategies_schema_and_underflow_safety(ohlcv_series):
     ]
 
     for name, mod in strategy_modules:
-        fn = getattr(mod, "get_signal")
+        fn = mod.get_signal
         
         # 1. Underflow
         short_df = ohlcv_series.head(5).copy()

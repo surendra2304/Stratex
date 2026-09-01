@@ -7,8 +7,7 @@ CRITICAL INVARIANTS:
 3. Exit Acceleration: Accelerates stop/take profit exit if deep learning forecast strongly turns adverse.
 """
 
-from typing import Dict, List, Optional, Tuple, Any
-from intelligence.prediction_client import AssetPrediction, PredictionClient
+from intelligence.prediction_client import PredictionClient
 from logger import get_logger
 
 logger = get_logger("prediction_enhanced")
@@ -21,7 +20,7 @@ class PredictionEnhancedStrategyFilter:
 
     def __init__(
         self,
-        prediction_client: Optional[PredictionClient] = None,
+        prediction_client: PredictionClient | None = None,
         min_agreement_confidence: float = 0.65,
         veto_conflicting_signals: bool = True
     ):
@@ -34,7 +33,7 @@ class PredictionEnhancedStrategyFilter:
         symbol: str,
         strategy_signal: int,  # +1 for BUY, -1 for SELL, 0 for NONE
         base_size: float
-    ) -> Tuple[bool, float, str]:
+    ) -> tuple[bool, float, str]:
         """
         Evaluates whether predictive intelligence allows the strategy entry and adjusts sizing.
         Returns: (allow_entry, modulated_size, reason)
@@ -78,7 +77,7 @@ class PredictionEnhancedStrategyFilter:
         symbol: str,
         current_side: str,  # "LONG" or "SHORT"
         current_pnl_pct: float
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """
         Evaluates whether an active position should exit early due to strong adverse forecast.
         """

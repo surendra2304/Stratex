@@ -1,10 +1,16 @@
 import os
-import json
-import pytest
-from deployment.live_authorization import LiveAuthorizationVerifier, create_physical_authorization_file
-from deployment.capital_levels import get_level_spec, check_demotion_trigger, GRADUATED_LEVELS
-from risk.live_enforcer import LiveRiskEnforcer
+
+from deployment.capital_levels import (
+    check_demotion_trigger,
+    get_level_spec,
+)
+from deployment.live_authorization import (
+    LiveAuthorizationVerifier,
+    create_physical_authorization_file,
+)
 from ledger.live_ledger import LiveLedgerManager
+from risk.live_enforcer import LiveRiskEnforcer
+
 
 def test_capital_levels_specs():
     l1 = get_level_spec(1)

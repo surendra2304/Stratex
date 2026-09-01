@@ -9,14 +9,15 @@ Automates:
 5. Database/WAL Replay & Integrity Verification: Replays write-ahead logs and verifies integrity before resumption.
 """
 
-import os
 import gc
-import json
-import time
-import shutil
 import glob
 import hashlib
-from typing import Dict, List, Optional, Tuple, Any
+import json
+import os
+import shutil
+import time
+from typing import Any
+
 from logger import get_logger
 
 logger = get_logger("self_healing")
@@ -32,7 +33,7 @@ class SelfHealingEngine:
         self.max_rss_mb = max_rss_mb
         os.makedirs(self.backup_dir, exist_ok=True)
         self.healed_incidents_count = 0
-        self.strategy_crash_restarts: Dict[str, int] = {}
+        self.strategy_crash_restarts: dict[str, int] = {}
 
     def compute_file_checksum(self, filepath: str) -> str:
         """Computes SHA-256 checksum of a state file."""
@@ -44,7 +45,7 @@ class SelfHealingEngine:
                 hasher.update(chunk)
         return hasher.hexdigest()
 
-    def validate_and_repair_state_file(self, filepath: str, expected_checksum: Optional[str] = None) -> bool:
+    def validate_and_repair_state_file(self, filepath: str, expected_checksum: str | None = None) -> bool:
         """Validates JSON state structure and checksum, restoring from backup on corruption."""
         is_corrupt = False
         if not os.path.exists(filepath):
@@ -85,7 +86,7 @@ class SelfHealingEngine:
             logger.error(f"[SELF_HEALING] Failed to restore backup: {e}")
             return False
 
-    def handle_exchange_api_failure(self, consecutive_errors: int) -> Dict[str, Any]:
+    def handle_exchange_api_failure(self, consecutive_errors: int) -> dict[str, Any]:
         """
         Calculates exponential backoff and determines if entries must be halted while maintaining open positions.
         """
@@ -110,7 +111,7 @@ class SelfHealingEngine:
         logger.warning(f"[SELF_HEALING] 🔄 Isolated and restarted crashed strategy '{strategy_name}' (Restart count: {self.strategy_crash_restarts[strategy_name]}).")
         return True
 
-    def check_memory_usage(self, current_rss_mb: float, is_low_activity_window: bool = False) -> Dict[str, Any]:
+    def check_memory_usage(self, current_rss_mb: float, is_low_activity_window: bool = False) -> dict[str, Any]:
         """Checks if process memory RSS exceeds 80% threshold and recommends scheduled restart."""
         usage_pct = (current_rss_mb / max(self.max_rss_mb, 1.0)) * 100.0
         needs_restart = (usage_pct >= 80.0 and is_low_activity_window)
@@ -125,7 +126,7 @@ class SelfHealingEngine:
             "restart_recommended": needs_restart
         }
 
-    def execute_maintenance_window(self) -> Dict[str, Any]:
+    def execute_maintenance_window(self) -> dict[str, Any]:
         """Performs scheduled low-volatility maintenance, garbage collection, and compaction."""
         logger.info("[SELF_HEALING] 🧹 Executing maintenance window...")
         collected = gc.collect()

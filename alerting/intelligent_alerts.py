@@ -17,13 +17,14 @@ Features:
 - Max Rate: Capped at 10 alerts/hour to prevent alert fatigue.
 """
 
-import time
 import datetime
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, field, asdict
-from reporting.voice_summaries import generate_alert_voice_snippet
+import time
+from dataclasses import asdict, dataclass
+from typing import Any
+
 from api.webhooks import EcosystemWebhookEmitter
 from logger import get_logger
+from reporting.voice_summaries import generate_alert_voice_snippet
 
 logger = get_logger("intelligent_alerts")
 
@@ -36,7 +37,7 @@ class IntelligentAlert:
     title: str
     message: str
     context: str
-    recommendation: Optional[str]
+    recommendation: str | None
     voice_summary: str
     timestamp: str
     dedup_key: str
@@ -54,8 +55,8 @@ class IntelligentAlertEngine:
     ):
         self.dedup_window = dedup_window_seconds
         self.max_per_hour = max_alerts_per_hour
-        self.recent_alerts: List[IntelligentAlert] = []
-        self.recent_alert_timestamps: List[float] = []
+        self.recent_alerts: list[IntelligentAlert] = []
+        self.recent_alert_timestamps: list[float] = []
         self.webhook_emitter = EcosystemWebhookEmitter()
 
     def emit_alert(
@@ -65,8 +66,8 @@ class IntelligentAlertEngine:
         title: str,
         message: str,
         context: str = "",
-        recommendation: Optional[str] = None
-    ) -> Optional[IntelligentAlert]:
+        recommendation: str | None = None
+    ) -> IntelligentAlert | None:
         now = time.time()
         dedup_key = f"{severity}_{category}_{title}"
 
@@ -110,5 +111,5 @@ class IntelligentAlertEngine:
 
         return alert
 
-    def get_recent_alerts(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_recent_alerts(self, limit: int = 20) -> list[dict[str, Any]]:
         return [asdict(a) for a in self.recent_alerts[-limit:]]

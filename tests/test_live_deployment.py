@@ -15,18 +15,19 @@ Verifies:
 
 import os
 import tempfile
-import time
-import pytest
 
+from deployment.capital_levels import check_demotion_trigger, get_level_spec
+from deployment.live_authorization import (
+    LiveAuthorizationVerifier,
+    create_physical_authorization_file,
+)
 from deployment.live_deployment_gates import LiveDeploymentGates
-from hardening.production_hardening import ReliabilityHardener
-from deployment.live_trading_prep import LiveTradingPreparer, LiveCapitalPlan
-from monitoring.production_monitor import EnterpriseProductionMonitor
-from deployment.capital_levels import get_level_spec, check_demotion_trigger
-from deployment.live_authorization import LiveAuthorizationVerifier, create_physical_authorization_file
-from risk.live_risk_enforcer import LiveRiskEnforcer
-from ledger.live_ledger import LiveLedgerManager
 from deployment.live_rollback import LiveRollbackManager
+from deployment.live_trading_prep import LiveCapitalPlan, LiveTradingPreparer
+from hardening.production_hardening import ReliabilityHardener
+from ledger.live_ledger import LiveLedgerManager
+from monitoring.production_monitor import EnterpriseProductionMonitor
+from risk.live_risk_enforcer import LiveRiskEnforcer
 
 
 def test_live_deployment_gates_evaluation():

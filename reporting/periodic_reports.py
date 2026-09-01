@@ -6,11 +6,10 @@ Generates:
 2. Monthly Reports (1st of Month): Macro review, capital status, cumulative AI Advisory alpha.
 """
 
-import os
-import json
 import datetime
-from typing import Dict, List, Optional, Any
-from reporting.voice_summaries import generate_daily_voice_summary
+import json
+import os
+from typing import Any
 
 
 class PeriodicReportGenerator:
@@ -25,7 +24,7 @@ class PeriodicReportGenerator:
         os.makedirs(self.weekly_dir, exist_ok=True)
         os.makedirs(self.monthly_dir, exist_ok=True)
 
-    def generate_weekly_report(self, week_str: Optional[str] = None) -> Dict[str, Any]:
+    def generate_weekly_report(self, week_str: str | None = None) -> dict[str, Any]:
         week_tag = week_str or datetime.datetime.utcnow().strftime("%Y-W%W")
         report = {
             "report_type": "WEEKLY_PERFORMANCE_REVIEW",
@@ -50,7 +49,7 @@ class PeriodicReportGenerator:
             json.dump(report, f, indent=2)
         return report
 
-    def generate_monthly_report(self, month_str: Optional[str] = None) -> Dict[str, Any]:
+    def generate_monthly_report(self, month_str: str | None = None) -> dict[str, Any]:
         month_tag = month_str or datetime.datetime.utcnow().strftime("%Y-%m")
         report = {
             "report_type": "MONTHLY_EXECUTIVE_AUDIT",

@@ -5,14 +5,13 @@
 # It must NOT expose order execution methods.
 # It is SEPARATE from ExecutionClient and MarketDataClient.
 # ==============================================================================
+import logging
+import time
+
 from binance.client import Client
+from binance.exceptions import BinanceAPIException
 
 from config import API_KEY, SECRET_KEY, TRADING_MODE
-
-
-import time
-import logging
-from binance.exceptions import BinanceAPIException
 
 logger = logging.getLogger("account_client")
 

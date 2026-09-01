@@ -11,9 +11,9 @@ Tracks:
 import datetime
 import json
 import os
-import time
-from typing import Dict, List, Optional, Tuple, Any
-from metrics import calculate_metrics, calculate_drawdown
+from typing import Any
+
+from metrics import calculate_metrics
 
 
 class LiveTelemetryReporter:
@@ -28,7 +28,7 @@ class LiveTelemetryReporter:
         initial_capital: float = 1000.0,
         output_json: str = "live_daily_report.json",
         output_html: str = "live_daily_report.html"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Calculates daily metrics and exports structured JSON and visual HTML report.
         """

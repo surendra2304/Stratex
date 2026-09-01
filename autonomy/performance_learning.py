@@ -7,9 +7,8 @@ Capabilities:
 3. Feedback Loop: Feeds discovered heuristics to Genetic Evolution and Operations Director.
 """
 
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field
-import datetime
+from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -27,7 +26,7 @@ class PerformanceLearningEngine:
     Extracts empirical heuristics from historical and live trade logs.
     """
 
-    def analyze_trade_patterns(self, trades: List[Dict[str, Any]]) -> List[ExtractedMarketPattern]:
+    def analyze_trade_patterns(self, trades: list[dict[str, Any]]) -> list[ExtractedMarketPattern]:
         """Scans trade logs to discover regime-specific patterns."""
         if not trades or len(trades) < 5:
             return []

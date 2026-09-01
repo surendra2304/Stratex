@@ -13,19 +13,17 @@ Verifies:
 
 import os
 import tempfile
-import time
-import pytest
 
-from config_production import validate_production_security, PRODUCTION_FORBIDDEN_PARAMS
+from config_production import PRODUCTION_FORBIDDEN_PARAMS, validate_production_security
+from monitoring_system import ProductionMonitoringSystem
 from security_hardening import (
     SecurityRateLimiter,
-    sanitize_input,
+    TradingAnomalyDetector,
     mask_credential,
+    sanitize_input,
     sign_audit_record,
     verify_audit_chain,
-    TradingAnomalyDetector
 )
-from monitoring_system import ProductionMonitoringSystem
 
 
 def test_production_security_validation():

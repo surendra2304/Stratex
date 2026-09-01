@@ -9,14 +9,13 @@ Endpoints:
 - GET /api/v1/reports/alerts : Recent intelligent alerts log.
 """
 
-import os
-import json
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, Response, jsonify, request
+
+from alerting.intelligent_alerts import IntelligentAlertEngine
 from api.auth import require_permission
 from api.data_shapes import format_api_response
 from reporting.daily_report import DailyReportGenerator
 from reporting.periodic_reports import PeriodicReportGenerator
-from alerting.intelligent_alerts import IntelligentAlertEngine
 
 reporting_bp = Blueprint("reporting_api", __name__, url_prefix="/api/v1/reports")
 

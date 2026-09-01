@@ -17,7 +17,7 @@ import os
 import subprocess
 import sys
 import time
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import config
 from config_production import validate_production_security
@@ -27,7 +27,7 @@ from security_hardening import mask_credential, sign_audit_record
 logger = get_logger("deploy_production")
 
 
-def run_command_checked(cmd: List[str]) -> Tuple[int, str]:
+def run_command_checked(cmd: list[str]) -> tuple[int, str]:
     try:
         res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120)
         return res.returncode, res.stdout + res.stderr
@@ -35,7 +35,7 @@ def run_command_checked(cmd: List[str]) -> Tuple[int, str]:
         return 1, str(e)
 
 
-def audit_environment_and_secrets() -> Dict[str, Any]:
+def audit_environment_and_secrets() -> dict[str, Any]:
     """Audits required environment variables and ensures sensitive keys are not exposed."""
     results = {}
     required_keys = [
@@ -60,7 +60,7 @@ def audit_environment_and_secrets() -> Dict[str, Any]:
     }
 
 
-def execute_pre_deployment_tests() -> Tuple[bool, str]:
+def execute_pre_deployment_tests() -> tuple[bool, str]:
     """Runs pytest across production test suites to verify system integrity."""
     logger.info("[DEPLOY] Executing automated test suite verification...")
     python_exe = sys.executable

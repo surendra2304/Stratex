@@ -7,14 +7,15 @@ CRITICAL INVARIANTS:
 3. Every human approval logs a cryptographic audit hash and evidence package.
 """
 
-import os
-import json
-import time
 import datetime
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, field, asdict
-from security_hardening import sign_audit_record
+import json
+import os
+import time
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
 from logger import get_logger
+from security_hardening import sign_audit_record
 
 logger = get_logger("approval_gates")
 
@@ -30,10 +31,10 @@ class PromotionProposal:
     fidelity_score: float
     status: str = "PENDING_HUMAN_APPROVAL"  # "PENDING_HUMAN_APPROVAL", "APPROVED", "REJECTED"
     created_at: str = field(default_factory=lambda: datetime.datetime.utcnow().isoformat() + "Z")
-    decided_at: Optional[str] = None
-    approver: Optional[str] = None
-    rationale: Optional[str] = None
-    signature: Optional[str] = None
+    decided_at: str | None = None
+    approver: str | None = None
+    rationale: str | None = None
+    signature: str | None = None
 
 
 class HumanApprovalGate:
@@ -43,7 +44,7 @@ class HumanApprovalGate:
 
     def __init__(self, state_file: str = "approval_queue.json"):
         self.state_file = state_file
-        self.proposals: Dict[str, PromotionProposal] = {}
+        self.proposals: dict[str, PromotionProposal] = {}
         self.load_state()
 
     def load_state(self) -> None:
@@ -65,7 +66,7 @@ class HumanApprovalGate:
         self,
         genome_id: str,
         archetype: str,
-        evidence_summary: Dict[str, Any],
+        evidence_summary: dict[str, Any],
         incubation_days: int,
         live_pf: float,
         fidelity: float
@@ -89,7 +90,7 @@ class HumanApprovalGate:
         logger.info(f"[APPROVAL_GATE] 📋 Submitted promotion proposal {proposal_id} for genome {genome_id}")
         return proposal
 
-    def approve_proposal(self, proposal_id: str, approver: str, rationale: str = "") -> Optional[PromotionProposal]:
+    def approve_proposal(self, proposal_id: str, approver: str, rationale: str = "") -> PromotionProposal | None:
         """Approves a strategy for deployment with cryptographic signature."""
         if proposal_id not in self.proposals:
             return None
@@ -111,7 +112,7 @@ class HumanApprovalGate:
         logger.info(f"[APPROVAL_GATE] ✅ Strategy {prop.genome_id} APPROVED for production by {approver}")
         return prop
 
-    def reject_proposal(self, proposal_id: str, approver: str, rationale: str = "") -> Optional[PromotionProposal]:
+    def reject_proposal(self, proposal_id: str, approver: str, rationale: str = "") -> PromotionProposal | None:
         """Rejects a strategy promotion."""
         if proposal_id not in self.proposals:
             return None
@@ -127,8 +128,8 @@ class HumanApprovalGate:
         logger.info(f"[APPROVAL_GATE] ❌ Strategy {prop.genome_id} REJECTED by {approver}")
         return prop
 
-    def get_pending_proposals(self) -> List[Dict[str, Any]]:
+    def get_pending_proposals(self) -> list[dict[str, Any]]:
         return [asdict(p) for p in self.proposals.values() if p.status == "PENDING_HUMAN_APPROVAL"]
 
-    def get_all_proposals(self) -> List[Dict[str, Any]]:
+    def get_all_proposals(self) -> list[dict[str, Any]]:
         return [asdict(p) for p in self.proposals.values()]

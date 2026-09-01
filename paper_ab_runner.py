@@ -14,34 +14,30 @@ Safety Invariants:
 
 import datetime
 import json
-import os
-import sys
 import threading
 import time
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+import config
+import features
+import strategy_swing
 from advisory_gate import AdvisoryGate
 from advisory_ledger import append_advisory_entry
 from advisory_params import AdvisoryParameterOverlay
 from advisory_telemetry import build_telemetry_payload
 from ai_universe_client import AIUniverseClient
-import config
 from config_ab import ABExperimentConfig, get_default_ab_config
 from data_client import MarketDataClient
-import features
 from logger import get_logger
-from metrics import calculate_drawdown, calculate_metrics
 from paper_engine.portfolio import PaperPortfolio
-import strategy_swing
 
 logger = get_logger("paper_ab_runner")
 
 
 class CostModel:
-    def __init__(self, cfg: Dict[str, float]):
+    def __init__(self, cfg: dict[str, float]):
         self.entry_fee = cfg.get("entry_fee", 0.001)
         self.exit_fee = cfg.get("exit_fee", 0.001)
         self.entry_slip = cfg.get("entry_slip", 0.0005)
@@ -54,7 +50,7 @@ class PaperABEngine:
     Manages execution of both Arm A (Control) and Arm B (Treatment) in lockstep.
     """
 
-    def __init__(self, experiment_cfg: Optional[ABExperimentConfig] = None):
+    def __init__(self, experiment_cfg: ABExperimentConfig | None = None):
         self.cfg = experiment_cfg or get_default_ab_config()
         self.cost_model = CostModel(self.cfg.cost_config)
 
@@ -83,13 +79,13 @@ class PaperABEngine:
             api_key=getattr(config, "AI_UNIVERSE_API_KEY", "")
         )
 
-        self.last_ai_consultation_time: Optional[datetime.datetime] = None
+        self.last_ai_consultation_time: datetime.datetime | None = None
         self.market_client = MarketDataClient()
         self._stop_event = threading.Event()
         self.arm_a_halted = False
         self.arm_b_halted = False
 
-    def check_drawdown_safeties(self, current_prices: Dict[str, float]) -> Tuple[bool, bool]:
+    def check_drawdown_safeties(self, current_prices: dict[str, float]) -> tuple[bool, bool]:
         """
         Calculates current drawdown for both arms.
         Halts an arm if drawdown breaches max_drawdown_limit_pct (10%).
@@ -116,7 +112,7 @@ class PaperABEngine:
 
         return self.arm_a_halted, self.arm_b_halted
 
-    def consult_ai_for_treatment_arm(self, current_df: Optional[pd.DataFrame] = None) -> None:
+    def consult_ai_for_treatment_arm(self, current_df: pd.DataFrame | None = None) -> None:
         """
         Queries AI-Universe and applies validated parameter changes ONLY to Arm B overlay.
         """
@@ -187,7 +183,7 @@ class PaperABEngine:
         symbol: str,
         df: pd.DataFrame,
         is_treatment: bool
-    ) -> Tuple[Optional[str], Optional[float], Optional[float], float]:
+    ) -> tuple[str | None, float | None, float | None, float]:
         """
         Computes trading signals.
         - If Control (is_treatment=False): Uses default strategy parameters.
@@ -230,9 +226,9 @@ class PaperABEngine:
         symbol: str,
         direction: str,
         price: float,
-        sl: Optional[float],
-        tp: Optional[float]
-    ) -> Optional[str]:
+        sl: float | None,
+        tp: float | None
+    ) -> str | None:
         """Executes a simulated paper order with fee and slippage attribution."""
         try:
             equity = portfolio.cash + portfolio.used_margin
@@ -278,8 +274,8 @@ class PaperABEngine:
     def manage_positions_for_portfolio(
         self,
         portfolio: PaperPortfolio,
-        current_prices: Dict[str, float],
-        df_map: Dict[str, pd.DataFrame]
+        current_prices: dict[str, float],
+        df_map: dict[str, pd.DataFrame]
     ) -> None:
         """Evaluates open positions for SL, TP, or bar closure exits."""
         now = time.time()
@@ -366,12 +362,12 @@ class PaperABEngine:
                 with open(portfolio.ledger_file, "a", encoding="utf-8") as lf:
                     lf.write(json.dumps(ledger_entry) + "\n")
 
-    def run_step(self, market_candles_map: Optional[Dict[str, pd.DataFrame]] = None) -> None:
+    def run_step(self, market_candles_map: dict[str, pd.DataFrame] | None = None) -> None:
         """
         Executes one unified market step for both Arm A and Arm B.
         """
-        df_map: Dict[str, pd.DataFrame] = {}
-        current_prices: Dict[str, float] = {}
+        df_map: dict[str, pd.DataFrame] = {}
+        current_prices: dict[str, float] = {}
 
         # 1. Fetch / Ingest identical candle data
         for sym in self.cfg.symbols:
@@ -459,7 +455,7 @@ class PaperABEngine:
 
 
 # Module-level singleton supervisor
-_ab_engine_instance: Optional[PaperABEngine] = None
+_ab_engine_instance: PaperABEngine | None = None
 _ab_engine_lock = threading.Lock()
 
 

@@ -1,7 +1,8 @@
-import pytest
-import pandas as pd
 import numpy as np
-from strategy_aggressive_scalper import get_signal, add_features, SignalResult
+import pandas as pd
+import pytest
+
+from strategy_aggressive_scalper import add_features, get_signal
 
 
 def _generate_synthetic_candles(n_bars=60, base_price=100.0, trend="BULLISH"):

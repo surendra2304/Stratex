@@ -19,6 +19,7 @@ import json
 import os
 import time
 import urllib.request
+
 import numpy as np
 import pandas as pd
 
@@ -389,11 +390,11 @@ def generate_markdown_report(results: list[dict]):
         "# Multi-Timeframe (1h/15m) ADX+EMA Strategy Backtest Report",
         "",
         "## 1. Executive Summary & Verdict",
-        f"- **Benchmark Period**: 2024-01-01 to 2026-08-23 (~32 months out-of-sample data)",
-        f"- **Assets Tested**: BTCUSDT, ETHUSDT, SOLUSDT",
-        f"- **Timeframes**: 1h HTF Trend Filter / 15m LTF Sniper Entry",
-        f"- **Friction Model**: 8 bps total round-trip friction (LIMIT_MAKER entry + taker stop/target exit)",
-        f"- **Leverage**: 5x Isolated Margin",
+        "- **Benchmark Period**: 2024-01-01 to 2026-08-23 (~32 months out-of-sample data)",
+        "- **Assets Tested**: BTCUSDT, ETHUSDT, SOLUSDT",
+        "- **Timeframes**: 1h HTF Trend Filter / 15m LTF Sniper Entry",
+        "- **Friction Model**: 8 bps total round-trip friction (LIMIT_MAKER entry + taker stop/target exit)",
+        "- **Leverage**: 5x Isolated Margin",
         f"- **Scientific Verdict**: **{verdict_text}**",
         "",
         f"> **Portfolio Net Profit Factor**: **{portfolio_net_pf:.2f}** (Gross PF: {portfolio_gross_pf:.2f})  ",

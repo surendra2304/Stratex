@@ -8,11 +8,11 @@ Implements:
 4. Latency Profiler: Microsecond-precision round-trip order and market data latency tracking.
 """
 
-import time
 import os
-import json
 import shutil
-from typing import Dict, List, Optional, Tuple, Any
+import time
+from typing import Any
+
 from logger import get_logger
 
 logger = get_logger("production_hardening")
@@ -34,7 +34,7 @@ class ReliabilityHardener:
         delay = min(self.max_backoff_sec, base_delay * (2 ** attempt))
         return delay
 
-    def create_atomic_backup(self, source_filepath: str) -> Optional[str]:
+    def create_atomic_backup(self, source_filepath: str) -> str | None:
         """Creates an atomic timestamped backup copy of critical state file."""
         if not os.path.exists(source_filepath):
             return None
@@ -53,7 +53,7 @@ class ReliabilityHardener:
             logger.error(f"[HARDENING] Backup creation failed for {source_filepath}: {e}")
             return None
 
-    def execute_graceful_degradation(self, component_name: str, error: str) -> Dict[str, Any]:
+    def execute_graceful_degradation(self, component_name: str, error: str) -> dict[str, Any]:
         """
         Commands graceful degradation when a peripheral service fails (e.g. AI-Universe or secondary data feeds).
         """

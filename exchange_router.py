@@ -8,8 +8,7 @@ Features:
 4. Per-Exchange Rate Limit Tracking.
 """
 
-from typing import Dict, List, Optional, Tuple, Any
-from exchanges.base_exchange import BaseExchange, UnifiedOrderResult, UnifiedTicker
+from exchanges.base_exchange import BaseExchange, UnifiedOrderResult
 from logger import get_logger
 
 logger = get_logger("exchange_router")
@@ -20,16 +19,16 @@ class MultiExchangeRouter:
     Routes execution orders to the most cost-effective and liquid exchange.
     """
 
-    def __init__(self, exchanges: Dict[str, BaseExchange]):
+    def __init__(self, exchanges: dict[str, BaseExchange]):
         self.exchanges = exchanges
-        self.unhealthy_exchanges: List[str] = []
+        self.unhealthy_exchanges: list[str] = []
 
     def find_best_execution_venue(
         self,
         symbol: str,
         side: str,  # "BUY" or "SELL"
         quantity: float
-    ) -> Tuple[str, float, float]:
+    ) -> tuple[str, float, float]:
         """
         Finds the venue offering the best execution net of fees.
         Returns: (best_exchange_id, estimated_price, estimated_fee)
@@ -63,12 +62,7 @@ class MultiExchangeRouter:
                 best_price = gross_price
                 best_fee = fee_rate
             else:
-                if side == "BUY" and net_price < best_net_price:
-                    best_net_price = net_price
-                    best_venue = name
-                    best_price = gross_price
-                    best_fee = fee_rate
-                elif side == "SELL" and net_price > best_net_price:
+                if side == "BUY" and net_price < best_net_price or side == "SELL" and net_price > best_net_price:
                     best_net_price = net_price
                     best_venue = name
                     best_price = gross_price
@@ -82,7 +76,7 @@ class MultiExchangeRouter:
         side: str,
         order_type: str,
         quantity: float,
-        price: Optional[float] = None
+        price: float | None = None
     ) -> UnifiedOrderResult:
         """
         Selects the best venue and executes the order with automated failover.
@@ -101,8 +95,8 @@ class MultiExchangeRouter:
         side: str,
         quantity: float,
         order_type: str = "MARKET",
-        price: Optional[float] = None
-    ) -> Optional[UnifiedOrderResult]:
+        price: float | None = None
+    ) -> UnifiedOrderResult | None:
         """
         Routes an order to candidate venues with automatic failover if execution fails.
         """

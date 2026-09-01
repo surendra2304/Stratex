@@ -11,7 +11,10 @@ enforcement so it cannot silently regress.
 
 import config
 from config_strategy import PRODUCTION_STRATEGY_REGISTRY
-from testnet_engine.service import governance_filter_strategies, governance_validated_assets
+from testnet_engine.service import (
+    governance_filter_strategies,
+    governance_validated_assets,
+)
 
 
 class TestStrategyGovernance:
@@ -64,6 +67,7 @@ class TestHeartbeatReportsLoadedTruth:
         """The dashboard must mirror the engine: heartbeat reports actually-loaded
         (VALIDATED) strategies, not the raw config that includes DISABLED ones."""
         import json as _json
+
         import testnet_engine.service as svc
 
         monkeypatch.setattr(svc, "TRADING_MODE", "TESTNET")

@@ -1,13 +1,14 @@
 """
 Test suite for Backtesting Engine, Cost Accounting, and Statistical Integrity
 """
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
 
-from backtest_engine import BacktestEngine, DataValidator
 import metrics
 import strategy_adx_ema
+from backtest_engine import BacktestEngine, DataValidator
+
 
 @pytest.fixture
 def candle_dataframe():

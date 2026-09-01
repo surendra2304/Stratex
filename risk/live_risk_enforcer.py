@@ -9,14 +9,11 @@ Implements:
 5. Immediate Kill-Switch Position Liquidation.
 """
 
-import time
-import os
-import json
 import threading
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass
+import time
+from typing import Any
 
-from deployment.capital_levels import get_level_spec, CapitalLevelSpec
+from deployment.capital_levels import CapitalLevelSpec, get_level_spec
 from logger import get_logger
 
 logger = get_logger("live_risk_enforcer")
@@ -44,8 +41,7 @@ class LiveRiskEnforcer:
     def update_live_equity(self, equity: float) -> None:
         with self._lock:
             self.current_equity = equity
-            if equity > self.peak_equity:
-                self.peak_equity = equity
+            self.peak_equity = max(self.peak_equity, equity)
 
             # Check Drawdown Limit for Current Level
             dd_pct = ((self.peak_equity - equity) / self.peak_equity) * 100.0 if self.peak_equity > 0 else 0.0
@@ -78,9 +74,9 @@ class LiveRiskEnforcer:
         symbol: str,
         notional: float,
         strategy_name: str,
-        current_open_positions: List[Dict[str, Any]],
+        current_open_positions: list[dict[str, Any]],
         realized_vol_24h: float = 0.20
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """
         Validates proposed live order against all hard-coded level bounds.
         """
@@ -90,7 +86,7 @@ class LiveRiskEnforcer:
                 return False, f"REJECTED: Circuit breaker active due to Level {self.level} drawdown breach."
             if self.daily_halt_active:
                 if time.time() < self.daily_halt_expiry:
-                    return False, f"REJECTED: 24-hour daily loss lockout active."
+                    return False, "REJECTED: 24-hour daily loss lockout active."
                 else:
                     self.daily_halt_active = False
 
@@ -116,7 +112,7 @@ class LiveRiskEnforcer:
 
             return True, "APPROVED"
 
-    def execute_kill_switch_flatten(self) -> Dict[str, Any]:
+    def execute_kill_switch_flatten(self) -> dict[str, Any]:
         """Flattens all live positions immediately upon kill switch reception."""
         with self._lock:
             self.circuit_breaker_active = True

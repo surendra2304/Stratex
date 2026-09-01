@@ -7,9 +7,9 @@ Calculates:
 3. Dynamic Volatility Regime Classifier (Low, Normal, High, Extreme).
 """
 
+
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional, Tuple, Any
 
 
 class VolatilitySizingEngine:
@@ -53,7 +53,7 @@ class VolatilitySizingEngine:
     def compute_vol_targeted_weight(
         self,
         asset_volatility: float,
-        target_vol: Optional[float] = None,
+        target_vol: float | None = None,
         max_leverage: float = 1.0
     ) -> float:
         """

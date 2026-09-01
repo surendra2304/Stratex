@@ -12,22 +12,19 @@ Verifies:
 9. Cryptographically signed audit trail (control_audit.jsonl) integrity.
 10. GET /api/v1/security/status contract and fields.
 """
-import os
-import json
 import pytest
-from dashboard import app
+
 import config
+from dashboard import app
 from security_hardening import (
-    authenticate_request,
-    verify_webhook_signature,
+    SecurityRateLimiter,
+    mask_credential,
+    sanitize_input,
     sign_audit_record,
     verify_audit_chain,
-    log_control_action,
-    get_security_status_report,
-    sanitize_input,
-    mask_credential,
-    SecurityRateLimiter
+    verify_webhook_signature,
 )
+
 
 @pytest.fixture
 def client():
@@ -90,7 +87,8 @@ def test_security_status_endpoint(client):
 
 def test_webhook_hmac_signature_verification():
     """Verifies HMAC-SHA256 signature verification on webhook payloads."""
-    import hmac, hashlib
+    import hashlib
+    import hmac
     payload = b'{"event":"trade_filled","symbol":"BTCUSDT"}'
     secret = "test_webhook_secret_key"
     expected_sig = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()

@@ -1,9 +1,11 @@
-import os
-import json
-import pytest
-from exchanges.exchange_implementations import BinanceExchangeAdapter, BybitExchangeAdapter, OKXExchangeAdapter
-from portfolio.unified import UnifiedPortfolioManager
+from exchanges.exchange_implementations import (
+    BinanceExchangeAdapter,
+    BybitExchangeAdapter,
+    OKXExchangeAdapter,
+)
 from execution.router import MultiExchangeRouter
+from portfolio.unified import UnifiedPortfolioManager
+
 
 def test_multi_exchange_routing_and_failover():
     exchanges = {

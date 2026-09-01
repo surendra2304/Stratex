@@ -20,14 +20,14 @@ Features:
    - Archives retired genomes with full performance history.
 """
 
-import os
-import json
-import time
 import copy
-import random
 import datetime
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field, asdict
+import json
+import random
+import time
+from dataclasses import dataclass, field
+from typing import Any
+
 from logger import get_logger
 
 logger = get_logger("genetic_engine")
@@ -41,16 +41,16 @@ SIZING_METHODS = ["volatility_target", "fixed_fractional", "risk_parity", "half_
 class StrategyGenome:
     genome_id: str
     strategy_type: str  # "trend", "mean_reversion", "momentum", "breakout"
-    indicators: List[str] = field(default_factory=lambda: ["RSI", "EMA", "ATR"])
-    parameters: Dict[str, Any] = field(default_factory=dict)
-    entry_logic: Dict[str, Any] = field(default_factory=dict)
-    exit_logic: Dict[str, Any] = field(default_factory=dict)
-    risk_params: Dict[str, Any] = field(default_factory=dict)
+    indicators: list[str] = field(default_factory=lambda: ["RSI", "EMA", "ATR"])
+    parameters: dict[str, Any] = field(default_factory=dict)
+    entry_logic: dict[str, Any] = field(default_factory=dict)
+    exit_logic: dict[str, Any] = field(default_factory=dict)
+    risk_params: dict[str, Any] = field(default_factory=dict)
     fitness: float = 0.0
     generation: int = 1
     created_at: str = field(default_factory=lambda: datetime.datetime.utcnow().isoformat() + "Z")
-    performance_history: Dict[str, Any] = field(default_factory=dict)
-    feedback_notes: List[str] = field(default_factory=list)
+    performance_history: dict[str, Any] = field(default_factory=dict)
+    feedback_notes: list[str] = field(default_factory=list)
 
 
 class StrategyGeneticEngine:
@@ -70,10 +70,10 @@ class StrategyGeneticEngine:
         self.tournament_size = tournament_size
         self.archive_file = archive_file
         self.generation = 1
-        self.population: List[StrategyGenome] = self._initialize_population()
-        self.history: List[Dict[str, Any]] = []
+        self.population: list[StrategyGenome] = self._initialize_population()
+        self.history: list[dict[str, Any]] = []
 
-    def _initialize_population(self) -> List[StrategyGenome]:
+    def _initialize_population(self) -> list[StrategyGenome]:
         pop = []
         for i in range(self.population_size):
             stype = random.choice(STRATEGY_TYPES)
@@ -206,7 +206,7 @@ class StrategyGeneticEngine:
         except Exception as e:
             logger.error(f"[GENETIC_ENGINE] Failed to archive retired genome: {e}")
 
-    def evolve_generation(self) -> List[StrategyGenome]:
+    def evolve_generation(self) -> list[StrategyGenome]:
         """Keeps top 50% of population, breeds offspring, and archives bottom 50%."""
         sorted_pop = sorted(self.population, key=lambda g: g.fitness, reverse=True)
         keep_count = self.population_size // 2  # Top 50%

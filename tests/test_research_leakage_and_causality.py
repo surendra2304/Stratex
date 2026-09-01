@@ -1,9 +1,10 @@
-import pytest
 import numpy as np
 import pandas as pd
-from features import add_features
-import strategy_adx_ema, strategy_supertrend, strategy_scalper, strategy_swing, strategy_aggressor, strategy_bollinger, strategy_breakout_vol, strategy_hybrid
+import pytest
+
+import strategy_adx_ema
 from backtest_engine import BacktestEngine
+from features import add_features
 from metrics import calculate_metrics
 from research.regime_classifier import RegimeClassifier
 

@@ -10,8 +10,8 @@ Capabilities:
 import json
 import os
 import time
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -22,7 +22,7 @@ class AdvancedConfigSchema:
     max_daily_loss_pct: float = 0.05
     max_risk_per_trade_pct: float = 0.01
     leverage_limit: float = 1.0
-    strategy_params: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    strategy_params: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class AdvancedConfigManager:
@@ -33,10 +33,10 @@ class AdvancedConfigManager:
     def __init__(self, config_dir: str = "config_history"):
         self.config_dir = config_dir
         os.makedirs(self.config_dir, exist_ok=True)
-        self.history: List[AdvancedConfigSchema] = []
+        self.history: list[AdvancedConfigSchema] = []
         self.current_config = AdvancedConfigSchema()
 
-    def validate_config(self, cfg: AdvancedConfigSchema) -> Tuple[bool, List[str]]:
+    def validate_config(self, cfg: AdvancedConfigSchema) -> tuple[bool, list[str]]:
         """
         Validates safety invariants and cross-parameter constraints.
         """
@@ -52,7 +52,7 @@ class AdvancedConfigManager:
 
         return len(errors) == 0, errors
 
-    def update_config(self, new_cfg: AdvancedConfigSchema) -> Tuple[bool, str]:
+    def update_config(self, new_cfg: AdvancedConfigSchema) -> tuple[bool, str]:
         """
         Validates and commits a new configuration version.
         """
@@ -72,7 +72,7 @@ class AdvancedConfigManager:
 
         return True, f"Config updated to version {new_cfg.version}"
 
-    def rollback(self) -> Tuple[bool, str]:
+    def rollback(self) -> tuple[bool, str]:
         """
         Reverts to the immediately preceding configuration version.
         """

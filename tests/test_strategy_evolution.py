@@ -10,12 +10,11 @@ Verifies:
 """
 
 import tempfile
-import pytest
 
-from evolution.genetic_engine import StrategyGeneticEngine, StrategyGenome
-from evolution.validation_gauntlet import ValidationGauntlet
-from evolution.incubator import StrategyIncubator
 from evolution.approval_gates import HumanApprovalGate
+from evolution.genetic_engine import StrategyGeneticEngine, StrategyGenome
+from evolution.incubator import StrategyIncubator
+from evolution.validation_gauntlet import ValidationGauntlet
 
 
 def test_strategy_genetic_engine():

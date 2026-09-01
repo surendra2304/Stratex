@@ -8,11 +8,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import subprocess
 
+from research_phase10.stage10_runner import fetch_funding_history
+
 from research_phase7.data_loader import download_and_verify_data
 from research_phase9.cost_engine import CostEngine
 from research_phase10.funding_engine import FundingEngine
 from research_phase10.pairs_engine import PairsEngine
-from research_phase10.stage10_runner import fetch_funding_history
 
 
 def get_git_revision_hash():

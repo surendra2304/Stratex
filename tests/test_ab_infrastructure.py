@@ -14,15 +14,17 @@ import datetime
 import json
 import os
 import tempfile
-import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
 import numpy as np
 import pandas as pd
-import pytest
 
-from config_ab import ABExperimentConfig, get_default_ab_config
+from config_ab import ABExperimentConfig
 from paper_ab_runner import PaperABEngine
-from scripts.compare_ab_performance import compute_ab_comparison, generate_markdown_report
+from scripts.compare_ab_performance import (
+    compute_ab_comparison,
+    generate_markdown_report,
+)
 
 
 def create_mock_candles(n_bars: int = 100, base_price: float = 50000.0) -> pd.DataFrame:
@@ -162,9 +164,9 @@ def test_statistical_comparison_engine():
             trades_b.append({"net_pnl": pnl_b, "gross_pnl": pnl_b + 1.0, "hold_duration_sec": 3600})
 
         with open(ledger_a, "w") as f:
-            for t in trades_a: f.write(json.dumps(t) + "\n")
+            f.writelines(json.dumps(t) + "\n" for t in trades_a)
         with open(ledger_b, "w") as f:
-            for t in trades_b: f.write(json.dumps(t) + "\n")
+            f.writelines(json.dumps(t) + "\n" for t in trades_b)
 
         with open(eq_a, "w") as f:
             f.write(json.dumps({"timestamp": "2026-08-27T00:00:00Z", "equity": 10000.0, "cash": 10000.0}) + "\n")

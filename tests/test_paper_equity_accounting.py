@@ -9,7 +9,9 @@ Without this correction, equity is understated by the total open-position
 notional for the entire duration of every trade.
 """
 import uuid
+
 import pytest
+
 from paper_engine.portfolio import PaperPortfolio
 
 STARTING = 10_000.0
@@ -198,8 +200,9 @@ def test_defect_4_persisted_cash_calculation():
 # 5. RSI ZERO-LOSS DIVISION-BY-ZERO HANDLING
 # ===========================================================================
 def test_defect_5_rsi_zero_loss_no_nan():
-    import pandas as pd
     import numpy as np
+    import pandas as pd
+
     from features import add_features
     
     n = 30
@@ -248,8 +251,9 @@ def test_defect_7_daily_risk_state_restoration():
 # ===========================================================================
 def test_defect_8_backtest_equity_deducts_fees():
     import pandas as pd
-    from backtest_engine import BacktestEngine
+
     import strategy_adx_ema
+    from backtest_engine import BacktestEngine
     
     n = 250
     timestamps = pd.date_range('2026-08-01', periods=n, freq='15min')
@@ -273,8 +277,9 @@ def test_defect_8_backtest_equity_deducts_fees():
 # 9. WARMUP NAN HANDLING IN MOVING AVERAGES
 # ===========================================================================
 def test_defect_9_warmup_nan_handling():
-    import pandas as pd
     import numpy as np
+    import pandas as pd
+
     from features import add_features
     
     n = 25
@@ -296,9 +301,10 @@ def test_defect_9_warmup_nan_handling():
 # ===========================================================================
 def test_defect_10_clean_strategy_syntax():
     import pandas as pd
+
+    import strategy_aggressor
     import strategy_scalper
     import strategy_supertrend
-    import strategy_aggressor
     
     n = 30
     df = pd.DataFrame({

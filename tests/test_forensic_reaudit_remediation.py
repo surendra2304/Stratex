@@ -1,22 +1,18 @@
 import os
-import json
-import datetime
-import numpy as np
-import pandas as pd
-import pytest
 from unittest import mock
 
-import config
-from features import add_features
-import strategy_breakout_vol
+import numpy as np
+import pandas as pd
+
+import strategy_adx_ema
 import strategy_bollinger
+import strategy_breakout_vol
 import strategy_hybrid
 import strategy_ml
-import strategy_adx_ema
-from paper_engine.portfolio import PaperPortfolio
-from paper_engine.signal_logger import Signal, PaperSignalLogger
-from testnet_engine.risk_gate import RiskGate
 from backtest_engine import BacktestEngine
+from features import add_features
+from paper_engine.portfolio import PaperPortfolio
+from testnet_engine.risk_gate import RiskGate
 
 
 def test_startup_environment_variable_handling():

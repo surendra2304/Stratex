@@ -9,11 +9,10 @@ Manages:
 5. Automated Exchange Balance Reconciliation: Compares exchange balances against local state (Alert on mismatch > 0.5%).
 """
 
-import time
 import datetime
 import json
-import os
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Any
+
 from logger import get_logger
 
 logger = get_logger("live_ledger")
@@ -41,7 +40,7 @@ class LiveLedgerManager:
         self.balance_file = balance_file
         self.risk_file = risk_file
 
-    def record_live_trade(self, trade_data: Dict[str, Any]) -> None:
+    def record_live_trade(self, trade_data: dict[str, Any]) -> None:
         """Appends closed live trade record."""
         trade_data["recorded_at"] = datetime.datetime.utcnow().isoformat() + "Z"
         with open(self.trade_file, "a", encoding="utf-8") as f:
@@ -59,7 +58,7 @@ class LiveLedgerManager:
         with open(self.equity_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
 
-    def record_live_risk_event(self, event_type: str, details: Dict[str, Any]) -> None:
+    def record_live_risk_event(self, event_type: str, details: dict[str, Any]) -> None:
         """Appends risk event record."""
         entry = {
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
@@ -74,7 +73,7 @@ class LiveLedgerManager:
         exchange_reported_balance: float,
         local_calculated_balance: float,
         max_mismatch_pct: float = 0.005  # 0.5% tolerance
-    ) -> Tuple[bool, float, str]:
+    ) -> tuple[bool, float, str]:
         """
         Compares Binance reported balance with internal ledger balance.
         Returns: (is_reconciled, discrepancy_pct, summary_message)
