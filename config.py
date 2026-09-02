@@ -90,7 +90,7 @@ BYPASS_PROFITABILITY_GATE = os.getenv("BYPASS_PROFITABILITY_GATE", "False").lowe
 MAX_POSITION_SIZE = 0.95
 
 # --- Testnet Risk Management ---
-# In test environment default is 0.05 / 0.02 / 5, in live service runs unlimited (999.0 / 999)
+# Base defaults maintain test integrity; aggressive mode scales dynamically to 999
 MAX_TESTNET_RISK_PER_TRADE = float(os.getenv("MAX_TESTNET_RISK_PER_TRADE", "0.005")) # 0.5% risk
 MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.05"))        # 5% max total exposure
 MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.02"))   # 2% max per single asset

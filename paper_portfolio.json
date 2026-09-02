@@ -1,9 +1,9 @@
 {
     "starting_capital": 10000.0,
-    "cash": 7112.465276812072,
-    "realized_pnl": -3.1727981175773863,
-    "used_margin": 2884.361925070351,
-    "cumulative_fees": 0.0,
+    "cash": 2704.52254886405,
+    "realized_pnl": -110.77096232213233,
+    "used_margin": 7184.706488813819,
+    "cumulative_fees": 1.3414829083069333,
     "cumulative_slippage": 0.0,
     "cumulative_spread": 0.0,
     "cumulative_funding": 0.0,
@@ -13,11 +13,12 @@
             "direction": "LONG",
             "entry_price": 78580.480605,
             "quantity": 0.018361749014301956,
-            "status": "OPEN",
+            "status": "CLOSED",
             "open_time": 1787772410.2904017,
-            "last_update_time": 1787772410.2904017,
+            "last_update_time": 1788269680.0677276,
             "sl": 73095.10571428572,
-            "tp": 89433.41857142858
+            "tp": 89433.41857142858,
+            "close_time": 1788269680.0677276
         },
         "81fd6e23-b2e6-49ee-a229-780f60edb5e7": {
             "symbol": "BTCUSDT",
@@ -27,18 +28,30 @@
             "status": "OPEN",
             "open_time": 1787772471.6311243,
             "last_update_time": 1787772471.6311243
+        },
+        "dfe7cd87-6841-4b4c-b245-5536064a7c0e": {
+            "symbol": "BTCUSDT",
+            "direction": "SHORT",
+            "entry_price": 76877.542,
+            "quantity": 0.05590962301398237,
+            "status": "OPEN",
+            "open_time": 1788340857.455724,
+            "last_update_time": 1788340857.455724
         }
     },
     "peak_equity": 10000.0,
-    "daily_loss": 3.1727981175773863,
-    "daily_realized_pnl": -3.1727981175773863,
+    "daily_loss": 4.730379020117814,
+    "daily_realized_pnl": -4.730379020117814,
     "daily_fees": 0.0,
     "daily_funding": 0.0,
-    "last_day_ts": 1787702400,
+    "last_day_ts": 1788307200,
     "processed_event_ids": [
-        "456b8794-c982-454d-8f15-e43dbbd6880b",
-        "bca84f98-aae4-4d72-90fa-77ccebfea686",
         "6dfe6172-6701-4d8e-8286-fec5e562f78b",
-        "5708cc7d-e5d7-4b7f-99e4-b2a1b6366976"
+        "7f8c5c91-7121-4850-acd9-57564bd41f86",
+        "bca84f98-aae4-4d72-90fa-77ccebfea686",
+        "84af43aa-da9d-470b-852d-c406bf6e3109",
+        "5708cc7d-e5d7-4b7f-99e4-b2a1b6366976",
+        "659a3a63-5dbf-484a-a488-f6aba9d5c08e",
+        "456b8794-c982-454d-8f15-e43dbbd6880b"
     ]
 }
