@@ -28,7 +28,7 @@ This document serves as the central index and comprehensive development journal 
 | Day 18 — 2026-08-31 | Multi-System Ecosystem Alignment, STRATEX Rebrand & Verification | Verified | [2026-08-31](diary/2026-08-31.md) |
 | Day 19 — 2026-09-01 | Full Codebase Scan, Legacy URL Cleanup & Terminal v2.0.0 Upgrade | Verified | [2026-09-01](diary/2026-09-01.md) |
 | Day 20 — 2026-09-02 | Forensic Loss Attribution, RiskGate Drawdown Fix & High-Expectancy Strategy Upgrade | Verified | [2026-09-02](diary/2026-09-02.md) |
-| Day 21 — 2026-09-03 | Freqtrade Quant Adapter, CCXT, QuantDinger & 5 Trading Frameworks (Nautilus, VectorBT, Jesse, Hummingbot, LEAN) | Verified | [2026-09-03](diary/2026-09-03.md) |
+| Day 21 — 2026-09-03 | Quantitative Ecosystem Expansion: Freqtrade, CCXT, QuantDinger, Nautilus, VectorBT, Jesse, Hummingbot, LEAN, Riskfolio & QuantStats | Verified | [2026-09-03](diary/2026-09-03.md) |
 
 
 ---
@@ -45,6 +45,8 @@ This document serves as the central index and comprehensive development journal 
 6. **Quantitative Optimization & CCXT Unified Exchange**: Integration of Freqtrade parameter abstraction, Optuna-driven walk-forward validation with strict out-of-sample testing, pre-trade protections (cooldown, stoploss guard, drawdown guard), and unified CCXT multi-exchange data abstraction with permanent live trading safety blocks.
 7. **QuantDinger Institutional Architecture**: Immutable strategy versions with SHA-256 code hashing, strict lifecycle state machines (RESEARCH -> OOS_VALIDATED -> APPROVED -> ACTIVE -> RETIRED), durable finite research jobs, time-bounded runtime worker leases with health supervision, idempotent execution intents, and isolated AI agent research boundaries.
 8. **Multi-Framework Quantitative Architecture**: Integration of NautilusTrader deterministic event runtime with strict monotonic timestamps, VectorBT high-throughput parameter sweep accelerator with canonical confirmation bridges, Jesse typed hyperparameter contracts with train/test degradation detection, Hummingbot microstructure order-book depth imbalance, and QuantConnect LEAN modular Alpha/Portfolio/Risk/Execution pipeline.
+9. **Portfolio Intelligence & Institutional Analytics**: Implementation of convex portfolio optimization (Minimum Variance, Risk Parity) via CVXPY/Riskfolio/skfolio, Alphalens factor diagnostics (IC, rank IC, quantile spreads), ARCH/GARCH(1,1) conditional volatility forecasting, QuantStats institutional performance attribution, and correlation-penalized portfolio risk overlays.
+
 
 
 

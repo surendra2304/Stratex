@@ -1776,7 +1776,7 @@ async function fetchABTestData() {
 // ==========================================
 async function fetchOptimizationData() {
     try {
-        const [optRes, exchRes, regRes, jobsRes, rtRes, intRes, microRes] = await Promise.all([
+        const [optRes, exchRes, regRes, jobsRes, rtRes, intRes, microRes, portRes, volRes, facRes, perfRes] = await Promise.all([
             apiClient.get('/api/optimization').catch(() => null),
             apiClient.get('/api/exchange-status').catch(() => null),
             apiClient.get('/api/strategy-registry').catch(() => null),
@@ -1784,7 +1784,12 @@ async function fetchOptimizationData() {
             apiClient.get('/api/runtime-status').catch(() => null),
             apiClient.get('/api/execution-intents').catch(() => null),
             apiClient.get('/api/microstructure').catch(() => null),
+            apiClient.get('/api/portfolio-optimization').catch(() => null),
+            apiClient.get('/api/volatility-forecast').catch(() => null),
+            apiClient.get('/api/factor-diagnostics').catch(() => null),
+            apiClient.get('/api/performance-analytics').catch(() => null),
         ]);
+
 
 
         if (optRes) {
@@ -1995,7 +2000,53 @@ async function fetchOptimizationData() {
             }
         }
 
+        // Portfolio Optimization & Risk Overlay
+        if (portRes && portRes.risk_overlaid_weights) {
+            const w = portRes.risk_overlaid_weights;
+            if ($('port-btc-wt')) $('port-btc-wt').innerText = `${((w.BTCUSDT || 0) * 100).toFixed(1)}%`;
+            if ($('port-eth-wt')) $('port-eth-wt').innerText = `${((w.ETHUSDT || 0) * 100).toFixed(1)}%`;
+            if ($('port-sol-wt')) $('port-sol-wt').innerText = `${((w.SOLUSDT || 0) * 100).toFixed(1)}%`;
+            if ($('port-overlay-flags')) {
+                const adj = portRes.overlay_adjustments || [];
+                $('port-overlay-flags').innerText = adj.length > 0 ? adj.join(', ') : 'NO_ADJUSTMENT';
+            }
+        }
+
+        // Volatility Forecast
+        if (volRes && volRes.forecast) {
+            const f = volRes.forecast;
+            if ($('vol-forecast-val')) {
+                const vol = Number(f.forecast_vol || 0);
+                $('vol-forecast-val').innerText = `${(vol * 100).toFixed(2)}% (${f.model || 'EWMA'})`;
+            }
+        }
+
+        // Factor Diagnostics
+        if (facRes && facRes.report) {
+            const r = facRes.report;
+            if ($('factor-ic-val')) {
+                const ic = Number(r.rank_ic || r.ic || 0);
+                $('factor-ic-val').innerText = ic.toFixed(3);
+                $('factor-ic-val').style.color = ic > 0.05 ? '#10B981' : '#EAB308';
+            }
+            if ($('factor-spread-val')) {
+                const sp = Number(r.quantile_return_spread || 0);
+                $('factor-spread-val').innerText = `${sp >= 0 ? '+' : ''}${(sp * 100).toFixed(2)}%`;
+            }
+        }
+
+        // QuantStats Performance
+        if (perfRes && perfRes.performance) {
+            const p = perfRes.performance;
+            if ($('qs-sharpe-val')) {
+                const sh = Number(p.sharpe || 0);
+                const so = Number(p.sortino || 0);
+                $('qs-sharpe-val').innerText = `Sh: ${sh.toFixed(2)} | So: ${so.toFixed(2)}`;
+            }
+        }
+
     } catch (e) {
+
 
         console.warn('[OPTIMIZATION] Error loading optimization data:', e);
     }

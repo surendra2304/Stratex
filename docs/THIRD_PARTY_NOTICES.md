@@ -82,3 +82,41 @@ No upstream repositories are vendored or copied wholesale. All adapters, models,
   - Unified multi-exchange data and execution abstraction layer.
   - Bidirectional symbol normalization, precision flooring, and error categorization.
 - **Location in Stratex**: `stratex_ccxt_adapter/`
+
+### 9. Riskfolio-Lib
+- **Upstream Repository**: [https://github.com/dcajasn/Riskfolio-Lib](https://github.com/dcajasn/Riskfolio-Lib)
+- **License**: BSD-3-Clause
+- **Ported Architectural Concepts**:
+  - Convex minimum variance and risk parity portfolio allocation (`PortfolioOptimizer`).
+  - Budget constraints, gross exposure bounds, and turnover penalties (`PortfolioConstraints`).
+- **Location in Stratex**: `stratex_more_integrations/portfolio.py`
+
+### 10. skfolio
+- **Upstream Repository**: [https://github.com/skfolio/skfolio](https://github.com/skfolio/skfolio)
+- **License**: BSD-3-Clause
+- **Ported Architectural Concepts**:
+  - Scikit-learn-compatible portfolio model selection and robust out-of-sample portfolio policy evaluation.
+- **Location in Stratex**: `stratex_more_integrations/portfolio.py`
+
+### 11. ARCH
+- **Upstream Repository**: [https://github.com/bashtage/arch](https://github.com/bashtage/arch)
+- **License**: NCSA / UIUC Open Source
+- **Ported Architectural Concepts**:
+  - Conditional heteroskedasticity GARCH(1,1)-$t$ forecasting and deterministic EWMA fallbacks (`VolatilityForecaster`).
+- **Location in Stratex**: `stratex_more_integrations/volatility.py`
+
+### 12. Alphalens
+- **Upstream Repository**: [https://github.com/quantopian/alphalens](https://github.com/quantopian/alphalens)
+- **License**: Apache-2.0
+- **Ported Architectural Concepts**:
+  - Parametric and rank Information Coefficient analysis (`information_coefficient`).
+  - Multi-quantile forward return tables and monotonic spread diagnostics (`factor_quantile_table`, `factor_report`).
+- **Location in Stratex**: `stratex_more_integrations/factors.py`
+
+### 13. QuantStats
+- **Upstream Repository**: [https://github.com/ranaroussi/quantstats](https://github.com/ranaroussi/quantstats)
+- **License**: Apache-2.0
+- **Ported Architectural Concepts**:
+  - Institutional performance metrics (Sharpe, Sortino, Calmar, underwater drawdown curves) (`performance_summary`, `drawdown_series`).
+- **Location in Stratex**: `stratex_more_integrations/performance.py`
+

@@ -1493,7 +1493,43 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 8. PORTFOLIO INTELLIGENCE, VOLATILITY & FACTOR DIAGNOSTICS -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+                    <!-- Portfolio Optimization & Risk Overlay -->
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.5px;">
+                                ⚖️ PORTFOLIO ALLOCATION (RISKFOLIO / SKFOLIO)
+                            </div>
+                            <span class="mono" style="font-size: 10px; color: #10B981;">RISK OVERLAID</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px;">
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">BTC Target Weight</span><span class="mono" id="port-btc-wt">--</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">ETH Target Weight</span><span class="mono" id="port-eth-wt">--</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">SOL Target Weight</span><span class="mono" id="port-sol-wt">--</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Risk Overlay Flags</span><span class="mono" id="port-overlay-flags" style="color: #3B82F6;">--</span></div>
+                        </div>
+                    </div>
+
+                    <!-- GARCH Volatility & Factor Diagnostics -->
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.5px;">
+                                🔬 VOLATILITY &amp; FACTOR ALPHA (ARCH / ALPHALENS)
+                            </div>
+                            <span class="mono" style="font-size: 10px; color: #3B82F6;">QUANTSTATS</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px;">
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">GARCH / EWMA Vol Forecast</span><span class="mono" id="vol-forecast-val">--</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Composite Factor IC (Rank)</span><span class="mono" id="factor-ic-val">--</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Quantile Q5 - Q1 Spread</span><span class="mono" id="factor-spread-val">--</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">QuantStats Sharpe / Sortino</span><span class="mono" id="qs-sharpe-val">--</span></div>
+                        </div>
+                    </div>
+                </div>
             </div>
+
 
 
 
