@@ -1,0 +1,68 @@
+{
+  "strategies": {
+    "adx_ema": {
+      "v1.0.0": {
+        "created_at": "2026-09-03T05:22:58.644605+00:00",
+        "parameters": {
+          "ADX_PERIOD": 14,
+          "ADX_THRESHOLD": 25,
+          "ATR_PERIOD": 14,
+          "EMA_DIRECTION_PERIOD": 200,
+          "EMA_FAST_PERIOD": 20,
+          "EMA_SLOW_PERIOD": 50,
+          "OOS_EXPECTANCY_PER_TRADE": 30.8,
+          "OOS_MAX_DRAWDOWN_PCT": 3.2,
+          "OOS_PROFIT_FACTOR": 1.26,
+          "OOS_VALIDATED_ASSETS": [
+            "BTCUSDT",
+            "ETHUSDT",
+            "BNBUSDT",
+            "SOLUSDT",
+            "XRPUSDT",
+            "LINKUSDT"
+          ],
+          "OOS_VALIDATION_STATUS": "VALIDATED",
+          "OOS_WIN_RATE_PRIOR": 0.494,
+          "RISK_REWARD_RATIO": 1.5,
+          "SL_ATR_MULTIPLIER": 2.0,
+          "TIMEFRAME": "4h",
+          "TP_ATR_MULTIPLIER": 3.0
+        },
+        "source_hash": "cefd56844437c3ff285145b60389dc3a63990d73575c249b18ffeade821cb477",
+        "status": "ACTIVE",
+        "strategy_id": "adx_ema",
+        "version": "v1.0.0"
+      }
+    },
+    "factory_winner_1": {
+      "v1.0.0": {
+        "created_at": "2026-09-03T05:22:58.635568+00:00",
+        "parameters": {},
+        "source_hash": "fd981f60b296dd9c62c131b1a0821cbc32d67366a195dc50ea71e6f7bc9b0401",
+        "status": "ACTIVE",
+        "strategy_id": "factory_winner_1",
+        "version": "v1.0.0"
+      }
+    },
+    "factory_winner_2": {
+      "v1.0.0": {
+        "created_at": "2026-09-03T05:22:58.637699+00:00",
+        "parameters": {},
+        "source_hash": "32d00e3be77a99b07f3c7ba1c5e2665566cc1c5e39c58b5ac6c6be6b21df8468",
+        "status": "ACTIVE",
+        "strategy_id": "factory_winner_2",
+        "version": "v1.0.0"
+      }
+    },
+    "factory_winner_4": {
+      "v1.0.0": {
+        "created_at": "2026-09-03T05:22:58.640865+00:00",
+        "parameters": {},
+        "source_hash": "f52d6c8ec5022ed9e3fdab92eb2f59ab0170d2f7ad1ad6fb8952c1b2e23914c9",
+        "status": "ACTIVE",
+        "strategy_id": "factory_winner_4",
+        "version": "v1.0.0"
+      }
+    }
+  }
+}

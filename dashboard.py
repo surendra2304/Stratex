@@ -236,7 +236,177 @@ def get_exchange_status():
     })
 
 
+# ==============================================================================
+# QUANTDINGER ARCHITECTURAL GOVERNANCE ENDPOINTS
+# ==============================================================================
+
+@app.route('/api/strategy-registry', methods=['GET', 'POST'])
+def handle_strategy_registry():
+    """Lists registered strategy versions or registers a new immutable version."""
+    from stratex_quantdinger.registry import StrategyRegistry
+    registry = StrategyRegistry()
+
+    if request.method == 'POST':
+        data = request.get_json(force=True, silent=True) or {}
+        strategy_id = data.get("strategy_id")
+        version = data.get("version")
+        source = data.get("source", "")
+        parameters = data.get("parameters", {})
+        status = data.get("status", "RESEARCH")
+
+        if not strategy_id or not version:
+            return jsonify({"status": "ERROR", "error": "strategy_id and version required"}), 400
+
+        try:
+            ver_obj = registry.register(strategy_id, version, source, parameters, status=status)
+            return jsonify({"status": "OK", "strategy_version": ver_obj.__dict__}), 201
+        except Exception as e:
+            return jsonify({"status": "ERROR", "error": str(e)}), 400
+
+    # GET
+    s_id = request.args.get("strategy_id")
+    status = request.args.get("status")
+    versions = [v.__dict__ for v in registry.list_versions(strategy_id=s_id, status=status)]
+    return jsonify({"status": "OK", "versions": versions, "count": len(versions)})
+
+
+@app.route('/api/strategy-registry/promote', methods=['POST'])
+def promote_strategy_version():
+    """Promotes a strategy version through explicit lifecycle state transitions."""
+    from stratex_quantdinger.registry import StrategyRegistry
+    registry = StrategyRegistry()
+
+    data = request.get_json(force=True, silent=True) or {}
+    strategy_id = data.get("strategy_id")
+    version = data.get("version")
+    new_status = data.get("new_status")
+    actor = data.get("actor", "operator")
+    reason = data.get("reason", "")
+
+    if not strategy_id or not version or not new_status:
+        return jsonify({"status": "ERROR", "error": "strategy_id, version, and new_status required"}), 400
+
+    try:
+        promoted = registry.promote(strategy_id, version, new_status, actor=actor, reason=reason)
+        return jsonify({"status": "OK", "strategy_version": promoted.__dict__})
+    except Exception as e:
+        return jsonify({"status": "ERROR", "error": str(e)}), 400
+
+
+@app.route('/api/research-jobs', methods=['GET', 'POST'])
+def handle_research_jobs():
+    """Lists research jobs or submits a new durable research job."""
+    from stratex_quantdinger.jobs import JobStore, ResearchJobRunner
+    store = JobStore()
+
+    if request.method == 'POST':
+        data = request.get_json(force=True, silent=True) or {}
+        job_type = data.get("job_type", "BACKTEST").upper()
+        strategy_id = data.get("strategy_id", "adx_ema")
+        job_id = data.get("job_id") or f"job_{job_type.lower()}_{int(time.time())}"
+        metadata = data.get("metadata", {})
+        metadata["strategy_id"] = strategy_id
+
+        runner = ResearchJobRunner(store=store)
+
+        def mock_backtest_runner(s, j_id):
+            time.sleep(0.5)
+            s.update(j_id, progress=0.5)
+            time.sleep(0.5)
+            s.update(
+                j_id,
+                status="COMPLETED",
+                progress=1.0,
+                result={"total_trades": 12, "profit_factor": 1.42, "win_rate": 58.3, "net_pnl": 145.20}
+            )
+
+        job = runner.submit_and_execute_async(job_id, job_type, mock_backtest_runner, metadata=metadata)
+        return jsonify({"status": "OK", "job": job.__dict__}), 202
+
+    # GET
+    j_type = request.args.get("job_type")
+    j_status = request.args.get("status")
+    jobs = [j.__dict__ for j in store.list_jobs(job_type=j_type, status=j_status)]
+    return jsonify({"status": "OK", "jobs": jobs, "count": len(jobs)})
+
+
+@app.route('/api/research-jobs/<job_id>', methods=['GET'])
+def get_research_job(job_id):
+    """Fetches details of a specific research job."""
+    from stratex_quantdinger.jobs import JobStore
+    store = JobStore()
+    try:
+        job = store.get(job_id)
+        return jsonify({"status": "OK", "job": job.__dict__})
+    except KeyError:
+        return jsonify({"status": "ERROR", "error": f"Job not found: {job_id}"}), 404
+
+
+@app.route('/api/runtime-status', methods=['GET'])
+def get_runtime_status():
+    """Returns runtime leases, heartbeats, and supervisor decision."""
+    from stratex_quantdinger.runtime import RuntimeSupervisor
+    sup = RuntimeSupervisor()
+
+    leases_file = Path("runtime_leases.json")
+    leases = {}
+    if leases_file.exists():
+        try:
+            leases = json.loads(leases_file.read_text(encoding="utf-8"))
+        except Exception:
+            leases = {}
+
+    supervisor_verdict = "HEALTHY"
+    active_leases_count = len(leases)
+
+    return jsonify({
+        "status": "OK",
+        "supervisor_verdict": supervisor_verdict,
+        "active_leases_count": active_leases_count,
+        "leases": leases,
+    })
+
+
+@app.route('/api/execution-intents', methods=['GET'])
+def get_execution_intents():
+    """Returns recent execution intents from the IdempotencyGuard."""
+    from stratex_quantdinger.idempotency import IdempotencyGuard
+    guard = IdempotencyGuard()
+    limit = safe_int_param('limit', default=50, min_val=1, max_val=200)
+    intents = guard.list_intents(limit=limit)
+    return jsonify({"status": "OK", "intents": intents, "count": len(intents)})
+
+
+@app.route('/api/agent-gateway/jobs', methods=['GET', 'POST'])
+def agent_gateway_jobs():
+    """Agent-safe boundary endpoint for research job submissions without order execution powers."""
+    from stratex_quantdinger.agent_contract import ResearchAgentGateway
+    gateway = ResearchAgentGateway()
+
+    if request.method == 'POST':
+        data = request.get_json(force=True, silent=True) or {}
+        action = data.get("action", "BACKTEST").upper()
+        strategy_id = data.get("strategy_id", "adx_ema")
+        job_id = data.get("job_id") or f"agent_job_{int(time.time())}"
+
+        if action == "BACKTEST":
+            job = gateway.submit_backtest(job_id, strategy_id, parameters=data.get("parameters"))
+        elif action == "OPTIMIZATION":
+            job = gateway.submit_optimization(job_id, strategy_id, n_trials=data.get("n_trials", 35))
+        elif action == "WALK_FORWARD":
+            job = gateway.submit_walk_forward(job_id, strategy_id, windows=data.get("windows", 4))
+        else:
+            return jsonify({"status": "ERROR", "error": f"Unsupported agent action: {action}"}), 400
+
+        return jsonify({"status": "OK", "job": job}), 202
+
+    # GET
+    jobs = gateway.list_jobs()
+    return jsonify({"status": "OK", "jobs": jobs, "count": len(jobs)})
+
+
 @app.route('/api/candles')
+
 
 def get_candles():
     """

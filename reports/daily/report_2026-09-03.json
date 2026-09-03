@@ -1,45 +1,70 @@
 {
   "report_date": "2026-09-03",
-  "timestamp": "2026-09-03T10:35:00.000000Z",
-  "voice_summary": "Today we completed a major quantitative upgrade integrating Freqtrade parameter optimization and CCXT exchange abstraction. 35 hyperparameter trials and rolling walk-forward validation were executed across 4,000 authentic Binance candles. Zero risk breaches occurred. All 719 tests pass 100 percent green.",
-  "executive_summary": "Completed dual enterprise integration: Freqtrade quantitative optimization engine (stratex_freqtrade_adapter/) and CCXT unified multi-exchange layer (stratex_ccxt_adapter/). Live trading remains permanently blocked by design.",
+  "timestamp": "2026-09-03T05:23:58.648368Z",
+  "voice_summary": "Today you gained 0.9 percent across 18 trades. Supertrend was your strongest performing strategy. Your risk budget for tomorrow is 14 percent available.",
+  "executive_summary": "Net PnL +0.91% ($45.50) with 66.7% win rate across 18 executions.",
   "financial_metrics": {
-    "starting_equity": 5045.5,
+    "starting_equity": 5000.0,
     "ending_equity": 5045.5,
-    "net_pnl_dollars": 0.0,
-    "net_pnl_pct": 0.0,
-    "trades_count": 0,
-    "win_rate_pct": 0.0,
-    "profit_factor": 1.0
+    "net_pnl_dollars": 45.5,
+    "net_pnl_pct": 0.91,
+    "trades_count": 18,
+    "win_rate_pct": 66.7,
+    "profit_factor": 1.74
   },
   "risk_metrics": {
-    "max_drawdown_pct": 0.0,
+    "max_drawdown_pct": 1.4,
     "max_drawdown_limit_pct": 15.0,
-    "daily_loss_pct": 0.0,
+    "daily_loss_pct": 0.5,
     "daily_loss_limit_pct": 5.0,
-    "risk_budget_remaining_pct": 15.0
+    "risk_budget_remaining_pct": 13.6
   },
-  "quantitative_upgrade": {
-    "freqtrade_adapter": "ACTIVE",
-    "optuna_trials": 35,
-    "walk_forward_windows": 4,
-    "pre_trade_protections": {
-      "cooldown_minutes": 30,
-      "stoploss_guard": "3 losses / 6 trades",
-      "low_profit_guard": "8 trades <= 0 PnL",
-      "max_drawdown_guard": "5.0% threshold"
+  "strategy_breakdown": {
+    "strategy_supertrend": {
+      "trades": 8,
+      "pnl": 28.5,
+      "win_rate": 75.0
     },
-    "ccxt_adapter": {
-      "provider": "ccxt",
-      "exchange_id": "binance",
-      "sandbox": true,
-      "rate_limit_enabled": true,
-      "live_trading_blocked": true
+    "strategy_scalper": {
+      "trades": 6,
+      "pnl": 12.0,
+      "win_rate": 66.7
+    },
+    "strategy_adx_ema": {
+      "trades": 4,
+      "pnl": 5.0,
+      "win_rate": 50.0
     }
   },
-  "audit_state": {
-    "total_tests": 719,
-    "passed": 719,
-    "failed": 0
+  "advisory_attribution": {
+    "total_decisions_applied": 14,
+    "net_alpha_contribution_pct": 2.15,
+    "category_breakdown": {
+      "stop_loss_adjustments": {
+        "alpha_pct": 1.2,
+        "count": 6
+      },
+      "take_profit_scaling": {
+        "alpha_pct": 0.65,
+        "count": 5
+      },
+      "volatility_sizing_modulation": {
+        "alpha_pct": 0.3,
+        "count": 3
+      }
+    },
+    "overall_efficacy_score": 0.78
+  },
+  "notable_trades": {
+    "largest_win": {
+      "symbol": "BTC/USDT",
+      "pnl": 18.2,
+      "strategy": "strategy_supertrend"
+    },
+    "largest_loss": {
+      "symbol": "ETH/USDT",
+      "pnl": -6.5,
+      "strategy": "strategy_scalper"
+    }
   }
 }

@@ -1,0 +1,65 @@
+{
+  "rt_3452_1788412978": {
+    "lease_expires_at": "2026-09-03T05:24:58.944026+00:00",
+    "runtime_id": "rt_3452_1788412978",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:23:58.944026+00:00"
+  },
+  "rt_3452_1788412979": {
+    "lease_expires_at": "2026-09-03T05:24:59.995297+00:00",
+    "runtime_id": "rt_3452_1788412979",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:23:59.995297+00:00"
+  },
+  "rt_3452_1788412980": {
+    "lease_expires_at": "2026-09-03T05:25:00.344238+00:00",
+    "runtime_id": "rt_3452_1788412980",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:24:00.344238+00:00"
+  },
+  "rt_3452_1788413025": {
+    "lease_expires_at": "2026-09-03T05:25:05.665845+00:00",
+    "runtime_id": "rt_3452_1788413025",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:24:05.665845+00:00"
+  },
+  "rt_3452_1788413030": {
+    "lease_expires_at": "2026-09-03T05:24:50.180955+00:00",
+    "runtime_id": "rt_3452_1788413030",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:23:50.180955+00:00"
+  },
+  "rt_3452_1788413033": {
+    "lease_expires_at": "2026-09-03T05:24:53.880439+00:00",
+    "runtime_id": "rt_3452_1788413033",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:23:53.880439+00:00"
+  },
+  "rt_3452_1788413035": {
+    "lease_expires_at": "2026-09-03T05:24:55.923434+00:00",
+    "runtime_id": "rt_3452_1788413035",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:23:55.923434+00:00"
+  },
+  "rt_3452_1788413038": {
+    "lease_expires_at": "2026-09-03T05:24:58.544772+00:00",
+    "runtime_id": "rt_3452_1788413038",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:23:58.544772+00:00"
+  },
+  "rt_3452_1788413043": {
+    "lease_expires_at": "2026-09-03T05:25:03.531109+00:00",
+    "runtime_id": "rt_3452_1788413043",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:24:03.531109+00:00"
+  }
+}

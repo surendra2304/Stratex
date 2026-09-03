@@ -1386,7 +1386,86 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 4. QUANTDINGER: STRATEGY REGISTRY & JOBS -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+                    <!-- Strategy Registry -->
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.5px;">
+                                📜 IMMUTABLE STRATEGY REGISTRY (LIFECYCLE)
+                            </div>
+                            <span id="qd-registry-count" class="mono" style="font-size: 10px; color: var(--text-muted);">0 Versions</span>
+                        </div>
+                        <table class="table-terminal" style="width: 100%; font-size: 11px;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--border-medium); text-align: left; color: var(--text-muted);">
+                                    <th style="padding: 8px 4px;">STRATEGY</th>
+                                    <th style="padding: 8px 4px;">VER</th>
+                                    <th style="padding: 8px 4px;">SOURCE HASH</th>
+                                    <th style="padding: 8px 4px;">STATUS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="qd-registry-tbody" class="mono">
+                                <tr><td colspan="4" style="padding: 12px 4px; color: var(--text-muted);">Loading registry...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Durable Research Jobs -->
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.5px;">
+                                ⚙️ DURABLE RESEARCH JOBS
+                            </div>
+                            <span id="qd-jobs-count" class="mono" style="font-size: 10px; color: var(--text-muted);">0 Jobs</span>
+                        </div>
+                        <table class="table-terminal" style="width: 100%; font-size: 11px;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--border-medium); text-align: left; color: var(--text-muted);">
+                                    <th style="padding: 8px 4px;">JOB ID</th>
+                                    <th style="padding: 8px 4px;">TYPE</th>
+                                    <th style="padding: 8px 4px;">PROGRESS</th>
+                                    <th style="padding: 8px 4px;">STATUS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="qd-jobs-tbody" class="mono">
+                                <tr><td colspan="4" style="padding: 12px 4px; color: var(--text-muted);">No active jobs.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 5. QUANTDINGER: RUNTIME LEASES & EXECUTION INTENTS -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+                    <!-- Runtime Leases -->
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; letter-spacing: 0.5px;">
+                            ⏱️ RUNTIME LEASES & HEALTH SUPERVISOR
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px;">
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Active Lease ID</span><span class="mono" id="qd-lease-id">--</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Supervisor Verdict</span><span class="mono" id="qd-lease-verdict" style="color: #10B981; font-weight: 700;">HEALTHY</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Lease Expiration</span><span class="mono" id="qd-lease-expiry">--</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Last Heartbeat</span><span class="mono" id="qd-lease-heartbeat">--</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Execution Intents -->
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.5px;">
+                                🎯 IDEMPOTENT EXECUTION INTENTS
+                            </div>
+                            <span id="qd-intents-count" class="mono" style="font-size: 10px; color: var(--text-muted);">0 Intents</span>
+                        </div>
+                        <div id="qd-intents-stream" class="mono" style="font-size: 11px; max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+                            <span style="color: var(--text-muted);">No execution intents recorded yet.</span>
+                        </div>
+                    </div>
+                </div>
             </div>
+
 
             <!-- ═══════════════════════════════════════════════════════════════
                  VIEW: SYSTEM

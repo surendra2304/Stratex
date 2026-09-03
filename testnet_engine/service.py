@@ -219,9 +219,42 @@ class TestnetService:
                 logger.info(f"[CCXT_READY] TestnetService loaded CCXTExchangeAdapter for {self.ccxt_adapter.exchange_id}")
             except Exception as e:
                 logger.warning(f"[CCXT_INIT_WARN] Could not initialize CCXTExchangeAdapter: {e}")
+
+        # QuantDinger architectural governance subsystems
+        try:
+            from stratex_quantdinger.registry import StrategyRegistry
+            from stratex_quantdinger.runtime import RuntimeLease, RuntimeSupervisor
+            from stratex_quantdinger.idempotency import IdempotencyGuard
+            self.registry = StrategyRegistry()
+            self.idempotency_guard = IdempotencyGuard(ledger_file=TESTNET_LEDGER_FILE)
+            self.runtime_lease = RuntimeLease(
+                runtime_id=f"rt_{os.getpid()}_{int(time.time())}",
+                strategy_id="multi_strategy",
+                lease_seconds=60,
+            )
+            self.runtime_supervisor = RuntimeSupervisor()
+            self.runtime_heartbeat = self.runtime_lease.acquire()
+            self.runtime_supervisor.record_heartbeat(self.runtime_heartbeat)
+
+            # Auto-register active strategies into StrategyRegistry (status=ACTIVE)
+            self._register_active_strategies_in_registry()
+
+            # Start background runtime lease heartbeat renewal thread (every 20 seconds)
+            self._stop_heartbeat = threading.Event()
+            self._heartbeat_thread = threading.Thread(target=self._runtime_heartbeat_loop, daemon=True)
+            self._heartbeat_thread.start()
+            logger.info(f"[QUANTDINGER_READY] Runtime lease acquired: {self.runtime_lease.runtime_id}")
+        except Exception as e:
+            logger.warning(f"[QUANTDINGER_INIT_WARN] Could not initialize QuantDinger subsystems: {e}")
+            self.registry = None
+            self.idempotency_guard = None
+            self.runtime_supervisor = None
+            self.runtime_lease = None
+            self.runtime_heartbeat = None
         
         # State
         self.current_equity = self.starting_equity
+
         self.active_positions = {} # Keep track of open OCOs per symbol
         self.symbol_filters = {}
         self.last_evaluation = {}
@@ -304,7 +337,49 @@ class TestnetService:
             except Exception as e:
                 logger.error(f"[SERVICE] Failed to restore persistent stats: {e}")
 
+    def _register_active_strategies_in_registry(self):
+        """Auto-registers active strategies with source hashing and parameter snapshots into StrategyRegistry."""
+        if not getattr(self, "registry", None):
+            return
+        import inspect
+        import config_strategy
+        for tf, strats in getattr(self, "strategies", {}).items():
+            for strat_name, mod in strats:
+                try:
+                    src = inspect.getsource(mod)
+                except Exception:
+                    src = f"# Strategy {strat_name} auto-registered"
+                param_attr = f"{strat_name.upper()}_STRATEGY"
+                params = getattr(config_strategy, param_attr, getattr(config_strategy, f"{param_attr}_V2", {}))
+                if not isinstance(params, dict):
+                    params = {}
+                try:
+                    active = self.registry.get_active(strat_name)
+                    if not active:
+                        self.registry.register(
+                            strategy_id=strat_name,
+                            version="v1.0.0",
+                            source=src,
+                            parameters=params,
+                            status="ACTIVE",
+                        )
+                except Exception as ex:
+                    logger.debug(f"[REGISTRY_AUTO] {strat_name}: {ex}")
+
+    def _runtime_heartbeat_loop(self):
+        """Periodically renews the runtime lease and updates the heartbeat."""
+        while not getattr(self, "_stop_heartbeat", threading.Event()).is_set():
+            time.sleep(20.0)
+            try:
+                if getattr(self, "runtime_lease", None) and getattr(self, "runtime_supervisor", None):
+                    status = "PAUSED" if getattr(self, "observe_only", False) or getattr(self, "safety_halt", False) else "RUNNING"
+                    self.runtime_heartbeat = self.runtime_lease.heartbeat(status=status)
+                    self.runtime_supervisor.record_heartbeat(self.runtime_heartbeat)
+            except Exception as e:
+                logger.debug(f"[HEARTBEAT_TICK_ERR] {e}")
+
     def _restore_daily_risk_state(self):
+
         """Parse today's ledger entries to accurately restore the daily realized PnL limit with strict provenance checking."""
         try:
             ledger_file = os.getenv("TESTNET_LEDGER_FILE", TESTNET_LEDGER_FILE)
@@ -951,8 +1026,17 @@ class TestnetService:
                     is_aggressive_strat = any(k in str(strategy_name).lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend", "factory_winner"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
                     
                     with self.lock:
+                        # QuantDinger Runtime Lease & Health Supervisor Gate
+                        if getattr(self, "runtime_supervisor", None) and getattr(self, "runtime_heartbeat", None):
+                            is_healthy, h_reason = self.runtime_supervisor.evaluate(self.runtime_heartbeat)
+                            if not is_healthy:
+                                self.stats["OTHER_REJECTED"] += 1
+                                self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", f"UNHEALTHY_RUNTIME_LEASE_{h_reason}")
+                                continue
+
                         # Enforce per-symbol cooldown (bypassed for aggressive scalper)
                         now_ts = datetime.datetime.utcnow().timestamp()
+
                         if not is_aggressive_strat and symbol in self.cooldowns and now_ts - self.cooldowns[symbol] < _COOLDOWN_SECONDS:
                             self.stats["COOLDOWN_REJECTED"] += 1
                             self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "ON_COOLDOWN")
@@ -1061,7 +1145,36 @@ class TestnetService:
                             precision = len(str(step_size).rstrip('0').split('.')[1])
                         qty_str = f"{qty:.{precision}f}"
                         
-                        logger.info(f"[EXECUTION_ATTEMPTED] {strategy_name} {side} {qty_str} {symbol} @ ~{current_price} | SignalID: {signal_id}")
+                        # QuantDinger ExecutionIntent Contract & Idempotency Guard
+                        intent_id = f"intent_{signal_id}"
+                        active_ver = self.registry.get_active(strategy_name) if getattr(self, "registry", None) else None
+                        ver_str = active_ver.version if active_ver else "v1.0.0"
+                        
+                        try:
+                            from stratex_quantdinger.models import ExecutionIntent
+                            current_intent = ExecutionIntent(
+                                intent_id=intent_id,
+                                strategy_id=strategy_name,
+                                strategy_version=ver_str,
+                                symbol=symbol,
+                                side=side,
+                                quantity=float(qty_str),
+                                order_type="MARKET",
+                                price=current_price,
+                                paper_only=(TRADING_MODE == "PAPER"),
+                                metadata={"timeframe": tf, "prob_win": fresh_metrics.get("prob_win", 0.0)}
+                            )
+                        except Exception:
+                            current_intent = None
+
+                        if getattr(self, "idempotency_guard", None):
+                            if self.idempotency_guard.seen(intent_id):
+                                self.stats["OTHER_REJECTED"] += 1
+                                self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", "IDEMPOTENT_DUPLICATE_INTENT")
+                                continue
+
+                        logger.info(f"[EXECUTION_ATTEMPTED] {strategy_name} {side} {qty_str} {symbol} @ ~{current_price} | SignalID: {signal_id} | IntentID: {intent_id}")
+
                         self.stats["EXECUTION_ELIGIBLE"] += 1
                         
                         self.telemetry.record_execution_event({
@@ -1133,7 +1246,16 @@ class TestnetService:
                                 
                                 logger.info(f"[ORDER_FILLED] {symbol} {side} {executed_qty} @ {actual_price:.4f} | OrderID: {entry_oid} | SignalID: {signal_id}")
 
+                                if getattr(self, "idempotency_guard", None):
+                                    self.idempotency_guard.record(
+                                        intent_id,
+                                        exchange_order_id=entry_oid,
+                                        status="FILLED",
+                                        metadata={"symbol": symbol, "side": side, "qty": executed_qty, "price": actual_price}
+                                    )
+
                                 # Partial fill detection: warn if filled quantity < 95% of requested
+
                                 proposed_qty = float(qty_str)
                                 if proposed_qty > 0 and executed_qty / proposed_qty < 0.95:
                                     fill_pct = (executed_qty / proposed_qty) * 100

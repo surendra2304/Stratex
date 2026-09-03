@@ -1776,9 +1776,13 @@ async function fetchABTestData() {
 // ==========================================
 async function fetchOptimizationData() {
     try {
-        const [optRes, exchRes] = await Promise.all([
-            apiClient.get('/api/optimization'),
-            apiClient.get('/api/exchange-status')
+        const [optRes, exchRes, regRes, jobsRes, rtRes, intRes] = await Promise.all([
+            apiClient.get('/api/optimization').catch(() => null),
+            apiClient.get('/api/exchange-status').catch(() => null),
+            apiClient.get('/api/strategy-registry').catch(() => null),
+            apiClient.get('/api/research-jobs').catch(() => null),
+            apiClient.get('/api/runtime-status').catch(() => null),
+            apiClient.get('/api/execution-intents').catch(() => null),
         ]);
 
         if (optRes) {
@@ -1881,6 +1885,95 @@ async function fetchOptimizationData() {
             if ($('ccxt-provider')) $('ccxt-provider').innerText = `${(c.exchange_id || 'binance').toUpperCase()} (${c.provider || 'ccxt'})`;
             if ($('ccxt-markets-count')) $('ccxt-markets-count').innerText = c.markets_cached_count || 'Cached';
         }
+
+        // QuantDinger: Strategy Registry
+        if (regRes && regRes.versions) {
+            const versions = regRes.versions;
+            if ($('qd-registry-count')) $('qd-registry-count').innerText = `${versions.length} Versions`;
+            const tbody = $('qd-registry-tbody');
+            if (tbody) {
+                if (versions.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="padding: 12px 4px; color: var(--text-muted);">No registered versions.</td></tr>';
+                } else {
+                    let html = '';
+                    for (const v of versions) {
+                        const stColor = v.status === 'ACTIVE' ? '#10B981' : (v.status === 'OOS_VALIDATED' ? '#3B82F6' : (v.status === 'APPROVED' ? '#A855F7' : '#EAB308'));
+                        html += `<tr style="border-bottom: 1px solid var(--border-subtle);">
+                            <td style="padding: 8px 4px; color: var(--text-primary); font-weight: 700;">${v.strategy_id}</td>
+                            <td style="padding: 8px 4px;">${v.version}</td>
+                            <td style="padding: 8px 4px; color: var(--text-secondary);">${(v.source_hash || '').substring(0, 8)}...</td>
+                            <td style="padding: 8px 4px; color: ${stColor}; font-weight: 700;">${v.status}</td>
+                        </tr>`;
+                    }
+                    tbody.innerHTML = html;
+                }
+            }
+        }
+
+        // QuantDinger: Research Jobs
+        if (jobsRes && jobsRes.jobs) {
+            const jobs = jobsRes.jobs;
+            if ($('qd-jobs-count')) $('qd-jobs-count').innerText = `${jobs.length} Jobs`;
+            const tbody = $('qd-jobs-tbody');
+            if (tbody) {
+                if (jobs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="padding: 12px 4px; color: var(--text-muted);">No active jobs.</td></tr>';
+                } else {
+                    let html = '';
+                    for (const j of jobs) {
+                        const stColor = j.status === 'COMPLETED' ? '#10B981' : (j.status === 'RUNNING' ? '#3B82F6' : (j.status === 'FAILED' ? '#EF4444' : '#EAB308'));
+                        const pct = Math.round((j.progress || 0) * 100);
+                        html += `<tr style="border-bottom: 1px solid var(--border-subtle);">
+                            <td style="padding: 8px 4px; color: var(--text-primary);">${j.job_id}</td>
+                            <td style="padding: 8px 4px; color: var(--text-secondary);">${j.job_type}</td>
+                            <td style="padding: 8px 4px;">${pct}%</td>
+                            <td style="padding: 8px 4px; color: ${stColor}; font-weight: 700;">${j.status}</td>
+                        </tr>`;
+                    }
+                    tbody.innerHTML = html;
+                }
+            }
+        }
+
+        // QuantDinger: Runtime Leases & Supervisor
+        if (rtRes) {
+            if ($('qd-lease-verdict')) {
+                const verd = rtRes.supervisor_verdict || 'HEALTHY';
+                $('qd-lease-verdict').innerText = verd;
+                $('qd-lease-verdict').style.color = verd === 'HEALTHY' ? '#10B981' : '#EF4444';
+            }
+            const leases = rtRes.leases || {};
+            const firstKey = Object.keys(leases)[0];
+            if (firstKey) {
+                const l = leases[firstKey];
+                if ($('qd-lease-id')) $('qd-lease-id').innerText = l.runtime_id || firstKey;
+                if ($('qd-lease-expiry')) $('qd-lease-expiry').innerText = l.lease_expires_at ? l.lease_expires_at.substring(11, 19) + ' UTC' : '--';
+                if ($('qd-lease-heartbeat')) $('qd-lease-heartbeat').innerText = l.timestamp ? l.timestamp.substring(11, 19) + ' UTC' : '--';
+            }
+        }
+
+        // QuantDinger: Execution Intents
+        if (intRes && intRes.intents) {
+            const intents = intRes.intents;
+            if ($('qd-intents-count')) $('qd-intents-count').innerText = `${intents.length} Intents`;
+            const container = $('qd-intents-stream');
+            if (container) {
+                if (intents.length === 0) {
+                    container.innerHTML = '<span style="color: var(--text-muted);">No execution intents recorded yet.</span>';
+                } else {
+                    let html = '';
+                    for (const it of intents.slice(0, 10)) {
+                        const oid = it.exchange_order_id ? `OID: ${it.exchange_order_id}` : 'PENDING';
+                        html += `<div style="display: flex; justify-content: space-between; padding: 4px 6px; background: var(--bg-card); border-radius: 4px; border-left: 3px solid #10B981;">
+                            <span>${it.intent_id}</span>
+                            <span style="color: var(--text-secondary);">${it.status || 'SUBMITTED'} | ${oid}</span>
+                        </div>`;
+                    }
+                    container.innerHTML = html;
+                }
+            }
+        }
+
     } catch (e) {
         console.warn('[OPTIMIZATION] Error loading optimization data:', e);
     }
