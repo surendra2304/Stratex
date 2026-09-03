@@ -197,12 +197,35 @@ class TestnetService:
         self.profitability_gate = ProfitabilityGate(cost_engine=self.cost_engine)
         self.risk_gate = RiskGate(starting_balance=self.starting_equity)
         self.telemetry = get_telemetry_manager()
+
+        # Freqtrade-inspired pre-trade protection layer
+        try:
+            from stratex_freqtrade_adapter.protections import ProtectionManager
+            self.protection_manager = ProtectionManager()
+        except Exception as e:
+            logger.warning(f"[PROTECTION_INIT_WARN] Could not initialize ProtectionManager: {e}")
+            self.protection_manager = None
+
+        # CCXT unified exchange abstraction
+        self.ccxt_adapter = None
+        if os.getenv("EXCHANGE_PROVIDER", "").lower() == "ccxt" or os.getenv("CCXT_ENABLED", "").lower() == "true":
+            try:
+                from stratex_ccxt_adapter.client import CCXTExchangeAdapter
+                self.ccxt_adapter = CCXTExchangeAdapter(
+                    exchange_id=os.getenv("CCXT_EXCHANGE_ID", "binance"),
+                    sandbox=True,
+                    enable_rate_limit=True,
+                )
+                logger.info(f"[CCXT_READY] TestnetService loaded CCXTExchangeAdapter for {self.ccxt_adapter.exchange_id}")
+            except Exception as e:
+                logger.warning(f"[CCXT_INIT_WARN] Could not initialize CCXTExchangeAdapter: {e}")
         
         # State
         self.current_equity = self.starting_equity
         self.active_positions = {} # Keep track of open OCOs per symbol
         self.symbol_filters = {}
         self.last_evaluation = {}
+
         self.safety_halt = False
         self.observe_only = False
         self.cooldowns = {} # symbol -> timestamp (float)
@@ -984,8 +1007,21 @@ class TestnetService:
                             
                         self.stats["PROFITABILITY_ACCEPTED"] += 1
                         
+                        # Pre-Trade Protection Layer (Freqtrade-inspired)
+                        if hasattr(self, 'protection_manager') and self.protection_manager:
+                            history = getattr(self, "trade_history", [])
+                            peak_eq = getattr(self.risk_gate, "peak_equity", self.current_equity)
+                            prot_decision = self.protection_manager.evaluate(
+                                symbol, history, self.current_equity, peak_eq
+                            )
+                            if not prot_decision.allowed:
+                                self.stats["OTHER_REJECTED"] += 1
+                                self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", f"PROTECTION_{prot_decision.reason}")
+                                continue
+
                         # Sizing
                         filters = self.symbol_filters.get(symbol, {})
+
                         qty = self.risk_gate.calculate_position_size(self.current_equity, current_price, sl, filters)
                         
                         if qty < 0.00000001:
@@ -1785,8 +1821,14 @@ class TestnetService:
                         if str(ct["exit_order_id"]) not in existing_exit_ids:
                             f.write(json.dumps(ct) + "\n")
                             existing_exit_ids.add(str(ct["exit_order_id"]))
+                            if hasattr(self, "protection_manager") and self.protection_manager:
+                                try:
+                                    self.protection_manager.on_trade_closed(ct)
+                                except Exception as e:
+                                    logger.warning(f"[PROTECTION_HOOK_ERR] Failed on_trade_closed: {e}")
                             
                             # Telemetry update — full 40-field canonical lifecycle record
+
                             try:
                                 if hasattr(self, "telemetry") and self.telemetry:
                                     # Compute balance state before/after exit

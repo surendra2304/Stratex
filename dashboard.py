@@ -6,8 +6,10 @@ import os
 import sys
 import threading
 import time
+from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, send_from_directory
+
 from flask_cors import CORS
 
 import config
@@ -138,7 +140,104 @@ def serve_root_css():
 def serve_root_js():
     return send_from_directory('static', 'app.js')
 
+
+@app.route('/api/optimization')
+def get_optimization_data():
+    """Returns the latest strategy parameter optimization, walk-forward OOS metrics,
+    and parameter comparison against frozen production config."""
+    import config_strategy
+    production_params = getattr(config_strategy, "ADX_EMA_STRATEGY_V2", {})
+
+    opt_file = Path("optimization_results/adx_ema_optimization.json")
+    best_file = Path("optimization_results/best_params.json")
+
+    opt_data = {}
+    if opt_file.exists():
+        try:
+            opt_data = json.loads(opt_file.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    elif best_file.exists():
+        try:
+            opt_data = json.loads(best_file.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    protection_status = {}
+    try:
+        from stratex_freqtrade_adapter.protections import ProtectionManager
+        pm = ProtectionManager()
+        protection_status = pm.get_status()
+    except Exception:
+        pass
+
+    return jsonify({
+        "status": "OK",
+        "strategy": "adx_ema",
+        "promotion_status": opt_data.get("promotion_status", "RESEARCH ONLY"),
+        "production_parameters": {
+            "ADX_THRESHOLD": production_params.get("ADX_THRESHOLD", 20),
+            "SL_ATR_MULTIPLIER": production_params.get("SL_ATR_MULTIPLIER", 3.0),
+            "TP_ATR_MULTIPLIER": production_params.get("TP_ATR_MULTIPLIER", 3.0),
+            "RETEST_WINDOW_BARS": production_params.get("RETEST_WINDOW_BARS", 10),
+            "EMA_FAST_PERIOD": production_params.get("EMA_FAST_PERIOD", 20),
+            "EMA_SLOW_PERIOD": production_params.get("EMA_SLOW_PERIOD", 50),
+            "ENABLE_RETEST_ENTRY": production_params.get("ENABLE_RETEST_ENTRY", True),
+        },
+        "optimized_parameters": opt_data.get("best_params", opt_data.get("params", {})),
+        "baseline_metrics": {
+            "is": opt_data.get("baseline_is", {}),
+            "oos": opt_data.get("baseline_oos", {}),
+        },
+        "optimized_metrics": {
+            "is": opt_data.get("optimized_is", opt_data.get("result", {})),
+            "oos": opt_data.get("optimized_oos", {}),
+        },
+        "walk_forward_windows": opt_data.get("walk_forward_windows", []),
+        "optimization_meta": {
+            "git_sha": opt_data.get("git_sha", "UNKNOWN"),
+            "timestamp": opt_data.get("timestamp", ""),
+            "data_range": opt_data.get("data_range", ""),
+            "timeframe": opt_data.get("timeframe", "1h"),
+            "symbols": opt_data.get("symbols", ["BTCUSDT"]),
+            "optimizer_score": opt_data.get("optimizer_score", opt_data.get("score", 0.0)),
+            "friction": opt_data.get("friction", {"fee_rate": 0.001, "slippage_rate": 0.0005}),
+        },
+        "protections": protection_status,
+    })
+
+
+@app.route('/api/exchange-status')
+def get_exchange_status():
+    """Returns unified exchange connectivity, CCXT status, and market cache metrics.
+    Never exposes API keys or secrets."""
+    ccxt_info = {
+        "provider": "binance_direct",
+        "exchange_id": "binance",
+        "sandbox": True,
+        "rate_limit_enabled": True,
+        "markets_cached_count": 0,
+        "status": "HEALTHY",
+    }
+    try:
+        from stratex_ccxt_adapter.client import CCXTExchangeAdapter
+        adapter = CCXTExchangeAdapter(exchange_id="binance", sandbox=True, enable_rate_limit=True)
+        ccxt_info = adapter.get_health_status()
+    except Exception as e:
+        ccxt_info["status"] = f"INIT_NOTICE: {e}"
+
+    return jsonify({
+        "status": "OK",
+        "exchange_provider": os.environ.get("EXCHANGE_PROVIDER", "ccxt"),
+        "exchange_id": os.environ.get("CCXT_EXCHANGE_ID", "binance"),
+        "trading_mode": os.environ.get("TRADING_MODE", "TESTNET"),
+        "live_trading_blocked": True,
+        "ccxt": ccxt_info,
+    })
+
+
 @app.route('/api/candles')
+
 def get_candles():
     """
     Fetches live Binance OHLCV candles for chart.

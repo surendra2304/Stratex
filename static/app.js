@@ -258,7 +258,11 @@ function loadActiveViewData(view) {
         case 'abtest':
             fetchABTestData();
             break;
+        case 'optimization':
+            fetchOptimizationData();
+            break;
         case 'system':
+
             fetchSystemViewData();
             break;
         case 'settings':
@@ -1767,7 +1771,123 @@ async function fetchABTestData() {
     }
 }
 
+// ==========================================
+// 13. VIEW: QUANTITATIVE OPTIMIZATION & CCXT
+// ==========================================
+async function fetchOptimizationData() {
+    try {
+        const [optRes, exchRes] = await Promise.all([
+            apiClient.get('/api/optimization'),
+            apiClient.get('/api/exchange-status')
+        ]);
+
+        if (optRes) {
+            // Badges & Meta
+            const badge = $('opt-status-badge');
+            if (badge) {
+                const st = optRes.promotion_status || 'RESEARCH ONLY';
+                badge.innerText = st;
+                badge.style.color = st === 'ACTIVE' ? '#10B981' : (st === 'OOS VALIDATED' ? '#3B82F6' : '#EAB308');
+            }
+            const shaEl = $('opt-git-sha');
+            if (shaEl && optRes.optimization_meta) {
+                shaEl.innerText = `SHA: ${(optRes.optimization_meta.git_sha || '').substring(0, 7) || '--'}`;
+            }
+
+            // Summary metrics
+            const isMetrics = optRes.optimized_metrics?.is || {};
+            const oosMetrics = optRes.optimized_metrics?.oos || {};
+
+            if ($('opt-is-pf')) $('opt-is-pf').innerText = isMetrics.profit_factor ? Number(isMetrics.profit_factor).toFixed(2) : '--';
+            if ($('opt-oos-pf')) $('opt-oos-pf').innerText = oosMetrics.profit_factor ? Number(oosMetrics.profit_factor).toFixed(2) : '--';
+            if ($('opt-oos-wr')) $('opt-oos-wr').innerText = oosMetrics.win_rate !== undefined ? `${Number(oosMetrics.win_rate).toFixed(1)}%` : '--%';
+            if ($('opt-oos-mdd')) $('opt-oos-mdd').innerText = oosMetrics.max_dd_pct !== undefined ? `${Number(oosMetrics.max_dd_pct).toFixed(2)}%` : '--%';
+            if ($('opt-oos-pnl')) {
+                const pnl = Number(oosMetrics.net_pnl || 0);
+                $('opt-oos-pnl').innerText = `$${pnl.toFixed(2)}`;
+                $('opt-oos-pnl').style.color = pnl >= 0 ? '#10B981' : '#EF4444';
+            }
+            if ($('opt-oos-trades')) $('opt-oos-trades').innerText = oosMetrics.total_trades ?? '--';
+
+            // Parameters Table
+            const prodParams = optRes.production_parameters || {};
+            const optParams = optRes.optimized_parameters || {};
+            const tbody = $('opt-params-tbody');
+            if (tbody) {
+                const allKeys = Array.from(new Set([...Object.keys(prodParams), ...Object.keys(optParams)]));
+                if (allKeys.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="padding: 12px 4px; color: var(--text-muted);">No parameters available.</td></tr>';
+                } else {
+                    let html = '';
+                    for (const k of allKeys) {
+                        const pv = prodParams[k] !== undefined ? prodParams[k] : '—';
+                        const ov = optParams[k] !== undefined ? optParams[k] : '—';
+                        const isDiff = String(pv) !== String(ov) && ov !== '—';
+                        const ovColor = isDiff ? '#10B981' : 'var(--text-primary)';
+                        html += `<tr style="border-bottom: 1px solid var(--border-subtle);">
+                            <td style="padding: 8px 4px; color: var(--text-secondary);">${k}</td>
+                            <td style="padding: 8px 4px; color: var(--text-primary);">${pv}</td>
+                            <td style="padding: 8px 4px; color: ${ovColor}; font-weight: 700;">${ov} ${isDiff ? '★' : ''}</td>
+                        </tr>`;
+                    }
+                    tbody.innerHTML = html;
+                }
+            }
+
+            // Meta box
+            const metaBox = $('opt-metadata-box');
+            if (metaBox && optRes.optimization_meta) {
+                const m = optRes.optimization_meta;
+                metaBox.innerText = `Data: ${m.data_range || '--'} | TF: ${m.timeframe || '1h'} | Symbols: ${(m.symbols || []).join(', ')}`;
+            }
+
+            // Walk-Forward Windows Table
+            const wfTbody = $('opt-wf-tbody');
+            if (wfTbody) {
+                const windows = optRes.walk_forward_windows || [];
+                if (windows.length === 0) {
+                    wfTbody.innerHTML = '<tr><td colspan="6" style="padding: 12px 4px; color: var(--text-muted);">No walk-forward records yet.</td></tr>';
+                } else {
+                    let html = '';
+                    for (const w of windows) {
+                        const stColor = w.status === 'PASS' ? '#10B981' : '#EF4444';
+                        html += `<tr style="border-bottom: 1px solid var(--border-subtle);">
+                            <td style="padding: 8px 4px;">#${w.window_idx}</td>
+                            <td style="padding: 8px 4px; font-size: 10px; color: var(--text-secondary);">${w.test_range}</td>
+                            <td style="padding: 8px 4px;">${w.is_pf}</td>
+                            <td style="padding: 8px 4px; color: #10B981; font-weight: 700;">${w.oos_pf}</td>
+                            <td style="padding: 8px 4px;">${w.oos_trades}</td>
+                            <td style="padding: 8px 4px; color: ${stColor}; font-weight: 700;">${w.status}</td>
+                        </tr>`;
+                    }
+                    wfTbody.innerHTML = html;
+                }
+            }
+
+            // Protections status
+            if (optRes.protections) {
+                const p = optRes.protections;
+                if ($('prot-cooldown-status')) $('prot-cooldown-status').innerText = `ACTIVE (${p.cooldown_minutes || 30} min)`;
+                const cdSyms = Object.keys(p.active_cooldowns || {});
+                if ($('prot-active-symbols')) {
+                    $('prot-active-symbols').innerText = cdSyms.length > 0 ? cdSyms.join(', ') : 'None';
+                    $('prot-active-symbols').style.color = cdSyms.length > 0 ? '#EF4444' : '#10B981';
+                }
+            }
+        }
+
+        if (exchRes && exchRes.ccxt) {
+            const c = exchRes.ccxt;
+            if ($('ccxt-provider')) $('ccxt-provider').innerText = `${(c.exchange_id || 'binance').toUpperCase()} (${c.provider || 'ccxt'})`;
+            if ($('ccxt-markets-count')) $('ccxt-markets-count').innerText = c.markets_cached_count || 'Cached';
+        }
+    } catch (e) {
+        console.warn('[OPTIMIZATION] Error loading optimization data:', e);
+    }
+}
+
 async function triggerManualAdvisoryConsultation() {
+
     const btn = $('btn-trigger-advisory');
     if (btn) {
         btn.disabled = true;

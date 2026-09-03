@@ -111,7 +111,12 @@
                     <span>A/B Test</span>
                     <span class="nav-indicator"></span>
                 </a>
+                <a href="#optimization" class="nav-item" data-view="optimization" id="nav-optimization">
+                    <span>Optimization</span>
+                    <span class="nav-indicator"></span>
+                </a>
                 <a href="#system" class="nav-item" data-view="system" id="nav-system">
+
                     <span>System</span>
                     <span class="nav-indicator"></span>
                 </a>
@@ -1258,9 +1263,136 @@
             </div>
 
             <!-- ═══════════════════════════════════════════════════════════════
+                 VIEW: OPTIMIZATION (FREQTRADE & CCXT RESEARCH)
+            ═══════════════════════════════════════════════════════════════ -->
+            <div class="view-container" id="view-optimization">
+                <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <h1 class="page-title">OPTIMIZATION</h1>
+                        <span id="opt-status-badge" class="badge" style="background: rgba(234, 179, 8, 0.15); color: #EAB308; border: 1px solid rgba(234, 179, 8, 0.4); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-family: var(--font-mono); font-weight: 700;">RESEARCH ONLY</span>
+                        <span id="opt-git-sha" class="mono" style="font-size: 11px; color: var(--text-muted);">SHA: --</span>
+                    </div>
+                    <button class="btn-terminal" onclick="fetchOptimizationData()" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">REFRESH ↻</button>
+                </div>
+
+                <!-- 1. SUMMARY CARDS -->
+                <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 16px;">
+                    <div class="panel-card" style="padding: 14px;">
+                        <div style="font-size: 10px; font-family: var(--font-heading); color: var(--text-muted); margin-bottom: 4px;">IS PROFIT FACTOR</div>
+                        <div id="opt-is-pf" class="mono" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">--</div>
+                        <div style="font-size: 10px; color: var(--text-muted);">In-Sample Fit</div>
+                    </div>
+                    <div class="panel-card" style="padding: 14px;">
+                        <div style="font-size: 10px; font-family: var(--font-heading); color: var(--text-muted); margin-bottom: 4px;">OOS PROFIT FACTOR</div>
+                        <div id="opt-oos-pf" class="mono" style="font-size: 18px; font-weight: 700; color: #10B981;">--</div>
+                        <div style="font-size: 10px; color: var(--text-muted);">Out-Of-Sample Validation</div>
+                    </div>
+                    <div class="panel-card" style="padding: 14px;">
+                        <div style="font-size: 10px; font-family: var(--font-heading); color: var(--text-muted); margin-bottom: 4px;">OOS WIN RATE</div>
+                        <div id="opt-oos-wr" class="mono" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">--%</div>
+                        <div style="font-size: 10px; color: var(--text-muted);">OOS Trades Only</div>
+                    </div>
+                    <div class="panel-card" style="padding: 14px;">
+                        <div style="font-size: 10px; font-family: var(--font-heading); color: var(--text-muted); margin-bottom: 4px;">OOS MAX DRAWDOWN</div>
+                        <div id="opt-oos-mdd" class="mono" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">--%</div>
+                        <div style="font-size: 10px; color: var(--text-muted);">Peak-to-Trough</div>
+                    </div>
+                    <div class="panel-card" style="padding: 14px;">
+                        <div style="font-size: 10px; font-family: var(--font-heading); color: var(--text-muted); margin-bottom: 4px;">OOS NET PNL</div>
+                        <div id="opt-oos-pnl" class="mono" style="font-size: 18px; font-weight: 700; color: #10B981;">$--</div>
+                        <div style="font-size: 10px; color: var(--text-muted);">Friction-Adjusted</div>
+                    </div>
+                    <div class="panel-card" style="padding: 14px;">
+                        <div style="font-size: 10px; font-family: var(--font-heading); color: var(--text-muted); margin-bottom: 4px;">OOS TRADES</div>
+                        <div id="opt-oos-trades" class="mono" style="font-size: 18px; font-weight: 700; color: var(--text-primary);">--</div>
+                        <div style="font-size: 10px; color: var(--text-muted);">Total Sample Size</div>
+                    </div>
+                </div>
+
+                <!-- 2. PARAMETERS COMPARISON & WALK-FORWARD -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <!-- Left: Parameters Table -->
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; letter-spacing: 0.5px;">
+                            ⚖️ PARAMETER COMPARISON (PRODUCTION vs OPTIMIZED)
+                        </div>
+                        <table class="table-terminal" style="width: 100%; font-size: 11px;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--border-medium); text-align: left; color: var(--text-muted);">
+                                    <th style="padding: 8px 4px;">PARAMETER</th>
+                                    <th style="padding: 8px 4px;">CURRENT PRODUCTION</th>
+                                    <th style="padding: 8px 4px;">OPTIMIZED CANDIDATE</th>
+                                </tr>
+                            </thead>
+                            <tbody id="opt-params-tbody" class="mono">
+                                <tr><td colspan="3" style="padding: 12px 4px; color: var(--text-muted);">Loading parameter configuration...</td></tr>
+                            </tbody>
+                        </table>
+                        <div style="margin-top: 12px; font-size: 11px; color: var(--text-muted);" id="opt-metadata-box">
+                            Dataset: -- | Timeframe: -- | Trials: --
+                        </div>
+                    </div>
+
+                    <!-- Right: Walk-Forward Validation Windows -->
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; letter-spacing: 0.5px;">
+                            📈 ROLLING WALK-FORWARD VALIDATION WINDOWS
+                        </div>
+                        <table class="table-terminal" style="width: 100%; font-size: 11px;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--border-medium); text-align: left; color: var(--text-muted);">
+                                    <th style="padding: 8px 4px;">WIN</th>
+                                    <th style="padding: 8px 4px;">TEST PERIOD</th>
+                                    <th style="padding: 8px 4px;">IS PF</th>
+                                    <th style="padding: 8px 4px;">OOS PF</th>
+                                    <th style="padding: 8px 4px;">TRADES</th>
+                                    <th style="padding: 8px 4px;">STATUS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="opt-wf-tbody" class="mono">
+                                <tr><td colspan="6" style="padding: 12px 4px; color: var(--text-muted);">No walk-forward records yet.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 3. PRE-TRADE PROTECTIONS & CCXT STATUS -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <!-- Protections -->
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; letter-spacing: 0.5px;">
+                            🛡️ PRE-TRADE PROTECTION STATUS (FREQTRADE-INSPIRED)
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px;">
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Stoploss Cooldown</span><span class="mono" id="prot-cooldown-status">ACTIVE (30 min)</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Active Cooldown Symbols</span><span class="mono" id="prot-active-symbols">None</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Stoploss Guard Lookback</span><span class="mono">6 trades (max 3 SLs)</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Low Profit Pair Guard</span><span class="mono">20 trades (min 8)</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Max Drawdown Guard</span><span class="mono">5.0% threshold</span></div>
+                        </div>
+                    </div>
+
+                    <!-- CCXT Exchange Abstraction -->
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; letter-spacing: 0.5px;">
+                            🌐 UNIFIED EXCHANGE ABSTRACTION (CCXT)
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px;">
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Configured Provider</span><span class="mono" id="ccxt-provider">CCXT (Binance)</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Environment Sandbox</span><span class="mono" style="color: #10B981;">ENABLED (Testnet Only)</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Rate Limiting</span><span class="mono" style="color: #10B981;">ENABLED (Built-in)</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Markets Loaded</span><span class="mono" id="ccxt-markets-count">--</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Live Trading</span><span class="mono" style="color: #EF4444; font-weight: 700;">PERMANENTLY BLOCKED</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════════════════════
                  VIEW: SYSTEM
             ═══════════════════════════════════════════════════════════════ -->
             <div class="view-container" id="view-system">
+
                 <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <h1 class="page-title">SYSTEM</h1>
                     <button class="btn-terminal" onclick="fetchSystemData()" style="border: 1px solid var(--border-medium); background: var(--bg-input); padding: 4px 12px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); cursor: pointer;">REFRESH ↻</button>

@@ -1,0 +1,58 @@
+{
+  "strategy": "adx_ema",
+  "study_name": "adx_ema_1h_optuna",
+  "git_sha": "0d543c1d6bf323dc66a130a43d680b5f1c616241",
+  "timestamp": "2026-09-03T05:09:37.942012+00:00",
+  "timeframe": "1h",
+  "symbols": [
+    "BTCUSDT"
+  ],
+  "promotion_status": "RESEARCH ONLY",
+  "score": -4353.8932,
+  "params": {
+    "ADX_THRESHOLD": 16,
+    "SL_ATR_MULTIPLIER": 3.0,
+    "TP_ATR_MULTIPLIER": 3.0,
+    "RETEST_WINDOW_BARS": 14,
+    "EMA_FAST_PERIOD": 22,
+    "EMA_SLOW_PERIOD": 55
+  },
+  "result": {
+    "initial_balance": 10000.0,
+    "final_balance": 9860.595025058403,
+    "net_pnl": -139.40497494159638,
+    "return_pct": -1.3940497494159638,
+    "total_trades": 10,
+    "winning_trades": 5,
+    "losing_trades": 5,
+    "win_rate": 50.0,
+    "gross_profit": 208.22159517992748,
+    "gross_loss": 258.13966717602995,
+    "profit_factor": 0.806623784162306,
+    "profit_factor_str": "0.8066",
+    "expectancy": -13.940497494159638,
+    "average_win": 31.46330051542551,
+    "average_loss": -59.34429550374479,
+    "max_dd_pct": 1.39404974941599,
+    "sharpe": -2.041378665098723,
+    "sortino": -1.5317635809048442,
+    "calmar": -3.384183285746473,
+    "largest_win": 39.888615647819044,
+    "largest_loss": -66.82891703455618,
+    "average_r": -0.09858051951280322,
+    "avg_holding_time": 612.0,
+    "total_fees": 89.48690294549391,
+    "total_slippage": 44.743451472746955,
+    "evidence_grade": "GRADE D (under 30 trades)",
+    "reliability_warning": "CRITICAL: Sample size is under 30 trades. Statistically insufficient.",
+    "trade_count": 10,
+    "max_drawdown_pct": 0.0139404974941599
+  },
+  "n_trials": 35,
+  "config": {
+    "min_trades": 10,
+    "max_drawdown_pct": 0.08,
+    "target_profit_factor": 1.2,
+    "seed": 42
+  }
+}

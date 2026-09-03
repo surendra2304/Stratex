@@ -175,6 +175,55 @@ class MarketDataClient:
             return None
         return _execute_with_rate_limit_protection(self.__client.futures_mark_price, **kwargs)
 
+    # --- CCXT Unified Market Data Abstraction ---
+
+    def get_ccxt_adapter(self):
+        """Lazily returns a read-only CCXTExchangeAdapter instance if CCXT is installed."""
+        if getattr(self, "_ccxt_adapter", None) is not None:
+            return self._ccxt_adapter
+        if not self.is_available():
+            return None
+        try:
+            from stratex_ccxt_adapter.client import CCXTExchangeAdapter
+            self._ccxt_adapter = CCXTExchangeAdapter(
+                exchange_id="binance",
+                sandbox=True,
+                enable_rate_limit=True,
+            )
+            return self._ccxt_adapter
+        except Exception as e:
+            logger.warning(f"[CCXT_ADAPTER_UNAVAILABLE] Could not load CCXT adapter: {e}")
+            return None
+
+    def get_ccxt_ticker(self, symbol: str):
+        """Fetches normalized ticker via CCXT."""
+        adapter = self.get_ccxt_adapter()
+        if adapter is None:
+            return None
+        return adapter.fetch_ticker(symbol)
+
+    def get_ccxt_ohlcv(self, symbol: str, timeframe: str = "1h", since=None, limit=None):
+        """Fetches normalized OHLCV candles via CCXT."""
+        adapter = self.get_ccxt_adapter()
+        if adapter is None:
+            return None
+        return adapter.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
+
+    def get_ccxt_order_book(self, symbol: str, limit: int | None = None):
+        """Fetches normalized order book via CCXT."""
+        adapter = self.get_ccxt_adapter()
+        if adapter is None:
+            return None
+        return adapter.fetch_order_book(symbol, limit=limit)
+
+    def get_ccxt_markets(self, reload: bool = False):
+        """Fetches normalized markets via CCXT."""
+        adapter = self.get_ccxt_adapter()
+        if adapter is None:
+            return []
+        return adapter.markets(reload=reload)
+
+
     # --- Explicit Block: No other methods allowed ---
     def __getattr__(self, item):
         """Deny access to any Binance Client method not in the approved whitelist."""
