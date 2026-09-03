@@ -1,4 +1,144 @@
 {
+  "rt_13236_1788413632": {
+    "lease_expires_at": "2026-09-03T05:34:52.476377+00:00",
+    "runtime_id": "rt_13236_1788413632",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:33:52.476377+00:00"
+  },
+  "rt_13236_1788413633": {
+    "lease_expires_at": "2026-09-03T05:34:53.003504+00:00",
+    "runtime_id": "rt_13236_1788413633",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:33:53.003504+00:00"
+  },
+  "rt_13776_1788413677": {
+    "lease_expires_at": "2026-09-03T05:36:37.986138+00:00",
+    "runtime_id": "rt_13776_1788413677",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:35:37.986138+00:00"
+  },
+  "rt_13776_1788413678": {
+    "lease_expires_at": "2026-09-03T05:36:38.140012+00:00",
+    "runtime_id": "rt_13776_1788413678",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:35:38.140012+00:00"
+  },
+  "rt_13776_1788413679": {
+    "lease_expires_at": "2026-09-03T05:36:39.690416+00:00",
+    "runtime_id": "rt_13776_1788413679",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:35:39.690416+00:00"
+  },
+  "rt_13776_1788413722": {
+    "lease_expires_at": "2026-09-03T05:36:42.631647+00:00",
+    "runtime_id": "rt_13776_1788413722",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:35:42.631647+00:00"
+  },
+  "rt_13776_1788413727": {
+    "lease_expires_at": "2026-09-03T05:36:27.447191+00:00",
+    "runtime_id": "rt_13776_1788413727",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:35:27.447191+00:00"
+  },
+  "rt_13776_1788413731": {
+    "lease_expires_at": "2026-09-03T05:36:31.492222+00:00",
+    "runtime_id": "rt_13776_1788413731",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:35:31.492222+00:00"
+  },
+  "rt_13776_1788413733": {
+    "lease_expires_at": "2026-09-03T05:36:33.635737+00:00",
+    "runtime_id": "rt_13776_1788413733",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:35:33.635737+00:00"
+  },
+  "rt_13776_1788413736": {
+    "lease_expires_at": "2026-09-03T05:36:36.453377+00:00",
+    "runtime_id": "rt_13776_1788413736",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:35:36.453377+00:00"
+  },
+  "rt_13776_1788413741": {
+    "lease_expires_at": "2026-09-03T05:36:41.982993+00:00",
+    "runtime_id": "rt_13776_1788413741",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:35:41.982993+00:00"
+  },
+  "rt_3320_1788413517": {
+    "lease_expires_at": "2026-09-03T05:33:57.940368+00:00",
+    "runtime_id": "rt_3320_1788413517",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:32:57.940368+00:00"
+  },
+  "rt_3320_1788413519": {
+    "lease_expires_at": "2026-09-03T05:33:59.627148+00:00",
+    "runtime_id": "rt_3320_1788413519",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:32:59.627148+00:00"
+  },
+  "rt_3320_1788413564": {
+    "lease_expires_at": "2026-09-03T05:34:04.119676+00:00",
+    "runtime_id": "rt_3320_1788413564",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:33:04.119676+00:00"
+  },
+  "rt_3320_1788413568": {
+    "lease_expires_at": "2026-09-03T05:33:48.971470+00:00",
+    "runtime_id": "rt_3320_1788413568",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:32:48.971470+00:00"
+  },
+  "rt_3320_1788413572": {
+    "lease_expires_at": "2026-09-03T05:33:52.622773+00:00",
+    "runtime_id": "rt_3320_1788413572",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:32:52.622773+00:00"
+  },
+  "rt_3320_1788413574": {
+    "lease_expires_at": "2026-09-03T05:33:54.338595+00:00",
+    "runtime_id": "rt_3320_1788413574",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:32:54.338595+00:00"
+  },
+  "rt_3320_1788413575": {
+    "lease_expires_at": "2026-09-03T05:33:55.585543+00:00",
+    "runtime_id": "rt_3320_1788413575",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:32:55.585543+00:00"
+  },
+  "rt_3320_1788413578": {
+    "lease_expires_at": "2026-09-03T05:33:58.241735+00:00",
+    "runtime_id": "rt_3320_1788413578",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:32:58.241735+00:00"
+  },
+  "rt_3320_1788413583": {
+    "lease_expires_at": "2026-09-03T05:34:03.831978+00:00",
+    "runtime_id": "rt_3320_1788413583",
+    "status": "RUNNING",
+    "strategy_id": "multi_strategy",
+    "timestamp": "2026-09-03T05:33:03.831978+00:00"
+  },
   "rt_3452_1788412978": {
     "lease_expires_at": "2026-09-03T05:24:58.944026+00:00",
     "runtime_id": "rt_3452_1788412978",

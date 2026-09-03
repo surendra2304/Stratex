@@ -31,7 +31,9 @@ def ranking_service(mocker):
     mocker.patch("testnet_engine.discovery.SymbolDiscoveryService")
     
     service = TestnetService()
+    service.idempotency_guard = None
     service.scanner = mocker.MagicMock()
+
     
     # Mock candle caches
     df_btc = pd.DataFrame({"close": [50000.0, 50000.0]})

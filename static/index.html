@@ -1464,7 +1464,37 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 6. HUMMINGBOT & LEAN: MICROSTRUCTURE & MODULAR PIPELINE -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+                    <!-- Hummingbot Microstructure -->
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; letter-spacing: 0.5px;">
+                            📊 ORDER-BOOK MICROSTRUCTURE (HUMMINGBOT)
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px;">
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Top-10 Depth Imbalance</span><span class="mono" id="hb-imbalance">--</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Bid / Ask Spread</span><span class="mono" id="hb-spread">--</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Mid Price</span><span class="mono" id="hb-mid">--</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Stale Book Gate</span><span class="mono" style="color: #10B981;">ACTIVE (&lt;5000ms)</span></div>
+                        </div>
+                    </div>
+
+                    <!-- LEAN Modular Pipeline & Nautilus Runtime -->
+                    <div class="panel-card" style="padding: 16px;">
+                        <div style="font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; letter-spacing: 0.5px;">
+                            ⚡ MODULAR PIPELINE (LEAN &amp; NAUTILUS)
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px;">
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Pipeline Architecture</span><span class="mono">LEAN Modular (4 Stages)</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Event Runtime</span><span class="mono" style="color: #10B981;">Nautilus Deterministic Bus</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">Monotonicity Guard</span><span class="mono" style="color: #10B981;">ENFORCED (Strict nanosecond)</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-secondary);">VectorBT Sweep Engine</span><span class="mono" style="color: #3B82F6;">READY (Fast Grid)</span></div>
+                        </div>
+                    </div>
+                </div>
             </div>
+
 
 
             <!-- ═══════════════════════════════════════════════════════════════

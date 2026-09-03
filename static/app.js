@@ -1776,14 +1776,16 @@ async function fetchABTestData() {
 // ==========================================
 async function fetchOptimizationData() {
     try {
-        const [optRes, exchRes, regRes, jobsRes, rtRes, intRes] = await Promise.all([
+        const [optRes, exchRes, regRes, jobsRes, rtRes, intRes, microRes] = await Promise.all([
             apiClient.get('/api/optimization').catch(() => null),
             apiClient.get('/api/exchange-status').catch(() => null),
             apiClient.get('/api/strategy-registry').catch(() => null),
             apiClient.get('/api/research-jobs').catch(() => null),
             apiClient.get('/api/runtime-status').catch(() => null),
             apiClient.get('/api/execution-intents').catch(() => null),
+            apiClient.get('/api/microstructure').catch(() => null),
         ]);
+
 
         if (optRes) {
             // Badges & Meta
@@ -1974,7 +1976,27 @@ async function fetchOptimizationData() {
             }
         }
 
+        // Hummingbot: Microstructure
+        if (microRes && microRes.microstructure) {
+            const m = microRes.microstructure;
+            if ($('hb-imbalance')) {
+                const imb = Number(m.imbalance_top_n || 0);
+                $('hb-imbalance').innerText = `${imb >= 0 ? '+' : ''}${(imb * 100).toFixed(1)}%`;
+                $('hb-imbalance').style.color = imb >= 0 ? '#10B981' : '#EF4444';
+            }
+            if ($('hb-spread')) {
+                const sp = Number(m.spread || 0);
+                const bps = Number(m.spread_bps || 0);
+                $('hb-spread').innerText = `$${sp.toFixed(2)} (${bps.toFixed(1)} bps)`;
+            }
+            if ($('hb-mid')) {
+                const mid = Number(m.mid_price || 0);
+                $('hb-mid').innerText = `$${mid.toFixed(2)}`;
+            }
+        }
+
     } catch (e) {
+
         console.warn('[OPTIMIZATION] Error loading optimization data:', e);
     }
 }
