@@ -48,8 +48,8 @@ class FundingPaperSimulator(PaperSimulator):
             status = "FAILED"
             return trade_id
             
-        spot_price = self.orders[order_spot_id]['fill_price'] if spot_filled else 0.0
-        perp_price = self.orders[order_perp_id]['fill_price'] if perp_filled else 0.0
+        spot_price = self.orders[order_spot_id]['fill_price'] if (spot_filled and order_spot_id) else 0.0
+        perp_price = self.orders[order_perp_id]['fill_price'] if (perp_filled and order_perp_id) else 0.0
             
         self.funding_trades[trade_id] = {
             "symbol": symbol,

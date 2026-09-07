@@ -51,7 +51,8 @@ import threading
 
 from binance.client import Client
 
-from logger import get_logger
+from logger import get_logger  # type: ignore[attr-defined]
+
 
 logger = get_logger("protection")
 
@@ -323,14 +324,18 @@ def emergency_market_close(
         quantity=executed_qty,
     )
     exec_qty = float(response.get("executedQty", 0))
-    if exec_qty < executed_qty * 0.99:
+    residual = max(0.0, executed_qty - exec_qty)
+    response["_residual_qty"] = residual
+    response["_is_flat"] = residual < 1e-8
+    if not response["_is_flat"]:
         logger.critical(
             f"[PROTECTION] 🚨 EMERGENCY CLOSE PARTIAL: sent {executed_qty}, "
-            f"filled {exec_qty}. Residual may remain open!"
+            f"filled {exec_qty}. Residual {residual} may remain open! State must be UNKNOWN."
         )
     else:
         logger.info(f"[PROTECTION] Emergency close FILLED: {exec_qty} @ market")
     return response
+
 
 
 # ---------------------------------------------------------------------------

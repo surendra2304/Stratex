@@ -146,14 +146,10 @@ class ProfitabilityGate:
         expected_net_return   = expected_gross_return - total_friction_pct
         min_edge              = getattr(config, "MINIMUM_EXPECTED_EDGE", 0.0001)
 
-        # Standard mathematical evaluation
-        is_accepted = (expected_net_return >= min_edge) or (prob_win >= 0.40 and expected_gross_return > total_friction_pct)
+        # Strict mathematical evaluation — genuine positive expected net edge required
+        is_accepted = (expected_net_return >= min_edge) and (expected_gross_return > total_friction_pct)
         reason      = "POSITIVE_EDGE" if is_accepted else "NEGATIVE_EXPECTED_NET_RETURN"
 
-        # Bypass all filters if requested (Zero rejections mode)
-        if getattr(config, "BYPASS_PROFITABILITY_GATE", False):
-            is_accepted = True
-            reason = "BYPASS_PROFITABILITY_GATE"
 
         # ------------------------------------------------------------------
         # 4. Diagnostic logging

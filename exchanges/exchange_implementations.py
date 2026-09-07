@@ -561,5 +561,5 @@ def get_exchange_adapter(exchange_id: str) -> BaseExchange:
     adapter_cls = ex_map.get(exchange_id.lower())
     if not adapter_cls:
         raise ValueError(f"Unsupported exchange identifier: {exchange_id}")
-    return adapter_cls()
+    return adapter_cls()  # type: ignore[abstract]
 

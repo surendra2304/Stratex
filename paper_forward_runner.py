@@ -109,11 +109,28 @@ from paper_engine.reconciliation import PaperReconciliation
 from paper_engine.signal_logger import SignalLogger
 from paper_engine.statistical_report import can_classify
 from research_phase9.cost_engine import CostEngine
-from strategy_swing import get_signal
+import importlib
+import config
+from stratex_upgrade.decay import SignalDecaySmoother
+from testnet_engine.profitability_gate import ProfitabilityGate
 
 logger = get_logger("paper_forward_runner")
 
 COST_ENGINE = CostEngine.get_binance_taker_config()
+_decay_smoother = SignalDecaySmoother(decay_steps=4)
+_profitability_gate = ProfitabilityGate(cost_engine=COST_ENGINE)
+
+
+def _get_active_signal(df_feat):
+    strat = getattr(config, "ACTIVE_STRATEGY", "factory_winner_1")
+    try:
+        mod = importlib.import_module(f"strategy_{strat}")
+        if hasattr(mod, "get_signal"):
+            return mod.get_signal(df_feat), strat
+    except Exception as e:
+        logger.warning(f"Could not load active strategy {strat}: {e}")
+    from strategy_swing import get_signal as swing_signal
+    return swing_signal(df_feat), "strategy_swing_macd_200ema"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -661,7 +678,9 @@ def run():
                 last_known_price = portfolio.cash  # fallback
 
             # ── Fetch market data ────────────────────────────────────────
-            df = fetch_candles(FROZEN_SYMBOL, FROZEN_TIMEFRAME, limit=250)
+            active_symbol = getattr(config, "SYMBOL", FROZEN_SYMBOL)
+            active_tf = getattr(config, "TIMEFRAME", FROZEN_TIMEFRAME)
+            df = fetch_candles(active_symbol, active_tf, limit=250)
 
             if df is None or df.empty:
                 health.set("market_data", "CRITICAL")
@@ -683,7 +702,7 @@ def run():
 
             last_candle_ts = df["timestamp"].iloc[-1]
             last_known_price = float(df["close"].iloc[-1])
-            current_prices = {FROZEN_SYMBOL: last_known_price}
+            current_prices = {active_symbol: last_known_price}
             current_ts = df["timestamp"].iloc[-1].timestamp()
 
             # ── Compute features (no lookahead) ──────────────────────────
@@ -707,7 +726,7 @@ def run():
             # ── Generate signal ──────────────────────────────────────────
             if not health.is_safe_to_trade():
                 log_signal_record(
-                    signal_logger, current_ts, FROZEN_STRATEGY, FROZEN_SYMBOL,
+                    signal_logger, current_ts, FROZEN_STRATEGY, active_symbol,
                     None, 0.0, last_known_price, None, None,
                     decision="REJECTED", rejection_reason=f"HEALTH_{health.market_data}",
                 )
@@ -716,22 +735,25 @@ def run():
                 continue
 
             try:
-                sig_res = get_signal(df_feat)
+                sig_res, strat_name = _get_active_signal(df_feat)
                 if hasattr(sig_res, "side"):
                     sig = sig_res.side
                     sl = sig_res.sl
                     tp = sig_res.tp
+                    raw_conf = getattr(sig_res, "confidence", 1.0)
                 elif isinstance(sig_res, (tuple, list)):
                     sig = sig_res[0]
                     sl = sig_res[1] if len(sig_res) > 1 else None
                     tp = sig_res[2] if len(sig_res) > 2 else None
+                    raw_conf = 1.0
                 else:
                     sig, sl, tp = None, None, None
+                    raw_conf = 0.0
             except Exception as e:
                 health.set("strategy", "DEGRADED")
                 logger.error(f"Signal generation failed: {e}")
                 log_signal_record(
-                    signal_logger, current_ts, FROZEN_STRATEGY, FROZEN_SYMBOL,
+                    signal_logger, current_ts, FROZEN_STRATEGY, active_symbol,
                     None, 0.0, last_known_price, None, None,
                     decision="REJECTED", rejection_reason=f"STRATEGY_ERROR:{e}",
                 )
@@ -741,9 +763,16 @@ def run():
 
             daily_signals += 1
 
+            # Qanat Linear Decay Smoothing filter
+            if sig is not None:
+                smoothed_sig = _decay_smoother.smooth(active_symbol, active_tf, sig, raw_conf)
+                if smoothed_sig is None:
+                    logger.info(f"[QANAT DECAY] Single-bar transient twitch filtered on {active_symbol} {active_tf}")
+                    sig = None
+
             if sig is None:
                 log_signal_record(
-                    signal_logger, current_ts, FROZEN_STRATEGY, FROZEN_SYMBOL,
+                    signal_logger, current_ts, strat_name, active_symbol,
                     None, 1.0, last_known_price, None, None,
                     decision="NO_SIGNAL",
                 )
@@ -752,9 +781,29 @@ def run():
                 time.sleep(POLL_INTERVAL_SECS)
                 continue
 
+            # Profitability Gate: Only execute positive mathematical net edge
+            accepted, gate_metrics = _profitability_gate.evaluate_signal(
+                symbol=active_symbol,
+                side=sig,
+                entry_price=last_known_price,
+                sl_price=sl,
+                tp_price=tp,
+                signal_result=sig_res,
+            )
+            if not accepted:
+                log_signal_record(
+                    signal_logger, current_ts, strat_name, active_symbol,
+                    sig, raw_conf, last_known_price, sl, tp,
+                    decision="REJECTED",
+                    rejection_reason=gate_metrics.get("reason", "NEGATIVE_EXPECTED_NET_RETURN"),
+                )
+                portfolio.record_equity_snapshot(current_ts, current_prices)
+                time.sleep(POLL_INTERVAL_SECS)
+                continue
+
             # ── Execute paper trade ───────────────────────────────────────
             fill = paper_execute(
-                portfolio, sig, FROZEN_SYMBOL,
+                portfolio, sig, active_symbol,
                 last_known_price, sl, tp, current_prices, LEDGER_FILE,
             )
 
@@ -762,13 +811,13 @@ def run():
                 daily_trades += 1
                 open_positions_meta[fill["pos_id"]] = {"sl": sl, "tp": tp}
                 log_signal_record(
-                    signal_logger, current_ts, FROZEN_STRATEGY, FROZEN_SYMBOL,
-                    sig, 1.0, last_known_price, sl, tp, decision="TRADED",
+                    signal_logger, current_ts, strat_name, active_symbol,
+                    sig, raw_conf, last_known_price, sl, tp, decision="TRADED",
                 )
             else:
                 log_signal_record(
-                    signal_logger, current_ts, FROZEN_STRATEGY, FROZEN_SYMBOL,
-                    sig, 1.0, last_known_price, sl, tp,
+                    signal_logger, current_ts, strat_name, active_symbol,
+                    sig, raw_conf, last_known_price, sl, tp,
                     decision="REJECTED", rejection_reason=fill["reason"],
                 )
 

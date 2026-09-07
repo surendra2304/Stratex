@@ -42,8 +42,14 @@ class PaperPortfolio:
         self.daily_funding = 0.0
         self.last_day_ts = self._get_day_start(time.time())
         
-        self.ledger_file = ledger_file or os.getenv("PAPER_LEDGER_FILE", "paper_trade_ledger.jsonl")
-        self.equity_file = equity_file or os.getenv("PAPER_EQUITY_FILE", "paper_equity_curve.jsonl")
+        if filename and os.path.dirname(filename):
+            dir_path = os.path.dirname(filename)
+            self.ledger_file = ledger_file or os.path.join(dir_path, "paper_trade_ledger.jsonl")
+            self.equity_file = equity_file or os.path.join(dir_path, "paper_equity_curve.jsonl")
+        else:
+            self.ledger_file = ledger_file or os.getenv("PAPER_LEDGER_FILE", "paper_trade_ledger.jsonl")
+            self.equity_file = equity_file or os.getenv("PAPER_EQUITY_FILE", "paper_equity_curve.jsonl")
+
         
         self._load()
         

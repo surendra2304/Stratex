@@ -1,0 +1,17 @@
+{
+  "report_type": "DAILY_COMPLIANCE_DOSSIER",
+  "timestamp": "2026-09-07T11:32:04.178157Z",
+  "voice_summary": "Today you gained 1.4 percent across 24 trades. Supertrend was your strongest performing strategy. Your risk budget for tomorrow is 13 percent available.",
+  "metrics": {
+    "total_trades": 24,
+    "net_pnl_dollars": 68.5,
+    "peak_drawdown_pct": 1.8,
+    "autonomous_decisions_executed": 0
+  },
+  "regulatory_invariants": {
+    "zero_live_order_policy_honored": true,
+    "max_drawdown_limit_within_bounds": true,
+    "cryptographic_signatures_verified": true
+  },
+  "signature": "d0063b63b1bbe8f7426474572a6429fe54c48996d9b96c0accced9f366f5f7c6"
+}

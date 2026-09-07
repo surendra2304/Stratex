@@ -67,16 +67,20 @@ def get_candles(symbol, interval="15m", limit=300):
         for col in numeric_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce')
             
-        df.dropna(subset=numeric_cols, inplace=True)
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-        df["close_time"] = pd.to_datetime(df["close_time"], unit="ms")
-        
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+        df["close_time"] = pd.to_datetime(df["close_time"], unit="ms", utc=True)
+
         # Calculate Volume Delta (Buy Volume - Sell Volume)
         df["buy_vol"] = df["taker_buy_base"]
         df["sell_vol"] = df["volume"] - df["buy_vol"]
         df["vol_delta"] = df["buy_vol"] - df["sell_vol"]
-        
+
+        # Reject active/incomplete candle from closed-candle strategy evaluations
+        now = pd.Timestamp.now(tz="UTC")
+        df = df[df["close_time"] <= now].copy()
+
         return df
+
     except Exception as e:
         logger.error(f"[DATA] Error fetching candles for {symbol}: {e}")
         return pd.DataFrame()

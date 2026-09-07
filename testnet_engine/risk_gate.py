@@ -56,13 +56,13 @@ class RiskGate:
             return False, "DATA_DEGRADED", f"Data health is {data_health_status}"
 
         # 2. Consecutive Losses
-        is_aggressive = getattr(config, "BYPASS_PROFITABILITY_GATE", False) or getattr(config, "UNLIMITED_POSITIONS", False) or (getattr(config, "MAX_OPEN_POSITIONS", 5) >= 999)
+        is_aggressive = False
         if not is_aggressive and self.consecutive_losses >= self.max_consecutive_losses:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: CONSECUTIVE_LOSS_LIMIT | Losses: {self.consecutive_losses}")
             return False, "CONSECUTIVE_LOSS_LIMIT", f"Hit {self.max_consecutive_losses} consecutive losses."
 
         # 3. Open Positions Limit
-        max_pos = 999 if is_aggressive else int(getattr(config, "MAX_OPEN_POSITIONS", 50))
+        max_pos = int(getattr(config, "MAX_OPEN_POSITIONS", 5))
         if len(active_positions) >= max_pos:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_OPEN_POSITIONS | Open: {len(active_positions)}")
             return False, "MAX_OPEN_POSITIONS", f"Currently at limit of {max_pos} open positions."
@@ -75,19 +75,20 @@ class RiskGate:
                     q = float(p.get('quantity', 0.0))
                     ep = float(p.get('entry_price', 0.0))
                     current_exposure += (q * ep)
-                except (ValueError, TypeError, Exception):
+                except (ValueError, TypeError):
+                    logger.warning("Ignoring invalid active-position record during exposure calculation.")
                     continue
-                    
+
         new_trade_value = proposed_qty * entry_price
         total_exposure = current_exposure + new_trade_value
         total_exposure_pct = total_exposure / current_equity
-        
+
         # 4. Total Exposure Limit
-        max_exp = 999.0 if is_aggressive else config.MAX_TESTNET_EXPOSURE
+        max_exp = config.MAX_TESTNET_EXPOSURE
         if total_exposure_pct > max_exp:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_EXPOSURE_REACHED | Total: {total_exposure_pct:.2%} > {max_exp:.2%}")
             return False, "MAX_EXPOSURE_REACHED", f"New exposure {total_exposure_pct:.2%} exceeds {max_exp:.2%}"
-            
+
         # 5. Single Asset Exposure
         existing_asset_exposure = 0.0
         for pos_k, p in active_positions.items():
@@ -96,12 +97,13 @@ class RiskGate:
                     q = float(p.get('quantity', 0.0))
                     ep = float(p.get('entry_price', 0.0))
                     existing_asset_exposure += (q * ep)
-                except (ValueError, TypeError, Exception):
+                except (ValueError, TypeError):
+                    logger.warning("Ignoring invalid asset record during exposure calculation.")
                     continue
-                    
+
         single_asset_exposure = existing_asset_exposure + new_trade_value
         single_asset_pct = single_asset_exposure / current_equity
-        max_asset_exp = 999.0 if is_aggressive else config.MAX_SINGLE_ASSET_EXPOSURE
+        max_asset_exp = config.MAX_SINGLE_ASSET_EXPOSURE
         if single_asset_pct > max_asset_exp:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_SINGLE_ASSET_EXPOSURE | Asset: {single_asset_pct:.2%} > {max_asset_exp:.2%}")
             return False, "MAX_SINGLE_ASSET_EXPOSURE", f"Asset exposure {single_asset_pct:.2%} exceeds {max_asset_exp:.2%}"
@@ -120,37 +122,37 @@ class RiskGate:
                     net_exposure += val
                 elif p_side in ("SHORT", "SELL"):
                     net_exposure -= val
-            except (ValueError, TypeError, Exception):
+            except (ValueError, TypeError):
                 continue
-                
+
         req_side = str(side).upper()
         if req_side in ("LONG", "BUY"):
             net_exposure += new_trade_value
         else:
             net_exposure -= new_trade_value
-            
+
         net_directional_pct = abs(net_exposure) / current_equity
-        max_dir_exp = 999.0 if is_aggressive else config.MAX_NET_DIRECTIONAL_EXPOSURE
+        max_dir_exp = config.MAX_NET_DIRECTIONAL_EXPOSURE
         if net_directional_pct > max_dir_exp:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_CORRELATION_EXPOSURE | NetDir: {net_directional_pct:.2%} > {max_dir_exp:.2%}")
             return False, "MAX_CORRELATION_EXPOSURE", f"Net directional {net_directional_pct:.2%} exceeds {max_dir_exp:.2%}"
 
         # 7. Drawdown Limit
-        # Update peak equity if current equity establishes a new watermark
         if current_equity > self.peak_equity:
             self.peak_equity = current_equity
 
         drawdown_pct = (self.peak_equity - current_equity) / self.peak_equity if self.peak_equity > 0 else 0.0
-        max_dd = 999.0 if is_aggressive else config.MAX_TESTNET_DRAWDOWN_PCT
+        max_dd = config.MAX_TESTNET_DRAWDOWN_PCT
         if drawdown_pct >= max_dd:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_DRAWDOWN_BREACH | DD: {drawdown_pct:.2%} >= {max_dd:.2%}")
             return False, "MAX_DRAWDOWN_BREACH", f"Current drawdown {drawdown_pct:.2%} >= {max_dd:.2%}"
 
         daily_loss_pct = abs(self.daily_realized_loss) / current_equity if self.daily_realized_loss < 0 else 0
-        max_daily_loss = 999.0 if is_aggressive else config.MAX_DAILY_LOSS_PCT
+        max_daily_loss = config.MAX_DAILY_LOSS_PCT
         if daily_loss_pct >= max_daily_loss:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: DAILY_LOSS_LIMIT | Loss: {daily_loss_pct:.2%} >= {max_daily_loss:.2%}")
             return False, "DAILY_LOSS_LIMIT", f"Daily loss {daily_loss_pct:.2%} >= {max_daily_loss:.2%}"
+
 
         logger.info(f"[RISK_ACCEPTED] {symbol} {side} | Proposed Qty: {proposed_qty} | Value: ${new_trade_value:.2f} | Total Exposure: {total_exposure_pct:.2%}")
         return True, "RISK_OK", ""
@@ -201,9 +203,8 @@ class RiskGate:
         max_risk_amount = current_equity * risk_pct
         quantity = max_risk_amount / risk_per_unit
         
-        # Also cap by max single asset absolute size
-        is_aggressive = getattr(config, "BYPASS_PROFITABILITY_GATE", False) or getattr(config, "UNLIMITED_POSITIONS", False)
-        max_single_exp = 999.0 if is_aggressive else config.MAX_SINGLE_ASSET_EXPOSURE
+        # Strictly cap by max single asset exposure limit
+        max_single_exp = config.MAX_SINGLE_ASSET_EXPOSURE
         max_position_value = current_equity * max_single_exp
         max_quantity_by_exposure = max_position_value / entry_price
         

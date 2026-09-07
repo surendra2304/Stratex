@@ -200,6 +200,34 @@ window.toggleSoundAlerts = toggleSoundAlerts;
 window.toggleNotificationDropdown = toggleNotificationDropdown;
 window.playAudioAlert = playAudioAlert;
 
+/* ── UI Event Handler Bridges (called from inline onclick/onchange in index.html) ── */
+function fetchTrades() {
+    if (typeof fetchTradesData === 'function') {
+        fetchTradesData();
+    }
+}
+
+function fetchSettings() {
+    if (typeof fetchSettingsViewData === 'function') {
+        fetchSettingsViewData();
+    }
+}
+
+function toggleChartIndicator(ind) {
+    const el = document.getElementById('chk-ind-' + ind);
+    if (el && typeof activeIndicators !== 'undefined') {
+        activeIndicators[ind] = el.checked;
+    }
+    if (typeof fetchMarketCandlesAndRender === 'function') {
+        fetchMarketCandlesAndRender();
+    }
+}
+
+window.fetchTrades = fetchTrades;
+window.fetchSettings = fetchSettings;
+window.toggleChartIndicator = toggleChartIndicator;
+
+
 /* ── Upgrade 8: Engine Action Log widget ──────────────────────────────── */
 
 async function refreshActionLog() {

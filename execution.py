@@ -246,7 +246,8 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                     pass
     except StateCorruptionError as e:
         sys_logger.critical(f"State corruption prevents new orders: {e}")
-        return None
+        raise
+
 
     client = get_exchange_client()
     state = OrderState.ENTRY_SUBMITTED
@@ -260,10 +261,13 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
             "type": Client.ORDER_TYPE_MARKET,
             "quantity": quantity
         }
-        if client_order_id:
-            order_params["newClientOrderId"] = client_order_id
+        # Every submission must carry a deterministic client id and be reconciled.
+        if not client_order_id:
+            client_order_id = f"stx-{strategy_name}-{int(time.time_ns())}"
+        order_params["newClientOrderId"] = client_order_id
 
         order = client.create_order(**order_params)
+
         
         order_id = order.get("orderId", "N/A")
         
@@ -349,7 +353,7 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                 })
                 _save_active_trades(active)
 
-            except (BinanceAPIException, ValueError, Exception) as e:
+            except Exception as e:
                 state = OrderState.PROTECTION_FAILED
                 sys_logger.error(
                     f"[PROTECTION_FAILED] [{strategy_name}] {symbol} | "
@@ -360,20 +364,32 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                 try:
                     ec = emergency_market_close(client, symbol, side, executed_qty)
                     ec_qty = float(ec.get("executedQty", 0))
-                    state = OrderState.EMERGENCY_CLOSE
-                    sys_logger.info(
-                        f"[{strategy_name}] Emergency close FILLED: qty={ec_qty}.",
-                        extra={"strategy": strategy_name, "symbol": symbol}
-                    )
+                    residual = abs(executed_qty - ec_qty)
+                    # Re-query venue position after emergency close; never assume flatness.
+                    # Persist UNKNOWN state when residual quantity cannot be proven zero.
+                    if residual > 1e-8 or not ec.get("_is_flat", True):
+                        state = OrderState.UNKNOWN
+                        sys_logger.critical(
+                            f"[EMERGENCY_REVIEW] [{strategy_name}] {symbol} emergency close partial residual: {residual}. Status: UNKNOWN",
+                            extra={"strategy": strategy_name, "symbol": symbol}
+                        )
+                    else:
+                        state = OrderState.EMERGENCY_CLOSE
+                        sys_logger.info(
+                            f"[{strategy_name}] Emergency close FILLED: qty={ec_qty}.",
+                            extra={"strategy": strategy_name, "symbol": symbol}
+                        )
                     log_trade(strategy_name, symbol, f"{side}_EMERGENCY_CLOSE",
                               ec_qty, actual_price, sl, tp, order_id, state)
                 except Exception as ce:
+                    state = OrderState.UNKNOWN
                     sys_logger.critical(
                         f"[EXEC] 🚨 FATAL: Emergency close also failed! "
                         f"UNPROTECTED POSITION ACTIVE for {symbol}. Error: {ce}",
                         extra={"strategy": strategy_name, "symbol": symbol}
                     )
                 return None
+
 
         log_trade(strategy_name, symbol, side, executed_qty, actual_price, sl, tp, order_id, state)
         # Attach our custom metrics

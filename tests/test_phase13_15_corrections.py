@@ -650,7 +650,7 @@ class TestClassificationGate:
 # Tests prove that early classification is STRUCTURALLY IMPOSSIBLE.
 # ═══════════════════════════════════════════════════════════════════════════
 
-class TestClassificationGate:
+class TestClassificationGateTradeCount:
     """
     Regression tests proving that the trade count gate works correctly.
     Duration checks have been completely deprecated.

@@ -1,0 +1,10 @@
+{
+  "incident_id": "INCIDENT_1788539888",
+  "timestamp": "2026-09-04T16:38:08.989400Z",
+  "triggered_by": "CONTROL_API",
+  "reason": "ECOSYSTEM_API_PANIC_COMMAND",
+  "positions_liquidated_count": 0,
+  "action": "LIVE_TRADING_DISABLED_REVERTED_TO_TESTNET_SANDBOX",
+  "status": "ROLLBACK_COMPLETED",
+  "signature": "0543c219bbd2bea407cc8eb2dffb8fc94823af8147001121ff926a66c469d73d"
+}

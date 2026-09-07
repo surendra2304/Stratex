@@ -1,0 +1,27 @@
+# Stratex Quantitative Trading Framework - Ruff Configuration
+target-version = "py311"
+line-length = 120
+
+[lint]
+select = [
+    "E9",  # runtime / syntax errors
+    "F",   # Pyflakes (undefined variables, unused imports, duplicate keys, broken syntax)
+]
+ignore = [
+    "F401",  # unused imports in __init__ and facade re-exports
+    "F841",  # unused variables
+    "F541",  # f-strings without placeholders
+]
+
+exclude = [
+    ".git",
+    ".pytest_cache",
+    ".mypy_cache",
+    "__pycache__",
+    "backup",
+    "backup_ui",
+    "data_cache",
+    "experiments",
+    "experiments_ab",
+    "logs",
+]

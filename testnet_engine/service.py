@@ -263,10 +263,61 @@ class TestnetService:
         self.observe_only = False
         self.cooldowns = {} # symbol -> timestamp (float)
         
+        # Stratex Deep Upgrade: UpgradeRiskManager, MarketDataGuard
+        try:
+            from stratex_upgrade.risk import RiskManager as UpgradeRiskManager, RiskState, RiskLimits
+            from stratex_upgrade.market import MarketDataGuard, FreshnessPolicy
+            from decimal import Decimal
+            eq_dec = Decimal(str(self.starting_equity))
+            r_state = RiskState(
+                equity=eq_dec,
+                starting_equity=eq_dec,
+                peak_equity=eq_dec,
+                daily_start_equity=eq_dec,
+            )
+            r_limits = RiskLimits(
+                max_risk_per_trade=Decimal(str(getattr(config, "MAX_TESTNET_RISK_PER_TRADE", 0.005))),
+                max_total_exposure=Decimal(str(getattr(config, "MAX_TESTNET_EXPOSURE", 0.05))),
+                max_single_asset_exposure=Decimal(str(getattr(config, "MAX_SINGLE_ASSET_EXPOSURE", 0.02))),
+                max_net_directional_exposure=Decimal(str(getattr(config, "MAX_NET_DIRECTIONAL_EXPOSURE", 0.04))),
+                max_open_positions=int(getattr(config, "MAX_OPEN_POSITIONS", 5)),
+                max_daily_loss=Decimal(str(getattr(config, "MAX_DAILY_LOSS_PCT", 0.02))),
+                max_drawdown=Decimal(str(getattr(config, "MAX_TESTNET_DRAWDOWN_PCT", 0.05))),
+            )
+            self.upgrade_risk_manager = UpgradeRiskManager(r_state, r_limits)
+            self.market_guard = MarketDataGuard(FreshnessPolicy(max_age_seconds=10.0))
+            logger.info("[UPGRADE_RISK_READY] UpgradeRiskManager and MarketDataGuard initialized.")
+        except Exception as e:
+            logger.warning(f"[UPGRADE_INIT_WARN] Could not initialize UpgradeRiskManager: {e}")
+            self.upgrade_risk_manager = None
+            self.market_guard = None
+
+        # Qanat Quantitative Architecture: Linear Signal Decay Smoother & Sharpe Portfolio Allocator
+        try:
+            from stratex_upgrade.decay import SignalDecaySmoother
+            from stratex_upgrade.qanat_portfolio import QanatPortfolioAllocator
+            decay_steps = int(os.getenv("SIGNAL_DECAY_STEPS", "4"))
+            self.decay_smoother = SignalDecaySmoother(decay_steps=decay_steps, confirmation_threshold=0.50)
+            self.qanat_allocator = QanatPortfolioAllocator(
+                max_total_exposure=getattr(config, "MAX_TESTNET_EXPOSURE", 0.05),
+                max_single_exposure=getattr(config, "MAX_SINGLE_ASSET_EXPOSURE", 0.02),
+            )
+            logger.info(f"[QANAT_READY] SignalDecaySmoother(decay={decay_steps}) and QanatPortfolioAllocator initialized.")
+        except Exception as e:
+            logger.warning(f"[QANAT_INIT_WARN] Could not initialize Qanat quantitative components: {e}")
+            self.decay_smoother = None
+            self.qanat_allocator = None
+
         # Stage 3: Restore daily risk state from ledger if restarting mid-day
         self._restore_daily_risk_state()
         
-        self.sync_exchange_state(account)
+        # Venue reconciliation must complete before execution threads are started
+        self.reconciliation_mismatch = False
+        try:
+            self.sync_exchange_state(account)
+        except Exception as e:
+            logger.error(f"[STARTUP_RECONCILIATION_ERROR] Venue reconciliation error: {e}")
+            self.reconciliation_mismatch = True
         
         # Thread safety for concurrent websocket callbacks
         self.lock = threading.Lock()
@@ -279,6 +330,7 @@ class TestnetService:
         self._target_monitor_thread = threading.Thread(target=self._trade_target_monitor, daemon=True)
         self._target_monitor_thread.start()
         self._execution_thread.start()
+
         
         # Stats for dashboard (Strict Signal Funnel)
         self.stats = {
@@ -906,30 +958,30 @@ class TestnetService:
                                 )
                                 continue
 
-                        is_aggressive = any(k in strat_name.lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend", "factory_winner"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
-                        if is_aggressive:
-                            passed_profit = True
-                            p_metrics = {
-                                "expected_gross_return": 0.01,
-                                "total_friction": 0.0008,
-                                "expected_net_return": 0.0092,
-                                "atr": abs(current_price - sl),
-                                "atr_pct": abs(current_price - sl) / current_price if current_price > 0 else 0.0,
-                                "reward_pct": abs(tp - current_price) / current_price if current_price > 0 else 0.0,
-                                "risk_pct": abs(current_price - sl) / current_price if current_price > 0 else 0.0,
-                                "prob_win": 0.50,
-                                "confidence": 0.50,
-                                "strategy_type": "RULE_BASED",
-                                "prob_source": "FACTORY_WINNER_BYPASS",
-                                "predicted_move": abs(tp - current_price),
-                                "holding_horizon": "FACTORY_WINNER",
-                                "decision": "ACCEPTED",
-                                "reason": "FACTORY_WINNER_BYPASS",
-                            }
-                        else:
-                            passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
-                                symbol, side, current_price, sl, tp, signal_result
-                            )
+                        # Qanat Signal Decay Filter: Linear weighted persistence filter to slash turnover noise
+                        persisted_bars = 1
+                        smoothed_conviction = 1.0
+                        if getattr(self, "decay_smoother", None):
+                            sig_conf = getattr(signal_result, "confidence", 1.0) if signal_result else 1.0
+                            decay_res = self.decay_smoother.update(symbol, tf, strat_name, side, float(sig_conf))
+                            persisted_bars = decay_res.persisted_bars
+                            smoothed_conviction = decay_res.conviction
+                            if not decay_res.is_confirmed:
+                                self.stats["OTHER_REJECTED"] += 1
+                                if strat_name in self.stats["strategy_metrics"]:
+                                    self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                                if tf in self.stats["timeframe_metrics"]:
+                                    self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                                self.log_opportunity(
+                                    signal_id, symbol, side,
+                                    {"reason": "QANAT_DECAY_FILTERED_NOISE", "conviction": decay_res.conviction, "threshold": self.decay_smoother.confirmation_threshold},
+                                    "REJECTED", "QANAT_DECAY_FILTERED_NOISE"
+                                )
+                                continue
+
+                        passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
+                            symbol, side, current_price, sl, tp, signal_result
+                        )
                         
                         if not passed_profit:
                             self.stats["PROFITABILITY_REJECTED"] += 1
@@ -952,6 +1004,8 @@ class TestnetService:
                             "strategy": strat_name,
                             "metrics": p_metrics,
                             "signal_result": signal_result,
+                            "persisted_bars": persisted_bars,
+                            "smoothed_conviction": smoothed_conviction,
                             "timestamp": datetime.datetime.utcnow().timestamp()
                         }
                         self.opportunity_pool.put(candidate)
@@ -1000,7 +1054,15 @@ class TestnetService:
                     risk_pct = float(p_met.get("risk_pct", abs(entry_p - sl_p) / max(1e-5, entry_p)))
                     if risk_pct <= 0.0 or risk_pct > 1.0:
                         risk_pct = 0.01 # normalize to standard 1% risk baseline
-                    score = round(exp_net * conf / max(0.001, risk_pct), 6)
+                    if getattr(self, "qanat_allocator", None):
+                        score = self.qanat_allocator.score_candidate(
+                            expected_net_return=exp_net,
+                            atr_pct=risk_pct,
+                            confidence=conf,
+                            persisted_bars=c.get("persisted_bars", 1)
+                        )
+                    else:
+                        score = round(exp_net * conf / max(0.001, risk_pct), 6)
                     c["score"] = score
                     c["net_edge"] = exp_net
                     c["risk"] = risk_pct
@@ -1023,8 +1085,6 @@ class TestnetService:
                     sl = candidate["sl"]
                     tp = candidate["tp"]
                     strategy_name = candidate.get("strategy", "adx_ema")
-                    is_aggressive_strat = any(k in str(strategy_name).lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend", "factory_winner"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
-                    
                     with self.lock:
                         # QuantDinger Runtime Lease & Health Supervisor Gate
                         if getattr(self, "runtime_supervisor", None) and getattr(self, "runtime_heartbeat", None):
@@ -1034,10 +1094,10 @@ class TestnetService:
                                 self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", f"UNHEALTHY_RUNTIME_LEASE_{h_reason}")
                                 continue
 
-                        # Enforce per-symbol cooldown (bypassed for aggressive scalper)
+                        # Enforce per-symbol cooldown strictly across all strategies to prevent fee churning
                         now_ts = datetime.datetime.utcnow().timestamp()
 
-                        if not is_aggressive_strat and symbol in self.cooldowns and now_ts - self.cooldowns[symbol] < _COOLDOWN_SECONDS:
+                        if symbol in self.cooldowns and now_ts - self.cooldowns[symbol] < _COOLDOWN_SECONDS:
                             self.stats["COOLDOWN_REJECTED"] += 1
                             self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "ON_COOLDOWN")
                             continue
@@ -1071,17 +1131,11 @@ class TestnetService:
                         current_price = df['close'].iloc[-1]
                         data_health = self.scanner.data_health_status.get(symbol, "OK") if hasattr(self, 'scanner') else "OK"
                         
-                        # Re-validate Profitability Gate (Price may have moved)
-                        # Pass signal_result from original candidate — preserves strategy_type metadata.
-                        is_aggressive_strat = any(k in str(strategy_name).lower() for k in ["aggressive", "bb_reversion", "rsi_burst", "vwap_trend", "factory_winner"]) or getattr(config, "BYPASS_PROFITABILITY_GATE", False)
-                        if is_aggressive_strat:
-                            passed_profit = True
-                            fresh_metrics = p_metrics
-                        else:
-                            passed_profit, fresh_metrics = self.profitability_gate.evaluate_signal(
-                                symbol, side, current_price, sl, tp,
-                                candidate.get("signal_result", p_metrics["prob_win"])
-                            )
+                        # Re-validate Profitability Gate with latest market price
+                        passed_profit, fresh_metrics = self.profitability_gate.evaluate_signal(
+                            symbol, side, current_price, sl, tp,
+                            candidate.get("signal_result", p_metrics.get("prob_win"))
+                        )
                         
                         if not passed_profit:
                             self.stats["PROFITABILITY_REJECTED"] += 1
@@ -1218,6 +1272,38 @@ class TestnetService:
                             except Exception as mc_err:
                                 logger.debug(f"[SERVICE] Pre-trade margin check bypassed: {mc_err}")
 
+                        if getattr(self, "reconciliation_mismatch", False):
+                            self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", "RECONCILIATION_MISMATCH")
+                            logger.warning(f"[RECONCILE_BLOCK] Order submission blocked due to venue reconciliation mismatch.")
+                            continue
+
+                        if getattr(self, "market_guard", None):
+                            from decimal import Decimal
+                            g_ok, g_reason = self.market_guard.accept(
+                                symbol=symbol,
+                                ts_ns=time.time_ns(),
+                                bid=Decimal(str(current_price * 0.999)),
+                                ask=Decimal(str(current_price * 1.001)),
+                                sequence=None,
+                            )
+                            if not g_ok:
+                                self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                                self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", f"MARKET_DATA_{g_reason}")
+                                logger.warning(f"[MARKET_GUARD_REJECT] {symbol} rejected by MarketDataGuard: {g_reason}")
+                                continue
+
+                        reserved_notional = None
+                        if getattr(self, "upgrade_risk_manager", None):
+                            from decimal import Decimal
+                            res_amt = Decimal(str(float(qty_str) * current_price))
+                            if not self.upgrade_risk_manager.reserve_notional(res_amt):
+                                self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                                self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", "RISK_RESERVATION_EXCEEDED")
+                                logger.warning(f"[RISK_RESERVATION] Failed to reserve notional {res_amt} for {symbol} {side}")
+                                continue
+                            reserved_notional = res_amt
+
                         try:
                             if TRADING_MODE == "FUTURES":
                                 from execution import place_futures_market_order
@@ -1229,7 +1315,10 @@ class TestnetService:
                                 order_res = place_market_order(
                                     strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp, client_order_id=signal_id
                                 )
+
                             if order_res:
+
+
                                 self.stats["ORDERS_SUBMITTED"] += 1
                                 order_status = str(order_res.get("status", "")).upper()
                                 if order_status in ("FILLED", "PARTIALLY_FILLED") or order_res.get("_executed_qty", 0) > 0:
@@ -1417,8 +1506,12 @@ class TestnetService:
                                 "error_message": str(e)
                             })
                             self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
-                            
+                        finally:
+                            if reserved_notional is not None and getattr(self, "upgrade_risk_manager", None):
+                                self.upgrade_risk_manager.release_notional(reserved_notional)
+
                         self._save_state()
+
             except Exception as exec_loop_err:
                 logger.critical(f"[EXECUTION_LOOP_ERROR] Uncaught exception in execution loop: {exec_loop_err}", exc_info=True)
                 time.sleep(5)

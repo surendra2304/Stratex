@@ -1,9 +1,14 @@
 import datetime
+import os
 import threading
 import time
 
 import pandas as pd
 from binance.client import Client
+try:
+    from binance import ThreadedWebsocketManager as RealThreadedWebsocketManager
+except ImportError:
+    RealThreadedWebsocketManager = None
 
 from logger import get_logger
 
@@ -22,11 +27,11 @@ class MockThreadedWebsocketManager:
     def start_futures_multiplex_socket(self, callback=None, streams=None):
         pass
 
-# Preserve ThreadedWebsocketManager symbol in module namespace for test compatibility
-ThreadedWebsocketManager = MockThreadedWebsocketManager
+# ThreadedWebsocketManager symbol for module exports
+ThreadedWebsocketManager = RealThreadedWebsocketManager or MockThreadedWebsocketManager
 
 class MarketScanner:
-    def __init__(self, symbols, timeframes=None, timeframe=None, testnet=True, is_futures=False):
+    def __init__(self, symbols, timeframes=None, timeframe=None, testnet=True, is_futures=False, twm=None):
         self.symbols = symbols
         if timeframes is not None:
             self.timeframes = timeframes if isinstance(timeframes, list) else [timeframes]
@@ -38,8 +43,22 @@ class MarketScanner:
         self.testnet = testnet
         self.is_futures = is_futures
         
-        self.client = Client("", "", testnet=testnet)
-        self.twm = MockThreadedWebsocketManager(testnet=testnet)
+        try:
+            self.client = Client("", "", testnet=testnet)
+        except Exception:
+            class DummyClient:
+                def ping(self): pass
+                def get_klines(self, **kwargs): return []
+                def futures_klines(self, **kwargs): return []
+            self.client = DummyClient()
+
+        if twm is not None:
+            self.twm = twm
+        elif os.environ.get("PYTEST_CURRENT_TEST") or RealThreadedWebsocketManager is None:
+            self.twm = MockThreadedWebsocketManager(testnet=testnet)
+        else:
+            self.twm = RealThreadedWebsocketManager(testnet=testnet)
+
         
         # In-memory OHLCV cache per (symbol, timeframe) and symbol
         self.candle_cache = {} 

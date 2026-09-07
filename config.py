@@ -29,8 +29,9 @@ GEMINI_ENABLED = os.getenv("GEMINI_ENABLED", "True").lower() == "true"
 
 # --- Inference Advisory Intelligence System ---
 INFERENCE_URL = os.getenv("INFERENCE_URL", os.getenv("AI_UNIVERSE_URL", os.getenv("AI_UNIVERSE_BASE_URL", "https://inference-3i2b.onrender.com")))
-INFERENCE_API_KEY = os.getenv("INFERENCE_API_KEY", os.getenv("AI_UNIVERSE_API_KEY", "inference_api"))
+INFERENCE_API_KEY = os.getenv("INFERENCE_API_KEY", os.getenv("AI_UNIVERSE_API_KEY", ""))
 AI_UNIVERSE_BASE_URL = INFERENCE_URL
+
 AI_UNIVERSE_API_KEY = INFERENCE_API_KEY
 AI_UNIVERSE_ENABLED = os.getenv("AI_UNIVERSE_ENABLED", "True").lower() == "true"
 ADVISORY_SHADOW_MODE = os.getenv("ADVISORY_SHADOW_MODE", "True").lower() == "true"
@@ -55,9 +56,10 @@ FUTURES_MARGIN_TYPE = os.getenv("FUTURES_MARGIN_TYPE", "ISOLATED").upper()
 SYMBOL = "BTCUSDT"
 
 # --- Risk Management ---
-TRADE_QTY = 0.001           # BTC quantity per trade (small for safety)
-MAX_OPEN_TRADES = 999       # Unlimited open trades
+TRADE_QTY = float(os.getenv("TRADE_QTY", "0.001"))           # BTC quantity per trade (small for safety)
+MAX_OPEN_TRADES = int(os.getenv("MAX_OPEN_TRADES", "5"))       # Bounded open trades (default 5)
 TOP_COINS_LIMIT = 20  # Increase number of top trending coins to scan
+
 TARGET_TRADE_COUNT = 30   # Aligned with the 30-trade statistical validation gate
 TARGET_TRADE_WINDOW_HOURS = 720  # 30-day forward validation window (stress-test remnant fixed)
 LONG_ONLY = os.getenv("TRADING_MODE", "PAPER").upper() != "FUTURES"  # Spot is LONG_ONLY, Futures allows Short
@@ -73,18 +75,17 @@ LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is im
 # --- Strategies to Run ---
 # High Profit Factor quantitative strategies validated with asymmetric Risk/Reward (> 1.33:1)
 ACTIVE_STRATEGIES = {
-    "factory_winner_1": ["5m", "15m", "30m", "1h", "4h"],  # MACD + BB Confluence (PF: 1.481)
-    "factory_winner_2": ["5m", "15m", "30m", "1h", "4h"],  # MACD + BB Confluence (PF: 1.449)
-    "factory_winner_4": ["5m", "15m", "30m", "1h", "4h"],  # MACD + BB Wide Confluence (PF: 1.390)
-    "supertrend": ["5m", "15m", "30m", "1h", "4h"],        # Supertrend Pullback Engine (RR: 2.5)
-    "adx_ema": ["15m", "30m", "1h", "4h"],                 # 200 EMA + ADX Trend (PF: 1.26)
-    "adx_ema_mtf": ["15m", "1h", "4h"],                    # Multi-Timeframe Trend + Sniper (PF: 1.33)
+    "factory_winner_1": ["15m", "30m", "1h", "4h"],  # MACD + BB Confluence (PF: 1.481)
+    "factory_winner_2": ["15m", "30m", "1h", "4h"],  # MACD + BB Confluence (PF: 1.449)
+    "factory_winner_4": ["15m", "30m", "1h", "4h"],  # MACD + BB Wide Confluence (PF: 1.390)
+    "adx_ema": ["4h"],                               # 200 EMA + ADX Trend (PF: 2.36)
 }
 
 ACTIVE_STRATEGY = "factory_winner_1"
-TIMEFRAME = "5m"
-ALL_ACTIVE_TIMEFRAMES = ["5m", "15m", "30m", "1h", "4h"]
-BYPASS_PROFITABILITY_GATE = os.getenv("BYPASS_PROFITABILITY_GATE", "False").lower() == "true"
+TIMEFRAME = "15m"
+ALL_ACTIVE_TIMEFRAMES = ["15m", "30m", "1h", "4h"]
+BYPASS_PROFITABILITY_GATE = False  # HARD SAFETY INVARIANT: Must never bypass mathematical edge calculation
+
 
 # Trading Config
 MAX_POSITION_SIZE = 0.95
@@ -96,8 +97,9 @@ MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.05"))        #
 MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.02"))   # 2% max per single asset
 MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.04")) # 4% max net directional exposure
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))            # Base limit of 5
-MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "999")) # Unlimited positions for aggressive mode
+MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "5")) # Bounded positions for aggressive mode
 VOLATILITY_BUFFER = 0.2  # Scale down positions during high volatility
+
 MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.02"))          # 2% daily loss limit
 MAX_TESTNET_DRAWDOWN_PCT = float(os.getenv("MAX_TESTNET_DRAWDOWN_PCT", "0.05"))    # 5% drawdown tolerance
 RECONCILIATION_TOLERANCE = float(os.getenv("RECONCILIATION_TOLERANCE", "5.0"))     # 5 USDT tolerance

@@ -140,6 +140,19 @@ def serve_root_css():
 def serve_root_js():
     return send_from_directory('static', 'app.js')
 
+@app.route('/ui-compat.js')
+def serve_root_ui_compat_js():
+    return send_from_directory('static', 'ui-compat.js')
+
+@app.route('/quantum')
+@app.route('/quantum.html')
+def serve_quantum_html():
+    return send_from_directory('static', 'quantum.html')
+
+@app.route('/quantum.js')
+def serve_quantum_js():
+    return send_from_directory('static', 'quantum.js')
+
 
 @app.route('/api/optimization')
 def get_optimization_data():

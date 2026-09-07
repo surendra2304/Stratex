@@ -163,24 +163,48 @@ class BacktestEngine:
                 best_tp = None
                 source_strat = None
                 
+                candidates = []
                 for strat in self.strategies:
                     res = strat.get_signal(window)
                     if res[0]:
-                        best_signal = res[0]
-                        best_sl = res[1]
-                        best_tp = res[2]
+                        sig = res[0]
+                        sl = res[1]
+                        tp = res[2]
+                        conf = None
                         if hasattr(res, "confidence"):
-                            pending_conf = res.confidence
+                            conf = res.confidence
                         elif hasattr(res, "win_rate_prior"):
-                            pending_conf = res.win_rate_prior
+                            conf = res.win_rate_prior
                         elif len(res) == 4:
-                            pending_conf = res[3]
+                            conf = res[3]
                         elif len(res) > 4:
-                            pending_conf = res[4]
-                        else:
-                            pending_conf = None
-                        source_strat = strat.__name__.split('_')[-1]
-                        break
+                            conf = res[4]
+
+                        s_name = getattr(strat, "__name__", str(strat)).split('_')[-1]
+                        # Deterministic scoring: confidence primary, risk/reward secondary, strat name tie-breaker
+                        close_p = current_bar['close']
+                        rr = abs(tp - close_p) / max(1e-8, abs(close_p - sl)) if (sl and tp) else 1.0
+                        score = float(conf if conf is not None else 0.5) * 100.0 + float(rr)
+                        candidates.append({
+
+                            "signal": sig,
+                            "sl": sl,
+                            "tp": tp,
+                            "conf": conf,
+                            "strategy": s_name,
+                            "score": score
+                        })
+
+                if candidates:
+                    # Deterministic arbitration: highest score, tie-broken by strategy name
+                    candidates.sort(key=lambda c: (c["score"], c["strategy"]), reverse=True)
+                    top = candidates[0]
+                    best_signal = top["signal"]
+                    best_sl = top["sl"]
+                    best_tp = top["tp"]
+                    source_strat = top["strategy"]
+                    pending_conf = top["conf"]
+
                 
                 if best_signal:
                     if self.long_only and best_signal == 'SELL':

@@ -27,9 +27,12 @@ class SessionState:
                 self.status = data.get("status", "STOPPED")
                 self.start_time = data.get("start_time", 0.0)
                 self.end_time = data.get("end_time", 0.0)
-                self.config_snapshot = data.get("config_snapshot", {})
-        except:
-            pass
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            from paper_engine.exceptions import PersistenceError
+            raise PersistenceError(
+                f"Session state is unreadable/corrupt: {self.filename}"
+            ) from exc
+
             
     def _save(self):
         try:

@@ -47,8 +47,8 @@ class MultiExchangeRouter:
             if not ticker:
                 continue
 
-            fee_dict = adapter.get_trading_fees(symbol) if hasattr(adapter.get_trading_fees, "__code__") and adapter.get_trading_fees.__code__.co_argcount > 1 else adapter.get_trading_fees()
-            fee_rate = fee_dict.get("taker", 0.0006) if isinstance(fee_dict, dict) else 0.0006
+            fee_dict = adapter.get_trading_fees(symbol)
+            fee_rate = fee_dict.get("taker", 0.0006) if isinstance(fee_dict, dict) else (fee_dict[1] if isinstance(fee_dict, (tuple, list)) and len(fee_dict) > 1 else 0.0006)
             gross_price = ticker.ask if side == "BUY" else ticker.bid
 
             if gross_price <= 0:

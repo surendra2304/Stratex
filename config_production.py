@@ -7,7 +7,7 @@ and sets conservative risk tolerances for production deployment.
 
 import os
 
-from config import *  # Inherit base settings and exchange definitions
+from config import *  # noqa: F403  # Inherit base settings and exchange definitions
 
 # --- Production Environment Overrides ---
 ENVIRONMENT = "PRODUCTION"
