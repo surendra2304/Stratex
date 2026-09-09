@@ -1175,7 +1175,9 @@ def get_status():
         elif trades_data and trades_data.get("net_pnl", 0.0) != 0.0:
             realized_pnl = float(trades_data.get("net_pnl", 0.0))
         elif not trades_data or not trades_data.get("positions"):
+            realized_pnl = float(trades_data.get("net_pnl", 0.0)) if trades_data else 0.0
             today_realized_pnl = 0.0
+            fees = 0.0
     except Exception as td_err:
         logger.error(f"Failed to load trades data: {td_err}")
 
