@@ -7,9 +7,17 @@ logger = get_logger("discovery_service")
 class SymbolDiscoveryService:
     def __init__(self, testnet=True):
         self.testnet = testnet
-        self.client = Client("", "", testnet=testnet)
-        if testnet:
-            self.client.API_URL = "https://testnet.binance.vision/api"
+        try:
+            self.client = Client("", "", testnet=testnet, ping=False)
+            if testnet:
+                self.client.API_URL = "https://testnet.binance.vision/api"
+        except Exception:
+            self.client = None
+            
+        try:
+            self.prod_client = Client("", "", testnet=False, ping=False)
+        except Exception:
+            self.prod_client = None
         
     def discover_eligible_symbols(self, min_quote_volume=1000, top_n=15):
         """
@@ -18,8 +26,24 @@ class SymbolDiscoveryService:
         """
         logger.info("[DISCOVERY] Fetching exchange metadata and 24hr tickers...")
         try:
-            exchange_info = self.client.get_exchange_info()
-            tickers = self.client.get_ticker()
+            exchange_info = None
+            tickers = None
+            if self.client:
+                try:
+                    exchange_info = self.client.get_exchange_info()
+                    tickers = self.client.get_ticker()
+                except Exception as ex_err:
+                    logger.warning(f"[DISCOVERY] Testnet exchange info error: {ex_err}")
+            
+            if (not exchange_info or not tickers) and self.prod_client:
+                try:
+                    exchange_info = self.prod_client.get_exchange_info()
+                    tickers = self.prod_client.get_ticker()
+                except Exception as prod_err:
+                    logger.warning(f"[DISCOVERY] Prod exchange info fallback error: {prod_err}")
+
+            if not exchange_info or not tickers:
+                raise RuntimeError("Failed to fetch exchange metadata from both testnet and production.")
             
             # Create a lookup for 24h volume and spread
             ticker_lookup = {}
@@ -121,10 +145,18 @@ class SymbolDiscoveryService:
         Returns {symbol: {stepSize, minNotional, tickSize}} for TRADING symbols.
         """
         out = {}
-        try:
-            exchange_info = self.client.get_exchange_info()
-        except Exception as e:
-            logger.error(f"[DISCOVERY] get_symbol_filters exchange_info error: {e}")
+        exchange_info = None
+        if self.client:
+            try:
+                exchange_info = self.client.get_exchange_info()
+            except Exception as e:
+                logger.debug(f"[DISCOVERY] Testnet get_symbol_filters error: {e}")
+        if not exchange_info and self.prod_client:
+            try:
+                exchange_info = self.prod_client.get_exchange_info()
+            except Exception as e:
+                logger.error(f"[DISCOVERY] Prod get_symbol_filters error: {e}")
+        if not exchange_info:
             return out
         wanted = set(symbols)
         for symbol_info in exchange_info.get("symbols", []):
