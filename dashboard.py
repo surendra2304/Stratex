@@ -1239,10 +1239,19 @@ def get_status():
         "crypto_holdings_value": round(crypto_trade_val, 2),
         "total_crypto_value": round(account_holdings["total_crypto_value"], 2),
         "holdings": account_holdings["holdings"],
+        "total_pnl": round(realized_pnl + unrealized_pnl, 4),
+        "total_net_pnl": round(realized_pnl + unrealized_pnl, 4),
+        "total_realized_pnl": round(realized_pnl, 4),
         "realized_pnl": round(realized_pnl, 4),
         "today_realized_pnl": round(today_realized_pnl, 4),
         "unrealized_pnl": round(unrealized_pnl, 4),
         "today_pnl": round(today_realized_pnl + unrealized_pnl, 4),
+        "total_trades": trades_data.get("total_trades", 0) if ('trades_data' in locals() and isinstance(trades_data, dict)) else 0,
+        "wins": trades_data.get("wins", 0) if ('trades_data' in locals() and isinstance(trades_data, dict)) else 0,
+        "losses": trades_data.get("losses", 0) if ('trades_data' in locals() and isinstance(trades_data, dict)) else 0,
+        "win_rate": trades_data.get("win_rate", 0.0) if ('trades_data' in locals() and isinstance(trades_data, dict)) else 0.0,
+        "gross_profit": trades_data.get("gross_profit", 0.0) if ('trades_data' in locals() and isinstance(trades_data, dict)) else 0.0,
+        "gross_loss": trades_data.get("gross_loss", 0.0) if ('trades_data' in locals() and isinstance(trades_data, dict)) else 0.0,
         "fees": round(fees, 4),
         "funding": funding,
         "used_margin": round(crypto_trade_val, 2),
@@ -1303,7 +1312,7 @@ def _get_trades_data():
         except Exception:
             baseline_iso = ""
         if not baseline_iso:
-            baseline_iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-09T09:44:52.803966Z")
+            baseline_iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-01T00:00:00Z")
 
     for ledger_file in ledger_files:
         if not os.path.exists(ledger_file):
@@ -1333,10 +1342,15 @@ def _get_trades_data():
                     entry_oid = str(trade.get("entry_order_id", ""))
                     exit_oid = str(trade.get("exit_order_id", ""))
                     
-                    if exit_oid and exit_oid != "None":
-                        key = f"{symbol}_{exit_oid}"
+                    signal_id = str(trade.get("signal_id") or "")
+                    if signal_id and signal_id != "None":
+                        key = signal_id
+                    elif entry_oid and exit_oid and entry_oid != "None" and exit_oid != "None":
+                        key = f"{symbol}_{entry_oid}_{exit_oid}"
+                    elif exit_oid and exit_oid != "None":
+                        key = f"{symbol}_{exit_oid}_{trade.get('exit_timestamp', '')}_{trade.get('pnl', '')}"
                     elif entry_oid and entry_oid != "None":
-                        key = f"{symbol}_{entry_oid}"
+                        key = f"{symbol}_{entry_oid}_{trade.get('entry_timestamp', '')}_{trade.get('pnl', '')}"
                     elif trade_id and trade_id != "None":
                         key = f"{symbol}_{trade_id}"
                     else:

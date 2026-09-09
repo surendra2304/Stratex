@@ -64,6 +64,7 @@ testnet_portfolio.json.tmp
 
 # ── Runtime audit / event ledgers (jsonl) ──────────────────────────────────────
 *.jsonl
+!testnet_trade_ledger.jsonl
 
 # ── Model / binary artifacts (retrainable) ─────────────────────────────────────
 *.pkl

@@ -538,7 +538,7 @@ class TestnetService:
                             _bl = json.load(bf)
                         _iso = _bl.get("reset_timestamp", "")
                     if not _iso:
-                        _iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-09T09:44:52.803966Z")
+                        _iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-01T00:00:00Z")
                     if _iso:
                         baseline_ms = datetime.datetime.fromisoformat(_iso.replace("Z", "+00:00")).timestamp() * 1000
             except Exception:
@@ -1968,7 +1968,7 @@ class TestnetService:
                             _bl = json.load(bf)
                         _bl_iso = _bl.get("reset_timestamp", "")
                     if not _bl_iso:
-                        _bl_iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-09T09:44:52.803966Z")
+                        _bl_iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-01T00:00:00Z")
                     if _bl_iso:
                         baseline_ts = datetime.datetime.fromisoformat(_bl_iso.replace("Z", "+00:00")).timestamp() * 1000
             except Exception:

@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=8.2.0">
+    <link rel="stylesheet" href="/static/style.css?v=8.3.0">
 </head>
 <body>
     <!-- App Header -->
@@ -33,212 +33,396 @@
 
     <!-- Main Container -->
     <main class="app-container">
-        <!-- Top KPI Grid -->
+        <!-- Top Synced KPI Grid (Always visible across all tabs) -->
         <section class="kpi-grid">
-            <div class="kpi-card highlight-blue">
-                <span class="kpi-label">Real Binance Balance</span>
+            <!-- Card 1: Balance & Total Equity -->
+            <div class="kpi-card highlight-blue" id="kpi-card-balance">
+                <span class="kpi-label">Binance Cash Balance</span>
                 <span id="kpi-balance" class="kpi-value text-blue">$0.00</span>
                 <span id="kpi-equity-sub" class="kpi-subtext mono">Total Equity: $0.00 USDT</span>
             </div>
+
+            <!-- Card 2: Total Net PnL (Synced: Realized + Unrealized) -->
             <div class="kpi-card" id="kpi-card-total-pnl">
-                <span class="kpi-label">Total Realized PnL</span>
+                <span class="kpi-label">Total Net PnL (Synced)</span>
                 <span id="kpi-total-pnl" class="kpi-value">$0.00</span>
-                <span id="kpi-pnl-sub" class="kpi-subtext mono">Gross Profit: $0.00 | Fees: $0.00</span>
+                <span id="kpi-pnl-sub" class="kpi-subtext mono">Realized: $0.00 | Floating: $0.00</span>
             </div>
+
+            <!-- Card 3: Total Realized PnL (Closed Trades) -->
+            <div class="kpi-card" id="kpi-card-realized-pnl">
+                <span class="kpi-label">Total Realized PnL</span>
+                <span id="kpi-realized-pnl" class="kpi-value">$0.00</span>
+                <span id="kpi-realized-sub" class="kpi-subtext mono">Gross: $0.00 | Fees: $0.00</span>
+            </div>
+
+            <!-- Card 4: Today's Net PnL -->
             <div class="kpi-card" id="kpi-card-today-pnl">
-                <span class="kpi-label">Today's PnL</span>
+                <span class="kpi-label">Today's Net PnL</span>
                 <span id="kpi-today-pnl" class="kpi-value">$0.00</span>
-                <span id="kpi-today-sub" class="kpi-subtext mono">Realized: $0.00 | Unrealized: $0.00</span>
+                <span id="kpi-today-sub" class="kpi-subtext mono">Realized: $0.00 | Floating: $0.00</span>
             </div>
-            <div class="kpi-card">
+
+            <!-- Card 5: Win Rate & Executions -->
+            <div class="kpi-card" id="kpi-card-winrate">
                 <span class="kpi-label">Win Rate / Executions</span>
                 <span id="kpi-win-rate" class="kpi-value">0.0%</span>
                 <span id="kpi-trades-count" class="kpi-subtext mono">0 Wins / 0 Losses (0 Total)</span>
             </div>
-            <div class="kpi-card">
-                <span class="kpi-label">Open Positions</span>
+
+            <!-- Card 6: Open Positions & Unrealized PnL -->
+            <div class="kpi-card" id="kpi-card-open">
+                <span class="kpi-label">Active Open Positions</span>
                 <span id="kpi-open-count" class="kpi-value text-main">0</span>
                 <span id="kpi-open-unrealized" class="kpi-subtext mono">Unrealized: $0.00</span>
             </div>
         </section>
 
-        <!-- Section 1: Everyday Profits and Losses -->
-        <section class="panel">
-            <div class="panel-header">
-                <div class="panel-title">
-                    <span>📅 Everyday Profit &amp; Loss Breakdown</span>
-                    <span class="panel-title-badge" id="daily-days-count">0 Days Recorded</span>
-                </div>
-                <span class="badge-tag">Verified Binance Execution Ledger</span>
-            </div>
-            <div class="panel-body">
-                <div class="data-table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Day Net PnL</th>
-                                <th>Win Rate</th>
-                                <th>Trades (W / L)</th>
-                                <th>Gross Profit</th>
-                                <th>Gross Loss</th>
-                                <th>Fees</th>
-                                <th>Trades List</th>
-                            </tr>
-                        </thead>
-                        <tbody id="daily-pnl-tbody">
-                            <tr>
-                                <td colspan="8" class="empty-state">
-                                    <div class="empty-state-icon">⏳</div>
-                                    <div class="empty-state-text">Loading daily performance ledger from Binance...</div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
+        <!-- Tab Navigation Bar -->
+        <nav class="tab-nav" aria-label="Terminal Navigation">
+            <button class="tab-btn active" data-tab="tab-overview" type="button">
+                <span>📊 Overview</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-daily" type="button">
+                <span>📅 Everyday PnL</span>
+                <span class="tab-badge" id="tab-badge-daily">0 Days</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-positions" type="button">
+                <span>⚡ Live Positions</span>
+                <span class="tab-badge" id="tab-badge-positions">0</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-trades" type="button">
+                <span>📜 Trade History &amp; Journal</span>
+                <span class="tab-badge" id="tab-badge-trades">0 Closed</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-scanner" type="button">
+                <span>📡 Market Scanner</span>
+                <span class="tab-badge">16 Pairs</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-diagnostics" type="button">
+                <span>⚙️ Engine Diagnostics</span>
+            </button>
+        </nav>
 
-        <!-- Section 2: Active Open Positions -->
-        <section class="panel">
-            <div class="panel-header">
-                <div class="panel-title">
-                    <span>⚡ Live Open Positions</span>
-                    <span class="panel-title-badge" id="open-positions-count">0 Open</span>
+        <!-- TAB 1: OVERVIEW & PERFORMANCE SNAPSHOT -->
+        <div id="tab-overview" class="tab-pane active">
+            <!-- Account & Margin Metrics Grid -->
+            <section class="overview-metrics-grid">
+                <div class="overview-metric-box">
+                    <span class="metric-label">Gross Profit</span>
+                    <span class="metric-val text-green mono" id="overview-gross-profit">+$0.00</span>
+                    <span class="metric-desc">Winning trade proceeds</span>
                 </div>
-                <span class="sync-status mono" id="positions-sync-note">Real-time Binance Position Tracker</span>
-            </div>
-            <div class="panel-body">
-                <div class="data-table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Symbol</th>
-                                <th>Side</th>
-                                <th>Quantity</th>
-                                <th>Entry Price</th>
-                                <th>Mark Price</th>
-                                <th>Unrealized PnL</th>
-                                <th>Stop Loss (SL)</th>
-                                <th>Take Profit (TP)</th>
-                                <th>Strategy</th>
-                                <th>Opened Time</th>
-                            </tr>
-                        </thead>
-                        <tbody id="open-positions-tbody">
-                            <tr>
-                                <td colspan="10" class="empty-state">
-                                    <div class="empty-state-icon">🎯</div>
-                                    <div class="empty-state-text">No active open positions on Binance Testnet</div>
-                                    <div class="empty-state-sub">Strategy engine is actively scanning 16 pairs for qualified high-expectancy entries.</div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="overview-metric-box">
+                    <span class="metric-label">Gross Loss</span>
+                    <span class="metric-val text-red mono" id="overview-gross-loss">-$0.00</span>
+                    <span class="metric-desc">Losing trade gross cost</span>
                 </div>
-            </div>
-        </section>
+                <div class="overview-metric-box">
+                    <span class="metric-label">Net Realized PnL</span>
+                    <span class="metric-val mono" id="overview-net-pnl">$0.00</span>
+                    <span class="metric-desc">Profit - Loss - Fees</span>
+                </div>
+                <div class="overview-metric-box">
+                    <span class="metric-label">Total Fees Paid</span>
+                    <span class="metric-val text-muted mono" id="overview-fees">$0.00</span>
+                    <span class="metric-desc">Maker/Taker exchange fees</span>
+                </div>
+                <div class="overview-metric-box">
+                    <span class="metric-label">Profit Factor</span>
+                    <span class="metric-val text-blue mono" id="overview-profit-factor">0.00</span>
+                    <span class="metric-desc">Gross Profit / Gross Loss</span>
+                </div>
+                <div class="overview-metric-box">
+                    <span class="metric-label">Margin In Use</span>
+                    <span class="metric-val mono" id="overview-margin-used">$0.00</span>
+                    <span class="metric-desc">Active collateral locked</span>
+                </div>
+                <div class="overview-metric-box">
+                    <span class="metric-label">Free Margin</span>
+                    <span class="metric-val text-green mono" id="overview-free-margin">$0.00</span>
+                    <span class="metric-desc">Available for new trades</span>
+                </div>
+                <div class="overview-metric-box">
+                    <span class="metric-label">Portfolio Exposure</span>
+                    <span class="metric-val mono" id="overview-exposure">0.0%</span>
+                    <span class="metric-desc">Current risk exposure</span>
+                </div>
+            </section>
 
-        <!-- Section 3: Real-Time Execution History (All Closed Trades) -->
-        <section class="panel">
-            <div class="panel-header">
-                <div class="panel-title">
-                    <span>📜 Trade History (Real Closed Positions)</span>
-                    <span class="panel-title-badge" id="total-trades-badge">0 Closed</span>
+            <!-- Quick Active Positions Snapshot -->
+            <section class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span>⚡ Live Positions Snapshot</span>
+                        <span class="panel-title-badge" id="overview-positions-count">0 Open</span>
+                    </div>
+                    <button class="btn-link" onclick="window.switchTab('tab-positions')">View Full Position Tracker &rarr;</button>
                 </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <input type="text" id="trades-search" class="table-filter-input mono" placeholder="Filter symbol (e.g. BTC)...">
+                <div class="panel-body">
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th>Quantity</th>
+                                    <th>Entry Price</th>
+                                    <th>Mark Price</th>
+                                    <th>Unrealized PnL</th>
+                                    <th>Stop Loss</th>
+                                    <th>Take Profit</th>
+                                </tr>
+                            </thead>
+                            <tbody id="overview-positions-tbody">
+                                <tr>
+                                    <td colspan="8" class="empty-state">
+                                        <div class="empty-state-text">No active positions open</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
-            <div class="panel-body">
-                <div class="data-table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Closed Time (UTC)</th>
-                                <th>Symbol</th>
-                                <th>Side</th>
-                                <th>Quantity</th>
-                                <th>Entry Price</th>
-                                <th>Exit Price</th>
-                                <th>Gross PnL</th>
-                                <th>Fees</th>
-                                <th>Net PnL</th>
-                                <th>Exit Reason</th>
-                                <th>Strategy</th>
-                                <th>Order ID</th>
-                            </tr>
-                        </thead>
-                        <tbody id="trades-history-tbody">
-                            <tr>
-                                <td colspan="12" class="empty-state">
-                                    <div class="empty-state-icon">⏳</div>
-                                    <div class="empty-state-text">Loading execution history...</div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
+            </section>
 
-        <!-- Section 4: Live Market Scanner -->
-        <section class="panel">
-            <div class="panel-header">
-                <div class="panel-title">
-                    <span>📡 Live Market Scanner (16 Tracked Pairs)</span>
-                    <span class="panel-title-badge" id="scanned-symbols-count">16 Pairs Active</span>
+            <!-- Quick Recent Trades Snapshot -->
+            <section class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span>📜 Recent Closed Executions</span>
+                    </div>
+                    <button class="btn-link" onclick="window.switchTab('tab-trades')">View Full Trade Journal &rarr;</button>
                 </div>
-                <span class="badge-tag mono">Multi-Timeframe Scanning (5m, 15m, 1h)</span>
-            </div>
-            <div class="panel-body">
-                <div class="market-grid" id="market-scanner-grid">
-                    <!-- Dynamic Market Chips injected by JS -->
+                <div class="panel-body">
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Closed Time (UTC)</th>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th>Quantity</th>
+                                    <th>Entry Price</th>
+                                    <th>Exit Price</th>
+                                    <th>Net PnL</th>
+                                    <th>Fees</th>
+                                    <th>Exit Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody id="overview-recent-trades-tbody">
+                                <tr>
+                                    <td colspan="9" class="empty-state">
+                                        <div class="empty-state-text">Loading recent trades...</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
-        </section>
+            </section>
+        </div>
 
-        <!-- Section 5: Engine Diagnostics -->
-        <section class="panel">
-            <div class="panel-header">
-                <div class="panel-title">
-                    <span>⚙️ Execution Engine Diagnostics</span>
-                    <span class="panel-title-badge text-green" id="diag-engine-status">ONLINE</span>
+        <!-- TAB 2: EVERYDAY PROFITS AND LOSSES JOURNAL -->
+        <div id="tab-daily" class="tab-pane">
+            <section class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span>📅 Everyday Profit &amp; Loss Breakdown</span>
+                        <span class="panel-title-badge" id="daily-days-count">0 Days Recorded</span>
+                    </div>
+                    <span class="badge-tag">100% Verified Binance Testnet Ledger</span>
                 </div>
-                <span class="badge-tag mono" id="diag-heartbeat">Heartbeat: OK</span>
-            </div>
-            <div class="panel-body">
-                <div class="diagnostics-grid">
-                    <div class="diag-item">
-                        <span class="diag-label">Active Strategies</span>
-                        <span class="diag-val" id="diag-strategies">supertrend, bb_reversion, factory_winners, adx_ema</span>
-                    </div>
-                    <div class="diag-item">
-                        <span class="diag-label">Active Timeframes</span>
-                        <span class="diag-val mono">5m, 15m, 30m, 1h, 4h</span>
-                    </div>
-                    <div class="diag-item">
-                        <span class="diag-label">Friction Model</span>
-                        <span class="diag-val mono">8.0 bps (USD-M Futures Maker/Taker)</span>
-                    </div>
-                    <div class="diag-item">
-                        <span class="diag-label">Qanat Decay Smoother</span>
-                        <span class="diag-val mono">Threshold: 0.35 | Steps: 4</span>
-                    </div>
-                    <div class="diag-item">
-                        <span class="diag-label">Engine PID</span>
-                        <span class="diag-val mono" id="diag-pid">24 (Daemon)</span>
-                    </div>
-                    <div class="diag-item">
-                        <span class="diag-label">Service Uptime</span>
-                        <span class="diag-val mono" id="diag-uptime">Online</span>
+                <div class="panel-body">
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Day Net PnL</th>
+                                    <th>Win Rate</th>
+                                    <th>Trades (W / L)</th>
+                                    <th>Gross Profit</th>
+                                    <th>Gross Loss</th>
+                                    <th>Fees</th>
+                                    <th>Trade Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="daily-pnl-tbody">
+                                <tr>
+                                    <td colspan="8" class="empty-state">
+                                        <div class="empty-state-icon">⏳</div>
+                                        <div class="empty-state-text">Loading everyday performance ledger from Binance...</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-            </div>
-        </section>
+            </section>
+        </div>
+
+        <!-- TAB 3: LIVE OPEN POSITIONS -->
+        <div id="tab-positions" class="tab-pane">
+            <section class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span>⚡ Live Open Positions Tracker</span>
+                        <span class="panel-title-badge" id="open-positions-count">0 Open</span>
+                    </div>
+                    <span class="sync-status mono" id="positions-sync-note">Real-time Binance Position Tracker</span>
+                </div>
+                <div class="panel-body">
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th>Quantity</th>
+                                    <th>Entry Price</th>
+                                    <th>Mark Price</th>
+                                    <th>Unrealized PnL</th>
+                                    <th>Stop Loss (SL)</th>
+                                    <th>Take Profit (TP)</th>
+                                    <th>Strategy</th>
+                                    <th>Opened Time (UTC)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="open-positions-tbody">
+                                <tr>
+                                    <td colspan="10" class="empty-state">
+                                        <div class="empty-state-icon">🎯</div>
+                                        <div class="empty-state-text">No active open positions on Binance Testnet</div>
+                                        <div class="empty-state-sub">Strategy engine is actively scanning 16 pairs for qualified entries.</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- TAB 4: TRADE EXECUTION HISTORY & COMPLETE JOURNAL -->
+        <div id="tab-trades" class="tab-pane">
+            <section class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span>📜 Trade History &amp; Execution Journal</span>
+                        <span class="panel-title-badge" id="total-trades-badge">0 Closed</span>
+                    </div>
+                    <div class="table-controls">
+                        <div class="filter-btn-group">
+                            <button class="filter-chip active" id="btn-filter-all" onclick="window.setTradeResultFilter('ALL')">All</button>
+                            <button class="filter-chip" id="btn-filter-wins" onclick="window.setTradeResultFilter('WINS')">Wins Only</button>
+                            <button class="filter-chip" id="btn-filter-losses" onclick="window.setTradeResultFilter('LOSSES')">Losses Only</button>
+                        </div>
+                        <input type="text" id="trades-search" class="table-filter-input mono" placeholder="Filter symbol (e.g. LTC, XRP)...">
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Closed Time (UTC)</th>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th>Quantity</th>
+                                    <th>Entry Price</th>
+                                    <th>Exit Price</th>
+                                    <th>Gross PnL</th>
+                                    <th>Fees</th>
+                                    <th>Net PnL</th>
+                                    <th>Exit Reason</th>
+                                    <th>Strategy</th>
+                                    <th>Order ID</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trades-history-tbody">
+                                <tr>
+                                    <td colspan="12" class="empty-state">
+                                        <div class="empty-state-icon">⏳</div>
+                                        <div class="empty-state-text">Loading execution history...</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- TAB 5: LIVE MARKET SCANNER -->
+        <div id="tab-scanner" class="tab-pane">
+            <section class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span>📡 Live Market Scanner (16 Tracked Pairs)</span>
+                        <span class="panel-title-badge" id="scanned-symbols-count">16 Pairs Active</span>
+                    </div>
+                    <span class="badge-tag mono">Multi-Timeframe Scanning (5m, 15m, 30m, 1h, 4h)</span>
+                </div>
+                <div class="panel-body">
+                    <div class="market-grid" id="market-scanner-grid">
+                        <!-- Dynamic Market Chips injected by JS -->
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- TAB 6: ENGINE DIAGNOSTICS & RISK CONTROLS -->
+        <div id="tab-diagnostics" class="tab-pane">
+            <section class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span>⚙️ Execution Engine Diagnostics &amp; Risk Guard</span>
+                        <span class="panel-title-badge text-green" id="diag-engine-status">ONLINE</span>
+                    </div>
+                    <span class="badge-tag mono" id="diag-heartbeat">Heartbeat: OK</span>
+                </div>
+                <div class="panel-body">
+                    <div class="diagnostics-grid">
+                        <div class="diag-item">
+                            <span class="diag-label">Active Strategies</span>
+                            <span class="diag-val" id="diag-strategies">supertrend, bb_reversion, factory_winners, adx_ema</span>
+                        </div>
+                        <div class="diag-item">
+                            <span class="diag-label">Active Timeframes</span>
+                            <span class="diag-val mono">5m, 15m, 30m, 1h, 4h</span>
+                        </div>
+                        <div class="diag-item">
+                            <span class="diag-label">Friction Model</span>
+                            <span class="diag-val mono">8.0 bps (USD-M Futures Maker/Taker)</span>
+                        </div>
+                        <div class="diag-item">
+                            <span class="diag-label">Qanat Decay Smoother</span>
+                            <span class="diag-val mono">Threshold: 0.35 | Steps: 4</span>
+                        </div>
+                        <div class="diag-item">
+                            <span class="diag-label">Engine PID</span>
+                            <span class="diag-val mono" id="diag-pid">24 (Daemon)</span>
+                        </div>
+                        <div class="diag-item">
+                            <span class="diag-label">Service Uptime</span>
+                            <span class="diag-val mono" id="diag-uptime">Online</span>
+                        </div>
+                        <div class="diag-item">
+                            <span class="diag-label">Max Allowed Drawdown</span>
+                            <span class="diag-val mono text-amber">5.0% Risk Limit</span>
+                        </div>
+                        <div class="diag-item">
+                            <span class="diag-label">Max Portfolio Exposure</span>
+                            <span class="diag-val mono text-amber">5.0% Total Capital</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
     </main>
 
     <!-- App JavaScript -->
-    <script src="/static/app.js?v=8.2.0"></script>
+    <script src="/static/app.js?v=8.3.0"></script>
 </body>
 </html>
