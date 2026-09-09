@@ -259,8 +259,9 @@ def trailing_cycle(service):
 
     for trade in active:
         try:
-            # Only process open positions
-            if trade.get("status") != "OPEN":
+            # Only process open positions (status="OPEN" or state="PROTECTED")
+            trade_status = trade.get("status") or trade.get("state")
+            if trade_status not in ("OPEN", "PROTECTED"):
                 continue
 
             symbol = trade.get("symbol")

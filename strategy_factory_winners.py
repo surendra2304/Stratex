@@ -113,13 +113,13 @@ def get_signal_winner_1(df: pd.DataFrame, **kwargs) -> SignalResult:
 
 
 def get_signal_winner_2(df: pd.DataFrame, **kwargs) -> SignalResult:
-    """Winner #2: 5m MACD+BB Confluence (SL 1.0x ATR, TP 2.0x ATR, RR 2.0, Net PF 1.449)"""
-    return _evaluate_macd_bb_confluence(df, sl_atr=1.0, tp_atr=2.0, rr_ratio=2.0, win_rate_prior=0.413)
+    """Winner #2: 5m MACD+BB Confluence (SL 1.5x ATR, TP 3.0x ATR, RR 2.0, Net PF 1.449)"""
+    return _evaluate_macd_bb_confluence(df, sl_atr=1.5, tp_atr=3.0, rr_ratio=2.0, win_rate_prior=0.413)
 
 
 def get_signal_winner_3(df: pd.DataFrame, **kwargs) -> SignalResult:
-    """Winner #3: 5m MACD+BB Confluence (SL 0.5x ATR, TP 1.5x ATR, RR 3.0, Net PF 1.433)"""
-    return _evaluate_macd_bb_confluence(df, sl_atr=0.5, tp_atr=1.5, rr_ratio=3.0, win_rate_prior=0.334)
+    """Winner #3: 5m MACD+BB Confluence (SL 1.5x ATR, TP 4.5x ATR, RR 3.0, Net PF 1.433)"""
+    return _evaluate_macd_bb_confluence(df, sl_atr=1.5, tp_atr=4.5, rr_ratio=3.0, win_rate_prior=0.334)
 
 
 def get_signal_winner_4(df: pd.DataFrame, **kwargs) -> SignalResult:
@@ -128,5 +128,5 @@ def get_signal_winner_4(df: pd.DataFrame, **kwargs) -> SignalResult:
 
 
 def get_signal_winner_5(df: pd.DataFrame, **kwargs) -> SignalResult:
-    """Winner #5: 15m MACD+BB Confluence (SL 0.5x ATR, TP 1.5x ATR, RR 3.0, Net PF 1.361)"""
-    return _evaluate_macd_bb_confluence(df, sl_atr=0.5, tp_atr=1.5, rr_ratio=3.0, win_rate_prior=0.305)
+    """Winner #5: 15m MACD+BB Confluence (SL 1.5x ATR, TP 4.5x ATR, RR 3.0, Net PF 1.361)"""
+    return _evaluate_macd_bb_confluence(df, sl_atr=1.5, tp_atr=4.5, rr_ratio=3.0, win_rate_prior=0.305)

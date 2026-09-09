@@ -24,8 +24,8 @@ class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_typ
 _STRATEGY_TYPE      = "RULE_BASED"
 _OOS_WIN_RATE_PRIOR = 0.50
 _RR_RATIO           = 3.0
-_SL_ATR             = 0.5
-_TP_ATR             = 1.5
+_SL_ATR             = 1.5
+_TP_ATR             = 4.5
 
 
 def compute_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:

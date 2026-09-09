@@ -1125,11 +1125,11 @@ def get_status():
                 if (sl_val == 0.0 or tp_val == 0.0) and entry_p > 0:
                     side_val = fp.get("side", "LONG")
                     if side_val in ["LONG", "BUY"]:
-                        if sl_val == 0.0: sl_val = round(entry_p * 0.995, 4)
-                        if tp_val == 0.0: tp_val = round(entry_p * 1.003, 4)
+                        if sl_val == 0.0: sl_val = round(entry_p * 0.985, 4)
+                        if tp_val == 0.0: tp_val = round(entry_p * 1.030, 4)
                     else:
-                        if sl_val == 0.0: sl_val = round(entry_p * 1.005, 4)
-                        if tp_val == 0.0: tp_val = round(entry_p * 0.997, 4)
+                        if sl_val == 0.0: sl_val = round(entry_p * 1.015, 4)
+                        if tp_val == 0.0: tp_val = round(entry_p * 0.970, 4)
 
                 open_pos_list.append({
                     "symbol": sym,
@@ -1140,7 +1140,7 @@ def get_status():
                     "unrealized_pnl": fp.get("unrealized_pnl", 0.0),
                     "sl": sl_val,
                     "tp": tp_val,
-                    "strategy": pos_meta.get("strategy", "AGGRESSIVE_SCALPER"),
+                    "strategy": pos_meta.get("strategy", "SUPERTREND"),
                     "timestamp": pos_meta.get("timestamp", datetime.datetime.utcnow().isoformat() + "Z")
                 })
 

@@ -2545,13 +2545,14 @@ class TestnetService:
                     if last_close <= 0.0:
                         raise RuntimeError(f"Could not fetch market price for {sym}")
 
+                    atr = float(compute_atr(df, 14).iloc[-1]) if (df is not None and not getattr(df, "empty", True) and len(df) >= 14) else (last_close * 0.015)
                     if TRADING_MODE == "FUTURES":
                         if entry_side == "BUY":
-                            sl_price = round(last_close * 0.995, 6)
-                            tp_price = round(last_close * 1.003, 6)
+                            sl_price = round(last_close - 1.5 * atr, 6)
+                            tp_price = round(last_close + 3.0 * atr, 6)
                         else:
-                            sl_price = round(last_close * 1.005, 6)
-                            tp_price = round(last_close * 0.997, 6)
+                            sl_price = round(last_close + 1.5 * atr, 6)
+                            tp_price = round(last_close - 3.0 * atr, 6)
                         qty = round(held_qty, 4)
                         from testnet_engine.protection import (
                             place_futures_bracket_protection,
@@ -2566,8 +2567,7 @@ class TestnetService:
                             tp_price=tp_price,
                         )
                     else:
-                        atr = float(compute_atr(df, 14).iloc[-1]) if (df is not None and not getattr(df, "empty", True) and len(df) >= 14) else (last_close * 0.01)
-                        sl_price = round(last_close - 3.0 * atr, 6)
+                        sl_price = round(last_close - 1.5 * atr, 6)
                         tp_price = round(last_close + 3.0 * atr, 6)
                         qty = round(held_qty, 4)
                         prot = place_oco_protection(
