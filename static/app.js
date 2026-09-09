@@ -65,6 +65,7 @@
         openPositionsTbody: document.getElementById('open-positions-tbody'),
         openPositionsCount: document.getElementById('open-positions-count'),
         positionsSyncNote: document.getElementById('positions-sync-note'),
+        btnCloseAllPositions: document.getElementById('btn-close-all-positions'),
 
         // Trade History Tab
         tradesHistoryTbody: document.getElementById('trades-history-tbody'),
@@ -602,6 +603,7 @@
         }
 
         if (positions.length === 0) {
+            if (el.btnCloseAllPositions) el.btnCloseAllPositions.style.display = 'none';
             el.openPositionsTbody.innerHTML = `
                 <tr>
                     <td colspan="10" class="empty-state">
@@ -613,6 +615,8 @@
             `;
             return;
         }
+
+        if (el.btnCloseAllPositions) el.btnCloseAllPositions.style.display = 'inline-block';
 
         el.openPositionsTbody.innerHTML = positions.map(pos => {
             const side = (pos.side || pos.direction || 'BUY').toUpperCase();
@@ -638,7 +642,7 @@
                     </td>
                     <td class="mono text-red">${pos.sl ? fmtNumber(pos.sl, 4) : '--'}</td>
                     <td class="mono text-green">${pos.tp ? fmtNumber(pos.tp, 4) : '--'}</td>
-                    <td><span class="badge-tag">${pos.strategy || 'aggressive_scalper'}</span></td>
+                    <td><span class="badge-tag">${pos.strategy || 'SUPERTREND'}</span></td>
                     <td class="mono text-muted">${fmtTime(pos.timestamp)}</td>
                 </tr>
             `;
@@ -791,6 +795,27 @@
             lastTradeFilter = e.target.value;
             if (cachedTrades) {
                 renderTradesHistory(cachedTrades);
+            }
+        });
+    if (el.btnCloseAllPositions) {
+        el.btnCloseAllPositions.addEventListener('click', async () => {
+            if (!confirm('Are you sure you want to close ALL open positions on Binance Futures Testnet?')) return;
+            try {
+                el.btnCloseAllPositions.disabled = true;
+                el.btnCloseAllPositions.textContent = 'Closing...';
+                const res = await fetch('/api/testnet/positions/close-all', { method: 'POST' });
+                const json = await res.json();
+                if (json.status === 'SUCCESS') {
+                    alert('Successfully closed all positions.');
+                } else {
+                    alert('Error closing positions: ' + (json.error || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Network error closing positions: ' + err.message);
+            } finally {
+                el.btnCloseAllPositions.disabled = false;
+                el.btnCloseAllPositions.textContent = '⚡ Close All Positions';
+                fetchAllData();
             }
         });
     }

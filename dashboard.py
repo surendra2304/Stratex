@@ -833,14 +833,29 @@ def get_live_account_and_holdings(force_refresh=False):
                 usdt_locked = float(fut_acc.get("totalInitialMargin", 0.0))
                 total_crypto_value = float(fut_acc.get("totalUnrealizedProfit", 0.0))
                 active_trade_holdings_value = float(fut_acc.get("totalPositionInitialMargin", 0.0))
+
+                fut_tickers = {}
+                try:
+                    if hasattr(client, "futures_symbol_ticker"):
+                        for t in client.futures_symbol_ticker():
+                            fut_tickers[t["symbol"]] = float(t["price"])
+                except Exception as te:
+                    logger.warning(f"[DASHBOARD] Could not fetch futures symbol tickers: {te}")
+
                 for p in fut_acc.get("positions", []):
                     pos_amt = float(p.get("positionAmt", 0.0))
                     if abs(pos_amt) > 0:
                         sym = p.get("symbol", "")
                         base_asset = sym.replace("USDT", "")
                         entry_p = float(p.get("entryPrice", 0.0))
-                        mark_p = float(p.get("markPrice", 0.0)) or entry_p
+                        mark_p = fut_tickers.get(sym, float(p.get("markPrice", 0.0)) or entry_p)
                         u_pnl = float(p.get("unrealizedProfit", 0.0))
+                        if u_pnl == 0.0 and mark_p > 0 and entry_p > 0:
+                            u_pnl = (mark_p - entry_p) * pos_amt
+                        
+                        update_time = p.get("updateTime", 0)
+                        pos_ts = datetime.datetime.fromtimestamp(update_time / 1000, datetime.timezone.utc).isoformat().replace("+00:00", "Z") if update_time else datetime.datetime.utcnow().isoformat() + "Z"
+
                         holdings.append({
                             "asset": base_asset,
                             "symbol": sym,
@@ -852,7 +867,8 @@ def get_live_account_and_holdings(force_refresh=False):
                             "usd_value": abs(pos_amt) * mark_p,
                             "is_bot_trade": True,
                             "unrealized_pnl": u_pnl,
-                            "side": "LONG" if pos_amt > 0 else "SHORT"
+                            "side": "LONG" if pos_amt > 0 else "SHORT",
+                            "timestamp": pos_ts
                         })
             elif client:
                 try:
@@ -1121,7 +1137,8 @@ def get_status():
                 tp_val = float(pos_meta.get("tp", pos_meta.get("tp_price", 0.0)))
                 
                 # If SL/TP not in portfolio file, estimate from entry_price and recent 1m ATR as fallback
-                entry_p = float(fp.get("entry_price", fp.get("price", 0.0)))
+                entry_p = float(fp.get("entry_price", 0.0))
+                mark_p = float(fp.get("price", 0.0)) or entry_p
                 if (sl_val == 0.0 or tp_val == 0.0) and entry_p > 0:
                     side_val = fp.get("side", "LONG")
                     if side_val in ["LONG", "BUY"]:
@@ -1135,13 +1152,13 @@ def get_status():
                     "symbol": sym,
                     "side": fp.get("side", "LONG"),
                     "entry_price": entry_p,
-                    "current_price": fp.get("price", 0.0),
+                    "current_price": mark_p,
                     "quantity": fp.get("total_quantity", 0.0),
                     "unrealized_pnl": fp.get("unrealized_pnl", 0.0),
                     "sl": sl_val,
                     "tp": tp_val,
                     "strategy": pos_meta.get("strategy", "SUPERTREND"),
-                    "timestamp": pos_meta.get("timestamp", datetime.datetime.utcnow().isoformat() + "Z")
+                    "timestamp": pos_meta.get("timestamp", fp.get("timestamp", datetime.datetime.utcnow().isoformat() + "Z"))
                 })
 
     today_utc_str = datetime.datetime.utcnow().date().isoformat()
@@ -1333,7 +1350,7 @@ def _get_trades_data():
                     strategy = str(trade.get("strategy", "")).upper()
                     status = str(trade.get("status", "")).upper()
                     
-                    INVALID_PROVENANCES = ["TEST", "SYNTHETIC", "SYNTHETIC_GENERATED", "UNVERIFIED", "MOCK", "RECOVERED_WITHOUT_BINANCE_PROOF"]
+                    INVALID_PROVENANCES = ["TEST", "SYNTHETIC", "SYNTHETIC_GENERATED", "UNVERIFIED", "MOCK", "RECOVERED_WITHOUT_BINANCE_PROOF", "RECOVERED", "AGGRESSIVE_SCALPER"]
                     if source in INVALID_PROVENANCES or prov in INVALID_PROVENANCES or strategy in INVALID_PROVENANCES or status == "OPEN":
                         continue
                     
@@ -2188,6 +2205,104 @@ def api_positions():
         "count": len(positions),
         "positions": positions
     })
+
+@app.route('/api/testnet/positions/close-all', methods=['POST'])
+def api_testnet_positions_close_all():
+    """Closes all open positions on Binance Futures testnet and flattens account."""
+    from execution import get_exchange_client
+    from testnet_engine.protection import emergency_futures_market_close
+    
+    client = get_exchange_client()
+    if client is None:
+        return jsonify({"status": "ERROR", "error": "Binance client unavailable"}), 500
+
+    closed = []
+    errors = []
+    try:
+        fut_acc = client.futures_account()
+        for p in fut_acc.get("positions", []):
+            pos_amt = float(p.get("positionAmt", 0.0))
+            if abs(pos_amt) > 0:
+                sym = p.get("symbol", "")
+                side = "LONG" if pos_amt > 0 else "SHORT"
+                try:
+                    try:
+                        client.futures_cancel_all_open_orders(symbol=sym)
+                    except Exception:
+                        pass
+                    emergency_futures_market_close(client, sym, "BUY" if side == "LONG" else "SELL", abs(pos_amt))
+                    closed.append({"symbol": sym, "side": side, "quantity": abs(pos_amt)})
+                except Exception as ce:
+                    errors.append({"symbol": sym, "error": str(ce)})
+
+        from execution import _save_active_trades
+        _save_active_trades([])
+
+        port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+        if os.path.exists(port_file):
+            try:
+                with open(port_file, "r") as pf:
+                    pdata = json.load(pf)
+                pdata["positions"] = {}
+                pdata["open_positions"] = 0
+                with open(port_file, "w") as pf:
+                    json.dump(pdata, pf, indent=2)
+            except Exception:
+                pass
+
+        return jsonify({
+            "status": "SUCCESS",
+            "message": f"Successfully closed {len(closed)} positions",
+            "closed": closed,
+            "errors": errors,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        logger.error(f"[DASHBOARD] Failed to close all positions: {e}")
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+
+@app.route('/api/testnet/positions/close', methods=['POST'])
+def api_testnet_positions_close():
+    """Closes a specific open position on Binance Futures testnet."""
+    from execution import get_exchange_client
+    from testnet_engine.protection import emergency_futures_market_close
+
+    payload = request.get_json(silent=True) or {}
+    symbol = payload.get("symbol")
+    if not symbol:
+        return jsonify({"status": "ERROR", "error": "symbol is required"}), 400
+
+    client = get_exchange_client()
+    if client is None:
+        return jsonify({"status": "ERROR", "error": "Binance client unavailable"}), 500
+
+    try:
+        fut_acc = client.futures_account()
+        target_pos = next((p for p in fut_acc.get("positions", []) if p.get("symbol") == symbol and abs(float(p.get("positionAmt", 0.0))) > 0), None)
+        if not target_pos:
+            return jsonify({"status": "ERROR", "error": f"No open position found for {symbol}"}), 404
+
+        pos_amt = float(target_pos.get("positionAmt", 0.0))
+        side = "LONG" if pos_amt > 0 else "SHORT"
+        
+        try:
+            client.futures_cancel_all_open_orders(symbol=symbol)
+        except Exception:
+            pass
+
+        emergency_futures_market_close(client, symbol, "BUY" if side == "LONG" else "SELL", abs(pos_amt))
+        return jsonify({
+            "status": "SUCCESS",
+            "message": f"Successfully closed position for {symbol}",
+            "symbol": symbol,
+            "quantity": abs(pos_amt),
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        })
+    except Exception as e:
+        logger.error(f"[DASHBOARD] Failed to close position for {symbol}: {e}")
+        return jsonify({"status": "ERROR", "error": str(e)}), 500
+
 
 @app.route('/api/signals')
 def api_signals():
