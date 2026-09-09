@@ -71,25 +71,42 @@ class BinanceExchangeAdapter(BaseExchange):
             except Exception as e:
                 logger.warning(f"[BINANCE_ADAPTER] get_balance API call failed: {e}")
 
-        # Standard simulated / forward testnet fallback
-        return {
-            "USDT": UnifiedBalance("USDT", free=5000.0, used=500.0, total=5500.0),
-            "BTC": UnifiedBalance("BTC", free=0.05, used=0.0, total=0.05)
-        }
+        # No live API credentials or API failure: return empty rather than fabricating balances.
+        if not (self.api_key and self.secret_key):
+            logger.warning("[BINANCE_ADAPTER] No API credentials configured — returning empty balance set.")
+        return {}
 
     def get_positions(self) -> list[UnifiedPosition]:
-        return [
-            UnifiedPosition(
-                symbol="BTC/USDT",
-                side="LONG",
-                quantity=0.05,
-                entry_price=60000.0,
-                mark_price=60500.0,
-                unrealized_pnl=25.0,
-                leverage=2.0,
-                exchange="binance"
-            )
-        ]
+        client = self._get_client()
+        if client:
+            try:
+                raw_positions = client.futures_account_positions()
+                res: list[UnifiedPosition] = []
+                for p in raw_positions:
+                    amt = float(p.get("positionAmt", 0.0) or 0.0)
+                    if amt == 0.0:
+                        continue
+                    entry = float(p.get("entryPrice", 0.0) or 0.0)
+                    mark = float(p.get("markPrice", 0.0) or 0.0)
+                    u_pnl = float(p.get("unRealizedProfit", 0.0) or 0.0)
+                    lev = float(p.get("leverage", 1.0) or 1.0)
+                    res.append(UnifiedPosition(
+                        symbol=self.normalize_symbol(p.get("symbol", "")),
+                        side="LONG" if amt > 0 else "SHORT",
+                        quantity=abs(amt),
+                        entry_price=entry,
+                        mark_price=mark,
+                        unrealized_pnl=u_pnl,
+                        leverage=lev,
+                        exchange="binance"
+                    ))
+                return res
+            except Exception as e:
+                logger.warning(f"[BINANCE_ADAPTER] get_positions API call failed: {e}")
+
+        # No credentials or API failure: return empty rather than fabricating positions.
+        logger.warning("[BINANCE_ADAPTER] Returning empty position set (no live client).")
+        return []
 
     def get_ticker(self, symbol: str) -> UnifiedTicker:
         u_sym = self.normalize_symbol(symbol)
@@ -464,7 +481,9 @@ OKXExchange = OKXExchangeAdapter
 
 class CoinbaseExchangeAdapter(BaseExchange):
     """
-    Coinbase Exchange Adapter (Spot only).
+    Coinbase Exchange Adapter (Spot only) — real ccxt-backed implementation.
+    Falls back to empty results (never fabricated data) when credentials/client
+    are unavailable.
     """
 
     def __init__(self, api_key: str = "", secret_key: str = ""):
@@ -480,25 +499,68 @@ class CoinbaseExchangeAdapter(BaseExchange):
                 max_leverage=1.0
             )
         )
-        self.is_connected = True
+        self.api_key = api_key or os.getenv("COINBASE_API_KEY", "")
+        self.secret_key = secret_key or os.getenv("COINBASE_API_SECRET", "")
+        self.is_connected = False
+        self._client = None
+
+    def _get_client(self):
+        if self._client is None and self.api_key and self.secret_key:
+            try:
+                import ccxt
+                self._client = ccxt.coinbaseadvanced({
+                    "apiKey": self.api_key,
+                    "secret": self.secret_key,
+                    "enableRateLimit": True,
+                })
+                self.is_connected = True
+            except Exception as e:
+                logger.warning(f"[COINBASE_ADAPTER] ccxt client init skipped: {e}")
+        return self._client
 
     def get_balance(self) -> dict[str, UnifiedBalance]:
-        return {
-            "USD": UnifiedBalance("USD", free=1000.0, used=0.0, total=1000.0)
-        }
+        client = self._get_client()
+        if not client:
+            logger.warning("[COINBASE_ADAPTER] No credentials — returning empty balance set.")
+            return {}
+        try:
+            bal = client.fetch_balance()
+            res: dict[str, UnifiedBalance] = {}
+            for asset in (bal.get("total") or {}):
+                total = float(bal.get("total", {}).get(asset, 0.0) or 0.0)
+                free = float(bal.get("free", {}).get(asset, 0.0) or 0.0)
+                used = float(bal.get("used", {}).get(asset, 0.0) or 0.0)
+                if total > 0:
+                    res[asset] = UnifiedBalance(asset, free=free, used=used, total=total)
+            return res
+        except Exception as e:
+            logger.warning(f"[COINBASE_ADAPTER] get_balance failed: {e}")
+            return {}
 
     def get_positions(self) -> list[UnifiedPosition]:
+        # Spot-only venue: no derivatives positions by definition.
         return []
 
     def get_ticker(self, symbol: str) -> UnifiedTicker:
         u_sym = self.normalize_symbol(symbol)
-        return UnifiedTicker(symbol=u_sym, bid=60520.0, ask=60540.0, last=60530.0, volume_24h=5000.0)
+        client = self._get_client()
+        if not client:
+            raise RuntimeError("[COINBASE_ADAPTER] No live client available for ticker data.")
+        t = client.fetch_ticker(self.denormalize_symbol(u_sym))
+        return UnifiedTicker(
+            symbol=u_sym,
+            bid=float(t.get("bid") or 0.0),
+            ask=float(t.get("ask") or 0.0),
+            last=float(t.get("last") or t.get("close") or 0.0),
+            volume_24h=float(t.get("quoteVolume") or 0.0)
+        )
 
     def get_orderbook(self, symbol: str, limit: int = 20) -> dict[str, list[list[float]]]:
-        return {
-            "bids": [[60520.0, 0.8]],
-            "asks": [[60540.0, 0.9]]
-        }
+        client = self._get_client()
+        if not client:
+            raise RuntimeError("[COINBASE_ADAPTER] No live client available for orderbook data.")
+        ob = client.fetch_order_book(self.denormalize_symbol(self.normalize_symbol(symbol)), limit=limit)
+        return {"bids": ob.get("bids", []), "asks": ob.get("asks", [])}
 
     def place_order(
         self,
@@ -509,41 +571,60 @@ class CoinbaseExchangeAdapter(BaseExchange):
         price: float | None = None,
         stop_price: float | None = None
     ) -> UnifiedOrderResult:
-        u_sym = self.normalize_symbol(symbol)
-        fill_price = price or 60530.0
+        client = self._get_client()
+        if not client:
+            raise RuntimeError("[COINBASE_ADAPTER] Cannot place order without live credentials.")
+        o = client.create_order(
+            self.denormalize_symbol(self.normalize_symbol(symbol)),
+            order_type.lower(), side.lower(), quantity, price, {}
+        )
+        fill_price = float(o.get("average") or o.get("price") or price or 0.0)
         return UnifiedOrderResult(
-            order_id=f"CB_{int(time.time()*1000)}",
-            symbol=u_sym,
+            order_id=str(o.get("id", "")),
+            symbol=self.normalize_symbol(symbol),
             side=side.upper(),
             order_type=order_type.upper(),
             price=fill_price,
-            quantity=quantity,
-            status="FILLED",
-            executed_qty=quantity,
+            quantity=float(o.get("filled") or quantity),
+            status=str(o.get("status", "OPEN")).upper(),
+            executed_qty=float(o.get("filled") or 0.0),
             avg_price=fill_price,
-            fee_paid=round(quantity * fill_price * 0.006, 4),
+            fee_paid=float((o.get("fee") or {}).get("cost", 0.0) or 0.0),
             exchange="coinbase"
         )
 
     def cancel_order(self, symbol: str, order_id: str) -> bool:
-        return True
+        client = self._get_client()
+        if not client:
+            return False
+        try:
+            client.cancel_order(order_id, self.denormalize_symbol(self.normalize_symbol(symbol)))
+            return True
+        except Exception as e:
+            logger.warning(f"[COINBASE_ADAPTER] cancel_order failed: {e}")
+            return False
 
     def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> list[dict[str, Any]]:
-        now_ts = int(time.time())
-        step = 900 if timeframe == "15m" else 300
+        client = self._get_client()
+        if not client:
+            raise RuntimeError("[COINBASE_ADAPTER] No live client available for historical data.")
+        ohlcv = client.fetch_ohlcv(
+            self.denormalize_symbol(self.normalize_symbol(symbol)),
+            timeframe=timeframe, limit=min(limit, 300)
+        )
         return [
-            {
-                "timestamp": now_ts - (i * step),
-                "open": 60030.0 + (i * 10),
-                "high": 60130.0 + (i * 10),
-                "low": 59930.0 + (i * 10),
-                "close": 60080.0 + (i * 10),
-                "volume": 40.0 + i
-            }
-            for i in range(min(limit, 100))
+            {"timestamp": int(c[0] / 1000), "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]}
+            for c in ohlcv
         ]
 
     def get_fees(self, symbol: str) -> tuple[float, float]:
+        client = self._get_client()
+        if client:
+            try:
+                market = client.market(self.denormalize_symbol(self.normalize_symbol(symbol)))
+                return float(market.get("maker", 0.004) or 0.004), float(market.get("taker", 0.006) or 0.006)
+            except Exception:
+                pass
         return 0.004, 0.006
 
 

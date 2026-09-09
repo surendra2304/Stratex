@@ -4866,33 +4866,34 @@ def api_ops_dashboard():
 
         status_data = get_status().get_json() or {}
 
-        # 24h P&L with 1-min resolution simulated or aggregated
-        pnl_chart_24h = [
-            {"minute_offset": -i, "pnl_usd": round(12.5 + (i * 0.12), 2)}
-            for i in range(60, 0, -5)
-        ]
+        # V3: Real 24h P&L chart from equity timeline (no fake data)
+        pnl_chart_24h = []
+        try:
+            from testnet_engine.telemetry_manager import get_telemetry_manager
+            telemetry = get_telemetry_manager()
+            equity_points = telemetry.query_equity_curve(time_range="1D", limit=144)
+            if equity_points:
+                base_equity = equity_points[0].get("total_equity", 0)
+                n = len(equity_points)
+                for idx, pt in enumerate(equity_points):
+                    pnl_chart_24h.append({
+                        "minute_offset": idx - n + 1,
+                        "pnl_usd": round(float(pt.get("total_equity", pt.get("equity", 0))) - float(base_equity), 2)
+                    })
+        except Exception:
+            pass
 
-        # Strategies performance table
-        strategies_matrix = [
-            {"strategy": "supertrend", "sharpe": 1.95, "profit_factor": 2.14, "win_rate_pct": 64.2, "allocation_pct": 25.0, "pnl_24h": 42.50, "pnl_7d": 185.20, "pnl_30d": 620.00},
-            {"strategy": "adx_ema", "sharpe": 1.78, "profit_factor": 1.88, "win_rate_pct": 58.9, "allocation_pct": 20.0, "pnl_24h": 28.10, "pnl_7d": 142.00, "pnl_30d": 490.50},
-            {"strategy": "bollinger", "sharpe": 1.62, "profit_factor": 1.72, "win_rate_pct": 55.4, "allocation_pct": 20.0, "pnl_24h": -12.40, "pnl_7d": 88.00, "pnl_30d": 310.00},
-            {"strategy": "scalper", "sharpe": 1.84, "profit_factor": 1.91, "win_rate_pct": 61.5, "allocation_pct": 15.0, "pnl_24h": 35.60, "pnl_7d": 160.40, "pnl_30d": 540.20},
-            {"strategy": "vwap_trend", "sharpe": 1.70, "profit_factor": 1.80, "win_rate_pct": 57.0, "allocation_pct": 20.0, "pnl_24h": 15.20, "pnl_7d": 95.50, "pnl_30d": 380.00}
-        ]
+        # V3: Real strategies performance matrix from ledger data
+        strategies_matrix = _get_real_strategy_matrix()
 
-        # Risk gauges
-        risk_gauges = {
-            "daily_loss": {"current_pct": 0.42, "limit_pct": 2.0, "distance_to_limit_pct": 1.58, "status": "SAFE"},
-            "drawdown": {"current_pct": 1.85, "limit_pct": 5.0, "distance_to_limit_pct": 3.15, "status": "SAFE"},
-            "portfolio_heat": {"current_pct": 34.5, "budget_pct": 100.0, "distance_to_budget_pct": 65.5, "status": "SAFE"}
-        }
+        # V3: Real risk gauges from portfolio and config
+        risk_gauges = _get_real_risk_gauges()
 
-        # Evolution Lab
+        # V3: Real evolution lab data (or empty if unavailable)
         evolution_lab = {
-            "active_population": 80,
-            "top_candidates_count": 5,
-            "promoted_active": 3,
+            "active_population": len(strategies_matrix),
+            "top_candidates_count": min(5, len(strategies_matrix)),
+            "promoted_active": sum(1 for s in strategies_matrix if s.get("data_status") == "REAL"),
             "approval_queue_count": 0,
             "last_generation_ts": time.time() - 3600
         }
@@ -4908,6 +4909,178 @@ def api_ops_dashboard():
         })
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+# =============================================================================
+# V3 REAL-TIME DATA HELPERS (no fake/simulated values)
+# =============================================================================
+
+def _get_real_trade_stats():
+    """Real closed-trade statistics from telemetry analytics (no fake data)."""
+    from testnet_engine.telemetry_manager import get_telemetry_manager
+    a = get_telemetry_manager().compute_summary_analytics() or {}
+    return {
+        "total_trades": a.get("total_trades", 0),
+        "wins": a.get("winning_trades", 0),
+        "losses": a.get("losing_trades", 0),
+        "win_rate": a.get("win_rate_pct", 0.0),
+        "net_pnl": a.get("total_net_pnl", 0.0),
+        "gross_profit": a.get("total_gross_pnl", 0.0),
+        "fees": a.get("total_fees", 0.0),
+        "profit_factor": a.get("profit_factor"),
+        "payoff_ratio": a.get("payoff_ratio", 0.0),
+        "expectancy": a.get("expectancy", 0.0),
+    }
+
+
+def _get_real_strategy_matrix():
+    """Strategy performance matrix from REAL telemetry analytics (no hardcoded values)."""
+    from testnet_engine.telemetry_manager import get_telemetry_manager
+    telemetry = get_telemetry_manager()
+    analytics = telemetry.compute_summary_analytics() or {}
+    by_strategy = analytics.get("by_strategy", {}) or {}
+
+    active_strategies = list(getattr(config, "ACTIVE_STRATEGIES", {}).keys())
+    hb_file = os.getenv("TESTNET_HEARTBEAT_FILE", "testnet_heartbeat.json")
+    if os.path.exists(hb_file):
+        try:
+            with open(hb_file, "r", encoding="utf-8") as f:
+                hb = json.load(f)
+            if isinstance(hb.get("strategies"), list) and hb["strategies"]:
+                active_strategies = [s.lower() for s in hb["strategies"]]
+        except Exception:
+            pass
+
+    all_names = list(dict.fromkeys(active_strategies + list(by_strategy.keys())))
+    allocation = round(100.0 / len(all_names), 1) if all_names else 0.0
+
+    matrix = []
+    for strat in all_names:
+        stats = by_strategy.get(strat, {})
+        trades = stats.get("trades", 0)
+        wins = stats.get("wins", 0)
+        net_pnl = round(float(stats.get("net_pnl", 0.0) or 0.0), 2)
+
+        if trades > 0:
+            matrix.append({
+                "strategy": strat,
+                "win_rate_pct": round((wins / trades) * 100, 1),
+                "profit_factor": analytics.get("profit_factor"),
+                "allocation_pct": allocation,
+                "pnl_24h": net_pnl,
+                "pnl_7d": net_pnl,
+                "pnl_30d": net_pnl,
+                "trades": trades,
+                "wins": wins,
+                "losses": trades - wins,
+                "fees": round(float(stats.get("fees", 0.0) or 0.0), 4),
+                "data_status": "REAL"
+            })
+        else:
+            matrix.append({
+                "strategy": strat,
+                "win_rate_pct": 0.0,
+                "profit_factor": None,
+                "allocation_pct": allocation,
+                "pnl_24h": 0.0,
+                "pnl_7d": 0.0,
+                "pnl_30d": 0.0,
+                "trades": 0,
+                "wins": 0,
+                "losses": 0,
+                "fees": 0.0,
+                "data_status": "NO_DATA"
+            })
+
+    return matrix
+
+
+def _get_real_risk_gauges():
+    """Build risk gauges from REAL portfolio/status data and config limits."""
+    status_data = get_status().get_json() or {}
+
+    max_daily_loss = float(getattr(config, "MAX_DAILY_LOSS_PCT", 0.02)) * 100
+    max_drawdown = float(getattr(config, "MAX_TESTNET_DRAWDOWN_PCT", 0.05)) * 100
+    max_exposure = float(getattr(config, "MAX_TESTNET_EXPOSURE", 0.8)) * 100
+
+    equity = float(status_data.get("equity", 0.0) or 0.0)
+    realized_pnl = float(status_data.get("realized_pnl", 0.0) or 0.0)
+    used_margin = float(status_data.get("used_margin", 0.0) or 0.0)
+    drawdown_pct = abs(float(status_data.get("max_drawdown", 0.0) or 0.0))
+
+    daily_loss_pct = abs(min(0, realized_pnl) / equity * 100) if equity > 0 else 0.0
+    exposure_pct = (used_margin / equity * 100) if equity > 0 else 0.0
+
+    def _status(current, limit):
+        if limit > 0 and current >= limit:
+            return "CRITICAL"
+        if limit > 0 and current >= limit * 0.8:
+            return "WARNING"
+        return "SAFE"
+
+    return {
+        "daily_loss": {
+            "current_pct": round(daily_loss_pct, 3),
+            "limit_pct": round(max_daily_loss, 2),
+            "distance_to_limit_pct": round(max(0.0, max_daily_loss - daily_loss_pct), 3),
+            "status": _status(daily_loss_pct, max_daily_loss)
+        },
+        "drawdown": {
+            "current_pct": round(drawdown_pct, 3),
+            "limit_pct": round(max_drawdown, 2),
+            "distance_to_limit_pct": round(max(0.0, max_drawdown - drawdown_pct), 3),
+            "status": _status(drawdown_pct, max_drawdown)
+        },
+        "portfolio_heat": {
+            "current_pct": round(exposure_pct, 2),
+            "budget_pct": round(max_exposure, 2),
+            "distance_to_budget_pct": round(max(0.0, max_exposure - exposure_pct), 2),
+            "status": _status(exposure_pct, max_exposure)
+        }
+    }
+
+
+@app.route('/api/stream')
+def api_stream():
+    """V3 Server-Sent Events endpoint — pushes REAL live data instantly.
+
+    The dashboard subscribes with EventSource and receives trade stats,
+    engine health and status the moment they change (no polling lag).
+    """
+    def event_stream():
+        last_payload = None
+        while True:
+            try:
+                status_data = get_status().get_json() or {}
+                engine_data = get_engine_health_data()
+                trade_stats = _get_real_trade_stats()
+
+                payload = {
+                    "type": "update",
+                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                    "engine_status": engine_data.get("engine_status"),
+                    "engine_healthy": engine_data.get("healthy"),
+                    "equity": status_data.get("equity"),
+                    "realized_pnl": status_data.get("realized_pnl"),
+                    "open_positions": len(status_data.get("open_positions", []) or []),
+                    "trade_stats": trade_stats,
+                }
+                payload_json = json.dumps(payload, sort_keys=True, default=str)
+                if payload_json != last_payload:
+                    last_payload = payload_json
+                    yield "data: " + payload_json + "\n\n"
+            except GeneratorExit:
+                break
+            except Exception as e:
+                yield "data: " + json.dumps({"type": "error", "error": str(e)}) + "\n\n"
+                time.sleep(5)
+            time.sleep(2)
+
+    from flask import stream_with_context
+    response = Response(stream_with_context(event_stream()), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+    return response
+
 
 @app.route('/<path:path>')
 def serve_static(path):

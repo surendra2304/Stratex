@@ -175,6 +175,46 @@ function initializeTerminal() {
             console.error('[POLL] Slow poll error:', err);
         }
     }, 10000);
+
+    // V3: Real-time SSE connection for instant updates
+    initRealtimeStream();
+}
+
+// ==========================================
+// V3: REAL-TIME SSE STREAM (no polling lag)
+// ==========================================
+let realtimeEventSource = null;
+
+function initRealtimeStream() {
+    if (!window.EventSource) return;
+    try {
+        realtimeEventSource = new EventSource('/api/stream');
+        realtimeEventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'update') handleRealtimeUpdate(data);
+            } catch (e) { /* ignore malformed frame */ }
+        };
+        realtimeEventSource.onerror = () => {
+            console.warn('[SSE] Stream disconnected, auto-reconnecting...');
+        };
+    } catch (e) {
+        console.warn('[SSE] EventSource unavailable:', e);
+    }
+}
+
+function handleRealtimeUpdate(data) {
+    try {
+        if (data.engine_status) safeSetText('hdr-uptime', data.engine_status);
+        if (typeof data.equity === 'number') safeSetText('db-equity', formatCurrency(data.equity));
+        if (typeof data.realized_pnl === 'number') safeSetText('db-realized-pnl', formatCurrency(data.realized_pnl));
+        if (data.trade_stats && activeViewName === 'dashboard') {
+            safeSetText('db-perf-winrate', (data.trade_stats.win_rate || 0).toFixed(1) + '%');
+            safeSetText('db-perf-trades', data.trade_stats.total_trades || 0);
+        }
+    } catch (e) {
+        console.warn('[SSE] Update handler error:', e);
+    }
 }
 
 if (document.readyState === 'loading') {
@@ -795,7 +835,7 @@ async function fetchTradesData() {
     container.innerHTML = sortedDates.map((dateStr, idx) => {
         const dayTrades = groups[dateStr];
         const dayPnl = dayTrades.reduce((acc, t) => acc + Number(t.pnl || t.net_pnl || 0), 0);
-        const isExpanded = idx === 0; // First day expanded by default
+        const isExpanded = true; // All days expanded by default so all historical trades are visible
         const pnlColor = dayPnl >= 0 ? 'var(--profit-green)' : 'var(--loss-red)';
 
         const rowsHtml = dayTrades.map(t => {
@@ -816,12 +856,13 @@ async function fetchTradesData() {
 
         return `
             <div class="card journal-day-card" style="margin-bottom: 12px;">
-                <div class="journal-day-header" onclick="this.nextElementSibling.classList.toggle('hidden')" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer; padding:10px 14px; background:var(--bg-subtle); border-radius:4px;">
-                    <div>
-                        <strong style="color:var(--text-primary); font-family:var(--font-mono);">${dateStr}</strong>
-                        <span class="text-muted" style="margin-left: 10px; font-size:11px;">(${dayTrades.length} trades)</span>
+                <div class="journal-day-header" onclick="this.nextElementSibling.classList.toggle('hidden'); const arrow = this.querySelector('.accordion-arrow'); if(arrow) arrow.innerText = this.nextElementSibling.classList.contains('hidden') ? '▶' : '▼';" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer; padding:12px 16px; background:var(--bg-subtle); border-radius:6px; border:1px solid var(--border-subtle);">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="accordion-arrow" style="font-size:10px; color:var(--text-muted); width:12px;">▼</span>
+                        <strong style="color:var(--text-primary); font-family:var(--font-mono); font-size:13px;">${dateStr}</strong>
+                        <span class="badge" style="background:rgba(14, 165, 233, 0.15); color:#0ea5e9; font-size:11px; padding:2px 8px; border-radius:12px;">${dayTrades.length} trades</span>
                     </div>
-                    <div style="font-family:var(--font-mono); font-weight:700; color:${pnlColor};">
+                    <div style="font-family:var(--font-mono); font-weight:700; font-size:13px; color:${pnlColor};">
                         ${dayPnl >= 0 ? '+' : ''}${formatCurrency(dayPnl)}
                     </div>
                 </div>

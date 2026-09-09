@@ -44,13 +44,22 @@ class MarketScanner:
         self.is_futures = is_futures
         
         try:
-            self.client = Client("", "", testnet=testnet)
+            self.client = Client("", "", testnet=testnet, ping=False)
+        except Exception as client_err:
+            logger.warning(f"[SCANNER] Testnet client init failed ({client_err}), falling back to public client")
+            try:
+                self.client = Client("", "", testnet=False, ping=False)
+            except Exception:
+                class DummyClient:
+                    def ping(self): pass
+                    def get_klines(self, **kwargs): return []
+                    def futures_klines(self, **kwargs): return []
+                self.client = DummyClient()
+
+        try:
+            self.prod_client = Client("", "", testnet=False, ping=False)
         except Exception:
-            class DummyClient:
-                def ping(self): pass
-                def get_klines(self, **kwargs): return []
-                def futures_klines(self, **kwargs): return []
-            self.client = DummyClient()
+            self.prod_client = None
 
         if twm is not None:
             self.twm = twm
@@ -99,6 +108,12 @@ class MarketScanner:
                 end_id = page[0][0] - 1
                 if len(klines) >= TARGET_BARS:
                     break
+            if not klines and getattr(self, "prod_client", None):
+                try:
+                    klines = self.prod_client.get_klines(symbol=symbol, interval=tf, limit=TARGET_BARS)
+                except Exception as prod_err:
+                    logger.debug(f"[SCANNER] Production historical fallback failed for {symbol} ({tf}): {prod_err}")
+
             if not klines:
                 logger.error(f"[SCANNER] No historical data for {symbol} ({tf})")
                 return
@@ -187,10 +202,21 @@ class MarketScanner:
         """Polls Binance REST API for the latest candles of a single (symbol, tf), updates cache, and triggers callback if new closed candle."""
         try:
             params = {"symbol": symbol, "interval": tf, "limit": 250}
-            if self.is_futures:
-                klines = self.client.futures_klines(**params)
-            else:
-                klines = self.client.get_klines(**params)
+            klines = None
+            try:
+                if self.is_futures:
+                    klines = self.client.futures_klines(**params)
+                else:
+                    klines = self.client.get_klines(**params)
+            except Exception as poll_err:
+                logger.debug(f"[SCANNER] Testnet poll error on {symbol} ({tf}): {poll_err}")
+                klines = None
+
+            if (not klines or len(klines) < 2) and getattr(self, "prod_client", None):
+                try:
+                    klines = self.prod_client.get_klines(**params)
+                except Exception:
+                    pass
 
             if not klines or len(klines) < 2:
                 return

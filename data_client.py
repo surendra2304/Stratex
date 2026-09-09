@@ -92,14 +92,18 @@ class MarketDataClient:
             self.__client = None
             self.data_source = "DATA_UNAVAILABLE"
         else:
-            # Use no credentials — public market-data endpoints do not require auth.
-            # Testnet by default; for LIVE mode, still use testnet for data reads
-            # unless a separate production data source is configured.
-            self.__client = Client("", "", testnet=True)
+            try:
+                self.__client = Client("", "", testnet=True, ping=False)
+            except Exception:
+                self.__client = None
+            try:
+                self.__prod_client = Client("", "", testnet=False, ping=False)
+            except Exception:
+                self.__prod_client = None
             self.data_source = "BINANCE_TESTNET_READ_ONLY"
 
     def is_available(self) -> bool:
-        return self.__client is not None
+        return self.__client is not None or getattr(self, "_MarketDataClient__prod_client", None) is not None
 
     # --- Explicitly Approved Read-Only Market Methods ---
 
@@ -119,13 +123,37 @@ class MarketDataClient:
         """Kline/Candlestick data for a symbol."""
         if not self.is_available():
             return None
-        return _execute_with_rate_limit_protection(self.__client.get_klines, **kwargs)
+        if self.__client:
+            try:
+                res = _execute_with_rate_limit_protection(self.__client.get_klines, **kwargs)
+                if res:
+                    return res
+            except Exception:
+                pass
+        if self.__prod_client:
+            try:
+                return _execute_with_rate_limit_protection(self.__prod_client.get_klines, **kwargs)
+            except Exception:
+                pass
+        return []
 
     def get_historical_klines(self, symbol, interval, start_str, end_str=None, **kwargs):
         """Historical klines (candles) for a symbol."""
         if not self.is_available():
             return None
-        return _execute_with_rate_limit_protection(self.__client.get_historical_klines, symbol, interval, start_str, end_str, **kwargs)
+        if self.__client:
+            try:
+                res = _execute_with_rate_limit_protection(self.__client.get_historical_klines, symbol, interval, start_str, end_str, **kwargs)
+                if res:
+                    return res
+            except Exception:
+                pass
+        if self.__prod_client:
+            try:
+                return _execute_with_rate_limit_protection(self.__prod_client.get_historical_klines, symbol, interval, start_str, end_str, **kwargs)
+            except Exception:
+                pass
+        return []
 
     def futures_funding_rate(self, **kwargs):
         """Get funding rate history."""
@@ -143,7 +171,19 @@ class MarketDataClient:
         """Futures klines/candlestick data for a symbol (/fapi/v1/klines)."""
         if not self.is_available():
             return None
-        return _execute_with_rate_limit_protection(self.__client.futures_klines, **kwargs)
+        if self.__client:
+            try:
+                res = _execute_with_rate_limit_protection(self.__client.futures_klines, **kwargs)
+                if res:
+                    return res
+            except Exception:
+                pass
+        if self.__prod_client:
+            try:
+                return _execute_with_rate_limit_protection(self.__prod_client.get_klines, **kwargs)
+            except Exception:
+                pass
+        return []
 
     def futures_historical_klines(self, symbol, interval, start_str, end_str=None, **kwargs):
         """Historical futures klines for a symbol."""

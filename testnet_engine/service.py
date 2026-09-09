@@ -23,6 +23,8 @@ from testnet_engine.discovery import SymbolDiscoveryService
 from testnet_engine.market_scanner import MarketScanner
 from testnet_engine.profitability_gate import ProfitabilityGate
 from testnet_engine.risk_gate import RiskGate
+from testnet_engine.signal_quality import evaluate_signal_quality
+from testnet_engine.trailing import trailing_cycle
 from testnet_engine.telemetry_manager import get_telemetry_manager
 
 logger = get_logger("service")
@@ -842,6 +844,11 @@ class TestnetService:
                     
                     for strat_name, strat_mod in self.strategies[tf]:
                         self.stats["strategy_evaluations"] += 1
+
+                        # V3 Strategy Performance Gate: skip demoted strategies
+                        if self.is_strategy_demoted(strat_name):
+                            self.stats["STRATEGY_DEMOTED_SKIPPED"] = self.stats.get("STRATEGY_DEMOTED_SKIPPED", 0) + 1
+                            continue
                         
                         if strat_name == "adx_ema_mtf" or "mtf" in strat_name:
                             df_1h = None
@@ -976,6 +983,26 @@ class TestnetService:
                                     signal_id, symbol, side,
                                     {"reason": "QANAT_DECAY_FILTERED_NOISE", "conviction": decay_res.conviction, "threshold": self.decay_smoother.confirmation_threshold},
                                     "REJECTED", "QANAT_DECAY_FILTERED_NOISE"
+                                )
+                                continue
+
+                        # V3 Signal Quality Filter: real-data entry gates
+                        # (trend alignment, candle confirmation, volume, volatility band, RSI chasing guard, risk-reward geometry)
+                        if getattr(config, "SIGNAL_QUALITY_ENABLED", True):
+                            q_ok, q_reason, q_detail = evaluate_signal_quality(
+                                df, side, current_price, sl, tp, strat_name
+                            )
+                            if not q_ok:
+                                self.stats["OTHER_REJECTED"] += 1
+                                self.stats["QUALITY_REJECTED"] = self.stats.get("QUALITY_REJECTED", 0) + 1
+                                if strat_name in self.stats["strategy_metrics"]:
+                                    self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                                if tf in self.stats["timeframe_metrics"]:
+                                    self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                                self.log_opportunity(
+                                    signal_id, symbol, side,
+                                    {"reason": q_reason, **q_detail},
+                                    "REJECTED", q_reason
                                 )
                                 continue
 
@@ -2190,6 +2217,86 @@ class TestnetService:
                 logger.warning(f"[SERVICE] 🚨 STRATEGY DEGRADATION DETECTED. Win rate {win_rate:.2%} < {min_win_rate:.2%}. Switching to OBSERVE-ONLY mode.")
                 self.observe_only = True
 
+        # V3: per-strategy demotion gate (additive to global observe-only)
+        self._strategy_performance_gate()
+
+    def _strategy_performance_gate(self):
+        """V3 Adaptive Strategy Performance Gate: per-strategy demotion.
+
+        Unlike the global degradation gate (which halts ALL trading), this
+        only demotes underperforming individual strategies for a cooldown.
+        """
+        if not getattr(config, "STRATEGY_PERFORMANCE_GATE", True):
+            return
+
+        window = int(getattr(config, "STRATEGY_GATE_MIN_TRADES", 10))
+        min_win_rate = float(getattr(config, "STRATEGY_GATE_WIN_RATE", 0.40))
+        min_net_pnl = float(getattr(config, "STRATEGY_GATE_MIN_NET_PNL", 0.0))
+        cooldown_hours = float(getattr(config, "STRATEGY_DEMOTION_COOLDOWN_HOURS", 4.0))
+
+        ledger_file = getattr(self, "ledger_file", TESTNET_LEDGER_FILE)
+        if not os.path.exists(ledger_file):
+            return
+
+        strategy_trades = {}
+        try:
+            with open(ledger_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    if not line.strip():
+                        continue
+                    try:
+                        record = json.loads(line)
+                        if "CLOSE" not in record.get("action", ""):
+                            continue
+                        strat = record.get("strategy", "unknown")
+                        strategy_trades.setdefault(strat, []).append(record)
+                    except Exception:
+                        pass
+        except Exception:
+            return
+
+        now = datetime.datetime.utcnow().timestamp()
+        cooldown_seconds = cooldown_hours * 3600
+
+        if not hasattr(self, "_strategy_demotions"):
+            self._strategy_demotions = {}
+
+        for strat, trades in strategy_trades.items():
+            if len(trades) < window:
+                continue
+
+            recent = trades[-window:]
+            wins = sum(1 for t in recent if t.get("pnl", 0) > 0)
+            win_rate = wins / window
+            net_pnl = sum(t.get("pnl", 0) for t in recent)
+
+            if win_rate < min_win_rate or net_pnl < min_net_pnl:
+                if strat not in self._strategy_demotions:
+                    self._strategy_demotions[strat] = now + cooldown_seconds
+                    logger.warning(
+                        f"[STRATEGY_GATE] Demoting '{strat}' for {cooldown_hours}h | "
+                        f"Win rate: {win_rate:.2%} (min {min_win_rate:.2%}) | "
+                        f"Net PnL: ${net_pnl:.2f} (min ${min_net_pnl:.2f})"
+                    )
+            else:
+                if strat in self._strategy_demotions:
+                    del self._strategy_demotions[strat]
+                    logger.info(f"[STRATEGY_GATE] '{strat}' recovered, re-enabled")
+
+    def is_strategy_demoted(self, strat_name):
+        """Check if a strategy is currently demoted (observe-only)."""
+        if not hasattr(self, "_strategy_demotions"):
+            return False
+        demotion_end = self._strategy_demotions.get(strat_name, 0)
+        if demotion_end == 0:
+            return False
+        now = datetime.datetime.utcnow().timestamp()
+        if now >= demotion_end:
+            del self._strategy_demotions[strat_name]
+            logger.info(f"[STRATEGY_GATE] '{strat_name}' demotion expired, re-enabled")
+            return False
+        return True
+
     def _write_heartbeat(self, status="RUNNING", worker_alive=True):
         """Atomically writes worker heartbeat state for dashboard, supervisor, and health checks."""
         try:
@@ -2520,6 +2627,18 @@ class TestnetService:
         # 4. Start Position Monitor Thread
         monitor_thread = threading.Thread(target=self.position_monitor_loop, daemon=True)
         monitor_thread.start()
+
+        # 4b. V3 Trailing Stop Thread: dedicated loop for responsive profit locking
+        def _trailing_loop():
+            while True:
+                try:
+                    trailing_cycle(self)
+                except Exception as e:
+                    logger.error(f"[TRAIL_THREAD] Error: {e}")
+                time.sleep(float(getattr(config, "TRAIL_LOOP_SECONDS", 20)))
+
+        trailing_thread = threading.Thread(target=_trailing_loop, daemon=True)
+        trailing_thread.start()
         
         # 5. Start Heartbeat Thread
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)

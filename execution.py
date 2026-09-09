@@ -99,7 +99,7 @@ def get_exchange_client():
         raise RuntimeError(f"CRITICAL ERROR: Client creation blocked. ({reason})")
 
     if TRADING_MODE in ["TESTNET", "FUTURES"]:
-        client = Client(API_KEY, SECRET_KEY, testnet=True)
+        client = Client(API_KEY, SECRET_KEY, testnet=True, ping=False)
         if TRADING_MODE == "TESTNET":
             client.API_URL = "https://testnet.binance.vision/api"
         return client

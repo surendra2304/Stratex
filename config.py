@@ -75,15 +75,17 @@ LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is im
 # --- Strategies to Run ---
 # High Profit Factor quantitative strategies validated with asymmetric Risk/Reward (> 1.33:1)
 ACTIVE_STRATEGIES = {
-    "factory_winner_1": ["15m", "30m", "1h", "4h"],  # MACD + BB Confluence (PF: 1.481)
-    "factory_winner_2": ["15m", "30m", "1h", "4h"],  # MACD + BB Confluence (PF: 1.449)
-    "factory_winner_4": ["15m", "30m", "1h", "4h"],  # MACD + BB Wide Confluence (PF: 1.390)
-    "adx_ema": ["4h"],                               # 200 EMA + ADX Trend (PF: 2.36)
+    "factory_winner_1": ["5m", "15m", "30m", "1h"],  # MACD + BB Confluence (PF: 1.481)
+    "factory_winner_2": ["5m", "15m", "30m", "1h"],  # MACD + BB Confluence (PF: 1.449)
+    "factory_winner_3": ["5m", "15m"],                # MACD + BB Fast (PF: 1.433)
+    "factory_winner_4": ["5m", "15m", "30m", "1h"],  # MACD + BB Wide Confluence (PF: 1.390)
+    "factory_winner_5": ["5m", "15m"],                # MACD + BB 15m (PF: 1.361)
+    "adx_ema": ["15m", "1h", "4h"],                   # 200 EMA + ADX Trend (PF: 2.36)
 }
 
 ACTIVE_STRATEGY = "factory_winner_1"
-TIMEFRAME = "15m"
-ALL_ACTIVE_TIMEFRAMES = ["15m", "30m", "1h", "4h"]
+TIMEFRAME = "5m"
+ALL_ACTIVE_TIMEFRAMES = ["5m", "15m", "30m", "1h", "4h"]
 BYPASS_PROFITABILITY_GATE = False  # HARD SAFETY INVARIANT: Must never bypass mathematical edge calculation
 
 
@@ -110,6 +112,50 @@ MIN_PROBABILITY_THRESHOLD = float(os.getenv("MIN_PROBABILITY_THRESHOLD", "0.40")
 DEGRADATION_WINDOW = 20            # Evaluate last 20 trades for degradation
 MIN_WIN_RATE_THRESHOLD = 0.35      # Automatically switch to OBSERVE-ONLY if < 35% win rate
 MAX_PREDICTION_ERROR = 0.02        # Automatically switch to OBSERVE-ONLY if actual differs from expected by > 2%
+
+# -------------------------------------------------------------------
+# SIGNAL QUALITY FILTERS (v3 upgrade) — real-data entry gates
+# Applied to every strategy signal before the profitability gate.
+# Goal: fewer, higher-conviction entries → higher realized win rate.
+# -------------------------------------------------------------------
+SIGNAL_QUALITY_ENABLED = os.getenv("SIGNAL_QUALITY_ENABLED", "True").lower() == "true"
+# Trend alignment strictness: "off" | "partial" (close vs EMA200) | "full" (EMA20>EMA50>EMA200)
+SQ_TREND_ALIGNMENT = os.getenv("SQ_TREND_ALIGNMENT", "partial").lower()
+SQ_CANDLE_CONFIRMATION = os.getenv("SQ_CANDLE_CONFIRMATION", "True").lower() == "true"   # signal candle must close in signal direction
+SQ_VOLUME_CONFIRMATION = os.getenv("SQ_VOLUME_CONFIRMATION", "True").lower() == "true"   # volume must exceed N × 20-bar average
+SQ_VOLUME_MULT = float(os.getenv("SQ_VOLUME_MULT", "0.9"))                               # reject only clearly dead volume by default
+SQ_ATR_PCT_MIN = float(os.getenv("SQ_ATR_PCT_MIN", "0.0015"))                            # 0.15% — dead/flat market guard
+SQ_ATR_PCT_MAX = float(os.getenv("SQ_ATR_PCT_MAX", "0.035"))                             # 3.5% — chaos/whipsaw guard
+SQ_RSI_GUARD = os.getenv("SQ_RSI_GUARD", "True").lower() == "true"                       # do not chase overbought/oversold
+SQ_RSI_MAX_BUY = float(os.getenv("SQ_RSI_MAX_BUY", "78.0"))
+SQ_RSI_MIN_SELL = float(os.getenv("SQ_RSI_MIN_SELL", "22.0"))
+SQ_MIN_RISK_REWARD = float(os.getenv("SQ_MIN_RISK_REWARD", "1.5"))                       # minimum TP/SL geometry
+
+# -------------------------------------------------------------------
+# ADAPTIVE STRATEGY PERFORMANCE GATE (v3 upgrade)
+# Automatically demotes strategies whose recent REALIZED results are poor
+# (win rate / net PnL from the ledger), for a cooldown period.
+# -------------------------------------------------------------------
+STRATEGY_PERFORMANCE_GATE = os.getenv("STRATEGY_PERFORMANCE_GATE", "True").lower() == "true"
+STRATEGY_GATE_MIN_TRADES = int(os.getenv("STRATEGY_GATE_MIN_TRADES", "10"))
+STRATEGY_GATE_WIN_RATE = float(os.getenv("STRATEGY_GATE_WIN_RATE", "0.40"))
+STRATEGY_GATE_MIN_NET_PNL = float(os.getenv("STRATEGY_GATE_MIN_NET_PNL", "0.0"))
+STRATEGY_DEMOTION_COOLDOWN_HOURS = float(os.getenv("STRATEGY_DEMOTION_COOLDOWN_HOURS", "4.0"))
+
+# -------------------------------------------------------------------
+# TRAILING STOP / BREAKEVEN LOCK-IN (v3 upgrade)
+# Converts round-trip losers into breakeven or winning exits by moving
+# the exchange-side protective SL as a position moves into profit.
+# -------------------------------------------------------------------
+TRAILING_STOP_ENABLED = os.getenv("TRAILING_STOP_ENABLED", "True").lower() == "true"
+TRAIL_BREAKEVEN_TRIGGER_R = float(os.getenv("TRAIL_BREAKEVEN_TRIGGER_R", "1.0"))  # at +1R move SL to breakeven(+fees)
+TRAIL_TRIGGER_R = float(os.getenv("TRAIL_TRIGGER_R", "1.5"))                      # at +1.5R start ATR trailing
+TRAIL_ATR_MULT = float(os.getenv("TRAIL_ATR_MULT", "2.0"))                        # trail distance = N × ATR(1h)
+TRAIL_FEE_BUFFER_PCT = float(os.getenv("TRAIL_FEE_BUFFER_PCT", "0.002"))          # breakeven buffer to cover round-trip fees
+TRAIL_MIN_REARM_SECONDS = float(os.getenv("TRAIL_MIN_REARM_SECONDS", "60"))       # min seconds between SL modifications per symbol
+TRAIL_LOOP_SECONDS = float(os.getenv("TRAIL_LOOP_SECONDS", "20"))                 # trailing evaluation cadence
+
+
 
 # --- Backtesting Engine ---
 BACKTEST_FEE_RATE = 0.001          # 0.1% fee per trade

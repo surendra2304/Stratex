@@ -68,7 +68,7 @@ class AccountClient:
             # Testnet for non-PAPER modes.
             # For LIVE, config.py must supply production credentials.
             testnet = TRADING_MODE != "LIVE"
-            self._client = Client(API_KEY, SECRET_KEY, testnet=testnet)
+            self._client = Client(API_KEY, SECRET_KEY, testnet=testnet, ping=False)
 
     def is_available(self) -> bool:
         return self._client is not None

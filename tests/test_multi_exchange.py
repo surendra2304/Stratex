@@ -24,14 +24,50 @@ from portfolio.unified_portfolio import UnifiedPortfolioManager
 from strategies.arb_scanner import CrossExchangeArbitrageScanner
 
 
+class FakeBinanceClient:
+    """Test double for python-binance Client (unit-test isolation, not production data)."""
+    def get_account(self):
+        return {"balances": [{"asset": "USDT", "free": "1000.0", "locked": "50.0"}]}
+
+    def futures_account_positions(self):
+        return [{
+            "symbol": "BTCUSDT", "positionAmt": "0.05", "entryPrice": "60000.0",
+            "markPrice": "60500.0", "unRealizedProfit": "25.0", "leverage": "2"
+        }]
+
+
+class FakeCcxtClient:
+    """Test double for ccxt coinbase client."""
+    def fetch_balance(self):
+        return {"total": {"USD": 1000.0}, "free": {"USD": 1000.0}, "used": {"USD": 0.0}}
+
+    def fetch_ticker(self, symbol):
+        return {"bid": 60520.0, "ask": 60540.0, "last": 60530.0, "quoteVolume": 5000.0}
+
+    def fetch_order_book(self, symbol, limit=20):
+        return {"bids": [[60520.0, 0.8]], "asks": [[60540.0, 0.9]]}
+
+    def create_order(self, symbol, type, side, amount, price=None, params=None):
+        return {"id": "CB_TEST_1", "status": "closed", "filled": amount,
+                "average": price or 60530.0, "fee": {"cost": 0.36}}
+
+    def market(self, symbol):
+        return {"maker": 0.004, "taker": 0.006}
+
+
 @pytest.fixture
 def mock_exchanges():
-    return {
+    exchanges = {
         "binance": BinanceExchangeAdapter(),
         "bybit": BybitExchangeAdapter(),
         "okx": OKXExchangeAdapter(),
         "coinbase": CoinbaseExchangeAdapter()
     }
+    # Inject test-double API clients so live-call paths are exercised deterministically.
+    exchanges["binance"]._client = FakeBinanceClient()
+    exchanges["coinbase"]._client = FakeCcxtClient()
+    exchanges["coinbase"].is_connected = True
+    return exchanges
 
 
 def test_symbol_normalization(mock_exchanges):
@@ -58,6 +94,13 @@ def test_exchange_implementations_data(mock_exchanges):
 
         maker_fee, taker_fee = ex.get_trading_fees("BTC/USDT")
         assert taker_fee >= maker_fee
+
+
+def test_adapters_without_credentials_return_no_fabricated_data():
+    """Adapters with no credentials must return empty data, never fake balances/positions."""
+    bare_binance = BinanceExchangeAdapter()
+    assert bare_binance.get_balance() == {}
+    assert bare_binance.get_positions() == []
 
 
 def test_unified_portfolio_manager(mock_exchanges):
