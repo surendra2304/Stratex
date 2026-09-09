@@ -1381,6 +1381,61 @@ def _get_trades_data():
         "positions": positions
     }
 
+@app.route('/api/daily-pnl')
+def api_daily_pnl():
+    """Groups closed trades by day (UTC) and returns daily PnL breakdown with trade details."""
+    trades_data = _get_trades_data()
+    positions = trades_data.get("positions", [])
+
+    daily = {}
+    for p in positions:
+        ts = p.get("timestamp", "")
+        date_key = ts[:10] if len(ts) >= 10 else "Unknown"
+        if date_key not in daily:
+            daily[date_key] = {
+                "date": date_key,
+                "net_pnl": 0.0,
+                "gross_profit": 0.0,
+                "gross_loss": 0.0,
+                "fees": 0.0,
+                "trades_count": 0,
+                "wins": 0,
+                "losses": 0,
+                "trades": [],
+            }
+        pnl = float(p.get("pnl", p.get("net_pnl", 0.0)))
+        fees = float(p.get("fees", 0.0))
+        daily[date_key]["net_pnl"] += pnl
+        daily[date_key]["fees"] += fees
+        daily[date_key]["trades_count"] += 1
+        if pnl > 0:
+            daily[date_key]["wins"] += 1
+            daily[date_key]["gross_profit"] += pnl
+        else:
+            daily[date_key]["losses"] += 1
+            daily[date_key]["gross_loss"] += abs(pnl)
+        daily[date_key]["trades"].append(p)
+
+    sorted_days = []
+    for d_key in sorted(daily.keys(), reverse=True):
+        d = daily[d_key]
+        total = d["trades_count"]
+        d["win_rate"] = round((d["wins"] / total * 100), 1) if total > 0 else 0.0
+        d["net_pnl"] = round(d["net_pnl"], 4)
+        d["gross_profit"] = round(d["gross_profit"], 4)
+        d["gross_loss"] = round(d["gross_loss"], 4)
+        d["fees"] = round(d["fees"], 4)
+        sorted_days.append(d)
+
+    return jsonify({
+        "status": "ok",
+        "days": sorted_days,
+        "total_days": len(sorted_days),
+        "total_net_pnl": trades_data.get("net_pnl", 0.0),
+        "total_trades": trades_data.get("total_trades", 0),
+        "overall_win_rate": trades_data.get("win_rate", 0.0),
+    })
+
 @app.route('/api/equity')
 @app.route('/api/equity-timeline')
 @app.route('/api/balance-timeline')
