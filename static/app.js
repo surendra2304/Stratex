@@ -481,19 +481,25 @@
             const winRate = parseFloat(d.win_rate || 0.0);
             const isExpanded = expandedDays.has(d.date);
 
+            const winRateBadge = (d.trades_count || 0) > 0
+                ? `<span class="badge ${winRate >= 50 ? 'badge-win' : winRate > 0 ? 'badge-tag' : 'badge-loss'}">${fmtPct(winRate)}</span>`
+                : `<span class="text-muted">--</span>`;
+
+            const actionBtn = (d.trades && d.trades.length > 0)
+                ? `<button class="btn-sync" style="padding: 3px 8px; font-size: 11px;" onclick="window.toggleDayExpand('${d.date}', event)">${isExpanded ? 'Hide' : 'View'} (${d.trades.length})</button>`
+                : `<span class="badge-tag" style="color: var(--blue);">Active Session</span>`;
+
             html += `
                 <tr class="day-row ${isExpanded ? 'expanded' : ''}" data-day="${d.date}">
                     <td class="mono" style="font-weight: 700;">
-                        <span class="expand-icon">▶</span>
+                        <span class="expand-icon">${(d.trades && d.trades.length > 0) ? '▶' : '•'}</span>
                         ${d.date} ${isToday ? '<span class="badge badge-tag" style="color: var(--blue);">TODAY</span>' : ''}
                     </td>
                     <td class="mono ${pnlClass}" style="font-weight: 700; font-size: 14px;">
                         ${fmtSignedMoney(netPnl, 4)}
                     </td>
                     <td class="mono">
-                        <span class="badge ${winRate >= 50 ? 'badge-win' : winRate > 0 ? 'badge-tag' : 'badge-loss'}">
-                            ${fmtPct(winRate)}
-                        </span>
+                        ${winRateBadge}
                     </td>
                     <td class="mono">
                         <span class="text-green">${d.wins || 0}W</span> / 
@@ -504,9 +510,7 @@
                     <td class="mono text-red">-${fmtMoney(d.gross_loss || 0.0, 4)}</td>
                     <td class="mono text-muted">${fmtMoney(d.fees || 0.0, 4)}</td>
                     <td>
-                        <button class="btn-sync" style="padding: 3px 8px; font-size: 11px;" onclick="window.toggleDayExpand('${d.date}', event)">
-                            ${isExpanded ? 'Hide' : 'View'} (${d.trades ? d.trades.length : 0})
-                        </button>
+                        ${actionBtn}
                     </td>
                 </tr>
             `;
@@ -555,7 +559,7 @@
                                                         ${fmtSignedMoney(tPnl, 4)}
                                                     </td>
                                                     <td class="mono text-muted">${fmtMoney(t.fees || 0.0, 4)}</td>
-                                                    <td><span class="badge-tag">${t.strategy || 'aggressive_scalper'}</span></td>
+                                                    <td><span class="badge-tag">${t.strategy || 'SUPERTREND'}</span></td>
                                                     <td class="mono text-muted" style="font-size: 10px;">${t.order_id || '--'}</td>
                                                 </tr>
                                             `;
@@ -718,7 +722,7 @@
                         ${fmtSignedMoney(pnl, 4)}
                     </td>
                     <td><span class="badge-tag">${t.exit_reason || 'TARGET'}</span></td>
-                    <td><span class="badge-tag">${t.strategy || 'aggressive_scalper'}</span></td>
+                    <td><span class="badge-tag">${t.strategy || 'SUPERTREND'}</span></td>
                     <td class="mono text-muted" style="font-size: 10px;">${t.order_id || '--'}</td>
                 </tr>
             `;

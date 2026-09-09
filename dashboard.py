@@ -1108,7 +1108,7 @@ def get_status():
                             "unrealized_pnl": u_pnl,
                             "sl": pos.get("sl_price", pos.get("sl", 0.0)),
                             "tp": pos.get("tp_price", pos.get("tp", 0.0)),
-                            "strategy": pos.get("strategy", "aggressive_scalper"),
+                            "strategy": pos.get("strategy", "SUPERTREND"),
                             "timestamp": pos_ts or (datetime.datetime.utcnow().isoformat() + "Z")
                         })
                     except Exception as pos_err:
@@ -1403,7 +1403,7 @@ def _get_trades_data():
                         "timestamp": ts_val,
                         "symbol": symbol,
                         "action": trade.get("direction", trade.get("side", trade.get("action", "BUY"))).replace("CLOSED_", "").replace("CLOSE_", ""),
-                        "strategy": trade.get("strategy", "aggressive_scalper"),
+                        "strategy": trade.get("strategy") or "SUPERTREND",
                         "source": source or trade.get("source", "PAPER_ENGINE" if "paper" in ledger_file else "BINANCE_EXECUTION"),
                         "entry_price": float(trade.get("entry_price", 0.0)),
                         "exit_price": float(trade.get("exit_price", 0.0)),
@@ -1470,6 +1470,20 @@ def api_daily_pnl():
             daily[date_key]["losses"] += 1
             daily[date_key]["gross_loss"] += abs(pnl)
         daily[date_key]["trades"].append(p)
+
+    today_key = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    if today_key not in daily:
+        daily[today_key] = {
+            "date": today_key,
+            "net_pnl": 0.0,
+            "gross_profit": 0.0,
+            "gross_loss": 0.0,
+            "fees": 0.0,
+            "trades_count": 0,
+            "wins": 0,
+            "losses": 0,
+            "trades": [],
+        }
 
     sorted_days = []
     for d_key in sorted(daily.keys(), reverse=True):
