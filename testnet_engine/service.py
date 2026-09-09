@@ -522,16 +522,25 @@ class TestnetService:
             # or valued as equity. Their stray OCOs are floating and cancelled.
             baseline_ms = None
             try:
-                _bl_path = os.getenv("TESTNET_BASELINE_FILE", "testnet_baseline.json")
-                _iso = ""
-                if os.path.exists(_bl_path):
-                    with open(_bl_path, "r") as bf:
-                        _bl = json.load(bf)
-                    _iso = _bl.get("reset_timestamp", "")
-                if not _iso:
-                    _iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-09T09:44:52.803966Z")
-                if _iso:
-                    baseline_ms = datetime.datetime.fromisoformat(_iso.replace("Z", "+00:00")).timestamp() * 1000
+                if "TESTNET_BASELINE_FILE" in os.environ:
+                    _bl_path = os.environ["TESTNET_BASELINE_FILE"]
+                    if os.path.exists(_bl_path):
+                        with open(_bl_path, "r") as bf:
+                            _bl = json.load(bf)
+                        _iso = _bl.get("reset_timestamp", "")
+                        if _iso:
+                            baseline_ms = datetime.datetime.fromisoformat(_iso.replace("Z", "+00:00")).timestamp() * 1000
+                else:
+                    _bl_path = "testnet_baseline.json"
+                    _iso = ""
+                    if os.path.exists(_bl_path):
+                        with open(_bl_path, "r") as bf:
+                            _bl = json.load(bf)
+                        _iso = _bl.get("reset_timestamp", "")
+                    if not _iso:
+                        _iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-09T09:44:52.803966Z")
+                    if _iso:
+                        baseline_ms = datetime.datetime.fromisoformat(_iso.replace("Z", "+00:00")).timestamp() * 1000
             except Exception:
                 baseline_ms = None
             engine_symbols = open_symbols_from_assets
@@ -873,34 +882,61 @@ class TestnetService:
                         ema20_val = float(last_row.get("ema_20", 0.0))
                         ema50_val = float(last_row.get("ema_50", 0.0))
                         ema200_val = float(last_row.get("ema_200", 0.0))
-                        atr_val = float(last_row.get("atr_adx_ema", 0.0))
+                        macd_val = float(last_row.get("macd", 0.0))
+                        macd_sig = float(last_row.get("macd_signal", 0.0))
+                        bb_mid_val = float(last_row.get("bb_mid", 0.0))
+                        atr_val = float(last_row.get("atr", last_row.get("atr_adx_ema", 0.0)))
                         atr_pct = (atr_val / current_price) if current_price > 0 else 0.0
                         trend_dir = "BULLISH" if current_price > ema200_val else "BEARISH"
                         candle_ts = last_row.name if hasattr(last_row, 'name') else df.index[-1]
                         
                         rejection_reason = "VALID_SIGNAL"
                         if not side:
-                            reasons = []
-                            cross_up = (ema20_val > ema50_val) and (float(prev_row.get("ema_20", 0)) <= float(prev_row.get("ema_50", 0)))
-                            cross_dn = (ema20_val < ema50_val) and (float(prev_row.get("ema_20", 0)) >= float(prev_row.get("ema_50", 0)))
-                            if not (cross_up or cross_dn):
-                                reasons.append("NO_CROSSOVER")
-                            _adx_th = ADX_EMA_STRATEGY_V2.get("ADX_THRESHOLD", 30)
-                            if adx_val <= _adx_th:
-                                reasons.append(f"ADX_BELOW_{_adx_th}")
-                            if cross_up and current_price <= ema200_val:
-                                reasons.append("CLOSE_BELOW_EMA200")
-                            if cross_dn and current_price >= ema200_val:
-                                reasons.append("CLOSE_ABOVE_EMA200")
-                            rejection_reason = "; ".join(reasons) if reasons else "NO_TRIGGER"
+                            if strat_name.startswith("factory_winner"):
+                                reasons = []
+                                prev_macd = float(prev_row.get("macd", 0.0))
+                                prev_sig = float(prev_row.get("macd_signal", 0.0))
+                                macd_cross_up = (macd_val > macd_sig) and (prev_macd <= prev_sig)
+                                macd_cross_dn = (macd_val < macd_sig) and (prev_macd >= prev_sig)
+                                if not (macd_cross_up or macd_cross_dn):
+                                    reasons.append("NO_MACD_CROSSOVER")
+                                if macd_cross_up and current_price >= bb_mid_val:
+                                    reasons.append("PRICE_ABOVE_BB_MID")
+                                if macd_cross_dn and current_price <= bb_mid_val:
+                                    reasons.append("PRICE_BELOW_BB_MID")
+                                rejection_reason = "; ".join(reasons) if reasons else "NO_TRIGGER"
+                            elif strat_name in ["adx_ema", "adx_ema_mtf"]:
+                                reasons = []
+                                cross_up = (ema20_val > ema50_val) and (float(prev_row.get("ema_20", 0)) <= float(prev_row.get("ema_50", 0)))
+                                cross_dn = (ema20_val < ema50_val) and (float(prev_row.get("ema_20", 0)) >= float(prev_row.get("ema_50", 0)))
+                                if not (cross_up or cross_dn):
+                                    reasons.append("NO_CROSSOVER")
+                                _adx_th = ADX_EMA_STRATEGY_V2.get("ADX_THRESHOLD", 30)
+                                if adx_val <= _adx_th:
+                                    reasons.append(f"ADX_BELOW_{_adx_th}")
+                                if cross_up and current_price <= ema200_val:
+                                    reasons.append("CLOSE_BELOW_EMA200")
+                                if cross_dn and current_price >= ema200_val:
+                                    reasons.append("CLOSE_ABOVE_EMA200")
+                                rejection_reason = "; ".join(reasons) if reasons else "NO_TRIGGER"
+                            else:
+                                rejection_reason = "NO_TRIGGER"
 
-                        logger.info(
-                            f"[CANDLE_EVALUATION] symbol={symbol} tf={tf} timestamp={candle_ts} "
-                            f"price={current_price:.4f} ADX={adx_val:.2f} EMA20={ema20_val:.4f} "
-                            f"EMA50={ema50_val:.4f} EMA200={ema200_val:.4f} ATR={atr_val:.4f} "
-                            f"ATR%={atr_pct*100:.3f}% trend_direction={trend_dir} "
-                            f"decision={side or 'HOLD'} reason={rejection_reason}"
-                        )
+                        if strat_name.startswith("factory_winner"):
+                            logger.info(
+                                f"[CANDLE_EVALUATION] symbol={symbol} tf={tf} timestamp={candle_ts} "
+                                f"price={current_price:.4f} MACD={macd_val:.4f} Signal={macd_sig:.4f} "
+                                f"BBMid={bb_mid_val:.4f} ATR={atr_val:.4f} ATR%={atr_pct*100:.3f}% "
+                                f"strategy={strat_name} decision={side or 'HOLD'} reason={rejection_reason}"
+                            )
+                        else:
+                            logger.info(
+                                f"[CANDLE_EVALUATION] symbol={symbol} tf={tf} timestamp={candle_ts} "
+                                f"price={current_price:.4f} ADX={adx_val:.2f} EMA20={ema20_val:.4f} "
+                                f"EMA50={ema50_val:.4f} EMA200={ema200_val:.4f} ATR={atr_val:.4f} "
+                                f"ATR%={atr_pct*100:.3f}% trend_direction={trend_dir} "
+                                f"decision={side or 'HOLD'} reason={rejection_reason}"
+                            )
                         logger.info(
                             f"[STRATEGY_SCAN] symbol={symbol} timeframe={tf} strategy={strat_name} "
                             f"decision={'SIGNAL' if side else 'HOLD'} reason={rejection_reason}"
@@ -1916,16 +1952,25 @@ class TestnetService:
             # backup/ and must never be re-imported into the live ledger.
             baseline_ts = None
             try:
-                _bl_path = os.getenv("TESTNET_BASELINE_FILE", "testnet_baseline.json")
-                _bl_iso = ""
-                if os.path.exists(_bl_path):
-                    with open(_bl_path, "r") as bf:
-                        _bl = json.load(bf)
-                    _bl_iso = _bl.get("reset_timestamp", "")
-                if not _bl_iso:
-                    _bl_iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-09T09:44:52.803966Z")
-                if _bl_iso:
-                    baseline_ts = datetime.datetime.fromisoformat(_bl_iso.replace("Z", "+00:00")).timestamp() * 1000
+                if "TESTNET_BASELINE_FILE" in os.environ:
+                    _bl_path = os.environ["TESTNET_BASELINE_FILE"]
+                    if os.path.exists(_bl_path):
+                        with open(_bl_path, "r") as bf:
+                            _bl = json.load(bf)
+                        _bl_iso = _bl.get("reset_timestamp", "")
+                        if _bl_iso:
+                            baseline_ts = datetime.datetime.fromisoformat(_bl_iso.replace("Z", "+00:00")).timestamp() * 1000
+                else:
+                    _bl_path = "testnet_baseline.json"
+                    _bl_iso = ""
+                    if os.path.exists(_bl_path):
+                        with open(_bl_path, "r") as bf:
+                            _bl = json.load(bf)
+                        _bl_iso = _bl.get("reset_timestamp", "")
+                    if not _bl_iso:
+                        _bl_iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-09T09:44:52.803966Z")
+                    if _bl_iso:
+                        baseline_ts = datetime.datetime.fromisoformat(_bl_iso.replace("Z", "+00:00")).timestamp() * 1000
             except Exception:
                 baseline_ts = None
 

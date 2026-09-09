@@ -164,48 +164,61 @@ def compute_max_drawdown(equity_curve: list[float]) -> float:
 
 def can_classify(
     config,
-    n_closed_trades: int,
+    elapsed_days: float = 30.0,
+    n_closed_trades: int = 0,
 ) -> dict:
     """
-    CLASSIFICATION GATE — must be called before evaluate_against_acceptance_criteria.
+    CLASSIFICATION GATE — dual condition enforcement.
 
-    Classification is ONLY permitted when:
-      1. Closed trades >= min_required_trades (default 30)
-
-    Returns
-    -------
-    dict with:
-      allowed       : bool
-      verdict       : "ALLOWED" | "BLOCKED_TRADES"
-      message       : human-readable explanation
-      n_closed_trades: int
-      trade_gate    : bool
+    Classification is ONLY permitted when BOTH:
+      1. wall-clock duration >= planned_duration_days (default 30)
+      2. closed trades >= min_required_trades (default 30)
     """
-    trade_gate = n_closed_trades >= config.min_required_trades
+    planned_days = getattr(config, "planned_duration_days", 30)
+    min_trades = getattr(config, "min_required_trades", 30)
 
-    if trade_gate:
+    duration_gate = float(elapsed_days) >= planned_days
+    trade_gate = int(n_closed_trades) >= min_trades
+
+    if duration_gate and trade_gate:
+        allowed = True
         verdict = "ALLOWED"
         message = (
-            f"Trade gate satisfied: {n_closed_trades} trades >= {config.min_required_trades}. "
-            "Proceed with full statistical evaluation."
+            f"Both gates satisfied: {elapsed_days:.1f} days >= {planned_days}, "
+            f"{n_closed_trades} trades >= {min_trades}."
         )
-        allowed = True
-    else:
-        verdict = "BLOCKED_TRADES"
-        remaining_trades = config.min_required_trades - n_closed_trades
-        message = (
-            f"CLASSIFICATION BLOCKED: "
-            f"Need {remaining_trades} more trades (have {n_closed_trades}/{config.min_required_trades})."
-        )
+    elif not duration_gate and not trade_gate:
         allowed = False
+        verdict = "BLOCKED_BOTH"
+        message = (
+            f"Classification blocked: elapsed {elapsed_days:.1f}/{planned_days} days, "
+            f"trades {n_closed_trades}/{min_trades}."
+        )
+    elif not duration_gate:
+        allowed = False
+        verdict = "BLOCKED_DURATION"
+        message = (
+            f"Classification blocked: duration not met ({elapsed_days:.1f}/{planned_days} days). "
+            f"Trade count met ({n_closed_trades}/{min_trades})."
+        )
+    else:
+        allowed = False
+        verdict = "BLOCKED_TRADES"
+        message = (
+            f"Classification blocked: trade count not met ({n_closed_trades}/{min_trades}). "
+            f"Duration met ({elapsed_days:.1f}/{planned_days} days)."
+        )
 
     return {
         "allowed": allowed,
         "verdict": verdict,
         "message": message,
-        "n_closed_trades": n_closed_trades,
+        "duration_gate": duration_gate,
         "trade_gate": trade_gate,
-        "min_required_trades": config.min_required_trades,
+        "elapsed_days": float(elapsed_days),
+        "n_closed_trades": int(n_closed_trades),
+        "planned_duration_days": planned_days,
+        "min_required_trades": min_trades,
     }
 
 
@@ -214,14 +227,37 @@ def evaluate_against_acceptance_criteria(
     trade_returns: list[float],
     equity_curve: list[float],
     benchmark_result: dict,
+    elapsed_days: float = 30.0,
 ) -> dict:
     """
     Evaluate forward experiment results against pre-registered acceptance criteria.
-
-    CRITICAL: This function MUST NOT be called unless can_classify() returns allowed=True.
-    Callers must enforce this.
     """
     n = len(trade_returns)
+    planned_days = getattr(config, "planned_duration_days", 30)
+    min_trades = getattr(config, "min_required_trades", 30)
+
+    # Gate check
+    gate = can_classify(config, elapsed_days=elapsed_days, n_closed_trades=n)
+    if not gate["allowed"]:
+        if gate["verdict"] == "BLOCKED_DURATION":
+            return {
+                "overall_verdict": "CLASSIFICATION_BLOCKED",
+                "gate": gate,
+                "reason": gate["message"]
+            }
+        elif n < min_trades:
+            return {
+                "overall_verdict": "INCONCLUSIVE",
+                "inconclusive_reason": "INSUFFICIENT_SAMPLE",
+                "gate": gate,
+                "reason": f"Insufficient closed trades: {n} < {min_trades}"
+            }
+        else:
+            return {
+                "overall_verdict": "CLASSIFICATION_BLOCKED",
+                "gate": gate,
+                "reason": gate["message"]
+            }
 
     # ── Full evaluation ───────────────────────────────────────────────────
     stats_result = compute_trade_stats(trade_returns)

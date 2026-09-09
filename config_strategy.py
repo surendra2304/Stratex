@@ -383,7 +383,7 @@ PRODUCTION_STRATEGY_REGISTRY = {
         "reason": "Disabled: 1m scalp mean-reversion fails positive expectancy under 31 bps friction."
     },
     "supertrend": {
-        "status": "VALIDATED",
+        "status": "DISABLED",
         "version": "V1-supertrend-pullback (2026-09-09)",
         "timeframe": "5m",
         "timeframes": ["5m", "15m", "1h"],

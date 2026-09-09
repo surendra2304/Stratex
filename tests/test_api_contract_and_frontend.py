@@ -26,47 +26,36 @@ def client():
     with app.test_client() as c:
         yield c
 
-def test_approved_navigation_views_in_html():
-    """Verifies exact 10 approved views in order: dashboard, scanner, positions, trades, markets, strategies, risk, analytics, system, settings."""
+def test_redesigned_terminal_structure_in_html():
+    """Verifies that static/index.html implements the high-density real-time terminal UI."""
     with open("static/index.html", "r", encoding="utf-8") as f:
         html = f.read()
 
-    expected_views = [
-        "dashboard", "scanner", "positions", "trades", "markets",
-        "strategies", "risk", "analytics", "abtest", "optimization", "system", "settings"
-    ]
-
-
-    # Verify nav items
-    nav_views = re.findall(r'class=["\'][^"\']*nav-item[^"\']*["\'][^>]*data-view=["\']([^"\']+)["\']', html)
-    assert nav_views == expected_views, f"Navigation mismatch: got {nav_views}, expected {expected_views}"
-
-    # Verify view container divs
-    container_views = re.findall(r'<div[^>]*id=["\']view-([^"\']+)["\']', html)
-    assert container_views == expected_views, f"View container mismatch: got {container_views}, expected {expected_views}"
-
-def test_global_header_elements_in_html():
-    """Verifies global header contains STRATEX, ENGINE, MODE, UPTIME, and Clock."""
-    with open("static/index.html", "r", encoding="utf-8") as f:
-        html = f.read()
-
+    # Brand and Header controls
     assert "STRATEX" in html
-    assert 'id="engine-status"' in html
-    assert 'id="hdr-uptime"' in html
-    assert 'id="live-clock"' in html
-    assert 'id="btn-sound-toggle"' in html
+    assert 'id="header-mode"' in html
+    assert 'id="last-sync-time"' in html
+    assert 'id="btn-refresh"' in html
 
-def test_scanner_filters_structure_in_html():
-    """Verifies Scanner has single filters dropdown with Symbol, Timeframe, Side, Result, Strategy."""
-    with open("static/index.html", "r", encoding="utf-8") as f:
-        html = f.read()
+    # KPI Grid
+    assert 'id="kpi-balance"' in html
+    assert 'id="kpi-total-pnl"' in html
+    assert 'id="kpi-today-pnl"' in html
+    assert 'id="kpi-win-rate"' in html
+    assert 'id="kpi-open-count"' in html
 
-    assert 'id="scanner-filter-dropdown"' in html
-    assert 'id="sf-symbol"' in html
-    assert 'id="sf-tf"' in html
-    assert 'id="sf-side"' in html
-    assert 'id="sf-result"' in html
-    assert 'id="sf-strategy"' in html
+    # Tables & Grid Sections
+    assert 'id="daily-pnl-tbody"' in html
+    assert 'id="open-positions-tbody"' in html
+    assert 'id="trades-history-tbody"' in html
+    assert 'id="trades-search"' in html
+    assert 'id="market-scanner-grid"' in html
+
+    # Diagnostics
+    assert 'id="diag-engine-status"' in html
+    assert 'id="diag-heartbeat"' in html
+    assert 'id="diag-uptime"' in html
+
 
 def test_frontend_js_zero_duplicate_functions_and_zero_dead_ids():
     """Verifies static/app.js has zero duplicate function definitions and zero queries to non-existent HTML IDs."""

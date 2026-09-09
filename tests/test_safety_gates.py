@@ -86,4 +86,4 @@ def test_client_constructor_calls(mock_client):
             
             if expected_calls == 1:
                 if mode == "TESTNET":
-                    mock_client.assert_called_with(execution.API_KEY, execution.SECRET_KEY, testnet=True)
+                    mock_client.assert_called_with(execution.API_KEY, execution.SECRET_KEY, testnet=True, ping=False)

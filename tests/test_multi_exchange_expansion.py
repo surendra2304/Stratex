@@ -28,9 +28,23 @@ def test_exchange_capabilities():
     assert binance.capabilities.supports_shorting is True
     assert cb.capabilities.supports_futures is False
 
+class FakeBinanceClient:
+    """Test double for python-binance Client (unit-test isolation, not production data)."""
+    def get_account(self):
+        return {"balances": [{"asset": "USDT", "free": "5000.0", "locked": "500.0"}, {"asset": "BTC", "free": "0.05", "locked": "0.0"}]}
+
+    def futures_account_positions(self):
+        return [{
+            "symbol": "BTCUSDT", "positionAmt": "0.05", "entryPrice": "60000.0",
+            "markPrice": "60500.0", "unRealizedProfit": "25.0", "leverage": "2"
+        }]
+
+
 def test_exchange_implementations_data():
     for ex_cls in [BinanceExchangeAdapter, BybitExchangeAdapter, OKXExchangeAdapter, CoinbaseExchangeAdapter]:
         ex = ex_cls()
+        if isinstance(ex, BinanceExchangeAdapter):
+            ex._client = FakeBinanceClient()
         bals = ex.get_balance()
         assert len(bals) > 0
         t = ex.get_ticker('BTC/USDT')
@@ -55,6 +69,7 @@ def test_unified_portfolio_aggregation():
         'okx': OKXExchangeAdapter(),
         'coinbase': CoinbaseExchangeAdapter()
     }
+    exchanges['binance']._client = FakeBinanceClient()
     pm = UnifiedPortfolioManager(exchanges)
     eq = pm.get_unified_equity()
     assert eq['total_portfolio_equity'] > 0
@@ -66,6 +81,7 @@ def test_unified_portfolio_aggregation():
 
 def test_unified_risk_limits():
     exchanges = {'binance': BinanceExchangeAdapter()}
+    exchanges['binance']._client = FakeBinanceClient()
     pm = UnifiedPortfolioManager(
         exchanges,
         risk_limits=UnifiedRiskLimits(

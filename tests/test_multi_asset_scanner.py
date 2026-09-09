@@ -45,6 +45,8 @@ class TestMultiAssetEngine:
         
         # Mock client to raise exception
         mocker.patch.object(service.client, 'get_exchange_info', side_effect=Exception("API limit"))
+        if getattr(service, 'prod_client', None):
+            mocker.patch.object(service.prod_client, 'get_exchange_info', side_effect=Exception("API limit"))
         
         symbols = service.discover_eligible_symbols()
         assert "BTCUSDT" in symbols
