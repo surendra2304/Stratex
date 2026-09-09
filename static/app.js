@@ -801,6 +801,8 @@
                 renderTradesHistory(cachedTrades);
             }
         });
+    }
+
     if (el.btnCloseAllPositions) {
         el.btnCloseAllPositions.addEventListener('click', async () => {
             if (!confirm('Are you sure you want to close ALL open positions on Binance Futures Testnet?')) return;

@@ -84,6 +84,14 @@ def test_frontend_js_zero_duplicate_functions_and_zero_dead_ids():
     missing_ids = queried_ids - html_ids
     assert len(missing_ids) == 0, f"Found queries for missing HTML IDs in app.js: {missing_ids}"
 
+    # Check JS syntax with Node if available
+    import subprocess
+    try:
+        node_res = subprocess.run(["node", "-c", "static/app.js"], capture_output=True, text=True)
+        assert node_res.returncode == 0, f"static/app.js has syntax error: {node_res.stderr}"
+    except FileNotFoundError:
+        pass
+
 def test_api_status_contract(client):
     """Verifies /api/status contract schema and data types."""
     res = client.get("/api/status")
