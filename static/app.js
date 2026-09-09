@@ -69,6 +69,7 @@
 
         // Trade History Tab
         tradesHistoryTbody: document.getElementById('trades-history-tbody'),
+        tradesActiveNotice: document.getElementById('trades-active-notice'),
         totalTradesBadge: document.getElementById('total-trades-badge'),
         tradesSearch: document.getElementById('trades-search'),
         btnFilterAll: document.getElementById('btn-filter-all'),
@@ -672,6 +673,35 @@
         let positions = tradesData && Array.isArray(tradesData.positions) ? tradesData.positions : [];
         if (el.totalTradesBadge) {
             el.totalTradesBadge.textContent = `${positions.length} Closed`;
+        }
+
+        // Update tradesActiveNotice banner
+        if (el.tradesActiveNotice) {
+            const openList = (cachedStatus && Array.isArray(cachedStatus.open_positions_data)) ? cachedStatus.open_positions_data : [];
+            if (openList.length > 0) {
+                const symList = openList.map(p => `<strong style="color: #60a5fa;">${p.symbol}</strong> (${p.side || 'LONG'}, Entry: $${fmtNumber(p.entry_price, 4)})`).join(', ');
+                el.tradesActiveNotice.innerHTML = `
+                    <div style="background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #cbd5e1; display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <span style="font-size: 14px; margin-right: 6px;">⚡</span>
+                            <span><strong>${openList.length} Active Position(s) Running:</strong> ${symList}</span>
+                        </div>
+                        <button class="btn-link" onclick="window.switchTab('tab-positions')" style="font-weight: 600; color: #60a5fa; cursor: pointer; text-decoration: underline; background: none; border: none; font-size: 12px;">View in Live Positions &rarr;</button>
+                    </div>
+                `;
+                el.tradesActiveNotice.style.display = 'block';
+            } else {
+                el.tradesActiveNotice.innerHTML = `
+                    <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #94a3b8; display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <span style="font-size: 14px; margin-right: 6px;">📊</span>
+                            <span><strong>0 Active Open Positions.</strong> Multi-Strategy Scanner is actively scanning 16 symbols on 5m/15m/1h timeframes for high-expectancy trend continuation setups.</span>
+                        </div>
+                        <span class="mono text-muted" style="font-size: 11px;">Scanner Active</span>
+                    </div>
+                `;
+                el.tradesActiveNotice.style.display = 'block';
+            }
         }
 
         // Apply symbol search filter

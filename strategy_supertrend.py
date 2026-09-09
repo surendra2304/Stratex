@@ -43,6 +43,8 @@ def get_signal(df):
     close = float(last['close'])
     open_p = float(last['open'])
     low = float(last['low'])
+    high = float(last.get('high', close))
+    prev_high = float(prev.get('high', prev['close']))
     
     ema_200 = float(last.get('ema_200', close))
     ema_50  = float(last.get('ema_50', close))
@@ -59,7 +61,7 @@ def get_signal(df):
         tp = close + (risk * 3.0)
         return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, 3.0)
 
-    # --- 2. Trend Continuation / Dynamic Pullback Entry ---
+    # --- 2. Bullish Trend Continuation / Dynamic Pullback Entry ---
     # When established in an uptrend (Supertrend True for >1 bar, price above 200 EMA & EMA21 > EMA50)
     if st_now == True and st_prev == True and close > ema_200 and ema_21 >= ema_50:
         # Price dipped to touch EMA21 or EMA50 during this candle or prev candle
@@ -75,11 +77,27 @@ def get_signal(df):
             tp = close + (risk * 2.5)
             return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
-    # --- Bearish Signals (For Short/Hedge evaluation) ---
+    # --- 3. Fresh Bearish Trend Flip (Breakout Entry) ---
     if st_now == False and st_prev == True and close < ema_200:
         sl = min(st_upper, close + (atr * 2.5))
         risk = max(sl - close, atr * 1.0)
         tp = close - (risk * 3.0)
         return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, 3.0)
+
+    # --- 4. Bearish Trend Continuation / Dynamic Pullback Entry ---
+    # When established in a downtrend (Supertrend False for >1 bar, price below 200 EMA & EMA21 <= EMA50)
+    if st_now == False and st_prev == False and close < ema_200 and ema_21 <= ema_50:
+        # Price rallied to test EMA21 or EMA50 resistance during this candle or prev candle
+        pulled_back = (high >= ema_21 * 0.998 or prev_high >= ema_21 * 0.998)
+        # Closed bearish (red candle rejecting back down below EMA21)
+        bearish_bounce = (close < open_p) and (close <= ema_21 * 1.002)
+        # Healthy momentum (not oversold, resetting from resistance)
+        rsi_healthy = (32 <= rsi <= 62)
+
+        if pulled_back and bearish_bounce and rsi_healthy:
+            sl = min(st_upper, close + (atr * 2.0))
+            risk = max(sl - close, atr * 1.0)
+            tp = close - (risk * 2.5)
+            return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)

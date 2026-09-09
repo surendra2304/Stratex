@@ -1380,6 +1380,11 @@ def sync_binance_futures_trades_to_ledger(force: bool = False):
                     if oid in existing_order_ids:
                         continue
                     avg_price = c["price_sum"] / c["qty"] if c["qty"] > 0 else 0.0
+                    # Derive exact entry price from realized PnL and closing price
+                    if c["side"] == "SELL":
+                        derived_entry_price = avg_price - (c["realizedPnl"] / c["qty"]) if c["qty"] > 0 else avg_price
+                    else:
+                        derived_entry_price = avg_price + (c["realizedPnl"] / c["qty"]) if c["qty"] > 0 else avg_price
                     iso_time = datetime.datetime.fromtimestamp(c["time"] / 1000, datetime.timezone.utc).isoformat().replace("+00:00", "Z")
                     rec = {
                         "symbol": sym,
@@ -1388,6 +1393,7 @@ def sync_binance_futures_trades_to_ledger(force: bool = False):
                         "action": c["side"],
                         "direction": "LONG" if c["side"] == "SELL" else "SHORT",
                         "quantity": round(c["qty"], 4),
+                        "entry_price": round(derived_entry_price, 4),
                         "exit_price": round(avg_price, 4),
                         "gross_pnl": round(c["realizedPnl"], 4),
                         "pnl": round(c["realizedPnl"], 4),
@@ -1520,16 +1526,31 @@ def _get_trades_data():
                         else:
                             ts_val = datetime.datetime.utcnow().isoformat() + "Z"
                         
+                    entry_p = float(trade.get("entry_price", 0.0))
+                    exit_p = float(trade.get("exit_price", 0.0))
+                    qty_val = float(trade.get("quantity", trade.get("entry_executed_quantity", 0.0)))
+                    gross_pnl_val = float(trade.get("gross_pnl", pnl))
+                    
+                    # Mathematical derivation fallback if entry_price is missing or 0.0
+                    if entry_p <= 0.0 and exit_p > 0.0 and qty_val > 0.0:
+                        trade_dir = str(trade.get("direction", trade.get("side", trade.get("action", "BUY")))).upper()
+                        if "SHORT" in trade_dir or "BUY" in str(trade.get("action", "")).upper():
+                            # Closed short: entry was higher than exit by (pnl / qty)
+                            entry_p = round(exit_p + (gross_pnl_val / qty_val), 4)
+                        else:
+                            # Closed long: entry was lower than exit by (pnl / qty)
+                            entry_p = round(exit_p - (gross_pnl_val / qty_val), 4)
+                        
                     positions.append({
                         "timestamp": ts_val,
                         "symbol": symbol,
                         "action": trade.get("direction", trade.get("side", trade.get("action", "BUY"))).replace("CLOSED_", "").replace("CLOSE_", ""),
                         "strategy": trade.get("strategy") or "SUPERTREND",
                         "source": source or trade.get("source", "PAPER_ENGINE" if "paper" in ledger_file else "BINANCE_EXECUTION"),
-                        "entry_price": float(trade.get("entry_price", 0.0)),
-                        "exit_price": float(trade.get("exit_price", 0.0)),
-                        "quantity": float(trade.get("quantity", trade.get("entry_executed_quantity", 0.0))),
-                        "gross_pnl": float(trade.get("gross_pnl", pnl)),
+                        "entry_price": entry_p,
+                        "exit_price": exit_p,
+                        "quantity": qty_val,
+                        "gross_pnl": gross_pnl_val,
                         "fees": fees,
                         "pnl": pnl,
                         "status": "CLOSED",
@@ -2330,30 +2351,60 @@ def api_positions():
     telemetry = get_telemetry_manager()
     positions = telemetry.get_positions(status=status_filter)
     
-    # If looking for OPEN positions and telemetry store is warming up, sync from testnet_portfolio.json
+    # If looking for OPEN positions and telemetry store is warming up, sync from Binance Futures or testnet_portfolio.json
     if status_filter in ["OPEN", "ALL"] and not positions:
-        port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
-        if os.path.exists(port_file):
-            try:
-                with open(port_file, "r") as f:
-                    p_data = json.load(f)
-                    for sym, p in p_data.get("positions", {}).items():
-                        if isinstance(p, dict) and p.get("status") == "OPEN":
-                            positions.append({
-                                "position_id": sym,
-                                "trade_id": p.get("entry_client_id", sym),
-                                "symbol": sym,
-                                "strategy": p.get("strategy", ""),
-                                "side": p.get("direction", p.get("side", "BUY")),
-                                "entry_timestamp": p.get("timestamp", ""),
-                                "entry_price": float(p.get("entry_price", 0.0)),
-                                "quantity": float(p.get("quantity", 0.0)),
-                                "stop_loss": float(p.get("sl", 0.0)),
-                                "take_profit": float(p.get("tp", 0.0)),
-                                "status": "OPEN"
-                            })
-            except Exception:
-                pass
+        try:
+            from execution import get_exchange_client
+            client = get_exchange_client()
+            if client and hasattr(client, "futures_position_information"):
+                raw_pos = client.futures_position_information()
+                for p in raw_pos:
+                    amt = float(p.get("positionAmt", 0.0))
+                    if amt != 0:
+                        sym = p.get("symbol")
+                        side = "BUY" if amt > 0 else "SELL"
+                        entry_p = float(p.get("entryPrice", 0.0))
+                        mark_p = float(p.get("markPrice", 0.0))
+                        upnl = float(p.get("unRealizedProfit", 0.0))
+                        positions.append({
+                            "position_id": sym,
+                            "trade_id": f"binance_{sym}",
+                            "symbol": sym,
+                            "strategy": "FUTURES_ACTIVE",
+                            "side": side,
+                            "entry_timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                            "entry_price": entry_p,
+                            "current_price": mark_p,
+                            "quantity": abs(amt),
+                            "unrealized_pnl": upnl,
+                            "status": "OPEN"
+                        })
+        except Exception:
+            pass
+
+        if not positions:
+            port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+            if os.path.exists(port_file):
+                try:
+                    with open(port_file, "r") as f:
+                        p_data = json.load(f)
+                        for sym, p in p_data.get("positions", {}).items():
+                            if isinstance(p, dict) and p.get("status") == "OPEN":
+                                positions.append({
+                                    "position_id": sym,
+                                    "trade_id": p.get("entry_client_id", sym),
+                                    "symbol": sym,
+                                    "strategy": p.get("strategy", ""),
+                                    "side": p.get("direction", p.get("side", "BUY")),
+                                    "entry_timestamp": p.get("timestamp", ""),
+                                    "entry_price": float(p.get("entry_price", 0.0)),
+                                    "quantity": float(p.get("quantity", 0.0)),
+                                    "stop_loss": float(p.get("sl", 0.0)),
+                                    "take_profit": float(p.get("tp", 0.0)),
+                                    "status": "OPEN"
+                                })
+                except Exception:
+                    pass
 
     return jsonify({
         "status": "SUCCESS",

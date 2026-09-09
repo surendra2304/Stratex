@@ -101,7 +101,7 @@ MAX_TESTNET_RISK_PER_TRADE = float(os.getenv("MAX_TESTNET_RISK_PER_TRADE", "0.00
 MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.05"))        # 5% max total exposure
 MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.02"))   # 2% max per single asset
 MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.04")) # 4% max net directional exposure
-MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "10"))            # Base limit of 10
+MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))            # Base limit of 5
 MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "10")) # Bounded positions for aggressive mode
 VOLATILITY_BUFFER = 0.2  # Scale down positions during high volatility
 
@@ -116,6 +116,8 @@ MIN_PROBABILITY_THRESHOLD = float(os.getenv("MIN_PROBABILITY_THRESHOLD", "0.40")
 DEGRADATION_WINDOW = 20            # Evaluate last 20 trades for degradation
 MIN_WIN_RATE_THRESHOLD = 0.35      # Automatically switch to OBSERVE-ONLY if < 35% win rate
 MAX_PREDICTION_ERROR = 0.02        # Automatically switch to OBSERVE-ONLY if actual differs from expected by > 2%
+
+BTC_REGIME_FILTER = os.getenv("BTC_REGIME_FILTER", "True").lower() == "true" # Altcoins follow BTC; block alt longs when BTC < 4h EMA200
 
 # -------------------------------------------------------------------
 # SIGNAL QUALITY FILTERS (v3 upgrade) — real-data entry gates

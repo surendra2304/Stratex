@@ -988,10 +988,11 @@ class TestnetService:
                             self.log_opportunity(signal_id, symbol, side, {"reason": "LONG_ONLY_RESTRICTION"}, "REJECTED", "LONG_ONLY_RESTRICTION")
                             continue
 
-                        # V2 spot upgrade: BTC market-regime gate — alts follow BTC;
-                        # long entries during BTC risk-off (4h close < EMA200) are
-                        # historically net-negative (see research/upgrade_2026_08).
-                        if side == "BUY" and ADX_EMA_STRATEGY_V2.get("BTC_REGIME_FILTER", False):
+                        # Global Macro BTC market-regime gate — alts follow BTC;
+                        # long entries on altcoins during BTC risk-off (4h close < EMA200) are
+                        # historically net-negative. Protects all strategies from buying alts into macro dumps.
+                        btc_filter_enabled = getattr(config, "BTC_REGIME_FILTER", True) or ADX_EMA_STRATEGY_V2.get("BTC_REGIME_FILTER", False)
+                        if side == "BUY" and symbol != "BTCUSDT" and btc_filter_enabled:
                             regime_ok, btc_close, btc_ema = self._btc_regime_state()
                             if regime_ok is False:
                                 self.stats["OTHER_REJECTED"] += 1
