@@ -27,8 +27,18 @@ _UNKNOWN_WIN_RATE_FALLBACK = 0.5   # conservative neutral; never optimistic
 
 class ProfitabilityGate:
     def __init__(self, cost_engine=None):
-        # Default to standard Binance Taker config for strict execution evaluation
-        self.cost_engine = cost_engine or CostEngine.get_binance_taker_config()
+        if cost_engine:
+            self.cost_engine = cost_engine
+        else:
+            try:
+                import config
+                trading_mode = getattr(config, "TRADING_MODE", "PAPER").upper()
+            except Exception:
+                trading_mode = "PAPER"
+            if trading_mode == "FUTURES":
+                self.cost_engine = CostEngine.get_futures_maker_config()
+            else:
+                self.cost_engine = CostEngine.get_binance_taker_config()
 
     def evaluate_signal(
         self,
@@ -105,6 +115,40 @@ class ProfitabilityGate:
         # ------------------------------------------------------------------
         # 2. Calculate gross moves
         # ------------------------------------------------------------------
+        if not entry_price or not tp_price or not sl_price:
+            return False, {
+                "decision": "REJECTED",
+                "reason": "MISSING_PRICE_LEVELS",
+                "details": f"entry={entry_price}, tp={tp_price}, sl={sl_price}",
+                "strategy_type": strategy_type,
+                "prob_source": prob_source,
+                "confidence": prob_win,
+            }
+
+        try:
+            entry_price = float(entry_price)
+            tp_price = float(tp_price)
+            sl_price = float(sl_price)
+        except (ValueError, TypeError):
+            return False, {
+                "decision": "REJECTED",
+                "reason": "INVALID_PRICE_NUMERICS",
+                "details": f"entry={entry_price}, tp={tp_price}, sl={sl_price}",
+                "strategy_type": strategy_type,
+                "prob_source": prob_source,
+                "confidence": prob_win,
+            }
+
+        if entry_price <= 0:
+            return False, {
+                "decision": "REJECTED",
+                "reason": "NON_POSITIVE_ENTRY_PRICE",
+                "details": f"entry={entry_price}",
+                "strategy_type": strategy_type,
+                "prob_source": prob_source,
+                "confidence": prob_win,
+            }
+
         if side in ("BUY", "LONG"):
             reward_pct = (tp_price - entry_price) / entry_price
             risk_pct   = (entry_price - sl_price) / entry_price

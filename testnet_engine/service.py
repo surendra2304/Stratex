@@ -299,7 +299,8 @@ class TestnetService:
             from stratex_upgrade.decay import SignalDecaySmoother
             from stratex_upgrade.qanat_portfolio import QanatPortfolioAllocator
             decay_steps = int(os.getenv("SIGNAL_DECAY_STEPS", "4"))
-            self.decay_smoother = SignalDecaySmoother(decay_steps=decay_steps, confirmation_threshold=0.50)
+            decay_thresh = float(os.getenv("SIGNAL_DECAY_THRESHOLD", "0.35"))
+            self.decay_smoother = SignalDecaySmoother(decay_steps=decay_steps, confirmation_threshold=decay_thresh)
             self.qanat_allocator = QanatPortfolioAllocator(
                 max_total_exposure=getattr(config, "MAX_TESTNET_EXPOSURE", 0.05),
                 max_single_exposure=getattr(config, "MAX_SINGLE_ASSET_EXPOSURE", 0.02),

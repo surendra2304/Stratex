@@ -37,17 +37,21 @@ class SignalDecaySmoother:
     Tracks and blends signals across consecutive candle closes per (symbol, timeframe, strategy).
     """
 
-    def __init__(self, decay_steps: int = 4, confirmation_threshold: float = 0.50):
+    def __init__(self, decay_steps: int = 4, confirmation_threshold: float | None = None):
         """
         Parameters
         ----------
         decay_steps : int
             Number of recent bars over which to blend signals (default 4, matching Qanat standard).
         confirmation_threshold : float
-            Minimum smoothed conviction required to confirm an entry (default 0.50).
+            Minimum smoothed conviction required to confirm an entry (default 0.35).
         """
+        import os
         self.decay_steps = max(1, int(decay_steps))
-        self.confirmation_threshold = float(confirmation_threshold)
+        if confirmation_threshold is not None:
+            self.confirmation_threshold = float(confirmation_threshold)
+        else:
+            self.confirmation_threshold = float(os.getenv("SIGNAL_DECAY_THRESHOLD", "0.35"))
         # Key: (symbol, timeframe, strategy) -> deque of raw signals [-1.0, 0.0, 1.0]
         self._history: dict[tuple[str, str, str], collections.deque[float]] = collections.defaultdict(
             lambda: collections.deque(maxlen=self.decay_steps)

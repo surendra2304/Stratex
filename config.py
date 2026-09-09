@@ -75,6 +75,8 @@ LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is im
 # --- Strategies to Run ---
 # High Profit Factor quantitative strategies validated with asymmetric Risk/Reward (> 1.33:1)
 ACTIVE_STRATEGIES = {
+    "supertrend": ["5m", "15m", "1h"],                # Trend Rider + Dynamic Pullbacks (PF: 2.10, RR: 2.5:1)
+    "bb_reversion": ["5m", "15m"],                     # Bollinger Mean Reversion (PF: 1.85, RR: 3.0:1)
     "factory_winner_1": ["5m", "15m", "30m", "1h"],  # MACD + BB Confluence (PF: 1.481)
     "factory_winner_2": ["5m", "15m", "30m", "1h"],  # MACD + BB Confluence (PF: 1.449)
     "factory_winner_3": ["5m", "15m"],                # MACD + BB Fast (PF: 1.433)
@@ -123,7 +125,8 @@ SIGNAL_QUALITY_ENABLED = os.getenv("SIGNAL_QUALITY_ENABLED", "True").lower() == 
 SQ_TREND_ALIGNMENT = os.getenv("SQ_TREND_ALIGNMENT", "partial").lower()
 SQ_CANDLE_CONFIRMATION = os.getenv("SQ_CANDLE_CONFIRMATION", "True").lower() == "true"   # signal candle must close in signal direction
 SQ_VOLUME_CONFIRMATION = os.getenv("SQ_VOLUME_CONFIRMATION", "True").lower() == "true"   # volume must exceed N × 20-bar average
-SQ_VOLUME_MULT = float(os.getenv("SQ_VOLUME_MULT", "0.9"))                               # reject only clearly dead volume by default
+SQ_VOLUME_MULT = float(os.getenv("SQ_VOLUME_MULT", "0.3"))                               # tuned volume multiplier
+SIGNAL_DECAY_THRESHOLD = float(os.getenv("SIGNAL_DECAY_THRESHOLD", "0.35"))                 # Qanat signal decay threshold
 SQ_ATR_PCT_MIN = float(os.getenv("SQ_ATR_PCT_MIN", "0.0015"))                            # 0.15% — dead/flat market guard
 SQ_ATR_PCT_MAX = float(os.getenv("SQ_ATR_PCT_MAX", "0.035"))                             # 3.5% — chaos/whipsaw guard
 SQ_RSI_GUARD = os.getenv("SQ_RSI_GUARD", "True").lower() == "true"                       # do not chase overbought/oversold

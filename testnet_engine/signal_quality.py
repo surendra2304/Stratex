@@ -151,7 +151,7 @@ def evaluate_signal_quality(df, side, entry_price, sl_price, tp_price, strategy_
 
     # 4. Volume confirmation vs real 20-bar average
     if bool(_cfg("SQ_VOLUME_CONFIRMATION", True)):
-        vol_mult = float(_cfg("SQ_VOLUME_MULT", 0.9))
+        vol_mult = float(_cfg("SQ_VOLUME_MULT", 0.3))
         try:
             vol_sma20 = float(pd.Series(df["volume"].astype(float).iloc[-21:-1]).mean())
         except Exception:
