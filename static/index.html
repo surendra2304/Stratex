@@ -360,7 +360,7 @@
 
         <!-- TAB 5: LIVE MARKET SCANNER -->
         <div id="tab-scanner" class="tab-pane">
-            <section class="panel">
+            <section class="panel" style="margin-bottom: 20px;">
                 <div class="panel-header">
                     <div class="panel-title">
                         <span>📡 Live Market Scanner (16 Tracked Pairs)</span>
@@ -371,6 +371,52 @@
                 <div class="panel-body">
                     <div class="market-grid" id="market-scanner-grid">
                         <!-- Dynamic Market Chips injected by JS -->
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span>⚡ Real-Time Signal Stream &amp; Execution Audit</span>
+                        <span class="panel-title-badge" id="live-scanner-count">0 Signals</span>
+                    </div>
+                    <div class="table-controls">
+                        <div class="filter-btn-group">
+                            <button class="filter-chip active" id="btn-scanner-all" onclick="window.setScannerFilter('ALL')">All Signals</button>
+                            <button class="filter-chip" id="btn-scanner-executed" onclick="window.setScannerFilter('EXECUTED')">Executed Only</button>
+                            <button class="filter-chip" id="btn-scanner-qualified" onclick="window.setScannerFilter('QUALIFIED')">Qualified</button>
+                            <button class="filter-chip" id="btn-scanner-rejected" onclick="window.setScannerFilter('REJECTED')">Rejected</button>
+                        </div>
+                        <input type="text" id="scanner-search" class="table-filter-input mono" placeholder="Filter symbol or gate...">
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="data-table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Evaluated (UTC)</th>
+                                    <th>Symbol / TF</th>
+                                    <th>Strategy</th>
+                                    <th>Side</th>
+                                    <th>Signal Price</th>
+                                    <th>Target (TP)</th>
+                                    <th>Stop (SL)</th>
+                                    <th>Expected Net Edge</th>
+                                    <th>Decision Status</th>
+                                    <th>Gate &amp; Decision Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="live-scanner-tbody">
+                                <tr>
+                                    <td colspan="10" class="empty-state">
+                                        <div class="empty-state-icon">📡</div>
+                                        <div class="empty-state-text">Listening to live signal evaluations...</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
@@ -427,6 +473,6 @@
     </main>
 
     <!-- App JavaScript -->
-    <script src="/static/app.js?v=8.5.0"></script>
+    <script src="/static/app.js?v=8.6.0"></script>
 </body>
 </html>

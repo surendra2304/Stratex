@@ -16,6 +16,9 @@
     let cachedTrades = null;
     let cachedDaily = null;
     let cachedMarkets = null;
+    let cachedScanner = null;
+    let scannerFilter = 'ALL'; // 'ALL', 'EXECUTED', 'QUALIFIED', 'REJECTED'
+    let scannerSearchQuery = '';
 
     // DOM Elements Cache
     const el = {
@@ -79,6 +82,13 @@
         // Market Scanner Tab
         marketScannerGrid: document.getElementById('market-scanner-grid'),
         scannedSymbolsCount: document.getElementById('scanned-symbols-count'),
+        liveScannerTbody: document.getElementById('live-scanner-tbody'),
+        liveScannerCount: document.getElementById('live-scanner-count'),
+        scannerSearch: document.getElementById('scanner-search'),
+        btnScannerAll: document.getElementById('btn-scanner-all'),
+        btnScannerExecuted: document.getElementById('btn-scanner-executed'),
+        btnScannerQualified: document.getElementById('btn-scanner-qualified'),
+        btnScannerRejected: document.getElementById('btn-scanner-rejected'),
 
         // Diagnostics Tab
         diagEngineStatus: document.getElementById('diag-engine-status'),
@@ -187,17 +197,19 @@
         if (el.btnRefresh) el.btnRefresh.classList.add('syncing');
 
         try {
-            const [resStatus, resTrades, resDaily, resMarkets] = await Promise.allSettled([
+            const [resStatus, resTrades, resDaily, resMarkets, resScanner] = await Promise.allSettled([
                 fetch('/api/status', { cache: 'no-store' }).then(r => r.ok ? r.json() : null),
                 fetch('/api/trades', { cache: 'no-store' }).then(r => r.ok ? r.json() : null),
                 fetch('/api/daily-pnl', { cache: 'no-store' }).then(r => r.ok ? r.json() : null),
-                fetch('/api/markets', { cache: 'no-store' }).then(r => r.ok ? r.json() : null)
+                fetch('/api/markets', { cache: 'no-store' }).then(r => r.ok ? r.json() : null),
+                fetch('/api/live-scanner', { cache: 'no-store' }).then(r => r.ok ? r.json() : null)
             ]);
 
             cachedStatus = resStatus.value || cachedStatus || {};
             cachedTrades = resTrades.value || cachedTrades || {};
             cachedDaily = resDaily.value || cachedDaily || {};
             cachedMarkets = resMarkets.value || cachedMarkets || {};
+            cachedScanner = resScanner.value || cachedScanner || {};
 
             renderKPIs(cachedStatus, cachedTrades);
             renderOverview(cachedStatus, cachedTrades);
@@ -205,11 +217,12 @@
             renderOpenPositions(cachedStatus);
             renderTradesHistory(cachedTrades);
             renderMarkets(cachedMarkets, cachedStatus);
+            renderLiveScanner(cachedScanner);
             renderDiagnostics(cachedStatus);
 
             const now = new Date();
             if (el.lastSync) {
-                el.lastSync.textContent = now.toLocaleTimeString() + ' (2s Sync)';
+                el.lastSync.textContent = now.toLocaleTimeString() + ' (<1s Realtime)';
             }
         } catch (err) {
             console.error('[STRATEX] Sync error:', err);
@@ -797,6 +810,114 @@
         }).join('');
     }
 
+    // Set Live Scanner Filter (ALL, EXECUTED, QUALIFIED, REJECTED)
+    window.setScannerFilter = function (type) {
+        scannerFilter = type;
+        if (el.btnScannerAll) el.btnScannerAll.classList.toggle('active', type === 'ALL');
+        if (el.btnScannerExecuted) el.btnScannerExecuted.classList.toggle('active', type === 'EXECUTED');
+        if (el.btnScannerQualified) el.btnScannerQualified.classList.toggle('active', type === 'QUALIFIED');
+        if (el.btnScannerRejected) el.btnScannerRejected.classList.toggle('active', type === 'REJECTED');
+
+        if (cachedScanner) {
+            renderLiveScanner(cachedScanner);
+        }
+    };
+
+    // Render Section 2 of Tab 5: Live Signal Execution Audit Stream
+    function renderLiveScanner(scannerData) {
+        if (!el.liveScannerTbody) return;
+
+        let signals = (scannerData && Array.isArray(scannerData.signals)) ? scannerData.signals : [];
+        if (el.liveScannerCount) {
+            el.liveScannerCount.textContent = `${signals.length} Signals Evaluated`;
+        }
+
+        // Apply Status Filter
+        if (scannerFilter === 'EXECUTED') {
+            signals = signals.filter(s => {
+                const dec = (s.decision || s.execution_decision || '').toUpperCase();
+                return dec === 'EXECUTED';
+            });
+        } else if (scannerFilter === 'QUALIFIED') {
+            signals = signals.filter(s => {
+                const dec = (s.decision || s.execution_decision || s.profitability_decision || '').toUpperCase();
+                return dec === 'QUALIFIED' || dec === 'APPROVED';
+            });
+        } else if (scannerFilter === 'REJECTED') {
+            signals = signals.filter(s => {
+                const dec = (s.decision || s.execution_decision || s.profitability_decision || '').toUpperCase();
+                return dec === 'REJECTED';
+            });
+        }
+
+        // Apply Search Filter (symbol, timeframe, reason, strategy)
+        const q = (scannerSearchQuery || '').toUpperCase().trim();
+        if (q) {
+            signals = signals.filter(s => {
+                const sym = (s.symbol || '').toUpperCase();
+                const strat = (s.strategy || '').toUpperCase();
+                const reason = (s.reason || s.execution_reason || s.profitability_reason || s.risk_reason || '').toUpperCase();
+                return sym.includes(q) || strat.includes(q) || reason.includes(q);
+            });
+        }
+
+        if (signals.length === 0) {
+            el.liveScannerTbody.innerHTML = `
+                <tr>
+                    <td colspan="10" class="empty-state">
+                        <div class="empty-state-icon">📡</div>
+                        <div class="empty-state-text">No market signals match current filter</div>
+                        <div class="empty-state-sub">Strategy engine evaluates 16 pairs across multi-timeframe candles in real time.</div>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        el.liveScannerTbody.innerHTML = signals.map(s => {
+            const side = (s.side || 'BUY').toUpperCase();
+            const sideClass = side.includes('BUY') || side.includes('LONG') ? 'badge-buy' : 'badge-sell';
+            
+            // Decision Badge
+            const decision = (s.decision || s.execution_decision || 'EVALUATING').toUpperCase();
+            let decisionBadgeClass = 'badge-tag';
+            if (decision === 'EXECUTED') decisionBadgeClass = 'badge-executed';
+            else if (decision === 'QUALIFIED' || decision === 'APPROVED') decisionBadgeClass = 'badge-qualified';
+            else if (decision === 'REJECTED') decisionBadgeClass = 'badge-rejected';
+            else if (decision === 'PENDING') decisionBadgeClass = 'badge-pending';
+
+            // Expected Net Edge
+            const netEdge = parseFloat(s.expected_net_return || s.expected_net || 0.0);
+            const netEdgePct = (netEdge * 100).toFixed(2);
+            const edgeClass = netEdge > 0 ? 'text-green' : netEdge < 0 ? 'text-red' : 'text-muted';
+
+            const reason = s.reason || s.execution_reason || s.profitability_reason || s.risk_reason || 'EVALUATION_IN_PROGRESS';
+            const price = parseFloat(s.entry || s.signal_price || 0.0);
+            const tp = parseFloat(s.target || 0.0);
+            const sl = parseFloat(s.stop || 0.0);
+
+            return `
+                <tr>
+                    <td class="mono text-muted" style="font-size: 11px;">${fmtTime(s.timestamp)}</td>
+                    <td>
+                        <span class="mono" style="font-weight: 700; color: #fff;">${s.symbol}</span>
+                        <span class="badge-tag" style="margin-left: 4px;">${s.timeframe || '15m'}</span>
+                    </td>
+                    <td><span class="badge-tag">${(s.strategy || 'STRATEGY').toUpperCase()}</span></td>
+                    <td><span class="badge ${sideClass}">${side}</span></td>
+                    <td class="mono">${price > 0 ? fmtNumber(price, price > 10 ? 2 : 4) : '--'}</td>
+                    <td class="mono text-green">${tp > 0 ? fmtNumber(tp, tp > 10 ? 2 : 4) : '--'}</td>
+                    <td class="mono text-red">${sl > 0 ? fmtNumber(sl, sl > 10 ? 2 : 4) : '--'}</td>
+                    <td class="mono ${edgeClass}" style="font-weight: 700;">${netEdge > 0 ? '+' : ''}${netEdgePct}%</td>
+                    <td><span class="badge ${decisionBadgeClass}">${decision}</span></td>
+                    <td class="mono" style="font-size: 11px; color: ${decision === 'EXECUTED' ? '#4ade80' : decision === 'QUALIFIED' ? '#60a5fa' : '#94a3b8'};">
+                        ${reason}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
     // Render Tab 6: Diagnostics
     function renderDiagnostics(status) {
         const engineData = status.engine_data || {};
@@ -833,6 +954,15 @@
         });
     }
 
+    if (el.scannerSearch) {
+        el.scannerSearch.addEventListener('input', (e) => {
+            scannerSearchQuery = e.target.value;
+            if (cachedScanner) {
+                renderLiveScanner(cachedScanner);
+            }
+        });
+    }
+
     if (el.btnCloseAllPositions) {
         el.btnCloseAllPositions.addEventListener('click', async () => {
             if (!confirm('Are you sure you want to close ALL open positions on Binance Futures Testnet?')) return;
@@ -859,8 +989,8 @@
     // Initialize View & Hash
     initHashTab();
 
-    // Start 2-Second Polling
+    // Start Sub-Second Realtime Polling (<1s Sync for zero lag)
     fetchAllData();
-    pollTimer = setInterval(fetchAllData, 2000);
+    pollTimer = setInterval(fetchAllData, 500);
 
 })();

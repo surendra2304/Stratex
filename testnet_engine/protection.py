@@ -494,7 +494,7 @@ def place_futures_bracket_protection(
         stopPrice=sl_str,
         closePosition=True
     )
-    sl_order_id = sl_order.get("orderId")
+    sl_order_id = sl_order.get("orderId") or sl_order.get("algoId")
 
     # 2. Place Take Profit conditional order (TAKE_PROFIT_MARKET with closePosition=True)
     tp_order = client.futures_create_order(
@@ -504,7 +504,7 @@ def place_futures_bracket_protection(
         stopPrice=tp_str,
         closePosition=True
     )
-    tp_order_id = tp_order.get("orderId")
+    tp_order_id = tp_order.get("orderId") or tp_order.get("algoId")
 
     return {
         "tp_order_id": tp_order_id,
@@ -540,6 +540,7 @@ def emergency_futures_market_close(
 def check_futures_bracket_status(client: Client, symbol: str, tp_order_id: int | None, sl_order_id: int | None) -> dict:
     """
     Checks if either the TP or SL conditional order has fired and closed the futures position.
+    Queries both order/algo endpoints and verifies against live Binance Futures position.
     """
     result = {
         "position_closed": False,
@@ -549,41 +550,54 @@ def check_futures_bracket_status(client: Client, symbol: str, tp_order_id: int |
         "close_qty": 0.0,
     }
 
-    if tp_order_id:
-        try:
-            tp_info = client.futures_get_order(symbol=symbol, orderId=tp_order_id)
-            if tp_info.get("status") == "FILLED":
-                result["position_closed"] = True
-                result["tp_filled"] = True
-                result["close_avg_price"] = float(tp_info.get("avgPrice", 0.0))
-                result["close_qty"] = float(tp_info.get("executedQty", 0.0))
-                # Cancel the opposing SL order if still active
-                if sl_order_id:
-                    try:
-                        client.futures_cancel_order(symbol=symbol, orderId=sl_order_id)
-                    except Exception:
-                        pass
-                return result
-        except Exception as e:
-            logger.debug(f"[FUTURES] Query TP order {tp_order_id} failed: {e}")
+    # 1. Check if position is still open on Binance
+    is_open = True
+    try:
+        if hasattr(client, "futures_position_information"):
+            positions = client.futures_position_information(symbol=symbol)
+            for p in positions:
+                if float(p.get("positionAmt", 0.0)) == 0.0:
+                    is_open = False
+                    break
+    except Exception:
+        pass
 
-    if sl_order_id:
+    # 2. Check open algo orders
+    open_algo_ids = set()
+    try:
+        if hasattr(client, "futures_get_open_algo_orders"):
+            algos = client.futures_get_open_algo_orders(symbol=symbol)
+            for a in algos:
+                open_algo_ids.add(a.get("algoId"))
+    except Exception:
+        pass
+
+    # If position is closed on Binance, or if one of the algo orders fired:
+    algo_fired = (tp_order_id and tp_order_id not in open_algo_ids) or (sl_order_id and sl_order_id not in open_algo_ids)
+    if not is_open or algo_fired:
         try:
-            sl_info = client.futures_get_order(symbol=symbol, orderId=sl_order_id)
-            if sl_info.get("status") == "FILLED":
+            trades = client.futures_account_trades(symbol=symbol) if hasattr(client, "futures_account_trades") else []
+            if trades:
+                last_trade = trades[-1]
                 result["position_closed"] = True
-                result["sl_filled"] = True
-                result["close_avg_price"] = float(sl_info.get("avgPrice", 0.0))
-                result["close_qty"] = float(sl_info.get("executedQty", 0.0))
-                # Cancel the opposing TP order if still active
-                if tp_order_id:
+                result["close_avg_price"] = float(last_trade.get("price", 0.0))
+                result["close_qty"] = float(last_trade.get("qty", 0.0))
+                pnl = float(last_trade.get("realizedPnl", 0.0))
+                if pnl > 0:
+                    result["tp_filled"] = True
+                else:
+                    result["sl_filled"] = True
+
+                # Cancel remaining opposing algo order
+                other_id = sl_order_id if result["tp_filled"] else tp_order_id
+                if other_id and hasattr(client, "futures_cancel_algo_order"):
                     try:
-                        client.futures_cancel_order(symbol=symbol, orderId=tp_order_id)
+                        client.futures_cancel_algo_order(algoId=other_id)
                     except Exception:
                         pass
                 return result
-        except Exception as e:
-            logger.debug(f"[FUTURES] Query SL order {sl_order_id} failed: {e}")
+        except Exception as te:
+            logger.debug(f"[FUTURES] Query trade history failed: {te}")
 
     return result
 

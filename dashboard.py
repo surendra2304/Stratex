@@ -2139,6 +2139,39 @@ def api_export_trades():
         headers={"Content-Disposition": "attachment;filename=binance_trade_ledger.csv"}
     )
 
+@app.route('/api/live-scanner')
+def api_live_scanner():
+    """Returns live signal execution stream with real-time gate accept/reject verdicts."""
+    opps = []
+    opp_file = os.getenv("TESTNET_OPPORTUNITY_LOG", "testnet_opportunity_log.jsonl")
+    if os.path.exists(opp_file):
+        try:
+            with open(opp_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()[-80:]
+                for line in reversed(lines):
+                    if not line.strip(): continue
+                    try:
+                        opps.append(json.loads(line))
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.error(f"Error reading live scanner opportunity log: {e}")
+
+    if not opps:
+        try:
+            from testnet_engine.telemetry_manager import get_telemetry_manager
+            t_mgr = get_telemetry_manager()
+            opps = t_mgr.get_signals(limit=50)
+        except Exception:
+            pass
+
+    return jsonify({
+        "status": "SUCCESS",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "count": len(opps[:50]),
+        "signals": opps[:50]
+    })
+
 @app.route('/api/account')
 def api_account():
     """

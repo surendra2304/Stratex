@@ -155,7 +155,7 @@ def _validate_trade_schema(trade: dict):
             except (ValueError, TypeError):
                 raise StateCorruptionError(f"Field {p_field} must be a positive finite number or None.")
                 
-    if trade.get("oco_id") is None:
+    if not trade.get("is_futures") and trade.get("oco_id") is None:
         if trade.get("tp_price") is not None or trade.get("sl_price") is not None:
             raise StateCorruptionError("oco_id cannot be None if tp_price or sl_price are set.")
 
@@ -636,9 +636,6 @@ def monitor_open_trades():
         sl_oid = t.get("sl_order_id")
 
         if is_fut:
-            if not tp_oid and not sl_oid:
-                remaining_trades.append(t)
-                continue
             try:
                 fut_res = check_futures_bracket_status(client, t["symbol"], tp_oid, sl_oid)
                 if fut_res["position_closed"]:
