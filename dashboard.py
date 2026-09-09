@@ -1019,9 +1019,10 @@ def get_status():
     if custom_port:
         port_files.append(custom_port)
     else:
-        for p_name in ["testnet_portfolio.json", "paper_portfolio.json"]:
-            if os.path.exists(p_name) and p_name not in port_files:
-                port_files.append(p_name)
+        trading_mode = getattr(config, "TRADING_MODE", "TESTNET").upper()
+        target_f = "testnet_portfolio.json" if trading_mode in ["TESTNET", "FUTURES"] else "paper_portfolio.json"
+        if os.path.exists(target_f):
+            port_files.append(target_f)
 
     open_pos_list = []
     port = {}
@@ -1143,17 +1144,16 @@ def get_status():
     today_realized_pnl = 0.0
     try:
         trades_data = _get_trades_data()
-        if trades_data:
+        if trades_data is not None:
+            realized_pnl = float(trades_data.get("net_pnl", 0.0))
             if trades_data.get("positions"):
-                realized_pnl = float(trades_data.get("net_pnl", 0.0))
                 fees = float(sum(t.get("fees", 0.0) for t in trades_data.get("positions", [])))
                 for t in trades_data.get("positions", []):
                     t_ts = t.get("exit_timestamp", t.get("timestamp", ""))
                     if t_ts and t_ts.startswith(today_utc_str):
                         today_realized_pnl += float(t.get("net_pnl", t.get("pnl", 0.0)))
-            elif "net_pnl" in trades_data and float(trades_data.get("net_pnl", 0.0)) != 0.0:
-                realized_pnl = float(trades_data.get("net_pnl", 0.0))
-                today_realized_pnl = realized_pnl
+            else:
+                today_realized_pnl = 0.0
     except Exception as td_err:
         logger.error(f"Failed to load trades data: {td_err}")
 
@@ -1282,9 +1282,22 @@ def _get_trades_data():
     if custom_ledger:
         ledger_files.append(custom_ledger)
     else:
-        for f_name in ["paper_trade_ledger.jsonl", "testnet_trade_ledger.jsonl"]:
-            if os.path.exists(f_name) and f_name not in ledger_files:
-                ledger_files.append(f_name)
+        trading_mode = getattr(config, "TRADING_MODE", "TESTNET").upper()
+        target_l = "testnet_trade_ledger.jsonl" if trading_mode in ["TESTNET", "FUTURES"] else "paper_trade_ledger.jsonl"
+        if os.path.exists(target_l):
+            ledger_files.append(target_l)
+
+    # Baseline cutoff: a statistics reset (testnet_baseline.json) defines the clean start
+    baseline_iso = ""
+    try:
+        baseline_file = os.getenv("TESTNET_BASELINE_FILE", "testnet_baseline.json")
+        if os.path.exists(baseline_file):
+            with open(baseline_file, "r") as bf:
+                baseline_iso = json.load(bf).get("reset_timestamp", "")
+    except Exception:
+        baseline_iso = ""
+    if not baseline_iso:
+        baseline_iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-09T09:44:52.803966Z")
 
     for ledger_file in ledger_files:
         if not os.path.exists(ledger_file):
@@ -1294,6 +1307,11 @@ def _get_trades_data():
                 try:
                     trade = json.loads(line.strip())
                     if not trade: continue
+
+                    # Check baseline cutoff
+                    t_ts = trade.get("exit_timestamp") or trade.get("timestamp") or trade.get("entry_timestamp") or ""
+                    if baseline_iso and t_ts and t_ts < baseline_iso:
+                        continue
                     
                     prov = str(trade.get("provenance", "")).upper()
                     source = str(trade.get("source", "")).upper()

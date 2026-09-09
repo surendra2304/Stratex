@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # .gitignore - Files to NEVER commit to GitHub
 # ==============================================================================
 
@@ -58,7 +58,6 @@ render_trades.json
 render_trades_audit.json
 runtime_leases.json
 strategy_registry.json
-testnet_baseline.json
 testnet_initial_deposit.json
 testnet_portfolio.json
 testnet_portfolio.json.tmp

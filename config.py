@@ -71,6 +71,7 @@ TRADING_MODE = os.getenv("TRADING_MODE", "PAPER").upper()
 PAPER_SAFE_MODE = os.getenv("PAPER_SAFE_MODE", "False" if TRADING_MODE in ["TESTNET", "FUTURES"] else "True").lower() == "true"
 TESTNET_ENABLED = os.getenv("TESTNET_ENABLED", "False").lower() == "true"
 LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is impossible by design
+TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-09-09T09:44:52.803966Z")
 
 # --- Strategies to Run ---
 # High Profit Factor quantitative strategies validated with asymmetric Risk/Reward (> 1.33:1)

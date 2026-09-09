@@ -522,12 +522,16 @@ class TestnetService:
             # or valued as equity. Their stray OCOs are floating and cancelled.
             baseline_ms = None
             try:
-                if os.path.exists(os.getenv("TESTNET_BASELINE_FILE", "testnet_baseline.json")):
-                    with open(os.getenv("TESTNET_BASELINE_FILE", "testnet_baseline.json"), "r") as bf:
+                _bl_path = os.getenv("TESTNET_BASELINE_FILE", "testnet_baseline.json")
+                _iso = ""
+                if os.path.exists(_bl_path):
+                    with open(_bl_path, "r") as bf:
                         _bl = json.load(bf)
                     _iso = _bl.get("reset_timestamp", "")
-                    if _iso:
-                        baseline_ms = datetime.datetime.fromisoformat(_iso.replace("Z", "+00:00")).timestamp() * 1000
+                if not _iso:
+                    _iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-09T09:44:52.803966Z")
+                if _iso:
+                    baseline_ms = datetime.datetime.fromisoformat(_iso.replace("Z", "+00:00")).timestamp() * 1000
             except Exception:
                 baseline_ms = None
             engine_symbols = open_symbols_from_assets
@@ -1912,12 +1916,16 @@ class TestnetService:
             # backup/ and must never be re-imported into the live ledger.
             baseline_ts = None
             try:
-                if os.path.exists(os.getenv("TESTNET_BASELINE_FILE", "testnet_baseline.json")):
-                    with open(os.getenv("TESTNET_BASELINE_FILE", "testnet_baseline.json"), "r") as bf:
+                _bl_path = os.getenv("TESTNET_BASELINE_FILE", "testnet_baseline.json")
+                _bl_iso = ""
+                if os.path.exists(_bl_path):
+                    with open(_bl_path, "r") as bf:
                         _bl = json.load(bf)
                     _bl_iso = _bl.get("reset_timestamp", "")
-                    if _bl_iso:
-                        baseline_ts = datetime.datetime.fromisoformat(_bl_iso.replace("Z", "+00:00")).timestamp() * 1000
+                if not _bl_iso:
+                    _bl_iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-09T09:44:52.803966Z")
+                if _bl_iso:
+                    baseline_ts = datetime.datetime.fromisoformat(_bl_iso.replace("Z", "+00:00")).timestamp() * 1000
             except Exception:
                 baseline_ts = None
 

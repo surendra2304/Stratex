@@ -6,6 +6,13 @@
 (function () {
     'use strict';
 
+    // Clear legacy hash fragments (e.g. /#dashboard) to ensure clean single-page load
+    if (window.location.hash) {
+        try {
+            history.replaceState(null, '', window.location.pathname + window.location.search);
+        } catch (e) {}
+    }
+
     // State
     let isFetching = false;
     let pollTimer = null;
