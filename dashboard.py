@@ -1299,6 +1299,118 @@ def get_status():
 def get_trades():
     return jsonify(_get_trades_data())
 
+_last_ledger_sync_time = 0.0
+
+def sync_binance_futures_trades_to_ledger(force: bool = False):
+    """Authoritatively reconciles Binance Futures closed trades directly into testnet_trade_ledger.jsonl"""
+    global _last_ledger_sync_time
+    now = time.time()
+    if not force and (now - _last_ledger_sync_time < 10.0):
+        return
+    _last_ledger_sync_time = now
+
+    if getattr(config, "TRADING_MODE", "TESTNET").upper() != "FUTURES":
+        return
+
+    try:
+        from execution import get_exchange_client
+        client = get_exchange_client()
+        if not client or not hasattr(client, "futures_account_trades"):
+            return
+
+        baseline_ms = 0
+        bl_path = "testnet_baseline.json"
+        if os.path.exists(bl_path):
+            try:
+                with open(bl_path, "r") as bf:
+                    b_iso = json.load(bf).get("reset_timestamp", "")
+                    if b_iso:
+                        baseline_ms = int(datetime.datetime.fromisoformat(b_iso.replace("Z", "+00:00")).timestamp() * 1000)
+            except Exception:
+                pass
+        if not baseline_ms:
+            baseline_ms = 1788958800000  # fallback 2026-09-09T13:00:00Z
+
+        symbols = [
+            "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "LTCUSDT",
+            "DOGEUSDT", "LINKUSDT", "AVAXUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT",
+            "APTUSDT", "ADAUSDT", "DOTUSDT", "INJUSDT"
+        ]
+
+        ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
+        existing_order_ids = set()
+        if os.path.exists(ledger_file):
+            with open(ledger_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        try:
+                            rec = json.loads(line)
+                            oid = str(rec.get("order_id") or rec.get("exit_order_id") or "")
+                            if oid:
+                                existing_order_ids.add(oid)
+                        except Exception:
+                            pass
+
+        new_records = []
+        for sym in symbols:
+            try:
+                trades = client.futures_account_trades(symbol=sym, startTime=baseline_ms, limit=100)
+                closing_by_order = {}
+                for t in trades:
+                    pnl = float(t.get("realizedPnl", 0.0))
+                    if pnl != 0.0:
+                        oid = str(t.get("orderId"))
+                        if oid not in closing_by_order:
+                            closing_by_order[oid] = {
+                                "symbol": sym,
+                                "orderId": oid,
+                                "side": "BUY" if t.get("buyer") else "SELL",
+                                "qty": 0.0,
+                                "price_sum": 0.0,
+                                "realizedPnl": 0.0,
+                                "commission": 0.0,
+                                "time": t.get("time")
+                            }
+                        closing_by_order[oid]["qty"] += float(t.get("qty", 0.0))
+                        closing_by_order[oid]["price_sum"] += float(t.get("price", 0.0)) * float(t.get("qty", 0.0))
+                        closing_by_order[oid]["realizedPnl"] += pnl
+                        closing_by_order[oid]["commission"] += float(t.get("commission", 0.0))
+
+                for oid, c in closing_by_order.items():
+                    if oid in existing_order_ids:
+                        continue
+                    avg_price = c["price_sum"] / c["qty"] if c["qty"] > 0 else 0.0
+                    iso_time = datetime.datetime.fromtimestamp(c["time"] / 1000, datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                    rec = {
+                        "symbol": sym,
+                        "order_id": oid,
+                        "exit_order_id": oid,
+                        "action": c["side"],
+                        "direction": "LONG" if c["side"] == "SELL" else "SHORT",
+                        "quantity": round(c["qty"], 4),
+                        "exit_price": round(avg_price, 4),
+                        "gross_pnl": round(c["realizedPnl"], 4),
+                        "pnl": round(c["realizedPnl"], 4),
+                        "net_pnl": round(c["realizedPnl"] - c["commission"], 4),
+                        "fees": round(c["commission"], 4),
+                        "timestamp": iso_time,
+                        "exit_timestamp": iso_time,
+                        "exit_reason": "WIN" if c["realizedPnl"] > 0 else "LOSS",
+                        "strategy": "SUPERTREND",
+                        "source": "BINANCE_FUTURES_EXECUTION"
+                    }
+                    new_records.append(rec)
+                    existing_order_ids.add(oid)
+            except Exception as se:
+                logger.debug(f"Sync error for {sym}: {se}")
+
+        if new_records:
+            with open(ledger_file, "a", encoding="utf-8") as f:
+                for r in new_records:
+                    f.write(json.dumps(r) + "\n")
+    except Exception as e:
+        logger.error(f"[DASHBOARD] Error in sync_binance_futures_trades_to_ledger: {e}")
+
 def _get_trades_data():
     """Parses trade ledgers, merges Binance live execution history, and deduplicates."""
     net_pnl = 0.0
@@ -1319,6 +1431,13 @@ def _get_trades_data():
         target_l = "testnet_trade_ledger.jsonl" if trading_mode in ["TESTNET", "FUTURES"] else "paper_trade_ledger.jsonl"
         if os.path.exists(target_l):
             ledger_files.append(target_l)
+
+    # Sync live trades from Binance if in Futures mode
+    if not custom_ledger and not app.config.get("TESTING"):
+        try:
+            sync_binance_futures_trades_to_ledger()
+        except Exception:
+            pass
 
     # Baseline cutoff: a statistics reset (testnet_baseline.json) defines the clean start
     baseline_iso = ""
@@ -1799,23 +1918,20 @@ def get_scanner():
 @app.route('/api/markets')
 def get_markets():
     """Returns live market ticker data, pricing, 24h stats, and monitored symbols."""
-    tracked_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "LINKUSDT", "PORTALUSDT", "HEMIUSDT", "TRXUSDT", "DOGEUSDT", "PAXGUSDT", "ADAUSDT", "SPCXBUSDT", "SOPHUSDT"]
-    port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
-    if os.path.exists(port_file):
-        try:
-            with open(port_file, "r") as f:
-                port = json.load(f)
-                tracked_symbols = port.get("symbols", tracked_symbols)
-        except Exception:
-            pass
+    tracked_symbols = [
+        "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "LTCUSDT",
+        "DOGEUSDT", "LINKUSDT", "AVAXUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT",
+        "APTUSDT", "ADAUSDT", "DOTUSDT", "INJUSDT"
+    ]
 
     market_list = []
+    # 1. Try Binance Futures client for direct live futures 24h ticker data
     try:
-        from data_client import MarketDataClient
-        client = MarketDataClient()
-        if client.is_available():
-            tickers = client.get_ticker()
-            for t in tickers:
+        from execution import get_exchange_client
+        bclient = get_exchange_client()
+        if bclient and hasattr(bclient, "futures_ticker"):
+            raw_tickers = bclient.futures_ticker()
+            for t in raw_tickers:
                 sym = t.get('symbol')
                 if sym in tracked_symbols:
                     last_p = float(t.get('lastPrice', 0))
@@ -1831,8 +1947,34 @@ def get_markets():
                         "quote_volume": float(t.get('quoteVolume', 0)),
                         "status": "STREAMING"
                     })
-    except Exception as e:
-        logger.error(f"Error fetching market list: {e}")
+    except Exception as fe:
+        logger.debug(f"Futures ticker error in get_markets: {fe}")
+
+    # 2. Fallback to MarketDataClient if futures client unavailable
+    if not market_list:
+        try:
+            from data_client import MarketDataClient
+            client = MarketDataClient()
+            if client.is_available():
+                tickers = client.get_ticker()
+                for t in tickers:
+                    sym = t.get('symbol')
+                    if sym in tracked_symbols:
+                        last_p = float(t.get('lastPrice', 0))
+                        chg = float(t.get('priceChangePercent', 0))
+                        vol = float(t.get('volume', 0))
+                        market_list.append({
+                            "symbol": sym,
+                            "price": last_p,
+                            "change_24h": chg,
+                            "high_24h": float(t.get('highPrice', last_p)),
+                            "low_24h": float(t.get('lowPrice', last_p)),
+                            "volume": vol,
+                            "quote_volume": float(t.get('quoteVolume', 0)),
+                            "status": "STREAMING"
+                        })
+        except Exception as e:
+            logger.error(f"Error fetching market list: {e}")
 
     # Fallback if tickers unavailable
     if not market_list:
@@ -2266,6 +2408,11 @@ def api_testnet_positions_close_all():
             except Exception:
                 pass
 
+        try:
+            sync_binance_futures_trades_to_ledger(force=True)
+        except Exception:
+            pass
+
         return jsonify({
             "status": "SUCCESS",
             "message": f"Successfully closed {len(closed)} positions",
@@ -2308,6 +2455,10 @@ def api_testnet_positions_close():
             pass
 
         emergency_futures_market_close(client, symbol, "BUY" if side == "LONG" else "SELL", abs(pos_amt))
+        try:
+            sync_binance_futures_trades_to_ledger(force=True)
+        except Exception:
+            pass
         return jsonify({
             "status": "SUCCESS",
             "message": f"Successfully closed position for {symbol}",
