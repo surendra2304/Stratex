@@ -96,17 +96,18 @@ BYPASS_PROFITABILITY_GATE = False  # HARD SAFETY INVARIANT: Must never bypass ma
 MAX_POSITION_SIZE = 0.95
 
 # --- Testnet Risk Management ---
-# Increased limits to allow more profitable trades with meaningful position sizes
-MAX_TESTNET_RISK_PER_TRADE = float(os.getenv("MAX_TESTNET_RISK_PER_TRADE", "0.015")) # 1.5% risk (3× increase for bigger positions)
-MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.40"))        # 40% max total exposure (8× increase)
-MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.10"))   # 10% max per single asset (5× increase)
-MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.30")) # 30% max net directional (7.5× increase)
-MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "10"))           # 10 concurrent positions
-MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "15")) # Up to 15 in aggressive mode
+# Base defaults maintain test integrity and forensic audit guarantees;
+# environment variables on Render override these dynamically for live execution.
+MAX_TESTNET_RISK_PER_TRADE = float(os.getenv("MAX_TESTNET_RISK_PER_TRADE", "0.005")) # 0.5% risk baseline
+MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.05"))        # 5% max total exposure
+MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.02"))   # 2% max per single asset
+MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.04")) # 4% max net directional exposure
+MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))            # Base limit of 5
+MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "10")) # Bounded positions for aggressive mode
 VOLATILITY_BUFFER = 0.2  # Scale down positions during high volatility
 
-MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.05"))          # 5% daily loss limit (allows 3× more room)
-MAX_TESTNET_DRAWDOWN_PCT = float(os.getenv("MAX_TESTNET_DRAWDOWN_PCT", "0.12"))    # 12% drawdown tolerance (increased)
+MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.02"))          # 2% daily loss limit
+MAX_TESTNET_DRAWDOWN_PCT = float(os.getenv("MAX_TESTNET_DRAWDOWN_PCT", "0.05"))    # 5% drawdown tolerance
 RECONCILIATION_TOLERANCE = float(os.getenv("RECONCILIATION_TOLERANCE", "5.0"))     # 5 USDT tolerance
 TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-09-09T13:00:00Z")
 
@@ -146,10 +147,10 @@ SQ_MIN_RISK_REWARD = float(os.getenv("SQ_MIN_RISK_REWARD", "1.2"))              
 # (win rate / net PnL from the ledger), for a cooldown period.
 # -------------------------------------------------------------------
 STRATEGY_PERFORMANCE_GATE = os.getenv("STRATEGY_PERFORMANCE_GATE", "True").lower() == "true"
-STRATEGY_GATE_MIN_TRADES = int(os.getenv("STRATEGY_GATE_MIN_TRADES", "15"))       # require 15 trades before evaluation (increased from 10)
-STRATEGY_GATE_WIN_RATE = float(os.getenv("STRATEGY_GATE_WIN_RATE", "0.30"))       # only demote if win rate < 30% (lowered from 40%)
+STRATEGY_GATE_MIN_TRADES = int(os.getenv("STRATEGY_GATE_MIN_TRADES", "10"))
+STRATEGY_GATE_WIN_RATE = float(os.getenv("STRATEGY_GATE_WIN_RATE", "0.40"))
 STRATEGY_GATE_MIN_NET_PNL = float(os.getenv("STRATEGY_GATE_MIN_NET_PNL", "0.0"))
-STRATEGY_DEMOTION_COOLDOWN_HOURS = float(os.getenv("STRATEGY_DEMOTION_COOLDOWN_HOURS", "2.0"))  # shorter cooldown
+STRATEGY_DEMOTION_COOLDOWN_HOURS = float(os.getenv("STRATEGY_DEMOTION_COOLDOWN_HOURS", "4.0"))
 
 # -------------------------------------------------------------------
 # TRAILING STOP / BREAKEVEN & PROFIT HARVESTING (v3 upgrade)
@@ -158,12 +159,12 @@ STRATEGY_DEMOTION_COOLDOWN_HOURS = float(os.getenv("STRATEGY_DEMOTION_COOLDOWN_H
 # -------------------------------------------------------------------
 TRAILING_STOP_ENABLED = os.getenv("TRAILING_STOP_ENABLED", "True").lower() == "true"
 PROFIT_HARVEST_PCT = float(os.getenv("PROFIT_HARVEST_PCT", "0.015"))                      # 1.5% profit harvest trigger
-TRAIL_BREAKEVEN_TRIGGER_R = float(os.getenv("TRAIL_BREAKEVEN_TRIGGER_R", "0.5"))          # at +0.5R move SL to breakeven (earlier lock-in)
-TRAIL_TRIGGER_R = float(os.getenv("TRAIL_TRIGGER_R", "1.0"))                              # at +1.0R start ATR trailing (earlier than before)
-TRAIL_ATR_MULT = float(os.getenv("TRAIL_ATR_MULT", "1.5"))                                # trail distance = 1.5 × ATR (tighter = keeps more profit)
+TRAIL_BREAKEVEN_TRIGGER_R = float(os.getenv("TRAIL_BREAKEVEN_TRIGGER_R", "1.0"))          # at +1R move SL to breakeven(+fees)
+TRAIL_TRIGGER_R = float(os.getenv("TRAIL_TRIGGER_R", "1.5"))                              # at +1.5R start ATR trailing
+TRAIL_ATR_MULT = float(os.getenv("TRAIL_ATR_MULT", "2.0"))                                # trail distance = N × ATR(1h)
 TRAIL_FEE_BUFFER_PCT = float(os.getenv("TRAIL_FEE_BUFFER_PCT", "0.002"))                  # breakeven buffer to cover round-trip fees
-TRAIL_MIN_REARM_SECONDS = float(os.getenv("TRAIL_MIN_REARM_SECONDS", "30"))               # check every 30s (faster than 60s)
-TRAIL_LOOP_SECONDS = float(os.getenv("TRAIL_LOOP_SECONDS", "15"))                         # trailing evaluation every 15s (faster cadence)
+TRAIL_MIN_REARM_SECONDS = float(os.getenv("TRAIL_MIN_REARM_SECONDS", "60"))               # min seconds between SL modifications per symbol
+TRAIL_LOOP_SECONDS = float(os.getenv("TRAIL_LOOP_SECONDS", "20"))                         # trailing evaluation cadence
 
 
 

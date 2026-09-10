@@ -56,29 +56,24 @@ def test_active_strategies_asymmetric_risk_reward():
 
 
 def test_trailing_stages_and_targets():
-    """Verify breakeven and trailing stage transitions and target prices.
-    
-    Config: TRAIL_BREAKEVEN_TRIGGER_R=0.5, TRAIL_TRIGGER_R=1.0
-    """
-    # 0.3R → below breakeven trigger (0.5R), no stage
-    assert stage_for_r_multiple(0.3) is None
-    # 0.6R → above TRAIL_BREAKEVEN_TRIGGER_R=0.5 → BREAKEVEN
-    assert stage_for_r_multiple(0.6) == "BREAKEVEN"
-    # 1.1R → above TRAIL_TRIGGER_R=1.0 → TRAILING
-    assert stage_for_r_multiple(1.1) == "TRAILING"
+    """Verify breakeven and trailing stage transitions and target prices."""
+    assert stage_for_r_multiple(0.8) is None
+    assert stage_for_r_multiple(1.0) == "BREAKEVEN"
+    assert stage_for_r_multiple(1.5) == "TRAILING"
 
     # BUY trade: entry 100, SL 98 (risk = 2.0), TP 106
-    # Price reaches 101.5 (+0.75R → above 0.5R → BREAKEVEN)
-    be_sl, stage = compute_trail_target("BUY", 100.0, 101.5, 98.0, 106.0, 2.0, "BREAKEVEN")
+    # Price reaches 102.5 (+1.25R -> BREAKEVEN)
+    be_sl, stage = compute_trail_target("BUY", 100.0, 102.5, 98.0, 106.0, 2.0, "BREAKEVEN")
     assert stage == "BREAKEVEN"
     assert be_sl > 100.0, "Breakeven SL must be above entry price to cover fee buffer"
-    assert be_sl < 101.5, "Breakeven SL must be below current price"
+    assert be_sl < 102.5, "Breakeven SL must be below current price"
 
-    # Price reaches 103.0 (+1.5R → above 1.0R → TRAILING with ATR=1.0)
-    trail_sl, t_stage = compute_trail_target("BUY", 100.0, 103.0, be_sl, 106.0, 2.0, "TRAILING", 1.0)
+    # Price reaches 104.0 (+2.0R -> TRAILING with ATR=1.0)
+    trail_sl, t_stage = compute_trail_target("BUY", 100.0, 104.0, be_sl, 106.0, 2.0, "TRAILING", 1.0)
     assert t_stage == "TRAILING"
     assert trail_sl > be_sl, "Trailing SL must ratchet upward"
-    assert trail_sl < 103.0
+    assert trail_sl < 104.0
+
 
 
 def test_trailing_cycle_accepts_protected_state(monkeypatch):
