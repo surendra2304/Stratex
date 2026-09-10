@@ -126,7 +126,7 @@ BTC_REGIME_FILTER = os.getenv("BTC_REGIME_FILTER", "True").lower() == "true" # A
 # -------------------------------------------------------------------
 SIGNAL_QUALITY_ENABLED = os.getenv("SIGNAL_QUALITY_ENABLED", "True").lower() == "true"
 # Trend alignment strictness: "off" | "partial" (close vs EMA200) | "full" (EMA20>EMA50>EMA200)
-SQ_TREND_ALIGNMENT = os.getenv("SQ_TREND_ALIGNMENT", "partial").lower()
+SQ_TREND_ALIGNMENT = os.getenv("SQ_TREND_ALIGNMENT", "full").lower()
 SQ_CANDLE_CONFIRMATION = os.getenv("SQ_CANDLE_CONFIRMATION", "True").lower() == "true"   # signal candle must close in signal direction
 SQ_VOLUME_CONFIRMATION = os.getenv("SQ_VOLUME_CONFIRMATION", "True").lower() == "true"   # volume must exceed N × 20-bar average
 SQ_VOLUME_MULT = float(os.getenv("SQ_VOLUME_MULT", "0.3"))                               # tuned volume multiplier
@@ -137,6 +137,11 @@ SQ_RSI_GUARD = os.getenv("SQ_RSI_GUARD", "True").lower() == "true"              
 SQ_RSI_MAX_BUY = float(os.getenv("SQ_RSI_MAX_BUY", "78.0"))
 SQ_RSI_MIN_SELL = float(os.getenv("SQ_RSI_MIN_SELL", "22.0"))
 SQ_MIN_RISK_REWARD = float(os.getenv("SQ_MIN_RISK_REWARD", "1.5"))                       # minimum TP/SL geometry
+
+# --- Profit Harvesting & Trailing Stop Settings ---
+PROFIT_HARVEST_PCT = float(os.getenv("PROFIT_HARVEST_PCT", "0.015"))                      # 1.5% profit harvest trigger
+TRAIL_BREAKEVEN_TRIGGER_R = float(os.getenv("TRAIL_BREAKEVEN_TRIGGER_R", "0.5"))         # Move SL to BE at 0.5R
+TRAIL_TRIGGER_R = float(os.getenv("TRAIL_TRIGGER_R", "1.0"))                             # Trail stop behind price at 1.0R
 
 # -------------------------------------------------------------------
 # ADAPTIVE STRATEGY PERFORMANCE GATE (v3 upgrade)

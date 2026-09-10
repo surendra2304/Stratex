@@ -70,7 +70,7 @@ def governance_validated_assets(strategies_by_tf):
     return assets
 
 
-def compute_btc_regime(btc_df):
+def compute_btc_regime(btc_df, min_bars=200):
     """Return (regime_ok, btc_close, btc_ema200) from a BTCUSDT 4h frame.
 
     regime_ok is True (risk-on) when close > EMA200, False (risk-off) below.
@@ -78,10 +78,11 @@ def compute_btc_regime(btc_df):
     caller treats None as fail-open with a warning rather than blocking all
     trading on a lagging websocket feed.
     """
-    if btc_df is None or len(btc_df) < 200 or "close" not in btc_df.columns:
+    if btc_df is None or len(btc_df) < min_bars or "close" not in btc_df.columns:
         return None, None, None
     closes = btc_df["close"].astype(float)
-    ema200 = float(closes.ewm(span=200, adjust=False).mean().iloc[-1])
+    span = min(len(closes), 200)
+    ema200 = float(closes.ewm(span=span, adjust=False).mean().iloc[-1])
     close = float(closes.iloc[-1])
     return (close > ema200), close, ema200
 
@@ -992,9 +993,9 @@ class TestnetService:
                         # long entries on altcoins during BTC risk-off (4h close < EMA200) are
                         # historically net-negative. Protects all strategies from buying alts into macro dumps.
                         btc_filter_enabled = getattr(config, "BTC_REGIME_FILTER", True) or ADX_EMA_STRATEGY_V2.get("BTC_REGIME_FILTER", False)
-                        if side == "BUY" and symbol != "BTCUSDT" and btc_filter_enabled:
+                        if btc_filter_enabled and symbol != "BTCUSDT":
                             regime_ok, btc_close, btc_ema = self._btc_regime_state()
-                            if regime_ok is False:
+                            if side == "BUY" and regime_ok is False:
                                 self.stats["OTHER_REJECTED"] += 1
                                 if strat_name in self.stats["strategy_metrics"]:
                                     self.stats["strategy_metrics"][strat_name]["rejected"] += 1
@@ -1004,6 +1005,18 @@ class TestnetService:
                                     signal_id, symbol, side,
                                     {"reason": "BTC_REGIME_RISK_OFF", "btc_close": btc_close, "btc_ema200": btc_ema},
                                     "REJECTED", "BTC_REGIME_RISK_OFF"
+                                )
+                                continue
+                            elif side == "SELL" and regime_ok is True and getattr(config, "BLOCK_SHORTS_IN_BULL_REGIME", False):
+                                self.stats["OTHER_REJECTED"] += 1
+                                if strat_name in self.stats["strategy_metrics"]:
+                                    self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                                if tf in self.stats["timeframe_metrics"]:
+                                    self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                                self.log_opportunity(
+                                    signal_id, symbol, side,
+                                    {"reason": "BTC_REGIME_RISK_ON_BLOCK_SHORTS", "btc_close": btc_close, "btc_ema200": btc_ema},
+                                    "REJECTED", "BTC_REGIME_RISK_ON_BLOCK_SHORTS"
                                 )
                                 continue
 
@@ -2216,17 +2229,31 @@ class TestnetService:
             logger.error(f"[SERVICE] Authoritative Rebuild Failed: {e}")
 
     def _btc_regime_state(self):
-        """Current BTC risk-on/risk-off state from the scanner's BTCUSDT 4h cache."""
+        """Current BTC risk-on/risk-off state from the scanner's BTCUSDT cache (4h, 1h, or 15m)."""
         try:
             btc_df = None
             scanner = getattr(self, "scanner", None)
             if scanner is not None:
                 with scanner._cache_lock:
                     btc_df = scanner.candle_cache.get(("BTCUSDT", "4h"))
-            if btc_df is None:
-                logger.warning("[GOVERNANCE] BTCUSDT 4h data unavailable — regime gate fail-open for this candle")
+                    if btc_df is None or len(btc_df) < 50:
+                        btc_1h = scanner.candle_cache.get(("BTCUSDT", "1h"))
+                        if btc_1h is not None and len(btc_1h) >= len(btc_df or []):
+                            btc_df = btc_1h
+                    if btc_df is None or len(btc_df) < 30:
+                        btc_15m = scanner.candle_cache.get(("BTCUSDT", "15m"))
+                        if btc_15m is not None and len(btc_15m) > len(btc_df or []):
+                            btc_df = btc_15m
+            if btc_df is None or len(btc_df) < 30:
+                logger.warning("[GOVERNANCE] BTCUSDT data unavailable or insufficient (<30 bars) — regime gate fail-open for this candle")
                 return None, None, None
-            return compute_btc_regime(btc_df)
+            if len(btc_df) >= 200:
+                return compute_btc_regime(btc_df, min_bars=200)
+            closes = btc_df["close"].astype(float)
+            span = 50 if len(closes) >= 50 else len(closes)
+            ema = float(closes.ewm(span=span, adjust=False).mean().iloc[-1])
+            close = float(closes.iloc[-1])
+            return (close > ema), close, ema
         except Exception as e:
             logger.error(f"[GOVERNANCE] BTC regime evaluation failed ({e}) — fail-open")
             return None, None, None
@@ -2568,7 +2595,7 @@ class TestnetService:
                             tp_price=tp_price,
                         )
                     else:
-                        sl_price = round(last_close - 1.5 * atr, 6)
+                        sl_price = round(last_close - 3.0 * atr, 6)
                         tp_price = round(last_close + 3.0 * atr, 6)
                         qty = round(held_qty, 4)
                         prot = place_oco_protection(
@@ -2672,7 +2699,14 @@ class TestnetService:
         # If an MTF strategy is active, ensure HTF ('1h') is included in the scanner cache
         if any("mtf" in s for tf_list in self.strategies.values() for s, _ in tf_list):
             tfs_set.add("1h")
-            
+
+        # BTC Macro Regime Filter: ensure BTCUSDT is tracked and 1h/4h are in the cache
+        if getattr(config, "BTC_REGIME_FILTER", True):
+            if "BTCUSDT" not in symbol_list:
+                symbol_list.append("BTCUSDT")
+            tfs_set.add("1h")
+            tfs_set.add("4h")
+
         tfs = list(tfs_set)
         self.scanner = MarketScanner(symbol_list, timeframes=tfs, is_futures=(TRADING_MODE == "FUTURES"))
         self.scanner.register_callback(self.on_candle_closed)

@@ -11,6 +11,14 @@ services:
     envVars:
       - key: TRADING_MODE
         value: "FUTURES"
+      - key: MAX_OPEN_POSITIONS
+        value: "10"
+      - key: SQ_TREND_ALIGNMENT
+        value: "full"
+      - key: PROFIT_HARVEST_PCT
+        value: "0.015"
+      - key: TRAIL_BREAKEVEN_TRIGGER_R
+        value: "0.5"
       - key: TESTNET_ONLY
         value: "TRUE"
       - key: TESTNET_ENABLED

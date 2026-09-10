@@ -1,5 +1,6 @@
 import datetime
 import math
+import os
 
 import config
 from logger import get_logger
@@ -62,7 +63,7 @@ class RiskGate:
             return False, "CONSECUTIVE_LOSS_LIMIT", f"Hit {self.max_consecutive_losses} consecutive losses."
 
         # 3. Open Positions Limit
-        max_pos = int(getattr(config, "MAX_OPEN_POSITIONS", 5))
+        max_pos = int(os.getenv("MAX_OPEN_POSITIONS", getattr(config, "MAX_OPEN_POSITIONS", 5)))
         if len(active_positions) >= max_pos:
             logger.info(f"[RISK_REJECTED] {symbol} {side} | Reason: MAX_OPEN_POSITIONS | Open: {len(active_positions)}")
             return False, "MAX_OPEN_POSITIONS", f"Currently at limit of {max_pos} open positions."

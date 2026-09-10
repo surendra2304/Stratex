@@ -28,7 +28,9 @@ Safety contract (mirrors protection.py):
 
 import json
 import math
+import os
 import time
+import datetime
 
 import config
 from logger import get_logger
@@ -149,11 +151,58 @@ def _cancel_futures_order(client, symbol, order_id) -> bool:
     if not order_id:
         return False
     try:
+        if hasattr(client, "futures_cancel_algo_order"):
+            try:
+                res = client.futures_cancel_algo_order(algoId=int(order_id))
+                if isinstance(res, dict) and (res.get("code") == 200 or res.get("result") == "SUCCESS"):
+                    return True
+            except Exception:
+                pass
         client.futures_cancel_order(symbol=symbol, orderId=int(order_id))
         return True
     except Exception as e:
-        logger.error(f"[TRAIL] Failed to cancel futures order {order_id} on {symbol}: {e}")
+        logger.debug(f"[TRAIL] Failed to cancel futures order {order_id} on {symbol}: {e}")
         return False
+
+
+def _record_harvest_win_in_ledger(trade, exit_price, profit_pct):
+    """Authoritative ledger recording for banked profit harvest wins."""
+    ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
+    try:
+        entry_p = float(trade.get("entry_price", exit_price))
+        qty = float(trade.get("quantity", 0))
+        side = trade.get("side", "BUY")
+        gross_pnl = (entry_p - exit_price) * qty if side == "SELL" else (exit_price - entry_p) * qty
+        fees = qty * (entry_p + exit_price) * 0.0004
+        net_pnl = gross_pnl - fees
+        now_iso = datetime.datetime.utcnow().isoformat() + "Z"
+        entry = {
+            "signal_id": trade.get("signal_id", f"HARVEST_{trade.get('symbol')}_{int(time.time())}"),
+            "symbol": trade.get("symbol"),
+            "strategy": trade.get("strategy", "SUPERTREND"),
+            "source": "BINANCE_FUTURES_EXECUTION",
+            "side": side,
+            "entry_price": entry_p,
+            "exit_price": exit_price,
+            "entry_executed_quantity": qty,
+            "exit_executed_quantity": qty,
+            "quantity": qty,
+            "exit_reason": "PROFIT_HARVEST_WIN",
+            "gross_pnl": round(gross_pnl, 4),
+            "total_fees": round(fees, 4),
+            "net_pnl": round(net_pnl, 4),
+            "fees": round(fees, 4),
+            "pnl": round(net_pnl, 4),
+            "timestamp": now_iso,
+            "exit_timestamp": now_iso,
+            "action": "CLOSE_WIN",
+            "is_futures": True
+        }
+        with open(ledger_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+        logger.info(f"[TRAIL] 💰 Banked PROFIT_HARVEST_WIN for {trade.get('symbol')}! Net: +${net_pnl:.4f}")
+    except Exception as e:
+        logger.error(f"[TRAIL] Failed to record harvest win to ledger: {e}")
 
 
 def _rebuild_spot_protection(client, symbol, side, qty, entry_price, new_sl, tp_price, list_client_order_id=None):
@@ -288,7 +337,35 @@ def trailing_cycle(service):
             if current_price is None:
                 continue
 
-            # Calculate initial risk
+            # 1. Profit Harvest Check: Automatically lock in and bank winning trades
+            harvest_pct = float(_cfg("PROFIT_HARVEST_PCT", 0.015))  # 1.5% profit target
+            price_diff = (entry_price - current_price) if side == "SELL" else (current_price - entry_price)
+            current_profit_pct = price_diff / entry_price if entry_price > 0 else 0.0
+
+            if current_profit_pct >= harvest_pct:
+                logger.info(
+                    f"[PROFIT_HARVEST] 🎯 {symbol} {side} hit harvest target "
+                    f"{current_profit_pct:.2%} >= {harvest_pct:.2%}. Closing to bank WIN!"
+                )
+                try:
+                    if is_futures:
+                        emergency_futures_market_close(client, symbol, side, qty)
+                        old_tp_oid = trade.get("tp_order_id")
+                        old_sl_oid = trade.get("sl_order_id")
+                        _cancel_futures_order(client, symbol, old_tp_oid)
+                        _cancel_futures_order(client, symbol, old_sl_oid)
+                    else:
+                        emergency_market_close(client, symbol, side, qty)
+                    trade["status"] = "CLOSED"
+                    trade["exit_reason"] = "PROFIT_HARVEST_WIN"
+                    trade["exit_price"] = current_price
+                    modified = True
+                    _record_harvest_win_in_ledger(trade, current_price, current_profit_pct)
+                    continue
+                except Exception as he:
+                    logger.error(f"[PROFIT_HARVEST] Failed to harvest {symbol}: {he}")
+
+            # 2. Calculate initial risk for trailing stop
             initial_risk = abs(entry_price - current_sl)
             if initial_risk <= 0:
                 continue
