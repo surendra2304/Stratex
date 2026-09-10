@@ -62,4 +62,21 @@ class PerformanceLearningEngine:
                     recommended_action="INCREASE_WEIGHT"
                 ))
 
+        # Forward extracted market heuristics and risk rules to Memora Experience memory
+        for p in patterns:
+            try:
+                from .memora_client import memora_client
+                status = "failure" if p.recommended_action in ["DECREASE_WEIGHT", "VETO"] else "success"
+                memora_client.learn_from_outcome(
+                    agent_name="stratex",
+                    task_name=f"strategy_{p.affected_strategy}",
+                    status=status,
+                    error_log=f"Pattern: {p.pattern_description}. Impact: {p.win_rate_impact_pct}%" if status == "failure" else None,
+                    actions_taken=f"action:{p.recommended_action}",
+                    context=f"regime:{p.regime}",
+                    domain="quantitative_trading"
+                )
+            except Exception:
+                pass
+
         return patterns
