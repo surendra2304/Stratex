@@ -32,24 +32,25 @@ class TestTestnetEngine:
         assert metrics["expected_net_return"] > 0
         
     def test_risk_gate_daily_loss_limit(self):
-        """Test that the risk gate correctly rejects trades when daily loss is breached."""
+        """Test that the risk gate correctly rejects trades when daily loss is breached.
+        MAX_DAILY_LOSS_PCT is now 5% (up from 2%).
+        """
         gate = RiskGate(starting_balance=10000.0)
         
-        # Simulate a massive loss beyond the daily limit
-        gate.update_after_trade(-300.0, 9700.0) # 3% loss > 2% limit
+        # Simulate a loss beyond the new daily limit (5%)
+        gate.update_after_trade(-600.0, 9400.0)  # 6% loss > 5% limit
         
-        passed, reason, _ = gate.evaluate_risk("BTCUSDT", "LONG", 9700.0, {}, 0.001, 50000.0, "OK")
+        passed, reason, _ = gate.evaluate_risk("BTCUSDT", "LONG", 9400.0, {}, 0.001, 50000.0, "OK")
         
         assert not passed
         assert reason == "DAILY_LOSS_LIMIT"
         
     def test_risk_gate_consecutive_losses(self):
-        """Test that the risk gate halts after 3 consecutive losses."""
+        """Test that the risk gate halts after 6 consecutive losses (limit raised from 3→6)."""
         gate = RiskGate(starting_balance=10000.0)
         
-        gate.update_after_trade(-10.0, 9990.0)
-        gate.update_after_trade(-10.0, 9980.0)
-        gate.update_after_trade(-10.0, 9970.0)
+        for _ in range(6):
+            gate.update_after_trade(-10.0, 9970.0)
         
         passed, reason, _ = gate.evaluate_risk("BTCUSDT", "LONG", 9970.0, {}, 0.1, 50000.0, "OK")
         

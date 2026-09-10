@@ -25,10 +25,15 @@ class TestProductionStrategyRegistry:
         assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["oos_win_rate_prior"] == 0.551
         assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["rr_ratio"] == 1.0
         
-        # Disabled strategies
-        for strat in ["aggressor", "scalper", "supertrend", "swing", "ml"]:
+        # Disabled strategies (only the truly obsolete ones remain disabled)
+        for strat in ["aggressor", "scalper", "swing", "ml"]:
             if strat in PRODUCTION_STRATEGY_REGISTRY:
                 assert PRODUCTION_STRATEGY_REGISTRY[strat]["status"] == "DISABLED"
+
+        # Validated strategies (actively trading)
+        for strat in ["supertrend", "adx_ema"]:
+            if strat in PRODUCTION_STRATEGY_REGISTRY:
+                assert PRODUCTION_STRATEGY_REGISTRY[strat]["status"] == "VALIDATED"
 
 class TestStrategyEquivalenceAndIntegrity:
     def test_causal_indicators_no_lookahead(self):

@@ -11,7 +11,7 @@ class RiskGate:
     def __init__(self, starting_balance=10000.0):
         self.starting_balance = starting_balance
         self.consecutive_losses = 0
-        self.max_consecutive_losses = 3
+        self.max_consecutive_losses = 6  # Raised from 3 → 6: prevents halting after normal variance
         
         # State tracking for limits
         self.daily_realized_loss = 0.0

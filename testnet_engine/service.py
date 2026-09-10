@@ -1221,10 +1221,48 @@ class TestnetService:
                     else:
                         base_score = round(exp_net * conf / max(0.001, risk_pct), 6)
 
+                    # ── ADX Momentum Boost ────────────────────────────────────────────
+                    # Trades with stronger trend momentum (higher ADX) are ranked higher.
+                    # ADX > 35 → 1.25× boost; ADX 25-35 → 1.10×; ADX < 20 → 0.85× penalty
+                    adx_boost = 1.0
+                    try:
+                        sym_c = c.get("symbol", "")
+                        tf_c = c.get("tf", "15m")
+                        df_c = None
+                        if hasattr(self, "scanner"):
+                            df_c = self.scanner.candle_cache.get((sym_c, tf_c))
+                        if df_c is not None and not df_c.empty:
+                            adx_c = float(df_c.iloc[-1].get("adx", 0.0))
+                            if adx_c >= 35:
+                                adx_boost = 1.25
+                            elif adx_c >= 25:
+                                adx_boost = 1.10
+                            elif adx_c < 20 and adx_c > 0:
+                                adx_boost = 0.85
+                    except Exception:
+                        pass
+
+                    # ── Reward/Risk Ratio Boost ───────────────────────────────────────
+                    # Prefer trades with better RR geometry (> 2.0 gets a 1.15× boost)
+                    rr_boost = 1.0
+                    try:
+                        sl_dist_c = abs(entry_p - sl_p) if sl_p > 0 else 0
+                        tp_dist_c = abs(tp_p - entry_p) if tp_p > 0 else 0
+                        if sl_dist_c > 0:
+                            rr_c = tp_dist_c / sl_dist_c
+                            if rr_c >= 2.5:
+                                rr_boost = 1.20
+                            elif rr_c >= 2.0:
+                                rr_boost = 1.10
+                            elif rr_c < 1.2:
+                                rr_boost = 0.90
+                    except Exception:
+                        pass
+
                     # Multi-Agent Confluence Boosters (IntelX & Futuris)
                     intelx_m = float(c.get("intelx_mult", 1.0))
                     futuris_m = float(c.get("futuris_mult", 1.0))
-                    score = round(base_score * intelx_m * futuris_m, 6)
+                    score = round(base_score * intelx_m * futuris_m * adx_boost * rr_boost, 6)
                     c["score"] = score
                     c["base_score"] = base_score
                     c["intelx_mult"] = intelx_m
@@ -1470,6 +1508,43 @@ class TestnetService:
                             reserved_notional = res_amt
 
                         try:
+                            # ── ATR-Based Dynamic SL/TP Override ──────────────────────────────
+                            # Replace strategy-supplied SL/TP with ATR-calibrated levels if the
+                            # strategy's levels are tighter than 1× ATR (avoids premature stops)
+                            # or looser than 4× ATR (avoids stops too far from price).
+                            try:
+                                df_for_atr = self.scanner.candle_cache.get((symbol, tf)) if hasattr(self, "scanner") else None
+                                if df_for_atr is not None and not df_for_atr.empty and len(df_for_atr) >= 15:
+                                    from testnet_engine.signal_quality import compute_atr_from_df
+                                    atr_val_pre = compute_atr_from_df(df_for_atr, period=14)
+                                    if atr_val_pre and atr_val_pre > 0 and current_price > 0:
+                                        # Compute natural ATR-based SL distance
+                                        atr_sl_dist = atr_val_pre * 1.5  # 1.5× ATR for SL
+                                        atr_tp_dist = atr_val_pre * 3.0  # 3.0× ATR for TP (2:1 RR)
+                                        if side in ("BUY", "LONG"):
+                                            atr_sl = current_price - atr_sl_dist
+                                            atr_tp = current_price + atr_tp_dist
+                                        else:
+                                            atr_sl = current_price + atr_sl_dist
+                                            atr_tp = current_price - atr_tp_dist
+                                        # Only override if strategy's SL/TP are missing or worse than ATR levels
+                                        sl_ok = (sl is not None and sl > 0)
+                                        tp_ok = (tp is not None and tp > 0)
+                                        if not sl_ok:
+                                            sl = atr_sl
+                                            logger.info(f"[ATR_SL_OVERRIDE] {symbol} {side} no SL → ATR-based SL: {sl:.4f}")
+                                        if not tp_ok:
+                                            tp = atr_tp
+                                            logger.info(f"[ATR_TP_OVERRIDE] {symbol} {side} no TP → ATR-based TP: {tp:.4f}")
+                                        # Also override if existing SL is extremely tight (< 0.5× ATR) — prevents instant stop-outs
+                                        if sl_ok:
+                                            existing_sl_dist = abs(current_price - float(sl))
+                                            if existing_sl_dist < atr_val_pre * 0.5:
+                                                sl = atr_sl
+                                                logger.info(f"[ATR_SL_WIDEN] {symbol} {side} SL too tight ({existing_sl_dist:.4f} < 0.5×ATR) → widened to {sl:.4f}")
+                            except Exception as atr_err:
+                                logger.debug(f"[ATR_SL_TP_OVERRIDE_SKIP] {symbol}: {atr_err}")
+
                             if TRADING_MODE == "FUTURES":
                                 from execution import place_futures_market_order
                                 leverage = getattr(config, "FUTURES_LEVERAGE", 5)
@@ -1721,16 +1796,28 @@ class TestnetService:
                 break
 
     def log_opportunity(self, signal_id, symbol, side, metrics, decision, reason, current_price=0.0, rank=None, score=None, candidate=None):
+        def _safe_float(val, default=0.0):
+            """Convert val to float safely, returning default if val is None or invalid."""
+            if val is None:
+                return default
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return default
+
         tf = metrics.get("timeframe") or (candidate.get("tf") if candidate else None) or "5m"
         strat = metrics.get("strategy") or (candidate.get("strategy") if candidate else None) or "adx_ema"
-        entry = float(current_price or metrics.get("entry_price") or metrics.get("current_price", 0.0) or (candidate.get("entry") if candidate else 0.0))
-        stop = float(metrics.get("sl_price") or metrics.get("sl") or (candidate.get("sl") if candidate else 0.0))
-        target = float(metrics.get("tp_price") or metrics.get("tp") or (candidate.get("tp") if candidate else 0.0))
-        conf = float(metrics.get("confidence", metrics.get("prob_win", metrics.get("win_rate_prior", 0.5))))
-        gross = float(metrics.get("gross_edge") or metrics.get("expected_gross_return") or metrics.get("expected_gross", 0.0))
-        fees = float(metrics.get("estimated_fees", metrics.get("fees", metrics.get("friction", 0.0031) * entry if entry > 0 else 0.0)))
-        slippage = float(metrics.get("slippage", metrics.get("slippage_pct", 0.0011) * entry if entry > 0 else 0.0))
-        net = float(metrics.get("expected_net_return") or metrics.get("expected_net") or metrics.get("net_edge", 0.0))
+        entry = _safe_float(current_price or metrics.get("entry_price") or metrics.get("current_price") or
+                            (candidate.get("entry") if candidate else None) or
+                            (candidate.get("current_price") if candidate else None), 0.0)
+        stop = _safe_float(metrics.get("sl_price") or metrics.get("sl") or (candidate.get("sl") if candidate else None), 0.0)
+        target = _safe_float(metrics.get("tp_price") or metrics.get("tp") or (candidate.get("tp") if candidate else None), 0.0)
+        conf = _safe_float(metrics.get("confidence") or metrics.get("prob_win") or metrics.get("win_rate_prior"), 0.5)
+        gross = _safe_float(metrics.get("gross_edge") or metrics.get("expected_gross_return") or metrics.get("expected_gross"), 0.0)
+        fees = _safe_float(metrics.get("estimated_fees") or metrics.get("fees") or (metrics.get("friction", 0.0031) * entry if entry > 0 else None), 0.0)
+        slippage = _safe_float(metrics.get("slippage") or metrics.get("slippage_pct") or (0.0011 * entry if entry > 0 else None), 0.0)
+        net = _safe_float(metrics.get("expected_net_return") or metrics.get("expected_net") or metrics.get("net_edge"), 0.0)
+
         
         is_risk_stage = any(k in reason for k in [
             "RISK", "MIN_NOTIONAL", "EXPOSURE", "DRAWDOWN", "DAILY_LOSS",
