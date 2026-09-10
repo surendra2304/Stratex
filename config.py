@@ -138,11 +138,6 @@ SQ_RSI_MAX_BUY = float(os.getenv("SQ_RSI_MAX_BUY", "78.0"))
 SQ_RSI_MIN_SELL = float(os.getenv("SQ_RSI_MIN_SELL", "22.0"))
 SQ_MIN_RISK_REWARD = float(os.getenv("SQ_MIN_RISK_REWARD", "1.5"))                       # minimum TP/SL geometry
 
-# --- Profit Harvesting & Trailing Stop Settings ---
-PROFIT_HARVEST_PCT = float(os.getenv("PROFIT_HARVEST_PCT", "0.015"))                      # 1.5% profit harvest trigger
-TRAIL_BREAKEVEN_TRIGGER_R = float(os.getenv("TRAIL_BREAKEVEN_TRIGGER_R", "0.5"))         # Move SL to BE at 0.5R
-TRAIL_TRIGGER_R = float(os.getenv("TRAIL_TRIGGER_R", "1.0"))                             # Trail stop behind price at 1.0R
-
 # -------------------------------------------------------------------
 # ADAPTIVE STRATEGY PERFORMANCE GATE (v3 upgrade)
 # Automatically demotes strategies whose recent REALIZED results are poor
@@ -155,17 +150,18 @@ STRATEGY_GATE_MIN_NET_PNL = float(os.getenv("STRATEGY_GATE_MIN_NET_PNL", "0.0"))
 STRATEGY_DEMOTION_COOLDOWN_HOURS = float(os.getenv("STRATEGY_DEMOTION_COOLDOWN_HOURS", "4.0"))
 
 # -------------------------------------------------------------------
-# TRAILING STOP / BREAKEVEN LOCK-IN (v3 upgrade)
+# TRAILING STOP / BREAKEVEN & PROFIT HARVESTING (v3 upgrade)
 # Converts round-trip losers into breakeven or winning exits by moving
 # the exchange-side protective SL as a position moves into profit.
 # -------------------------------------------------------------------
 TRAILING_STOP_ENABLED = os.getenv("TRAILING_STOP_ENABLED", "True").lower() == "true"
-TRAIL_BREAKEVEN_TRIGGER_R = float(os.getenv("TRAIL_BREAKEVEN_TRIGGER_R", "1.0"))  # at +1R move SL to breakeven(+fees)
-TRAIL_TRIGGER_R = float(os.getenv("TRAIL_TRIGGER_R", "1.5"))                      # at +1.5R start ATR trailing
-TRAIL_ATR_MULT = float(os.getenv("TRAIL_ATR_MULT", "2.0"))                        # trail distance = N × ATR(1h)
-TRAIL_FEE_BUFFER_PCT = float(os.getenv("TRAIL_FEE_BUFFER_PCT", "0.002"))          # breakeven buffer to cover round-trip fees
-TRAIL_MIN_REARM_SECONDS = float(os.getenv("TRAIL_MIN_REARM_SECONDS", "60"))       # min seconds between SL modifications per symbol
-TRAIL_LOOP_SECONDS = float(os.getenv("TRAIL_LOOP_SECONDS", "20"))                 # trailing evaluation cadence
+PROFIT_HARVEST_PCT = float(os.getenv("PROFIT_HARVEST_PCT", "0.015"))                      # 1.5% profit harvest trigger
+TRAIL_BREAKEVEN_TRIGGER_R = float(os.getenv("TRAIL_BREAKEVEN_TRIGGER_R", "1.0"))          # at +1R move SL to breakeven(+fees)
+TRAIL_TRIGGER_R = float(os.getenv("TRAIL_TRIGGER_R", "1.5"))                              # at +1.5R start ATR trailing
+TRAIL_ATR_MULT = float(os.getenv("TRAIL_ATR_MULT", "2.0"))                                # trail distance = N × ATR(1h)
+TRAIL_FEE_BUFFER_PCT = float(os.getenv("TRAIL_FEE_BUFFER_PCT", "0.002"))                  # breakeven buffer to cover round-trip fees
+TRAIL_MIN_REARM_SECONDS = float(os.getenv("TRAIL_MIN_REARM_SECONDS", "60"))               # min seconds between SL modifications per symbol
+TRAIL_LOOP_SECONDS = float(os.getenv("TRAIL_LOOP_SECONDS", "20"))                         # trailing evaluation cadence
 
 
 
