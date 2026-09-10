@@ -525,15 +525,28 @@ def emergency_futures_market_close(
     Emergency market order to immediately close a Futures position.
     """
     close_side = "SELL" if entry_side == "BUY" else "BUY"
+    actual_qty = executed_qty
+    try:
+        if hasattr(client, "futures_position_information"):
+            pos_info = client.futures_position_information(symbol=symbol, recvWindow=60000)
+            for p in pos_info:
+                amt = abs(float(p.get("positionAmt", 0.0)))
+                if amt > 0:
+                    actual_qty = max(actual_qty, amt)
+                    break
+    except Exception:
+        pass
+
     logger.critical(
-        f"[FUTURES_PROTECTION] 🚨 EMERGENCY CLOSE: {symbol} {close_side} {executed_qty}"
+        f"[FUTURES_PROTECTION] 🚨 EMERGENCY CLOSE: {symbol} {close_side} {actual_qty}"
     )
     return client.futures_create_order(
         symbol=symbol,
         side=close_side,
         type="MARKET",
-        quantity=executed_qty,
+        quantity=actual_qty,
         reduceOnly=True,
+        recvWindow=60000,
     )
 
 

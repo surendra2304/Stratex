@@ -102,6 +102,11 @@ def get_exchange_client():
         client = Client(API_KEY, SECRET_KEY, testnet=True, ping=False)
         if TRADING_MODE == "TESTNET":
             client.API_URL = "https://testnet.binance.vision/api"
+        try:
+            st = client.futures_time()['serverTime'] if TRADING_MODE == "FUTURES" else client.get_server_time()['serverTime']
+            client.TIME_OFFSET = st - int(time.time() * 1000)
+        except Exception:
+            pass
         return client
         
     return None

@@ -169,33 +169,33 @@ def _record_harvest_win_in_ledger(trade, exit_price, profit_pct):
     """Authoritative ledger recording for banked profit harvest wins."""
     ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
     try:
+        oid = trade.get("exit_order_id") or trade.get("order_id")
         entry_p = float(trade.get("entry_price", exit_price))
         qty = float(trade.get("quantity", 0))
         side = trade.get("side", "BUY")
+        direction = "LONG" if side == "BUY" else "SHORT"
         gross_pnl = (entry_p - exit_price) * qty if side == "SELL" else (exit_price - entry_p) * qty
         fees = qty * (entry_p + exit_price) * 0.0004
         net_pnl = gross_pnl - fees
         now_iso = datetime.datetime.utcnow().isoformat() + "Z"
         entry = {
-            "signal_id": trade.get("signal_id", f"HARVEST_{trade.get('symbol')}_{int(time.time())}"),
             "symbol": trade.get("symbol"),
-            "strategy": trade.get("strategy", "SUPERTREND"),
-            "source": "BINANCE_FUTURES_EXECUTION",
-            "side": side,
-            "entry_price": entry_p,
-            "exit_price": exit_price,
-            "entry_executed_quantity": qty,
-            "exit_executed_quantity": qty,
-            "quantity": qty,
-            "exit_reason": "PROFIT_HARVEST_WIN",
+            "order_id": str(oid) if oid else "",
+            "exit_order_id": str(oid) if oid else "",
+            "action": "SELL" if side == "BUY" else "BUY",
+            "direction": direction,
+            "quantity": round(qty, 4),
+            "entry_price": round(entry_p, 4),
+            "exit_price": round(exit_price, 4),
             "gross_pnl": round(gross_pnl, 4),
-            "total_fees": round(fees, 4),
+            "pnl": round(gross_pnl, 4),
             "net_pnl": round(net_pnl, 4),
             "fees": round(fees, 4),
-            "pnl": round(net_pnl, 4),
             "timestamp": now_iso,
             "exit_timestamp": now_iso,
-            "action": "CLOSE_WIN",
+            "exit_reason": "WIN",
+            "strategy": trade.get("strategy", "SUPERTREND"),
+            "source": "BINANCE_FUTURES_EXECUTION",
             "is_futures": True
         }
         with open(ledger_file, "a", encoding="utf-8") as f:
@@ -290,7 +290,7 @@ def trailing_cycle(service):
         return
 
     try:
-        from execution import _load_active_trades, _save_active_trades
+        from execution import _load_active_trades, _save_active_trades, get_exchange_client
         from testnet_engine.protection import emergency_market_close, emergency_futures_market_close
     except ImportError:
         logger.error("[TRAIL] Failed to import required modules")
@@ -302,9 +302,19 @@ def trailing_cycle(service):
         logger.error(f"[TRAIL] Failed to load active trades: {e}")
         return
 
+    client = getattr(service, "client", None)
+    if client is None:
+        try:
+            client = get_exchange_client()
+        except Exception:
+            client = None
+    if client is None:
+        return
+
     modified = False
     now = time.time()
     min_rearm = float(_cfg("TRAIL_MIN_REARM_SECONDS", 60))
+    harvest_pct = float(_cfg("PROFIT_HARVEST_PCT", 0.015))  # 1.5% profit target
 
     for trade in active:
         try:
@@ -321,24 +331,16 @@ def trailing_cycle(service):
             qty = float(trade.get("quantity", 0))
             is_futures = trade.get("is_futures", False) or getattr(config, "TRADING_MODE", "TESTNET").upper() == "FUTURES"
 
-            if not all([symbol, side, entry_price > 0, current_sl > 0, tp_price > 0, qty > 0]):
+            if not symbol or not side or entry_price <= 0:
                 continue
 
-            # Throttle: don't modify too frequently
-            last_trail = trade.get("last_trail_time", 0)
-            if now - last_trail < min_rearm:
-                continue
-
-            # Get live price
-            client = getattr(service, "client", None)
-            if client is None:
-                continue
             current_price = _get_live_price(client, symbol, is_futures)
             if current_price is None:
                 continue
 
-            # 1. Profit Harvest Check: Automatically lock in and bank winning trades
-            harvest_pct = float(_cfg("PROFIT_HARVEST_PCT", 0.015))  # 1.5% profit target
+            # -----------------------------------------------------------------
+            # 1. UNTHROTTLED Profit Harvest Check: Bank winning trades at once!
+            # -----------------------------------------------------------------
             price_diff = (entry_price - current_price) if side == "SELL" else (current_price - entry_price)
             current_profit_pct = price_diff / entry_price if entry_price > 0 else 0.0
 
@@ -348,24 +350,37 @@ def trailing_cycle(service):
                     f"{current_profit_pct:.2%} >= {harvest_pct:.2%}. Closing to bank WIN!"
                 )
                 try:
+                    close_res = None
                     if is_futures:
-                        emergency_futures_market_close(client, symbol, side, qty)
+                        close_res = emergency_futures_market_close(client, symbol, side, qty)
                         old_tp_oid = trade.get("tp_order_id")
                         old_sl_oid = trade.get("sl_order_id")
                         _cancel_futures_order(client, symbol, old_tp_oid)
                         _cancel_futures_order(client, symbol, old_sl_oid)
                     else:
-                        emergency_market_close(client, symbol, side, qty)
+                        close_res = emergency_market_close(client, symbol, side, qty)
                     trade["status"] = "CLOSED"
                     trade["exit_reason"] = "PROFIT_HARVEST_WIN"
                     trade["exit_price"] = current_price
+                    if close_res and isinstance(close_res, dict):
+                        trade["exit_order_id"] = close_res.get("orderId")
+                        trade["order_id"] = close_res.get("orderId")
                     modified = True
                     _record_harvest_win_in_ledger(trade, current_price, current_profit_pct)
                     continue
                 except Exception as he:
                     logger.error(f"[PROFIT_HARVEST] Failed to harvest {symbol}: {he}")
 
-            # 2. Calculate initial risk for trailing stop
+            # -----------------------------------------------------------------
+            # 2. Trailing Stop / Breakeven Arming (throttled by min_rearm)
+            # -----------------------------------------------------------------
+            if not all([current_sl > 0, tp_price > 0, qty > 0]):
+                continue
+
+            last_trail = trade.get("last_trail_time", 0)
+            if now - last_trail < min_rearm:
+                continue
+
             initial_risk = abs(entry_price - current_sl)
             if initial_risk <= 0:
                 continue

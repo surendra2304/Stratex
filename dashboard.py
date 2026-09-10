@@ -776,6 +776,52 @@ _holdings_cache = None
 _holdings_cache_ts = 0.0
 _holdings_lock = threading.Lock()
 
+_position_open_times_cache = {}
+_position_open_times_cache_ts = {}
+
+def _get_position_open_time(client, symbol, side):
+    now = time.time()
+    if symbol in _position_open_times_cache and (now - _position_open_times_cache_ts.get(symbol, 0) < 60):
+        return _position_open_times_cache[symbol]
+
+    # 1. Query real trade execution fill time from Binance Futures
+    try:
+        if client and hasattr(client, "futures_account_trades"):
+            trades = client.futures_account_trades(symbol=symbol, limit=30, recvWindow=60000)
+            if trades:
+                expected_side = "BUY" if side in ["LONG", "BUY"] else "SELL"
+                # For an open position, entry trades had realizedPnl == 0.0
+                entry_trades = [tr for tr in trades if tr.get("side") == expected_side and float(tr.get("realizedPnl", 0.0)) == 0.0]
+                if not entry_trades:
+                    entry_trades = [tr for tr in trades if tr.get("side") == expected_side]
+                target_tr = entry_trades[-1] if entry_trades else trades[-1]
+                t_ms = target_tr.get("time")
+                if t_ms:
+                    ts = datetime.datetime.fromtimestamp(t_ms / 1000, datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                    _position_open_times_cache[symbol] = ts
+                    _position_open_times_cache_ts[symbol] = now
+                    return ts
+    except Exception as e:
+        logger.debug(f"[DASHBOARD] Could not query trade time for {symbol}: {e}")
+
+    # 2. Check local active_trades.json as fallback
+    try:
+        from execution import _load_active_trades
+        for t in _load_active_trades():
+            if t.get("symbol") == symbol and (t.get("status") == "OPEN" or t.get("state") == "PROTECTED"):
+                ts = t.get("entry_timestamp") or t.get("timestamp")
+                if ts:
+                    _position_open_times_cache[symbol] = ts
+                    _position_open_times_cache_ts[symbol] = now
+                    return ts
+    except Exception:
+        pass
+
+    fallback_ts = datetime.datetime.utcnow().isoformat() + "Z"
+    _position_open_times_cache[symbol] = fallback_ts
+    _position_open_times_cache_ts[symbol] = now
+    return fallback_ts
+
 def get_live_account_and_holdings(force_refresh=False):
     """
     Queries Binance Spot for live balances, active crypto positions,
@@ -853,8 +899,7 @@ def get_live_account_and_holdings(force_refresh=False):
                         if u_pnl == 0.0 and mark_p > 0 and entry_p > 0:
                             u_pnl = (mark_p - entry_p) * pos_amt
                         
-                        update_time = p.get("updateTime", 0)
-                        pos_ts = datetime.datetime.fromtimestamp(update_time / 1000, datetime.timezone.utc).isoformat().replace("+00:00", "Z") if update_time else datetime.datetime.utcnow().isoformat() + "Z"
+                        pos_ts = _get_position_open_time(client, sym, "LONG" if pos_amt > 0 else "SHORT")
 
                         holdings.append({
                             "asset": base_asset,
@@ -1175,9 +1220,9 @@ def get_status():
         elif trades_data and trades_data.get("net_pnl", 0.0) != 0.0:
             realized_pnl = float(trades_data.get("net_pnl", 0.0))
         elif not trades_data or not trades_data.get("positions"):
-            realized_pnl = float(trades_data.get("net_pnl", 0.0)) if trades_data else 0.0
+            if realized_pnl == 0.0:
+                realized_pnl = float(trades_data.get("net_pnl", 0.0)) if trades_data else 0.0
             today_realized_pnl = 0.0
-            fees = 0.0
     except Exception as td_err:
         logger.error(f"Failed to load trades data: {td_err}")
 
@@ -1477,7 +1522,7 @@ def _get_trades_data():
                     strategy = str(trade.get("strategy", "")).upper()
                     status = str(trade.get("status", "")).upper()
                     
-                    INVALID_PROVENANCES = ["TEST", "SYNTHETIC", "SYNTHETIC_GENERATED", "UNVERIFIED", "MOCK", "RECOVERED_WITHOUT_BINANCE_PROOF", "RECOVERED", "AGGRESSIVE_SCALPER"]
+                    INVALID_PROVENANCES = ["TEST", "SYNTHETIC", "SYNTHETIC_GENERATED", "UNVERIFIED", "MOCK", "RECOVERED_WITHOUT_BINANCE_PROOF", "AGGRESSIVE_SCALPER"]
                     if source in INVALID_PROVENANCES or prov in INVALID_PROVENANCES or strategy in INVALID_PROVENANCES or status == "OPEN":
                         continue
                     
