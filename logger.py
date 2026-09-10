@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from config import TRADING_MODE
+TRADING_MODE = os.getenv("TRADING_MODE", "PAPER").upper()
 
 # --- Trade CSV Logging (Unbounded) ---
 LOG_FILE = "trade_log.csv"
