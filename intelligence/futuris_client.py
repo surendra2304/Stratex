@@ -33,14 +33,22 @@ class FuturisForecastContext:
         }
 
 class FuturisMarketClient:
-    def __init__(self, base_url='https://futuris-x4f4.onrender.com', cache_ttl_seconds=1800, timeout_seconds=5):
+    def __init__(self, base_url='https://futuris-x4f4.onrender.com', cache_ttl_seconds=1800, timeout_seconds=3.0):
         self.base_url = (os.getenv('FUTURIS_URL') or os.getenv('FUTURIS_BASE_URL') or base_url or 'https://futuris-x4f4.onrender.com').rstrip('/')
+        self.api_key = os.getenv('FUTURIS_API_KEY', 'futuris_api')
         self.cache_ttl_seconds = cache_ttl_seconds
-        self.timeout_seconds = timeout_seconds
+        self.timeout_seconds = float(os.getenv('FUTURIS_TIMEOUT_SECONDS', str(timeout_seconds)))
         self.cache: dict[str, FuturisForecastContext] = {}
         self.forecast_history: list[FuturisForecastContext] = []
         self.accuracy_records: list[dict[str, Any]] = []
         self._lock = threading.Lock()
+
+    def _get_headers(self) -> dict[str, str]:
+        headers = {'Content-Type': 'application/json'}
+        if self.api_key:
+            headers['Authorization'] = f'Bearer {self.api_key}'
+            headers['X-API-Key'] = self.api_key
+        return headers
 
     def fetch_forecast(self, symbol: str = 'BTCUSDT') -> FuturisForecastContext:
         with self._lock:
@@ -49,11 +57,13 @@ class FuturisMarketClient:
                 return cached
 
         url = f'{self.base_url}/v1/futuris/forecast'
+        forecast = None
         try:
             logger.info(f'[FUTURIS_CLIENT] Requesting market forecast for {symbol}...')
             resp = requests.post(
                 url,
                 json={'symbol': symbol, 'horizons': ['24h']},
+                headers=self._get_headers(),
                 timeout=self.timeout_seconds
             )
             if resp.status_code == 200:
@@ -72,6 +82,9 @@ class FuturisMarketClient:
             logger.debug(f'[FUTURIS_CLIENT] Futuris server unreachable, using defensive synthetic forecast: {e}')
             forecast = self._generate_fallback_forecast(symbol)
 
+        if forecast is None:
+            forecast = self._generate_fallback_forecast(symbol)
+
         with self._lock:
             self.cache[symbol] = forecast
             self.forecast_history.append(forecast)
@@ -83,12 +96,55 @@ class FuturisMarketClient:
     def _generate_fallback_forecast(self, symbol: str) -> FuturisForecastContext:
         return FuturisForecastContext(
             symbol=symbol,
-            volatility_forecast={'probability': 0.42, 'confidence': 0.78, 'horizon_hours': 24},
+            volatility_forecast={'probability': 0.35, 'confidence': 0.78, 'horizon_hours': 24},
             drawdown_risk={'probability': 0.18, 'threshold_pct': 0.05, 'horizon_hours': 24},
-            regime_outlook={'current': 'RANGING', 'transition_probability': 0.30, 'predicted_direction': 'SIDEWAYS'},
+            regime_outlook={'current': 'RANGING', 'transition_probability': 0.30, 'predicted_direction': 'NEUTRAL'},
             timestamp=time.time(),
             expires_at=time.time() + self.cache_ttl_seconds
         )
+
+    def evaluate_forecast_alignment(self, symbol: str, side: str) -> tuple[bool, float, str, dict[str, Any]]:
+        """
+        Evaluates Futuris predictive forecasts for live trade execution decisions.
+        Returns:
+            is_allowed (bool): True if allowed, False if conflicting regime or high drawdown risk
+            score_multiplier (float): Ranking score multiplier (1.3x boost or 0.8x penalty)
+            reason (str): Canonical verdict reason
+            details (dict): Context summary for live scanner and opportunity log
+        """
+        forecast = self.fetch_forecast(symbol)
+        dd_prob = float(forecast.drawdown_risk.get('probability', 0.18))
+        regime = str(forecast.regime_outlook.get('current', 'RANGING')).upper()
+        pred_dir = str(forecast.regime_outlook.get('predicted_direction', 'NEUTRAL')).upper()
+
+        details = {
+            'symbol': symbol,
+            'side': side,
+            'drawdown_probability': round(dd_prob, 3),
+            'regime': regime,
+            'predicted_direction': pred_dir,
+            'volatility_probability': float(forecast.volatility_forecast.get('probability', 0.35))
+        }
+
+        # 1. High Drawdown Risk Veto (Protect capital before volatility shock)
+        if dd_prob > 0.45:
+            return False, 0.0, 'FUTURIS_HIGH_DRAWDOWN_RISK', details
+
+        # 2. Predicted Direction & Regime Confluence
+        if side == 'BUY':
+            if pred_dir in ['BEARISH', 'STRONG_DOWN'] or 'BEAR' in regime:
+                return False, 0.0, 'FUTURIS_REGIME_CONFLICT_BEARISH', details
+            if pred_dir in ['BULLISH', 'STRONG_UP'] or 'BULL' in regime:
+                return True, 1.30, 'FUTURIS_DIRECTION_CONFIRMED', details
+            return True, 1.0, 'FUTURIS_FORECAST_NOMINAL', details
+        elif side == 'SELL':
+            if pred_dir in ['BULLISH', 'STRONG_UP'] or 'BULL' in regime:
+                return False, 0.0, 'FUTURIS_REGIME_CONFLICT_BULLISH', details
+            if pred_dir in ['BEARISH', 'STRONG_DOWN'] or 'BEAR' in regime:
+                return True, 1.30, 'FUTURIS_DIRECTION_CONFIRMED', details
+            return True, 1.0, 'FUTURIS_FORECAST_NOMINAL', details
+
+        return True, 1.0, 'FUTURIS_FORECAST_NOMINAL', details
 
     def record_actual_outcome(self, symbol: str, actual_volatility_spike: bool, actual_drawdown_pct: float) -> dict[str, Any]:
         with self._lock:

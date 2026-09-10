@@ -896,6 +896,21 @@
             const tp = parseFloat(s.target || 0.0);
             const sl = parseFloat(s.stop || 0.0);
 
+            // IntelX & Futuris Confluence / Veto Badges
+            let intelxBadge = '';
+            if (s.intelx_mult && s.intelx_mult > 1.0) {
+                intelxBadge = `<span class="badge-tag" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; margin-left: 4px; border: 1px solid rgba(59, 130, 246, 0.4);" title="${s.intelx_reason || 'Sentiment Confluence'}">IntelX +${Math.round((s.intelx_mult - 1) * 100)}%</span>`;
+            } else if (s.intelx_reason && s.intelx_reason.includes('REGULATORY')) {
+                intelxBadge = `<span class="badge-tag" style="background: rgba(239, 68, 68, 0.2); color: #f87171; margin-left: 4px; border: 1px solid rgba(239, 68, 68, 0.4);" title="${s.intelx_reason}">IntelX Veto</span>`;
+            }
+
+            let futurisBadge = '';
+            if (s.futuris_mult && s.futuris_mult > 1.0) {
+                futurisBadge = `<span class="badge-tag" style="background: rgba(168, 85, 247, 0.2); color: #c084fc; margin-left: 4px; border: 1px solid rgba(168, 85, 247, 0.4);" title="${s.futuris_reason || 'Forecast Confirmed'}">Futuris +${Math.round((s.futuris_mult - 1) * 100)}%</span>`;
+            } else if (s.futuris_reason && (s.futuris_reason.includes('CONFLICT') || s.futuris_reason.includes('RISK'))) {
+                futurisBadge = `<span class="badge-tag" style="background: rgba(239, 68, 68, 0.2); color: #f87171; margin-left: 4px; border: 1px solid rgba(239, 68, 68, 0.4);" title="${s.futuris_reason}">Futuris Veto</span>`;
+            }
+
             return `
                 <tr>
                     <td class="mono text-muted" style="font-size: 11px;">${fmtTime(s.timestamp)}</td>
@@ -912,6 +927,8 @@
                     <td><span class="badge ${decisionBadgeClass}">${decision}</span></td>
                     <td class="mono" style="font-size: 11px; color: ${decision === 'EXECUTED' ? '#4ade80' : decision === 'QUALIFIED' ? '#60a5fa' : '#94a3b8'};">
                         ${reason}
+                        ${intelxBadge}
+                        ${futurisBadge}
                     </td>
                 </tr>
             `;

@@ -118,6 +118,8 @@ MIN_WIN_RATE_THRESHOLD = 0.35      # Automatically switch to OBSERVE-ONLY if < 3
 MAX_PREDICTION_ERROR = 0.02        # Automatically switch to OBSERVE-ONLY if actual differs from expected by > 2%
 
 BTC_REGIME_FILTER = os.getenv("BTC_REGIME_FILTER", "True").lower() == "true" # Altcoins follow BTC; block alt longs when BTC < 4h EMA200
+INTELX_INTELLIGENCE_ENABLED = os.getenv("INTELX_INTELLIGENCE_ENABLED", "True").lower() == "true" # IntelX sentiment & news catalyst gate
+FUTURIS_FORECAST_ENABLED = os.getenv("FUTURIS_FORECAST_ENABLED", "True").lower() == "true" # Futuris predictive volatility & regime gate
 
 # -------------------------------------------------------------------
 # SIGNAL QUALITY FILTERS (v3 upgrade) — real-data entry gates

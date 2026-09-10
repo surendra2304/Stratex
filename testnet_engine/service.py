@@ -312,6 +312,23 @@ class TestnetService:
             self.decay_smoother = None
             self.qanat_allocator = None
 
+        # Multi-Agent Intelligence Clients (IntelX & Futuris)
+        self.intelx_client = None
+        self.futuris_client = None
+        try:
+            from intelligence.intelx_client import get_intelx_client
+            self.intelx_client = get_intelx_client()
+            logger.info("[INTELX_READY] IntelXMarketClient initialized for market sentiment gate.")
+        except Exception as e:
+            logger.warning(f"[INTELX_INIT_WARN] Could not initialize IntelXMarketClient: {e}")
+
+        try:
+            from intelligence.futuris_client import get_futuris_client
+            self.futuris_client = get_futuris_client()
+            logger.info("[FUTURIS_READY] FuturisMarketClient initialized for predictive forecast gate.")
+        except Exception as e:
+            logger.warning(f"[FUTURIS_INIT_WARN] Could not initialize FuturisMarketClient: {e}")
+
         # Stage 3: Restore daily risk state from ledger if restarting mid-day
         self._restore_daily_risk_state()
         
@@ -1074,6 +1091,58 @@ class TestnetService:
                             self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", p_metrics["reason"])
                             continue
                             
+                        # Stage 5.5: IntelX Market Intelligence Gate (Regulatory & Sentiment Veto/Confluence)
+                        intelx_ok = True
+                        intelx_mult = 1.0
+                        intelx_reason = "INTELX_NOT_EVALUATED"
+                        intelx_intel = {}
+                        if getattr(self, "intelx_client", None) and getattr(config, "INTELX_INTELLIGENCE_ENABLED", True):
+                            try:
+                                intelx_ok, intelx_mult, intelx_reason, intelx_intel = self.intelx_client.evaluate_market_sentiment(symbol, side)
+                            except Exception as e:
+                                logger.warning(f"[INTELX_GATE_WARN] Error evaluating IntelX sentiment for {symbol}: {e}")
+                                intelx_ok, intelx_mult, intelx_reason = True, 1.0, "INTELX_FAIL_OPEN"
+
+                        if not intelx_ok:
+                            self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                            self.stats["INTELX_REJECTED"] = self.stats.get("INTELX_REJECTED", 0) + 1
+                            if strat_name in self.stats["strategy_metrics"]:
+                                self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                            if tf in self.stats["timeframe_metrics"]:
+                                self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                            self.log_opportunity(
+                                signal_id, symbol, side,
+                                {"reason": intelx_reason, "intelx_intel": intelx_intel, **p_metrics},
+                                "REJECTED", intelx_reason
+                            )
+                            continue
+
+                        # Stage 5.6: Futuris Predictive Forecast Gate (Drawdown Veto & Directional Confluence)
+                        futuris_ok = True
+                        futuris_mult = 1.0
+                        futuris_reason = "FUTURIS_NOT_EVALUATED"
+                        futuris_forecast = {}
+                        if getattr(self, "futuris_client", None) and getattr(config, "FUTURIS_FORECAST_ENABLED", True):
+                            try:
+                                futuris_ok, futuris_mult, futuris_reason, futuris_forecast = self.futuris_client.evaluate_forecast_alignment(symbol, side)
+                            except Exception as e:
+                                logger.warning(f"[FUTURIS_GATE_WARN] Error evaluating Futuris forecast for {symbol}: {e}")
+                                futuris_ok, futuris_mult, futuris_reason = True, 1.0, "FUTURIS_FAIL_OPEN"
+
+                        if not futuris_ok:
+                            self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                            self.stats["FUTURIS_REJECTED"] = self.stats.get("FUTURIS_REJECTED", 0) + 1
+                            if strat_name in self.stats["strategy_metrics"]:
+                                self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                            if tf in self.stats["timeframe_metrics"]:
+                                self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                            self.log_opportunity(
+                                signal_id, symbol, side,
+                                {"reason": futuris_reason, "futuris_forecast": futuris_forecast, **p_metrics},
+                                "REJECTED", futuris_reason
+                            )
+                            continue
+
                         candidate = {
                             "signal_id": signal_id,
                             "symbol": symbol,
@@ -1088,6 +1157,12 @@ class TestnetService:
                             "signal_result": signal_result,
                             "persisted_bars": persisted_bars,
                             "smoothed_conviction": smoothed_conviction,
+                            "intelx_mult": intelx_mult,
+                            "intelx_reason": intelx_reason,
+                            "intelx_intel": intelx_intel,
+                            "futuris_mult": futuris_mult,
+                            "futuris_reason": futuris_reason,
+                            "futuris_forecast": futuris_forecast,
                             "timestamp": datetime.datetime.utcnow().timestamp()
                         }
                         self.opportunity_pool.put(candidate)
@@ -1137,15 +1212,23 @@ class TestnetService:
                     if risk_pct <= 0.0 or risk_pct > 1.0:
                         risk_pct = 0.01 # normalize to standard 1% risk baseline
                     if getattr(self, "qanat_allocator", None):
-                        score = self.qanat_allocator.score_candidate(
+                        base_score = self.qanat_allocator.score_candidate(
                             expected_net_return=exp_net,
                             atr_pct=risk_pct,
                             confidence=conf,
                             persisted_bars=c.get("persisted_bars", 1)
                         )
                     else:
-                        score = round(exp_net * conf / max(0.001, risk_pct), 6)
+                        base_score = round(exp_net * conf / max(0.001, risk_pct), 6)
+
+                    # Multi-Agent Confluence Boosters (IntelX & Futuris)
+                    intelx_m = float(c.get("intelx_mult", 1.0))
+                    futuris_m = float(c.get("futuris_mult", 1.0))
+                    score = round(base_score * intelx_m * futuris_m, 6)
                     c["score"] = score
+                    c["base_score"] = base_score
+                    c["intelx_mult"] = intelx_m
+                    c["futuris_mult"] = futuris_m
                     c["net_edge"] = exp_net
                     c["risk"] = risk_pct
                     c["confidence"] = conf
@@ -1272,7 +1355,7 @@ class TestnetService:
                             self.stats["strategy_metrics"][strategy_name]["qualified"] += 1
                         if tf in self.stats["timeframe_metrics"]:
                             self.stats["timeframe_metrics"][tf]["qualified"] += 1
-                        self.log_opportunity(signal_id, symbol, side, fresh_metrics, "ACCEPTED", "ALL_GATES_PASSED")
+                        self.log_opportunity(signal_id, symbol, side, fresh_metrics, "ACCEPTED", "ALL_GATES_PASSED", candidate=candidate)
                         
                         # Format strictly for Binance execution to prevent LOT_SIZE Filter Failure
                         step_size = filters.get("stepSize", 1.0)
@@ -1416,6 +1499,10 @@ class TestnetService:
                                 est_fee = notional * 0.001
                                 
                                 logger.info(f"[ORDER_FILLED] {symbol} {side} {executed_qty} @ {actual_price:.4f} | OrderID: {entry_oid} | SignalID: {signal_id}")
+                                self.log_opportunity(
+                                    signal_id, symbol, side, fresh_metrics, "EXECUTED", "ORDER_FILLED_DISPATCHED",
+                                    current_price=actual_price, candidate=candidate
+                                )
 
                                 if getattr(self, "idempotency_guard", None):
                                     self.idempotency_guard.record(
@@ -1653,7 +1740,14 @@ class TestnetService:
             "PROFITABILITY", "REVALIDATION", "EDGE", "NET_RETURN", "FEES", "INSUFFICIENT", "NEGATIVE"
         ])
 
-        if decision in ["ACCEPTED", "ALL_GATES_PASSED"]:
+        if decision == "EXECUTED":
+            p_dec = "ACCEPTED"
+            r_dec = "ACCEPTED"
+            e_dec = "EXECUTED"
+            p_reason_val = "NET_EDGE_POSITIVE"
+            r_reason_val = "WITHIN_LIMITS"
+            e_reason_val = reason
+        elif decision in ["ACCEPTED", "ALL_GATES_PASSED"]:
             p_dec = "ACCEPTED"
             r_dec = "ACCEPTED"
             e_dec = "ELIGIBLE"
@@ -1682,6 +1776,13 @@ class TestnetService:
             r_reason_val = reason
             e_reason_val = reason
 
+        intelx_intel = (metrics.get("intelx_intel") if isinstance(metrics, dict) else None) or (candidate.get("intelx_intel") if candidate else None)
+        futuris_forecast = (metrics.get("futuris_forecast") if isinstance(metrics, dict) else None) or (candidate.get("futuris_forecast") if candidate else None)
+        intelx_reason = (metrics.get("intelx_reason") if isinstance(metrics, dict) else None) or (candidate.get("intelx_reason") if candidate else None)
+        futuris_reason = (metrics.get("futuris_reason") if isinstance(metrics, dict) else None) or (candidate.get("futuris_reason") if candidate else None)
+        intelx_mult = (metrics.get("intelx_mult") if isinstance(metrics, dict) else None) or (candidate.get("intelx_mult", 1.0) if candidate else 1.0)
+        futuris_mult = (metrics.get("futuris_mult") if isinstance(metrics, dict) else None) or (candidate.get("futuris_mult", 1.0) if candidate else 1.0)
+
         log_entry = {
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
             "signal_id": signal_id,
@@ -1709,7 +1810,13 @@ class TestnetService:
             "rank": rank or (candidate.get("rank") if candidate else None),
             "score": score or (candidate.get("score") if candidate else None),
             "decision": decision,
-            "reason": reason
+            "reason": reason,
+            "intelx_intel": intelx_intel,
+            "futuris_forecast": futuris_forecast,
+            "intelx_reason": intelx_reason,
+            "futuris_reason": futuris_reason,
+            "intelx_mult": intelx_mult,
+            "futuris_mult": futuris_mult
         }
         try:
             with open(TESTNET_OPPORTUNITY_LOG, "a", encoding="utf-8") as f:

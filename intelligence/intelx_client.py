@@ -41,12 +41,20 @@ class MarketResearchReport:
 class IntelXMarketClient:
     def __init__(self, base_url='https://intelx-3cz1.onrender.com', cache_ttl_seconds=1800, timeout_seconds=5):
         self.base_url = (os.getenv('INTELX_URL') or os.getenv('INTELX_BASE_URL') or base_url or 'https://intelx-3cz1.onrender.com').rstrip('/')
+        self.api_key = os.getenv('INTELX_API_KEY', 'intelx_api')
         self.cache_ttl_seconds = cache_ttl_seconds
         self.timeout_seconds = timeout_seconds
         self.cache: dict[str, MarketResearchReport] = {}
         self.research_history: list[MarketResearchReport] = []
         self._lock = threading.Lock()
         self.total_queries_submitted = 0
+
+    def _get_headers(self) -> dict[str, str]:
+        headers = {'Content-Type': 'application/json'}
+        if self.api_key:
+            headers['Authorization'] = f'Bearer {self.api_key}'
+            headers['X-API-Key'] = self.api_key
+        return headers
 
     def should_trigger_research(self, symbol: str, volatility_z_score: float = 0.0, advisory_confidence: float = 1.0, current_drawdown_pct: float = 0.0) -> tuple[bool, str]:
         if volatility_z_score >= 2.0:
@@ -64,7 +72,6 @@ class IntelXMarketClient:
                 return cached
 
         query = f'What events are driving {symbol} volatility? Regulatory changes? Institutional flows? Macro events?'
-        url = f'{self.base_url}/v1/intelligence/research'
         self.total_queries_submitted += 1
 
         try:
@@ -73,27 +80,58 @@ class IntelXMarketClient:
         except Exception:
             pass
 
+        report = None
         try:
             logger.info(f'[INTELX_CLIENT] Submitting market research query for {symbol} (trigger: {trigger_reason})')
-            resp = requests.post(url, json={'symbol': symbol, 'query': query, 'trigger_reason': trigger_reason}, timeout=self.timeout_seconds)
+            # 1. Query Knowledge endpoint
+            know_url = f'{self.base_url}/api/v1/knowledge/query'
+            resp = requests.post(know_url, json={'q': f'{symbol} market sentiment regulatory catalysts'}, headers=self._get_headers(), timeout=self.timeout_seconds)
             if resp.status_code == 200:
                 data = resp.json()
+                results = data.get('results', [])
+                summary_text = f"IntelX intelligence: {len(results)} active claims tracked for {symbol}."
+                drivers = ['High volume institutional positioning']
+                if results:
+                    drivers = [r.get('text', '')[:100] for r in results[:3] if r.get('text')]
                 report = MarketResearchReport(
                     symbol=symbol,
                     trigger_reason=trigger_reason,
                     query=query,
-                    findings=data.get('findings', {}),
-                    summary=data.get('summary', f'IntelX intelligence report for {symbol}'),
-                    sentiment_drivers=data.get('sentiment_drivers', ['High volume institutional positioning']),
-                    regulatory_changes=data.get('regulatory_changes', ['Standard regulatory baseline']),
-                    macro_events=data.get('macro_events', ['FOMC interest rate rate-cut cycle expectations']),
+                    findings={'status': 'INTELX_LIVE', 'count': len(results), 'results': results},
+                    summary=summary_text,
+                    sentiment_drivers=drivers,
+                    regulatory_changes=['Standard regulatory baseline'],
+                    macro_events=['FOMC interest rate expectations'],
                     timestamp=time.time(),
                     expires_at=time.time() + self.cache_ttl_seconds
                 )
             else:
-                report = self._generate_fallback_report(symbol, trigger_reason, query)
+                # Fallback to general intelligence feed
+                feed_url = f'{self.base_url}/api/v1/friday-universe/intelligence?agent=all&limit=20'
+                f_resp = requests.get(feed_url, headers=self._get_headers(), timeout=self.timeout_seconds)
+                if f_resp.status_code == 200:
+                    f_data = f_resp.json()
+                    items = f_data.get('items', [])
+                    drivers = [item.get('title', '') for item in items[:3]]
+                    report = MarketResearchReport(
+                        symbol=symbol,
+                        trigger_reason=trigger_reason,
+                        query=query,
+                        findings={'status': 'INTELX_FEED', 'items_count': len(items)},
+                        summary=f"IntelX global intelligence feed: {len(items)} events tracked.",
+                        sentiment_drivers=drivers if drivers else ['Market liquidity flows'],
+                        regulatory_changes=['No imminent regulatory enforcement reported'],
+                        macro_events=['Correlated crypto market flows'],
+                        timestamp=time.time(),
+                        expires_at=time.time() + self.cache_ttl_seconds
+                    )
+                else:
+                    report = self._generate_fallback_report(symbol, trigger_reason, query)
         except Exception as e:
             logger.debug(f'[INTELX_CLIENT] Failed to connect to IntelX, generating defensive fallback: {e}')
+            report = self._generate_fallback_report(symbol, trigger_reason, query)
+
+        if report is None:
             report = self._generate_fallback_report(symbol, trigger_reason, query)
 
         with self._lock:
@@ -117,6 +155,48 @@ class IntelXMarketClient:
             timestamp=time.time(),
             expires_at=time.time() + self.cache_ttl_seconds
         )
+
+    def evaluate_market_sentiment(self, symbol: str, side: str) -> tuple[bool, float, str, dict[str, Any]]:
+        """
+        Evaluates IntelX intelligence for live trade decisions.
+        Returns:
+            is_allowed (bool): True if signal is safe to trade, False if hard vetoed
+            score_multiplier (float): Ranking score multiplier (e.g. 1.2x boost, 0.8x penalty)
+            reason (str): Canonical verdict reason
+            details (dict): Context summary for live scanner and opportunity log
+        """
+        report = self.query_market_research(symbol, trigger_reason='TRADE_DECISION_EVAL')
+        details = {
+            'symbol': symbol,
+            'side': side,
+            'summary': report.summary,
+            'sentiment_drivers': report.sentiment_drivers[:2],
+            'status': report.findings.get('status', 'NOMINAL')
+        }
+
+        combined_text = (report.summary + " " + " ".join(report.sentiment_drivers) + " " + " ".join(report.regulatory_changes)).lower()
+        
+        # Hard Veto Triggers
+        adverse_keywords = ['sec enforcement', 'subpoena', 'regulatory crackdown', 'delisting', 'exploit', 'insolvency', 'hack', 'freeze']
+        for bad_word in adverse_keywords:
+            if bad_word in combined_text:
+                if side == 'BUY':
+                    return False, 0.0, 'INTELX_ADVERSE_REGULATORY_RISK', details
+
+        # Confluence Boost Triggers
+        bullish_keywords = ['etf inflow', 'institutional accumulation', 'partnership', 'reserve asset', 'rate cut', 'bullish']
+        bearish_keywords = ['whale selling', 'exchange deposit surge', 'bearish distribution', 'liquidation cascade']
+
+        if side == 'BUY':
+            if any(k in combined_text for k in bullish_keywords):
+                return True, 1.25, 'INTELX_CONFLUENCE_BULLISH_BOOST', details
+            return True, 1.0, 'INTELX_SENTIMENT_NOMINAL', details
+        elif side == 'SELL':
+            if any(k in combined_text for k in bearish_keywords):
+                return True, 1.20, 'INTELX_CONFLUENCE_BEARISH_BOOST', details
+            return True, 1.0, 'INTELX_SENTIMENT_NOMINAL', details
+
+        return True, 1.0, 'INTELX_SENTIMENT_NOMINAL', details
 
     def get_latest_market_context(self, symbol: str | None = None) -> dict[str, Any] | None:
         with self._lock:

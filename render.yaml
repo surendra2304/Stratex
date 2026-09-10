@@ -27,6 +27,18 @@ services:
         value: "FALSE"
       - key: LIVE_TRADING_ENABLED
         value: "False"
+      - key: INTELX_URL
+        value: "https://intelx-3cz1.onrender.com"
+      - key: INTELX_API_KEY
+        value: "intelx_api"
+      - key: FUTURIS_URL
+        value: "https://futuris-x4f4.onrender.com"
+      - key: FUTURIS_API_KEY
+        value: "futuris_api"
+      - key: INTELX_INTELLIGENCE_ENABLED
+        value: "TRUE"
+      - key: FUTURIS_FORECAST_ENABLED
+        value: "TRUE"
       - key: API_KEY
         sync: false
       - key: SECRET_KEY
