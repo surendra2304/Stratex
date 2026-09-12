@@ -19,8 +19,23 @@ if '\ufeffAPI_KEY' in os.environ:
     del os.environ['\ufeffAPI_KEY']
 
 # --- Binance API Credentials (from environment / .env file only) ---
-API_KEY = os.getenv("API_KEY", "")
-SECRET_KEY = os.getenv("SECRET_KEY", "")
+API_KEY = (
+    os.getenv("API_KEY")
+    or os.getenv("BINANCE_API_KEY")
+    or os.getenv("BINANCE_TESTNET_API_KEY")
+    or os.getenv("TESTNET_API_KEY")
+    or ""
+).strip().strip("'\"")
+
+SECRET_KEY = (
+    os.getenv("SECRET_KEY")
+    or os.getenv("BINANCE_SECRET_KEY")
+    or os.getenv("BINANCE_API_SECRET")
+    or os.getenv("BINANCE_SECRET")
+    or os.getenv("BINANCE_TESTNET_SECRET_KEY")
+    or os.getenv("TESTNET_SECRET_KEY")
+    or ""
+).strip().strip("'\"")
 
 # --- Gemini AI Configuration (from environment / .env file only) ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

@@ -39,9 +39,3 @@ services:
         value: "TRUE"
       - key: FUTURIS_FORECAST_ENABLED
         value: "TRUE"
-      - key: API_KEY
-        sync: false
-      - key: SECRET_KEY
-        sync: false
-      - key: GEMINI_API_KEY
-        sync: false
