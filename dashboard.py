@@ -39,6 +39,7 @@ from api.openbb_routes import openbb_bp
 from api.freqtrade_routes import freqtrade_bp
 from api.ccxt_routes import ccxt_bp
 from api.nautilus_routes import nautilus_bp
+from api.backtrader_routes import backtrader_bp
 from api.public_status import public_status_bp
 from api.reporting import reporting_bp
 
@@ -53,6 +54,7 @@ app.register_blueprint(openbb_bp)
 app.register_blueprint(freqtrade_bp)
 app.register_blueprint(ccxt_bp)
 app.register_blueprint(nautilus_bp)
+app.register_blueprint(backtrader_bp)
 
 
 
