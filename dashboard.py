@@ -37,6 +37,7 @@ from api.health import health_bp
 from api.master_control_api import master_control_bp
 from api.openbb_routes import openbb_bp
 from api.freqtrade_routes import freqtrade_bp
+from api.ccxt_routes import ccxt_bp
 from api.public_status import public_status_bp
 from api.reporting import reporting_bp
 
@@ -49,6 +50,7 @@ app.register_blueprint(master_control_bp)
 app.register_blueprint(friday_supervision_bp)
 app.register_blueprint(openbb_bp)
 app.register_blueprint(freqtrade_bp)
+app.register_blueprint(ccxt_bp)
 
 
 
