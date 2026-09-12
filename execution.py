@@ -73,21 +73,36 @@ class OrderState(str, Enum):
 # ==============================================================================
 # EXECUTION POLICY (TESTNET ONLY - LIVE TRADING FORBIDDEN BY DESIGN)
 # ==============================================================================
+def _resolve_execution_flags():
+    """Resolves execution flags checking both execution globals (for unit test monkeypatching) and config."""
+    cfg_mode = getattr(config, "TRADING_MODE", None)
+    exec_mode = globals().get("TRADING_MODE", None)
+    if exec_mode == "LIVE" or cfg_mode == "LIVE":
+        mode = "LIVE"
+    elif exec_mode == "PAPER" or cfg_mode == "PAPER":
+        mode = "PAPER"
+    elif exec_mode == "TESTNET" or cfg_mode == "TESTNET":
+        mode = "TESTNET"
+    elif exec_mode == "FUTURES" or cfg_mode == "FUTURES":
+        mode = "FUTURES"
+    else:
+        mode = exec_mode or cfg_mode or "UNKNOWN"
+
+    paper_safe = bool(globals().get("PAPER_SAFE_MODE", False) or getattr(config, "PAPER_SAFE_MODE", False))
+    live_enabled = bool(globals().get("LIVE_TRADING_ENABLED", False) or getattr(config, "LIVE_TRADING_ENABLED", False))
+    
+    exec_testnet = globals().get("TESTNET_ENABLED", True)
+    cfg_testnet = getattr(config, "TESTNET_ENABLED", True)
+    testnet_enabled = bool(exec_testnet and cfg_testnet)
+    
+    return mode, paper_safe, live_enabled, testnet_enabled
+
+
 class ExecutionPolicy:
     @staticmethod
     def can_place_order() -> tuple[bool, str]:
         """Returns (is_allowed, reason) for placing a real order. LIVE trading is permanently impossible by design."""
-        mode = getattr(config, "TRADING_MODE", TRADING_MODE)
-        if TRADING_MODE == "LIVE" or getattr(config, "TRADING_MODE", None) == "LIVE":
-            return False, "LIVE_FORBIDDEN_BY_DESIGN"
-
-        paper_safe = getattr(config, "PAPER_SAFE_MODE", PAPER_SAFE_MODE)
-        testnet_enabled = getattr(config, "TESTNET_ENABLED", TESTNET_ENABLED)
-        live_enabled = getattr(config, "LIVE_TRADING_ENABLED", LIVE_TRADING_ENABLED)
-
-        if live_enabled:
-            return False, "LIVE_FORBIDDEN_BY_DESIGN"
-
+        mode, paper_safe, live_enabled, testnet_enabled = _resolve_execution_flags()
         if mode == "PAPER" or paper_safe:
             return False, "PAPER_BLOCKED"
             
@@ -99,6 +114,9 @@ class ExecutionPolicy:
                 return False, "TESTNET_DISABLED"
             return True, f"ALLOWED_{mode}"
 
+        if mode == "LIVE" or live_enabled:
+            return False, "LIVE_FORBIDDEN_BY_DESIGN"
+
         return False, "UNKNOWN_MODE"
 
 # ==============================================================================
@@ -106,9 +124,7 @@ class ExecutionPolicy:
 # ==============================================================================
 def get_exchange_client():
     """Lazily evaluates ExecutionPolicy to construct and return the Binance Testnet Client."""
-    mode = getattr(config, "TRADING_MODE", TRADING_MODE)
-    live_enabled = getattr(config, "LIVE_TRADING_ENABLED", LIVE_TRADING_ENABLED)
-
+    mode, paper_safe, live_enabled, testnet_enabled = _resolve_execution_flags()
     if mode == "LIVE" or live_enabled:
         raise RuntimeError("SECURITY CRITICAL: LIVE trading is permanently disabled by design in this repository.")
 
@@ -130,9 +146,7 @@ def get_exchange_client():
         raise RuntimeError(f"CRITICAL ERROR: Client creation blocked. ({reason})")
 
     if mode in ["TESTNET", "FUTURES"]:
-        api_k = getattr(config, "API_KEY", API_KEY)
-        sec_k = getattr(config, "SECRET_KEY", SECRET_KEY)
-        client = Client(api_k, sec_k, testnet=True, ping=False)
+        client = Client(API_KEY, SECRET_KEY, testnet=True, ping=False)
         if mode == "TESTNET":
             client.API_URL = "https://testnet.binance.vision/api"
         try:

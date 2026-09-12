@@ -63,8 +63,8 @@ def compute_trail_target(side, entry_price, current_price, current_sl, tp_price,
     else:
         r_multiple = (entry_price - current_price) / initial_risk
 
-    be_trigger = float(_cfg("TRAIL_BREAKEVEN_TRIGGER_R", 1.0))
-    trail_trigger = float(_cfg("TRAIL_TRIGGER_R", 1.5))
+    be_trigger = float(_cfg("TRAIL_BREAKEVEN_TRIGGER_R", 0.4))
+    trail_trigger = float(_cfg("TRAIL_TRIGGER_R", 0.8))
     fee_buffer = float(_cfg("TRAIL_FEE_BUFFER_PCT", 0.002))
     atr_mult = float(_cfg("TRAIL_ATR_MULT", 2.0))
 
@@ -108,9 +108,9 @@ def compute_trail_target(side, entry_price, current_price, current_sl, tp_price,
 
 def stage_for_r_multiple(r_multiple):
     """Which stage a given R-multiple reaches (pure)."""
-    if r_multiple >= float(_cfg("TRAIL_TRIGGER_R", 1.5)):
+    if r_multiple >= float(_cfg("TRAIL_TRIGGER_R", 0.8)):
         return "TRAILING"
-    if r_multiple >= float(_cfg("TRAIL_BREAKEVEN_TRIGGER_R", 1.0)):
+    if r_multiple >= float(_cfg("TRAIL_BREAKEVEN_TRIGGER_R", 0.4)):
         return "BREAKEVEN"
     return None
 

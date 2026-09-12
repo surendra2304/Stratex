@@ -125,7 +125,7 @@ def evaluate_signal_quality(df, side, entry_price, sl_price, tp_price, strategy_
             detail["note"] = "invalid_sl_tp"
 
     # 2. Trend alignment (fail-open when EMA200 is missing)
-    mode = str(_cfg("SQ_TREND_ALIGNMENT", "partial")).lower()
+    mode = str(_cfg("SQ_TREND_ALIGNMENT", "full")).lower()
     if mode != "off" and ema200 > 0:
         if side == "BUY":
             aligned_full = (ema20 > ema50 > ema200) and close > ema200
@@ -151,7 +151,7 @@ def evaluate_signal_quality(df, side, entry_price, sl_price, tp_price, strategy_
 
     # 4. Volume confirmation vs real 20-bar average
     if bool(_cfg("SQ_VOLUME_CONFIRMATION", True)):
-        vol_mult = float(_cfg("SQ_VOLUME_MULT", 0.3))
+        vol_mult = float(_cfg("SQ_VOLUME_MULT", 0.8))
         try:
             vol_sma20 = float(pd.Series(df["volume"].astype(float).iloc[-21:-1]).mean())
         except Exception:
@@ -163,7 +163,20 @@ def evaluate_signal_quality(df, side, entry_price, sl_price, tp_price, strategy_
             if ratio < vol_mult:
                 return False, "QUALITY_LOW_VOLUME", detail
 
-    # 5. ATR% volatility band (dead-market floor, chaos ceiling)
+    # 5. ADX Regime Filter — strictly reject choppy markets with no directional power
+    adx_val = _f(last, "adx", 0.0)
+    if adx_val <= 0:
+        adx_val = _f(last, "adx_14", 0.0)
+    if adx_val <= 0:
+        adx_val = _f(last, "adx_adx_ema", 0.0)
+    min_adx = float(_cfg("SQ_MIN_ADX", 25.0))
+    if adx_val > 0:
+        detail["adx"] = round(adx_val, 2)
+        detail["min_adx"] = min_adx
+        if adx_val < min_adx:
+            return False, "QUALITY_MARKET_CHOP_ADX_LOW", detail
+
+    # 6. ATR% volatility band (dead-market floor, chaos ceiling)
     if atr > 0:
         atr_pct = atr / close if close > 0 else 0.0
         detail["atr_pct"] = round(atr_pct, 5)
@@ -174,7 +187,7 @@ def evaluate_signal_quality(df, side, entry_price, sl_price, tp_price, strategy_
         if atr_pct > hi:
             return False, "QUALITY_ATR_TOO_HIGH", detail
 
-    # 6. RSI chasing guard
+    # 7. RSI chasing guard
     if bool(_cfg("SQ_RSI_GUARD", True)) and rsi > 0:
         max_buy = float(_cfg("SQ_RSI_MAX_BUY", 78.0))
         min_sell = float(_cfg("SQ_RSI_MIN_SELL", 22.0))

@@ -24,11 +24,12 @@ def test_supertrend_governance_validation():
     assert "supertrend" in PRODUCTION_STRATEGY_REGISTRY
     entry = PRODUCTION_STRATEGY_REGISTRY["supertrend"]
     assert entry["status"] == "VALIDATED", "supertrend must be VALIDATED in registry"
-    assert entry["rr_ratio"] >= 2.0, "supertrend must have RR ratio >= 2.0"
+    assert entry["rr_ratio"] >= 1.0, "supertrend must have RR ratio >= 1.0"
+    assert entry["oos_win_rate_prior"] >= 0.80, "supertrend must have 80%+ win rate prior"
 
     filtered = governance_filter_strategies(config.ACTIVE_STRATEGIES)
     assert "supertrend" in filtered, "supertrend must pass governance_filter_strategies"
-    assert "5m" in filtered["supertrend"]
+    assert "15m" in filtered["supertrend"]
 
 
 def test_active_strategies_asymmetric_risk_reward():
@@ -57,22 +58,59 @@ def test_active_strategies_asymmetric_risk_reward():
 
 def test_trailing_stages_and_targets():
     """Verify breakeven and trailing stage transitions and target prices."""
-    assert stage_for_r_multiple(0.8) is None
-    assert stage_for_r_multiple(1.0) == "BREAKEVEN"
-    assert stage_for_r_multiple(1.5) == "TRAILING"
+    assert stage_for_r_multiple(0.3) is None
+    assert stage_for_r_multiple(0.4) == "BREAKEVEN"
+    assert stage_for_r_multiple(0.8) == "TRAILING"
 
-    # BUY trade: entry 100, SL 98 (risk = 2.0), TP 106
-    # Price reaches 102.5 (+1.25R -> BREAKEVEN)
-    be_sl, stage = compute_trail_target("BUY", 100.0, 102.5, 98.0, 106.0, 2.0, "BREAKEVEN")
+    # BUY trade: entry 100, SL 98 (risk = 2.0), TP 102
+    # Price reaches 101.0 (+0.5R -> BREAKEVEN)
+    be_sl, stage = compute_trail_target("BUY", 100.0, 101.0, 98.0, 102.0, 2.0, "BREAKEVEN")
     assert stage == "BREAKEVEN"
     assert be_sl > 100.0, "Breakeven SL must be above entry price to cover fee buffer"
-    assert be_sl < 102.5, "Breakeven SL must be below current price"
+    assert be_sl < 101.0, "Breakeven SL must be below current price"
 
-    # Price reaches 104.0 (+2.0R -> TRAILING with ATR=1.0)
-    trail_sl, t_stage = compute_trail_target("BUY", 100.0, 104.0, be_sl, 106.0, 2.0, "TRAILING", 1.0)
+    # Price reaches 102.0 (+1.0R -> TRAILING with ATR=0.5)
+    trail_sl, t_stage = compute_trail_target("BUY", 100.0, 102.0, be_sl, 104.0, 2.0, "TRAILING", 0.5)
     assert t_stage == "TRAILING"
     assert trail_sl > be_sl, "Trailing SL must ratchet upward"
-    assert trail_sl < 104.0
+    assert trail_sl < 102.0
+
+
+def test_supertrend_high_winrate_geometry_and_adx_filter():
+    """Verify Supertrend enforces 80%+ prior, 1:1 RR, and ADX chop rejection."""
+    rows = []
+    for i in range(60):
+        rows.append({
+            "open": 100.0 + i * 0.1,
+            "high": 101.0 + i * 0.1,
+            "low": 99.0 + i * 0.1,
+            "close": 100.5 + i * 0.1,
+            "volume": 5000.0,
+            "supertrend": True if i == 59 else False,
+            "ema_200": 95.0,
+            "ema_50": 98.0,
+            "ema_21": 99.0,
+            "atr": 1.0,
+            "rsi": 50.0,
+            "adx": 28.0, # Strong trend
+        })
+    df = pd.DataFrame(rows)
+
+    # Qualified breakout with ADX = 28
+    sig = strategy_supertrend.get_signal(df)
+    assert sig.side == "BUY"
+    assert sig.win_rate_prior == 0.80
+    assert sig.rr_ratio == 1.0
+    close = df.iloc[-1]["close"]
+    # 1:1 R:R target symmetry
+    risk = close - sig.sl
+    gain = sig.tp - close
+    assert pytest.approx(gain, rel=1e-3) == risk
+
+    # Chop regime: ADX = 18 (< 25) -> Must return None signal
+    df.loc[df.index[-1], "adx"] = 18.0
+    sig_chop = strategy_supertrend.get_signal(df)
+    assert sig_chop.side is None, "Should reject trade in chop regime when ADX < 25"
 
 
 

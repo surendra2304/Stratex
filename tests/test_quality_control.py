@@ -54,10 +54,10 @@ def test_profitability_gate_edge_minimum():
     import config
     config.MINIMUM_EXPECTED_EDGE = 0.0010 # 0.1% minimum edge
 
-    # Gross expected: reward 1%, risk 1%, prob 0.6 ->
-    # (0.6 * 0.01) - (0.4 * 0.01) = 0.002; Net: 0.002 - 0.0035 = -0.0015 -> Reject
+    # Gross expected: reward 1%, risk 1%, prob 0.7 ->
+    # (0.7 * 0.01) - (0.3 * 0.01) = 0.004; Net: 0.004 - 0.0035 = 0.0005 < 0.0010 -> Reject
     # Pass as float (legacy PROBABILISTIC path)
-    passed, metrics = gate.evaluate_signal("BTCUSDT", "BUY", 100, 99, 101, 0.6)
+    passed, metrics = gate.evaluate_signal("BTCUSDT", "BUY", 100, 99, 101, 0.7)
     assert passed is False
     assert metrics["reason"] == "NEGATIVE_EXPECTED_NET_RETURN"
     assert metrics["decision"] == "REJECTED"

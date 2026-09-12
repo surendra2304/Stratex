@@ -18,7 +18,7 @@ services:
       - key: PROFIT_HARVEST_PCT
         value: "0.015"
       - key: TRAIL_BREAKEVEN_TRIGGER_R
-        value: "0.5"
+        value: "0.4"
       - key: TESTNET_ONLY
         value: "TRUE"
       - key: TESTNET_ENABLED

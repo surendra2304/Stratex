@@ -76,7 +76,7 @@ TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-09-01
 # --- Strategies to Run ---
 # High Profit Factor quantitative strategies validated with asymmetric Risk/Reward (> 1.33:1)
 ACTIVE_STRATEGIES = {
-    "supertrend": ["5m", "15m", "1h"],                # Trend Rider + Dynamic Pullbacks (PF: 2.10, RR: 2.5:1)
+    "supertrend": ["15m", "1h"],                      # Institutional Sniper: 15m/1h (eliminated 5m noise)
     "bb_reversion": ["5m", "15m"],                     # Bollinger Mean Reversion (PF: 1.85, RR: 3.0:1)
     "factory_winner_1": ["5m", "15m", "30m", "1h"],  # MACD + BB Confluence (PF: 1.481)
     "factory_winner_2": ["5m", "15m", "30m", "1h"],  # MACD + BB Confluence (PF: 1.449)
@@ -113,7 +113,7 @@ TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-09-09
 
 # --- Strategy Quality Control (Stage 5) ---
 MINIMUM_EXPECTED_EDGE = float(os.getenv("MINIMUM_EXPECTED_EDGE", "0.0001"))     # Standard positive expected edge threshold
-MIN_PROBABILITY_THRESHOLD = float(os.getenv("MIN_PROBABILITY_THRESHOLD", "0.40")) # 40% probability threshold
+MIN_PROBABILITY_THRESHOLD = float(os.getenv("MIN_PROBABILITY_THRESHOLD", "0.40")) # 40% platform minimum probability threshold
 DEGRADATION_WINDOW = 20            # Evaluate last 20 trades for degradation
 MIN_WIN_RATE_THRESHOLD = 0.35      # Automatically switch to OBSERVE-ONLY if < 35% win rate
 MAX_PREDICTION_ERROR = 0.02        # Automatically switch to OBSERVE-ONLY if actual differs from expected by > 2%
@@ -129,17 +129,17 @@ FUTURIS_FORECAST_ENABLED = os.getenv("FUTURIS_FORECAST_ENABLED", "True").lower()
 # -------------------------------------------------------------------
 SIGNAL_QUALITY_ENABLED = os.getenv("SIGNAL_QUALITY_ENABLED", "True").lower() == "true"
 # Trend alignment strictness: "off" | "partial" (close vs EMA200) | "full" (EMA20>EMA50>EMA200)
-SQ_TREND_ALIGNMENT = os.getenv("SQ_TREND_ALIGNMENT", "partial").lower()   # "partial" allows more signals while still trend-filtered
+SQ_TREND_ALIGNMENT = os.getenv("SQ_TREND_ALIGNMENT", "full").lower()          # "full" (EMA20>EMA50>EMA200) strictly enforces trend alignment
 SQ_CANDLE_CONFIRMATION = os.getenv("SQ_CANDLE_CONFIRMATION", "True").lower() == "true"   # signal candle must close in signal direction
 SQ_VOLUME_CONFIRMATION = os.getenv("SQ_VOLUME_CONFIRMATION", "True").lower() == "true"   # volume must exceed N × 20-bar average
-SQ_VOLUME_MULT = float(os.getenv("SQ_VOLUME_MULT", "0.2"))                               # lower threshold to allow more entries
+SQ_VOLUME_MULT = float(os.getenv("SQ_VOLUME_MULT", "0.8"))                               # 0.8x threshold for institutional volume confirmation
 SIGNAL_DECAY_THRESHOLD = float(os.getenv("SIGNAL_DECAY_THRESHOLD", "0.25"))                 # lower threshold → confirms faster
 SQ_ATR_PCT_MIN = float(os.getenv("SQ_ATR_PCT_MIN", "0.0010"))                            # 0.10% — wider dead-market guard
 SQ_ATR_PCT_MAX = float(os.getenv("SQ_ATR_PCT_MAX", "0.050"))                             # 5.0% — wider chaos guard for futures
 SQ_RSI_GUARD = os.getenv("SQ_RSI_GUARD", "True").lower() == "true"                       # do not chase overbought/oversold
 SQ_RSI_MAX_BUY = float(os.getenv("SQ_RSI_MAX_BUY", "82.0"))                              # slightly wider RSI ceiling
 SQ_RSI_MIN_SELL = float(os.getenv("SQ_RSI_MIN_SELL", "18.0"))                            # slightly wider RSI floor
-SQ_MIN_RISK_REWARD = float(os.getenv("SQ_MIN_RISK_REWARD", "1.2"))                       # 1.2 RR minimum (down from 1.5)
+SQ_MIN_RISK_REWARD = float(os.getenv("SQ_MIN_RISK_REWARD", "1.0"))                       # 1.0 RR minimum (optimized for >80% win rate)
 
 # -------------------------------------------------------------------
 # ADAPTIVE STRATEGY PERFORMANCE GATE (v3 upgrade)
@@ -166,9 +166,9 @@ OBSERVE_ONLY_COOLDOWN_SECONDS = float(os.getenv("OBSERVE_ONLY_COOLDOWN_SECONDS",
 # -------------------------------------------------------------------
 TRAILING_STOP_ENABLED = os.getenv("TRAILING_STOP_ENABLED", "True").lower() == "true"
 PROFIT_HARVEST_PCT = float(os.getenv("PROFIT_HARVEST_PCT", "0.015"))                      # 1.5% profit harvest trigger
-TRAIL_BREAKEVEN_TRIGGER_R = float(os.getenv("TRAIL_BREAKEVEN_TRIGGER_R", "1.0"))          # at +1R move SL to breakeven(+fees)
-TRAIL_TRIGGER_R = float(os.getenv("TRAIL_TRIGGER_R", "1.5"))                              # at +1.5R start ATR trailing
-TRAIL_ATR_MULT = float(os.getenv("TRAIL_ATR_MULT", "2.0"))                                # trail distance = N × ATR(1h)
+TRAIL_BREAKEVEN_TRIGGER_R = float(os.getenv("TRAIL_BREAKEVEN_TRIGGER_R", "0.4"))          # at +0.4R immediately move SL to breakeven(+fees)
+TRAIL_TRIGGER_R = float(os.getenv("TRAIL_TRIGGER_R", "0.8"))                              # at +0.8R start dynamic ATR trailing
+TRAIL_ATR_MULT = float(os.getenv("TRAIL_ATR_MULT", "1.5"))                                # tight trail distance = 1.5 × ATR
 TRAIL_FEE_BUFFER_PCT = float(os.getenv("TRAIL_FEE_BUFFER_PCT", "0.002"))                  # breakeven buffer to cover round-trip fees
 TRAIL_MIN_REARM_SECONDS = float(os.getenv("TRAIL_MIN_REARM_SECONDS", "60"))               # min seconds between SL modifications per symbol
 TRAIL_LOOP_SECONDS = float(os.getenv("TRAIL_LOOP_SECONDS", "20"))                         # trailing evaluation cadence
