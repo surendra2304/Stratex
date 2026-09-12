@@ -30,31 +30,33 @@ from quantum_endpoint import quantum_bp
 
 app.register_blueprint(quantum_bp, url_prefix='/api/quantum')
 
-from api.control import control_bp
-from api.export import export_bp
-from api.friday_supervision import execute_friday_task, friday_supervision_bp
-from api.health import health_bp
-from api.master_control_api import master_control_bp
-from api.openbb_routes import openbb_bp
-from api.freqtrade_routes import freqtrade_bp
-from api.ccxt_routes import ccxt_bp
-from api.nautilus_routes import nautilus_bp
-from api.backtrader_routes import backtrader_bp
-from api.public_status import public_status_bp
-from api.reporting import reporting_bp
+# ── Safe Blueprint Registrations ───────────────────────────────────────────────
+core_blueprints = [
+    ("api.public_status", "public_status_bp"),
+    ("api.control", "control_bp"),
+    ("api.export", "export_bp"),
+    ("api.health", "health_bp"),
+    ("api.reporting", "reporting_bp"),
+    ("api.master_control_api", "master_control_bp"),
+    ("api.friday_supervision", "friday_supervision_bp"),
+]
 
-app.register_blueprint(public_status_bp)
-app.register_blueprint(control_bp)
-app.register_blueprint(export_bp)
-app.register_blueprint(health_bp)
-app.register_blueprint(reporting_bp)
-app.register_blueprint(master_control_bp)
-app.register_blueprint(friday_supervision_bp)
-app.register_blueprint(openbb_bp)
-app.register_blueprint(freqtrade_bp)
-app.register_blueprint(ccxt_bp)
-app.register_blueprint(nautilus_bp)
-app.register_blueprint(backtrader_bp)
+adapter_blueprints = [
+    ("api.openbb_routes", "openbb_bp"),
+    ("api.freqtrade_routes", "freqtrade_bp"),
+    ("api.ccxt_routes", "ccxt_bp"),
+    ("api.nautilus_routes", "nautilus_bp"),
+    ("api.backtrader_routes", "backtrader_bp"),
+]
+
+import importlib
+for bp_mod, bp_name in core_blueprints + adapter_blueprints:
+    try:
+        mod = importlib.import_module(bp_mod)
+        bp = getattr(mod, bp_name)
+        app.register_blueprint(bp)
+    except Exception as e:
+        logger.error(f"[DASHBOARD_WARN] Failed to register blueprint {bp_name} from {bp_mod}: {e}")
 
 
 
