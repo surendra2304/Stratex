@@ -221,13 +221,13 @@ def validate_environment_safety():
 
 
 def validate_config():
+    global TRADING_MODE, PAPER_SAFE_MODE, ACTIVE_STRATEGY, TIMEFRAME
     if TRADING_MODE not in VALID_MODES:
         raise ValueError(f"Configuration Error: Invalid TRADING_MODE '{TRADING_MODE}'. Only {VALID_MODES} are supported.")
 
     validate_environment_safety()
 
     # If legacy ACTIVE_STRATEGY or TIMEFRAME attributes were set dynamically (e.g. in tests)
-    global ACTIVE_STRATEGY, TIMEFRAME
     if "ACTIVE_STRATEGY" in globals():
         strat = globals()["ACTIVE_STRATEGY"]
         if strat not in SUPPORTED_STRATEGIES:
@@ -255,10 +255,14 @@ def validate_config():
 
     # For non-PAPER modes, credentials must be set (but not hardcoded here)
     if TRADING_MODE in ["TESTNET", "FUTURES"] and (not API_KEY or not SECRET_KEY):
-        raise ValueError(
-            f"Configuration Error: API_KEY and SECRET_KEY must be set via "
-            f"environment variables or .env file for {TRADING_MODE} mode."
+        import logging
+        logging.getLogger("config").warning(
+            f"[CONFIG_WARNING] API_KEY and/or SECRET_KEY not configured in environment for {TRADING_MODE} mode. "
+            f"Gracefully falling back TRADING_MODE to 'PAPER' (safe simulation) and enabling PAPER_SAFE_MODE "
+            f"so web dashboard and health endpoints can boot cleanly without crashing."
         )
+        TRADING_MODE = "PAPER"
+        PAPER_SAFE_MODE = True
 
     # Double-key safety check for AI Advisory live execution
     if not ADVISORY_SHADOW_MODE and not ADVISORY_AUTONOMY_CONFIRMED:

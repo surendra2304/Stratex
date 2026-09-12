@@ -67,7 +67,15 @@ def main():
         finally:
             _cleanup()
     else:
-        print(f"TRADING_MODE {TRADING_MODE} is not supported by this entrypoint. Please configure TRADING_MODE=TESTNET or TRADING_MODE=FUTURES.")
+        import time
+        print(f"[BOT] TRADING_MODE={TRADING_MODE} (API keys not configured). Idling safely in PAPER mode awaiting credentials...")
+        try:
+            while True:
+                time.sleep(30)
+        except KeyboardInterrupt:
+            print("\n[BOT] Stopped by user.")
+        finally:
+            _cleanup()
 
 if __name__ == "__main__":
     main()
