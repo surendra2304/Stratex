@@ -992,7 +992,7 @@ class TestnetService:
                         self.stats["timeframe_metrics"][tf][side] = self.stats["timeframe_metrics"][tf].get(side, 0) + 1
 
                         candle_timestamp = df['timestamp'].iloc[-1]
-                        deterministic_str = f"{symbol}_{strat_name}_{side}_{candle_timestamp}"
+                        deterministic_str = f"{symbol}_{strat_name}_{tf}_{side}_{candle_timestamp}"
                         signal_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, deterministic_str))
 
                         logger.info(f"[SIGNAL_GENERATED] {strat_name} {side} {symbol} ({tf}) | SignalID: {signal_id} | SL: {sl} | TP: {tp}")

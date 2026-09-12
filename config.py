@@ -69,7 +69,7 @@ LONG_ONLY = os.getenv("TRADING_MODE", "PAPER").upper() != "FUTURES"  # Spot is L
 # -------------------------------------------------------------------
 TRADING_MODE = os.getenv("TRADING_MODE", "PAPER").upper()
 PAPER_SAFE_MODE = os.getenv("PAPER_SAFE_MODE", "False" if TRADING_MODE in ["TESTNET", "FUTURES"] else "True").lower() == "true"
-TESTNET_ENABLED = os.getenv("TESTNET_ENABLED", "False").lower() == "true"
+TESTNET_ENABLED = os.getenv("TESTNET_ENABLED", "True" if TRADING_MODE in ["TESTNET", "FUTURES"] else "False").lower() == "true"
 LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is impossible by design
 TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-09-01T00:00:00Z")
 

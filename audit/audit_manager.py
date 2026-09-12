@@ -173,8 +173,27 @@ class IdempotencyStore:
         with self._lock:
             if idempotency_key in self._cache:
                 cached = self._cache[idempotency_key]
-                logger.info(f"[IDEMPOTENCY_STORE] Duplicate request detected for key '{idempotency_key}'.")
-                return True, cached
+                # If cached entry was PENDING for over 60s, expire it so failed/timed-out attempts do not permanently block retries
+                if cached.get("status") == "PENDING":
+                    c_time = cached.get("created_at")
+                    is_stale = False
+                    if c_time:
+                        try:
+                            created_dt = datetime.datetime.fromisoformat(str(c_time).replace("Z", "+00:00"))
+                            if created_dt.tzinfo is None:
+                                created_dt = created_dt.replace(tzinfo=datetime.timezone.utc)
+                            if (datetime.datetime.now(datetime.timezone.utc) - created_dt).total_seconds() > 60:
+                                is_stale = True
+                        except Exception:
+                            is_stale = True
+                    if is_stale:
+                        del self._cache[idempotency_key]
+                    else:
+                        logger.info(f"[IDEMPOTENCY_STORE] In-flight request in progress for key '{idempotency_key}'.")
+                        return True, cached
+                else:
+                    logger.info(f"[IDEMPOTENCY_STORE] Duplicate request detected for key '{idempotency_key}'.")
+                    return True, cached
 
             # Record pending entry
             record = {
@@ -207,6 +226,17 @@ class IdempotencyStore:
                     "completed_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
                 }
             self._persist()
+
+    def remove(self, idempotency_key: str):
+        """Removes a key from cache if execution failed before placing an order."""
+        if not idempotency_key:
+            return
+
+        with self._lock:
+            if idempotency_key in self._cache:
+                del self._cache[idempotency_key]
+                self._persist()
+
 
 
 # Global singletons

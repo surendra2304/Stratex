@@ -443,8 +443,12 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         order["_executed_qty"] = executed_qty
         order["_total_fee"] = total_fee
         order["_final_state"] = state
+        if client_order_id:
+            get_idempotency_store().complete_request(client_order_id, order)
         return order
     except BinanceAPIException as e:
+        if client_order_id:
+            get_idempotency_store().remove(client_order_id)
         est_price = actual_price if 'actual_price' in locals() and actual_price > 0 else (sl or tp or 0.0)
         sys_logger.error(
             f"[EXECUTION_FAILED] Binance API Error | Code: {e.code} | Message: {e.message} | "
@@ -454,6 +458,8 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         )
         raise
     except Exception as e:
+        if client_order_id:
+            get_idempotency_store().remove(client_order_id)
         est_price = actual_price if 'actual_price' in locals() and actual_price > 0 else (sl or tp or 0.0)
         sys_logger.error(
             f"[EXECUTION_FAILED] Unexpected Exception: {e} | Symbol: {symbol} | Side: {side} | "
@@ -513,9 +519,13 @@ def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, 
             for t in active_trades:
                 if t.get("signal_id") == client_order_id or t.get("entry_client_id") == client_order_id or t.get("trade_id") == client_order_id or str(t.get("entry_order_id")) == str(client_order_id):
                     sys_logger.warning(f"[{strategy_name}] 🚫 Duplicate Client/Signal ID {client_order_id} rejected.")
+                    if client_order_id:
+                        get_idempotency_store().remove(client_order_id)
                     return None
     except StateCorruptionError as e:
         sys_logger.critical(f"State corruption prevents new orders: {e}")
+        if client_order_id:
+            get_idempotency_store().remove(client_order_id)
         return None
 
     client = get_exchange_client()
@@ -545,6 +555,8 @@ def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, 
                     f"Required: ${required_margin:.2f} USDT, Available: ${available_balance:.2f} USDT",
                     extra={"strategy": strategy_name, "symbol": symbol}
                 )
+                if client_order_id:
+                    get_idempotency_store().remove(client_order_id)
                 return None
         except Exception as margin_err:
             sys_logger.debug(f"[FUTURES] Pre-trade margin check bypassed: {margin_err}")
@@ -644,6 +656,8 @@ def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, 
                     emergency_futures_market_close(client, symbol, side, executed_qty)
                 except Exception as ce:
                     sys_logger.critical(f"[FUTURES] 🚨 FATAL: Emergency close failed for {symbol}: {ce}")
+                if client_order_id:
+                    get_idempotency_store().remove(client_order_id)
                 return None
 
         log_trade(strategy_name, symbol, side, executed_qty, actual_price, sl, tp, order_id, state)
@@ -651,8 +665,12 @@ def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, 
         order["_executed_qty"] = executed_qty
         order["_total_fee"] = total_fee
         order["_final_state"] = state
+        if client_order_id:
+            get_idempotency_store().complete_request(client_order_id, order)
         return order
     except Exception as e:
+        if client_order_id:
+            get_idempotency_store().remove(client_order_id)
         sys_logger.error(f"[FUTURES_EXECUTION_FAILED] Error: {e} | Symbol: {symbol} | Side: {side}")
         raise
 

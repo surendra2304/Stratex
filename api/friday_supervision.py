@@ -87,7 +87,7 @@ def _get_engine_status_summary() -> dict[str, Any]:
         "live_money_permanently_blocked": True,
         "panic_active": _is_panic_active(),
         "kill_switch_active": _is_kill_switch_locked(),
-        "exchange_connected": mode == "TESTNET" and getattr(config, "TESTNET_ENABLED", False),
+        "exchange_connected": mode in ["TESTNET", "FUTURES"] and getattr(config, "TESTNET_ENABLED", False),
         "telemetry_freshness": {
             "status": "FRESH",
             "max_staleness_seconds": MAX_TELEMETRY_STALENESS_SECONDS
