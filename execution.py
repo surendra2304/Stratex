@@ -78,9 +78,15 @@ class ExecutionPolicy:
     def can_place_order() -> tuple[bool, str]:
         """Returns (is_allowed, reason) for placing a real order. LIVE trading is permanently impossible by design."""
         mode = getattr(config, "TRADING_MODE", TRADING_MODE)
+        if TRADING_MODE == "LIVE" or getattr(config, "TRADING_MODE", None) == "LIVE":
+            return False, "LIVE_FORBIDDEN_BY_DESIGN"
+
         paper_safe = getattr(config, "PAPER_SAFE_MODE", PAPER_SAFE_MODE)
         testnet_enabled = getattr(config, "TESTNET_ENABLED", TESTNET_ENABLED)
         live_enabled = getattr(config, "LIVE_TRADING_ENABLED", LIVE_TRADING_ENABLED)
+
+        if live_enabled:
+            return False, "LIVE_FORBIDDEN_BY_DESIGN"
 
         if mode == "PAPER" or paper_safe:
             return False, "PAPER_BLOCKED"
@@ -93,9 +99,6 @@ class ExecutionPolicy:
                 return False, "TESTNET_DISABLED"
             return True, f"ALLOWED_{mode}"
 
-        if mode == "LIVE" or live_enabled:
-            return False, "LIVE_FORBIDDEN_BY_DESIGN"
-            
         return False, "UNKNOWN_MODE"
 
 # ==============================================================================

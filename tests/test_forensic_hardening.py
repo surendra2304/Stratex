@@ -17,6 +17,7 @@ class TestForensicHardening:
         with mock.patch.dict(os.environ, {"TRADING_MODE": "LIVE"}):
             with pytest.raises(ValueError, match="Invalid TRADING_MODE 'LIVE'"):
                 importlib.reload(config)
+        importlib.reload(config)
 
         # 2. Even if execution is monkeypatched with TRADING_MODE='LIVE', it is rejected
         with mock.patch("execution.TRADING_MODE", "LIVE"), \

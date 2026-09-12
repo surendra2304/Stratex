@@ -88,6 +88,8 @@ retired_genomes_archive.jsonl
 
 # ── Data cache / bulk market data (re-fetchable via scripts) ───────────────────
 data_cache/
+data/
+*.parquet
 research/upgrade_2026_08/data/
 
 # ── Scratch / experiments / backups ────────────────────────────────────────────
