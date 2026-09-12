@@ -123,3 +123,104 @@ def test_trailing_cycle_accepts_protected_state(monkeypatch):
     updated = trades_saved[0]
     assert updated["sl_price"] > 50000.0, "SL should have been trailed above entry price"
     assert updated["trail_stage"] in ["BREAKEVEN", "TRAILING"]
+
+
+def test_trailing_cycle_short_profit_harvest(monkeypatch):
+    """Verify trailing_cycle correctly computes profit for SHORT positions and triggers profit harvest."""
+    mock_trade = {
+        "symbol": "INJUSDT",
+        "side": "SHORT",
+        "entry_price": 10.0,
+        "sl_price": 10.5,
+        "tp_price": 9.0,
+        "quantity": 10.0,
+        "state": "PROTECTED",
+        "is_futures": True,
+        "last_trail_time": 0,
+    }
+
+    trades_saved = []
+    def mock_load():
+        return [mock_trade]
+    def mock_save(trades):
+        trades_saved.clear()
+        trades_saved.extend(trades)
+
+    monkeypatch.setattr("execution._load_active_trades", mock_load)
+    monkeypatch.setattr("execution._save_active_trades", mock_save)
+
+    closed_calls = []
+    def mock_close(client, symbol, side, qty):
+        closed_calls.append((symbol, side, qty))
+        return {"orderId": 999888}
+
+    monkeypatch.setattr("testnet_engine.protection.emergency_futures_market_close", mock_close)
+    monkeypatch.setattr("testnet_engine.trailing._cancel_futures_order", lambda *a, **k: None)
+    monkeypatch.setattr("testnet_engine.trailing._record_harvest_win_in_ledger", lambda *a, **k: None)
+
+    class MockClient:
+        def futures_symbol_ticker(self, symbol):
+            # Price fell from 10.0 to 9.80 -> +2.0% profit for short! (above default 1.5% harvest)
+            return {"price": "9.80"}
+
+    class MockService:
+        client = MockClient()
+        def get_atr(self, sym):
+            return 0.1
+
+    service = MockService()
+    trailing_cycle(service)
+
+    assert len(closed_calls) == 1, "SHORT trade with >1.5% profit should be harvested"
+    sym, s, q = closed_calls[0]
+    assert sym == "INJUSDT"
+    assert s == "SHORT"
+    assert len(trades_saved) == 1
+    assert trades_saved[0]["status"] == "CLOSED"
+    assert trades_saved[0]["exit_reason"] == "PROFIT_HARVEST_WIN"
+
+
+def test_degradation_check_logic(tmp_path, monkeypatch):
+    """Verify _check_degradation respects net PnL, ignores RECOVERED trades, and auto-recovers."""
+    import json
+    from testnet_engine.service import TestnetService
+
+    ledger_path = tmp_path / "test_ledger.json"
+    trades = []
+    # Create 20 scratch/administrative recovered trades with tiny negative pnl
+    for i in range(20):
+        trades.append({
+            "action": "CLOSE_POSITION",
+            "strategy": "RECOVERED",
+            "exit_reason": "RECOVERED_CLOSE",
+            "pnl": -0.05
+        })
+    # And 5 real trades with positive pnl
+    for i in range(5):
+        trades.append({
+            "action": "CLOSE_POSITION",
+            "strategy": "supertrend",
+            "exit_reason": "PROFIT_HARVEST",
+            "pnl": 5.0
+        })
+
+    with open(ledger_path, "w", encoding="utf-8") as f:
+        for t in trades:
+            f.write(json.dumps(t) + "\n")
+
+    service = TestnetService.__new__(TestnetService)
+    service.ledger_file = str(ledger_path)
+    service.observe_only = True
+    service.observe_only_since = 0
+
+    monkeypatch.setattr(config, "DEGRADATION_WINDOW", 20)
+    monkeypatch.setattr(config, "MIN_WIN_RATE_THRESHOLD", 0.30)
+    monkeypatch.setattr(config, "DEGRADATION_GUARD_ENABLED", True)
+    monkeypatch.setattr(service, "_strategy_performance_gate", lambda: None)
+
+    service._check_degradation()
+
+    # Administrative trades excluded -> only 5 strategy trades (< window 20) -> should auto-recover!
+    assert service.observe_only is False, "Should auto-recover from OBSERVE-ONLY when insufficient strategy trades"
+
+

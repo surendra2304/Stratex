@@ -152,6 +152,13 @@ STRATEGY_GATE_WIN_RATE = float(os.getenv("STRATEGY_GATE_WIN_RATE", "0.40"))
 STRATEGY_GATE_MIN_NET_PNL = float(os.getenv("STRATEGY_GATE_MIN_NET_PNL", "0.0"))
 STRATEGY_DEMOTION_COOLDOWN_HOURS = float(os.getenv("STRATEGY_DEMOTION_COOLDOWN_HOURS", "4.0"))
 
+# Global performance degradation guard (observe-only halt safeguard)
+DEGRADATION_GUARD_ENABLED = os.getenv("DEGRADATION_GUARD_ENABLED", "True").lower() == "true"
+DEGRADATION_WINDOW = int(os.getenv("DEGRADATION_WINDOW", "20"))
+MIN_WIN_RATE_THRESHOLD = float(os.getenv("MIN_WIN_RATE_THRESHOLD", "0.30"))
+OBSERVE_ONLY_COOLDOWN_SECONDS = float(os.getenv("OBSERVE_ONLY_COOLDOWN_SECONDS", "7200"))
+
+
 # -------------------------------------------------------------------
 # TRAILING STOP / BREAKEVEN & PROFIT HARVESTING (v3 upgrade)
 # Converts round-trip losers into breakeven or winning exits by moving
@@ -182,7 +189,43 @@ SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "mu
 SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"]
 VALID_MODES = ["PAPER", "TESTNET", "FUTURES"]
 
+class SecurityConfigurationError(ValueError):
+    """Raised when any unsafe live-trading or unauthorized environment configuration is detected."""
+    pass
+
+
+def validate_environment_safety():
+    """
+    PERMANENT SECURITY INVARIANT:
+    No live-money path can be enabled accidentally by an environment typo or misconfiguration.
+    """
+    for key, val in os.environ.items():
+        k_upper = key.upper()
+        v_upper = str(val).strip().upper()
+
+        # Check for live trading flags or common typos
+        if any(term in k_upper for term in ["LIVE_TRADING", "ENABLE_LIVE", "REAL_MONEY", "PROD_TRADING", "PRODUCTION_MONEY", "LIVE_CAPITAL"]):
+            if v_upper in ["TRUE", "1", "YES", "ON", "ENABLED"]:
+                raise SecurityConfigurationError(
+                    f"SECURITY CRITICAL: Live trading flag '{key}={val}' is permanently forbidden. "
+                    "Stratex operates strictly in PAPER or TESTNET mode with zero live capital risk."
+                )
+
+        # Check for non-testnet Binance production URLs
+        if k_upper in ["BASE_URL", "FUTURES_BASE_URL", "BINANCE_URL", "BINANCE_API_URL"]:
+            if "testnet" not in v_upper and any(prod in v_upper for prod in ["API.BINANCE.COM", "FAPI.BINANCE.COM"]):
+                raise SecurityConfigurationError(
+                    f"SECURITY CRITICAL: Production Binance URL '{key}={val}' is forbidden. "
+                    "Only testnet endpoints are allowed."
+                )
+
+
 def validate_config():
+    if TRADING_MODE not in VALID_MODES:
+        raise ValueError(f"Configuration Error: Invalid TRADING_MODE '{TRADING_MODE}'. Only {VALID_MODES} are supported.")
+
+    validate_environment_safety()
+
     # If legacy ACTIVE_STRATEGY or TIMEFRAME attributes were set dynamically (e.g. in tests)
     global ACTIVE_STRATEGY, TIMEFRAME
     if "ACTIVE_STRATEGY" in globals():
@@ -203,17 +246,15 @@ def validate_config():
             if tf not in SUPPORTED_TIMEFRAMES:
                 raise ValueError(f"Configuration Error: Invalid TIMEFRAME '{tf}' for strategy '{strategy}'. Supported: {SUPPORTED_TIMEFRAMES}")
 
-    if TRADING_MODE not in VALID_MODES:
-        raise ValueError(f"Configuration Error: Invalid TRADING_MODE '{TRADING_MODE}'. Only {VALID_MODES} are supported.")
-
     if not isinstance(TRADE_QTY, (int, float)) or TRADE_QTY <= 0:
         raise ValueError("Configuration Error: TRADE_QTY must be a positive number.")
+
 
     if not isinstance(TOP_COINS_LIMIT, int) or TOP_COINS_LIMIT <= 0:
         raise ValueError("Configuration Error: TOP_COINS_LIMIT must be a positive integer.")
 
     # For non-PAPER modes, credentials must be set (but not hardcoded here)
-    if TRADING_MODE in ["TESTNET", "FUTURES", "LIVE"] and (not API_KEY or not SECRET_KEY):
+    if TRADING_MODE in ["TESTNET", "FUTURES"] and (not API_KEY or not SECRET_KEY):
         raise ValueError(
             f"Configuration Error: API_KEY and SECRET_KEY must be set via "
             f"environment variables or .env file for {TRADING_MODE} mode."
@@ -230,3 +271,4 @@ def validate_config():
 
 # Validate immediately upon import
 validate_config()
+

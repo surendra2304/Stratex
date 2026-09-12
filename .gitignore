@@ -74,7 +74,8 @@ testnet_portfolio.json.tmp
 incident_reports/
 reports/
 compliance_reports/
-diary/
+# diary/
+!diary/*.md
 optimization_results/
 backtest_results/
 trade_log.csv

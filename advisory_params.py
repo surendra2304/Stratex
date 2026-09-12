@@ -8,15 +8,18 @@ Features:
 - Atomic file writes (.tmp then replace).
 - Full rollback capability: rollback(decision_id).
 - Safe reload on bot restart.
+- Explicit authorization requirement: separation of recommendation staging from application.
 """
 
 import datetime
 import json
 import os
 import threading
+import uuid
 from typing import Any
 
 import config_strategy
+from audit.audit_manager import get_audit_manager, get_idempotency_store
 from logger import get_logger
 
 logger = get_logger("advisory_params")
@@ -27,6 +30,7 @@ ADVISORY_PARAMS_FILE = os.getenv("ADVISORY_PARAMS_FILE", "advisory_params_state.
 class AdvisoryParameterOverlay:
     """
     Manages live strategy parameter overrides applied through validated AI-Universe advisories.
+    Separates advisory recommendation staging from explicit authorized application.
     """
 
     def __init__(self, state_file: str | None = None) -> None:
@@ -34,6 +38,7 @@ class AdvisoryParameterOverlay:
         self._lock = threading.RLock()
         self._overrides: dict[str, dict[str, Any]] = {}  # { "strategy_name": { "param_name": value } }
         self._history: list[dict[str, Any]] = []         # History of applied batches
+        self._pending_recommendations: dict[str, dict[str, Any]] = {} # Staged bounded recommendations
         self._last_applied_time: datetime.datetime | None = None
         self._load_state()
 
@@ -43,6 +48,7 @@ class AdvisoryParameterOverlay:
             if not os.path.exists(self.state_file):
                 self._overrides = {}
                 self._history = []
+                self._pending_recommendations = {}
                 self._last_applied_time = None
                 return
 
@@ -51,6 +57,7 @@ class AdvisoryParameterOverlay:
                     data = json.load(f)
                     self._overrides = data.get("overrides", {})
                     self._history = data.get("history", [])
+                    self._pending_recommendations = data.get("pending_recommendations", {})
                     last_ts_str = data.get("last_applied_timestamp")
                     if last_ts_str:
                         try:
@@ -61,6 +68,7 @@ class AdvisoryParameterOverlay:
             except Exception as e:
                 logger.error(f"[ADVISORY_PARAMS] Failed to load overlay state from {self.state_file}: {e}")
                 self._overrides = {}
+                self._pending_recommendations = {}
 
     def _save_state(self) -> bool:
         """Persists parameter overlay state to disk atomically."""
@@ -69,7 +77,8 @@ class AdvisoryParameterOverlay:
                 "last_applied_timestamp": self._last_applied_time.isoformat() + "Z" if self._last_applied_time else None,
                 "overrides": self._overrides,
                 "history": self._history,
-                "updated_at": datetime.datetime.utcnow().isoformat() + "Z"
+                "pending_recommendations": self._pending_recommendations,
+                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
             }
             tmp_file = self.state_file + ".tmp"
             try:
@@ -123,6 +132,131 @@ class AdvisoryParameterOverlay:
 
         return params
 
+    def stage_recommendation(self, recommendation: dict[str, Any]) -> str:
+        """
+        Stages a validated bounded recommendation in the pending queue.
+        Does NOT apply it to active parameter overrides.
+        Returns the unique recommendation_id.
+        """
+        with self._lock:
+            rec_id = str(recommendation.get("recommendation_id") or f"rec_{uuid.uuid4().hex[:8]}")
+            staged = dict(recommendation)
+            staged["recommendation_id"] = rec_id
+            staged["staged_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            staged["status"] = "PENDING_AUTHORIZATION"
+            self._pending_recommendations[rec_id] = staged
+            self._save_state()
+            logger.info(f"[ADVISORY_PARAMS] Staged bounded recommendation {rec_id} for parameter '{staged.get('parameter')}'.")
+            return rec_id
+
+    def get_pending_recommendations(self) -> list[dict[str, Any]]:
+        """Returns all staged bounded recommendations awaiting authorization."""
+        with self._lock:
+            return list(self._pending_recommendations.values())
+
+    def apply_authorized_recommendation(
+        self,
+        recommendation_id: str,
+        authorization_token: str,
+        authorized_by: str = "FRIDAY",
+        idempotency_key: str | None = None
+    ) -> tuple[bool, str, dict[str, Any] | None]:
+        """
+        Separation of Advisory Generation and Application:
+        Requires explicit authorization to apply a staged recommendation.
+        Validates token, expiry, and idempotency.
+        """
+        if not authorization_token or str(authorization_token).strip() == "":
+            return False, "Explicit authorization token is required.", None
+
+        # Check idempotency
+        if idempotency_key:
+            is_dup, cached = get_idempotency_store().check_and_record(
+                idempotency_key=idempotency_key,
+                request_type="PARAMETER_APPLICATION"
+            )
+            if is_dup:
+                logger.info(f"[ADVISORY_PARAMS] Duplicate parameter application request for key '{idempotency_key}'.")
+                return True, "Duplicate idempotent application handled.", cached.get("response") if cached else None
+
+        with self._lock:
+            rec = self._pending_recommendations.get(recommendation_id)
+            if not rec:
+                return False, f"Recommendation '{recommendation_id}' not found in pending queue.", None
+
+            # Check expiry
+            now = datetime.datetime.now(datetime.timezone.utc)
+            expiry_str = rec.get("expiry")
+            if expiry_str:
+                try:
+                    exp_dt = datetime.datetime.fromisoformat(str(expiry_str).replace("Z", "+00:00"))
+                    if exp_dt.tzinfo is None:
+                        exp_dt = exp_dt.replace(tzinfo=datetime.timezone.utc)
+                    if exp_dt < now:
+                        del self._pending_recommendations[recommendation_id]
+                        self._save_state()
+                        get_audit_manager().record_event(
+                            event_type="RECOMMENDATION_REJECTED",
+                            actor=authorized_by,
+                            details={"recommendation_id": recommendation_id, "reason": "EXPIRED_AT_APPLICATION"},
+                            rationale=f"Staged recommendation expired at {expiry_str}",
+                            status="EXPIRED"
+                        )
+                        return False, f"Recommendation '{recommendation_id}' expired before authorization.", None
+                except Exception as e:
+                    logger.warning(f"Could not parse expiry '{expiry_str}': {e}")
+
+            # Apply parameter modification
+            param = rec.get("parameter")
+            strategy = rec.get("strategy", "global")
+            proposed_val = rec.get("proposed_value", rec.get("new_value"))
+            current_val = rec.get("current_value")
+
+            change = {
+                "strategy": strategy,
+                "parameter": param,
+                "current_value": current_val,
+                "new_value": proposed_val,
+                "reason": f"Authorized by {authorized_by} (token={authorization_token[:8]}...)"
+            }
+
+            applied = self.apply_changes(decision_id=recommendation_id, changes=[change])
+            if not applied:
+                return False, "Failed applying parameter change to overlay.", None
+
+            # Record in audit trail
+            audit_rec = get_audit_manager().record_event(
+                event_type="RECOMMENDATION_APPLIED",
+                actor=authorized_by,
+                details={
+                    "recommendation_id": recommendation_id,
+                    "parameter": param,
+                    "strategy": strategy,
+                    "previous_value": current_val,
+                    "new_value": proposed_val,
+                    "authorization_token": authorization_token[:12] + "..." if len(authorization_token) > 12 else authorization_token
+                },
+                rationale=rec.get("evidence", "Explicitly authorized parameter change"),
+                status="APPLIED"
+            )
+
+            # Clean from pending queue
+            del self._pending_recommendations[recommendation_id]
+            self._save_state()
+
+            res_payload = {
+                "recommendation_id": recommendation_id,
+                "applied_change": change,
+                "authorized_by": authorized_by,
+                "status": "APPLIED",
+                "audit_event": audit_rec.get("hash")
+            }
+
+            if idempotency_key:
+                get_idempotency_store().complete_request(idempotency_key, res_payload)
+
+            return True, f"Successfully applied recommendation '{recommendation_id}'.", res_payload
+
     def apply_changes(self, decision_id: str, changes: list[dict[str, Any]]) -> bool:
         """
         Applies a validated list of parameter changes to the overlay and persists state.
@@ -130,11 +264,11 @@ class AdvisoryParameterOverlay:
         if not changes:
             return False
 
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
         with self._lock:
             batch_record = {
                 "decision_id": decision_id,
-                "timestamp": now.isoformat() + "Z",
+                "timestamp": now.isoformat(),
                 "changes": []
             }
 
@@ -157,7 +291,7 @@ class AdvisoryParameterOverlay:
                 })
 
             self._history.append(batch_record)
-            self._last_applied_time = now
+            self._last_applied_time = now.replace(tzinfo=None)
             self._save_state()
             logger.info(f"[ADVISORY_PARAMS] Successfully applied decision {decision_id} ({len(changes)} parameter changes).")
             return True
@@ -195,7 +329,7 @@ class AdvisoryParameterOverlay:
             # Mark in history
             self._history.append({
                 "decision_id": f"ROLLBACK_{decision_id}",
-                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "rolled_back_decision": decision_id,
                 "reverted_changes": target_batch.get("changes", [])
             })
@@ -209,7 +343,7 @@ class AdvisoryParameterOverlay:
             self._overrides = {}
             self._history.append({
                 "decision_id": f"RESET_{reason}",
-                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "reason": reason
             })
             self._save_state()
@@ -221,8 +355,10 @@ class AdvisoryParameterOverlay:
             return {
                 "last_applied_timestamp": self._last_applied_time.isoformat() + "Z" if self._last_applied_time else None,
                 "active_overrides": self._overrides,
+                "pending_recommendations_count": len(self._pending_recommendations),
+                "pending_recommendations": list(self._pending_recommendations.values()),
                 "history_count": len(self._history),
-                "history": self._history[-20:]  # Return last 20 events
+                "history": self._history[-20:]
             }
 
 

@@ -28,9 +28,29 @@ from testnet_engine.protection import (
     place_futures_bracket_protection,
     place_oco_protection,
 )
+from audit.audit_manager import get_audit_manager, get_idempotency_store
 
 sys_logger = get_logger("execution")
 ACTIVE_TRADES_FILE = os.getenv("ACTIVE_TRADES_FILE", "active_trades.json")
+
+
+def _check_panic_and_kill_switch():
+    """Verifies that neither panic nor emergency kill-switch lock is active."""
+    panic_file = os.getenv("PANIC_STATE_FILE", "panic_state.json")
+    if os.path.exists(panic_file):
+        try:
+            with open(panic_file, "r", encoding="utf-8") as pf:
+                pdata = json.load(pf)
+                if pdata.get("panic_active", False):
+                    raise RuntimeError("CRITICAL ERROR: Emergency Panic Kill-Switch is active. All order submission is blocked.")
+        except RuntimeError:
+            raise
+        except Exception:
+            pass
+    if os.path.exists("KILL_SWITCH_ACTIVE.lock"):
+        raise RuntimeError("CRITICAL ERROR: Emergency Kill Switch lock file is active. All order submission is blocked.")
+
+
 
 class OrderState(str, Enum):
     SIGNAL = "SIGNAL"
@@ -57,18 +77,23 @@ class ExecutionPolicy:
     @staticmethod
     def can_place_order() -> tuple[bool, str]:
         """Returns (is_allowed, reason) for placing a real order. LIVE trading is permanently impossible by design."""
-        if TRADING_MODE == "PAPER" or PAPER_SAFE_MODE:
+        mode = getattr(config, "TRADING_MODE", TRADING_MODE)
+        paper_safe = getattr(config, "PAPER_SAFE_MODE", PAPER_SAFE_MODE)
+        testnet_enabled = getattr(config, "TESTNET_ENABLED", TESTNET_ENABLED)
+        live_enabled = getattr(config, "LIVE_TRADING_ENABLED", LIVE_TRADING_ENABLED)
+
+        if mode == "PAPER" or paper_safe:
             return False, "PAPER_BLOCKED"
             
         if os.environ.get("RESEARCH_MODE") == "1":
             return False, "RESEARCH_BLOCKED"
 
-        if TRADING_MODE in ["TESTNET", "FUTURES"]:
-            if not TESTNET_ENABLED:
+        if mode in ["TESTNET", "FUTURES"]:
+            if not testnet_enabled:
                 return False, "TESTNET_DISABLED"
-            return True, f"ALLOWED_{TRADING_MODE}"
+            return True, f"ALLOWED_{mode}"
 
-        if TRADING_MODE == "LIVE" or LIVE_TRADING_ENABLED:
+        if mode == "LIVE" or live_enabled:
             return False, "LIVE_FORBIDDEN_BY_DESIGN"
             
         return False, "UNKNOWN_MODE"
@@ -78,10 +103,13 @@ class ExecutionPolicy:
 # ==============================================================================
 def get_exchange_client():
     """Lazily evaluates ExecutionPolicy to construct and return the Binance Testnet Client."""
-    if TRADING_MODE == "LIVE" or LIVE_TRADING_ENABLED:
+    mode = getattr(config, "TRADING_MODE", TRADING_MODE)
+    live_enabled = getattr(config, "LIVE_TRADING_ENABLED", LIVE_TRADING_ENABLED)
+
+    if mode == "LIVE" or live_enabled:
         raise RuntimeError("SECURITY CRITICAL: LIVE trading is permanently disabled by design in this repository.")
 
-    if TRADING_MODE == "PAPER":
+    if mode == "PAPER":
         return None
         
     allowed, reason = ExecutionPolicy.can_place_order()
@@ -98,18 +126,21 @@ def get_exchange_client():
             
         raise RuntimeError(f"CRITICAL ERROR: Client creation blocked. ({reason})")
 
-    if TRADING_MODE in ["TESTNET", "FUTURES"]:
-        client = Client(API_KEY, SECRET_KEY, testnet=True, ping=False)
-        if TRADING_MODE == "TESTNET":
+    if mode in ["TESTNET", "FUTURES"]:
+        api_k = getattr(config, "API_KEY", API_KEY)
+        sec_k = getattr(config, "SECRET_KEY", SECRET_KEY)
+        client = Client(api_k, sec_k, testnet=True, ping=False)
+        if mode == "TESTNET":
             client.API_URL = "https://testnet.binance.vision/api"
         try:
-            st = client.futures_time()['serverTime'] if TRADING_MODE == "FUTURES" else client.get_server_time()['serverTime']
+            st = client.futures_time()['serverTime'] if mode == "FUTURES" else client.get_server_time()['serverTime']
             client.TIME_OFFSET = st - int(time.time() * 1000)
         except Exception:
             pass
         return client
         
     return None
+
 
 # ==============================================================================
 # STATE MANAGEMENT
@@ -216,6 +247,7 @@ def get_open_orders(symbol):
 # ==============================================================================
 def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None, tp=None, client_order_id=None):
     """Places a market order and immediately sets SL/TP via an OCO order."""
+    _check_panic_and_kill_switch()
     allowed, reason = ExecutionPolicy.can_place_order()
     
     if not allowed:
@@ -228,6 +260,14 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         if "LIVE" in reason or "FORBIDDEN" in reason:
             raise RuntimeError("SECURITY CRITICAL: LIVE trading is permanently disabled by design in this repository.")
         raise RuntimeError(f"CRITICAL ERROR: Order blocked. ({reason})")
+
+    # Check Idempotency Store
+    if client_order_id:
+        is_dup, cached = get_idempotency_store().check_and_record(client_order_id, request_type="SPOT_ORDER")
+        if is_dup:
+            sys_logger.warning(f"[{strategy_name}] 🚫 Idempotent duplicate order rejected for client_order_id '{client_order_id}'.")
+            return cached.get("response") if cached else None
+
 
     try:
         active_trades = _load_active_trades()
@@ -454,9 +494,18 @@ def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, 
     """
     Places a Futures market order (BUY for Long, SELL for Short) with attached STOP_MARKET and TAKE_PROFIT_MARKET orders.
     """
+    _check_panic_and_kill_switch()
     allowed, reason = ExecutionPolicy.can_place_order()
     if not allowed:
         raise RuntimeError(f"CRITICAL ERROR: Order blocked. ({reason})")
+
+    # Check Idempotency Store
+    if client_order_id:
+        is_dup, cached = get_idempotency_store().check_and_record(client_order_id, request_type="FUTURES_ORDER")
+        if is_dup:
+            sys_logger.warning(f"[{strategy_name}] 🚫 Idempotent duplicate futures order rejected for client_order_id '{client_order_id}'.")
+            return cached.get("response") if cached else None
+
 
     try:
         active_trades = _load_active_trades()

@@ -341,7 +341,8 @@ def trailing_cycle(service):
             # -----------------------------------------------------------------
             # 1. UNTHROTTLED Profit Harvest Check: Bank winning trades at once!
             # -----------------------------------------------------------------
-            price_diff = (entry_price - current_price) if side == "SELL" else (current_price - entry_price)
+            is_short = side in ("SELL", "SHORT")
+            price_diff = (entry_price - current_price) if is_short else (current_price - entry_price)
             current_profit_pct = price_diff / entry_price if entry_price > 0 else 0.0
 
             if current_profit_pct >= harvest_pct:

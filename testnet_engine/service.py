@@ -2453,16 +2453,25 @@ class TestnetService:
             return None, None, None
 
     def _check_degradation(self):
-        """Stage 5: Automatically switch to OBSERVE-ONLY if strategy degrades."""
+        """Stage 5: Automatically switch to OBSERVE-ONLY if strategy degrades.
+
+        Safeguards:
+        1. Excludes administrative/recovered scratch ledger entries from strategy metrics.
+        2. Only halts if BOTH win rate is degraded AND recent net PnL is strictly negative
+           (trend-following strategies with 2:1-3:1 RR can be highly profitable at ~33% win rate).
+        3. Automatically recovers from OBSERVE-ONLY mode once PnL is healthy or cooldown expires.
+        """
         window = getattr(config, "DEGRADATION_WINDOW", 20)
-        min_win_rate = getattr(config, "MIN_WIN_RATE_THRESHOLD", 0.35)
-        
+        min_win_rate = float(getattr(config, "MIN_WIN_RATE_THRESHOLD", 0.30))
+        degradation_enabled = bool(getattr(config, "DEGRADATION_GUARD_ENABLED", True))
+        cooldown_sec = float(getattr(config, "OBSERVE_ONLY_COOLDOWN_SECONDS", 7200))  # 2 hours max halt
+
         if not hasattr(self, 'ledger_file'):
             self.ledger_file = TESTNET_LEDGER_FILE
-            
+
         if not os.path.exists(self.ledger_file):
             return
-            
+
         closed_trades = []
         try:
             with open(self.ledger_file, 'r', encoding="utf-8") as f:
@@ -2471,27 +2480,48 @@ class TestnetService:
                     try:
                         record = json.loads(line)
                         if "CLOSE" in record.get("action", ""):
+                            # Skip administrative scratch / recovered ledger entries
+                            strat_tag = str(record.get("strategy", "")).upper()
+                            exit_tag = str(record.get("exit_reason", "")).upper()
+                            if strat_tag == "RECOVERED" or "RECOVERED" in exit_tag:
+                                continue
                             closed_trades.append(record)
                     except Exception:
                         pass
         except Exception:
             return
-        
+
         if len(closed_trades) < window:
+            # Not enough strategy trades to judge degradation; maintain active trading
+            if self.observe_only:
+                logger.info(f"[SERVICE] 🟢 Insufficient closed trade sample ({len(closed_trades)}/{window}) to justify degradation halt. Resetting to ACTIVE trading.")
+                self.observe_only = False
+            self._strategy_performance_gate()
             return
-            
+
         recent = closed_trades[-window:]
-        wins = sum(1 for t in recent if t.get("pnl", 0) > 0)
+        wins = sum(1 for t in recent if float(t.get("pnl", t.get("net_pnl", 0.0))) > 0)
         win_rate = wins / window
-        
-        # Calculate prediction error if logged
-        # Expected vs Actual return (assuming 1% = 0.01)
-        # Note: We need expected_net_return logged in the ledger during close
-        
-        if win_rate < min_win_rate:
+        recent_pnl = sum(float(t.get("pnl", t.get("net_pnl", 0.0))) for t in recent)
+
+        if degradation_enabled and win_rate < min_win_rate and recent_pnl < 0:
             if not self.observe_only:
-                logger.warning(f"[SERVICE] 🚨 STRATEGY DEGRADATION DETECTED. Win rate {win_rate:.2%} < {min_win_rate:.2%}. Switching to OBSERVE-ONLY mode.")
+                logger.warning(
+                    f"[SERVICE] 🚨 STRATEGY DEGRADATION DETECTED. Win rate {win_rate:.2%} < {min_win_rate:.2%} "
+                    f"and recent net PnL (${recent_pnl:.2f}) < 0. Switching to OBSERVE-ONLY mode."
+                )
                 self.observe_only = True
+                self.observe_only_since = time.time()
+        else:
+            # Self-healing: resume live trading if PnL is positive, win rate recovered, or cooldown elapsed
+            if self.observe_only:
+                elapsed = time.time() - getattr(self, "observe_only_since", 0)
+                logger.info(
+                    f"[SERVICE] 🟢 RECOVERING FROM OBSERVE-ONLY MODE. "
+                    f"Recent PnL: ${recent_pnl:.2f}, Win rate: {win_rate:.2%}, Cooldown elapsed: {elapsed:.0f}s. "
+                    f"Resuming live order execution."
+                )
+                self.observe_only = False
 
         # V3: per-strategy demotion gate (additive to global observe-only)
         self._strategy_performance_gate()

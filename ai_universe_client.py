@@ -1,14 +1,20 @@
 """
-ai_universe_client.py — HTTP client for AI-Universe Advisory Intelligence.
+ai_universe_client.py — HTTP client for AI-Universe / Inference Advisory Intelligence.
 
-Integrates the Trading Bot with AI-Universe (POST /v1/trading/consult).
+Integrates the Trading Bot with Inference (POST /v1/trading/consult).
 Advisory only:
-- Queries AI-Universe on a schedule or event triggers.
-- Returns validated AIUniverseDecision dictionaries.
+- Queries Inference with standardized telemetry payload:
+  - telemetry metrics
+  - telemetry_freshness
+  - exchange_status
+  - positions
+- Returns validated decision dictionaries with bounded recommendations.
+- Critical safety invariant: Inference is advisory only; cannot execute orders or bypass gates.
 - Fails soft (returns None) on network issues, timeouts, or malformed responses.
 - Zero downtime tolerance: trading loop is never blocked or crashed.
 """
 
+import datetime
 import os
 import time
 from typing import Any
@@ -23,7 +29,7 @@ logger = get_logger("ai_universe_client")
 
 
 class AIUniverseClient:
-    """Client for consulting the external AI-Universe multi-agent intelligence platform."""
+    """Client for consulting the external Inference multi-agent intelligence platform."""
 
     REQUIRED_DECISION_FIELDS = {"decision_id", "status", "confidence", "parameter_changes"}
 
@@ -55,24 +61,61 @@ class AIUniverseClient:
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "Algorithmic-Trading-Bot/1.0"
+            "User-Agent": "Stratex-Trading-Bot/1.0"
         }
         if self.api_key:
             headers["X-FRIDAY-API-Key"] = self.api_key
+            headers["X-API-Key"] = self.api_key
         return headers
+
+    def standardize_consult_payload(self, telemetry_payload: dict[str, Any]) -> dict[str, Any]:
+        """
+        Standardizes telemetry dictionary into the canonical /v1/trading/consult request shape.
+        """
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        payload = dict(telemetry_payload or {})
+
+        # Ensure telemetry_freshness envelope
+        if "telemetry_freshness" not in payload:
+            payload["telemetry_freshness"] = {
+                "timestamp": payload.get("timestamp", now_iso),
+                "max_staleness_seconds": 60.0,
+                "clock_skew_ms": 0.0,
+                "status": "FRESH"
+            }
+
+        # Ensure exchange_status envelope
+        if "exchange_status" not in payload:
+            payload["exchange_status"] = {
+                "connectivity": "CONNECTED",
+                "exchange": "binance_testnet",
+                "latency_ms": 15.0
+            }
+
+        # Ensure positions envelope
+        if "positions" not in payload:
+            payload["positions"] = {
+                "open_count": payload.get("portfolio", {}).get("open_positions_count", 0),
+                "reconciliation_status": "RECONCILED",
+                "active_symbols": []
+            }
+
+        return payload
 
     def consult(self, telemetry_payload: dict[str, Any]) -> dict[str, Any] | None:
         """
-        Submits trading telemetry to AI-Universe (POST /v1/trading/consult) and returns
+        Submits trading telemetry to Inference (POST /v1/trading/consult) and returns
         the validated decision dictionary or None on any failure.
+        Enforces that Inference recommendations cannot contain executable orders.
         """
         url = f"{self.base_url}/v1/trading/consult"
         t0 = time.time()
         try:
+            standardized_body = self.standardize_consult_payload(telemetry_payload)
             logger.info(f"[AI_UNIVERSE_CLIENT] Sending consultation request to {url}...")
             response = self.session.post(
                 url,
-                json=telemetry_payload or {},
+                json=standardized_body,
                 headers=self._get_headers(),
                 timeout=self.timeout
             )
@@ -104,9 +147,20 @@ class AIUniverseClient:
                 logger.warning("[AI_UNIVERSE_CLIENT] Malformed AIUniverseDecision: parameter_changes must be a list")
                 return None
 
+            # CRITICAL SAFETY INVARIANT: Inference is advisory only.
+            # Strip and block any executable order directives if present.
+            for forbidden_key in ["orders", "execute", "commands", "trades_to_execute", "kill_switch_override"]:
+                if forbidden_key in data:
+                    logger.warning(
+                        f"[AI_UNIVERSE_CLIENT] 🚨 Stripping unauthorized execution directive '{forbidden_key}'. "
+                        "Inference cannot execute orders!"
+                    )
+                    data.pop(forbidden_key, None)
+
             data["latency_ms"] = elapsed_ms
             logger.info(
-                f"[AI_UNIVERSE_CLIENT] Received decision {data.get('decision_id')} ({elapsed_ms}ms) | Status: {data.get('status')} | Confidence: {data.get('confidence')}"
+                f"[AI_UNIVERSE_CLIENT] Received decision {data.get('decision_id')} ({elapsed_ms}ms) | "
+                f"Status: {data.get('status')} | Confidence: {data.get('confidence')}"
             )
             return data
 
@@ -122,7 +176,7 @@ class AIUniverseClient:
 
     def health_check(self) -> bool:
         """
-        Hits GET /v1/trading/consult/health (or fallback GET /health) to verify AI-Universe availability.
+        Hits GET /v1/trading/consult/health (or fallback GET /health) to verify Inference availability.
         """
         for endpoint in ["/v1/trading/consult/health", "/health", "/api/health"]:
             url = f"{self.base_url}{endpoint}"

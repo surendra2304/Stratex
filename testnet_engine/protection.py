@@ -461,18 +461,19 @@ def place_futures_bracket_protection(
     if actual_fill_price <= 0:
         raise ValueError(f"actual_fill_price must be positive, got {actual_fill_price}")
 
-    close_side = "SELL" if entry_side == "BUY" else "BUY"
+    is_buy = entry_side in ("BUY", "LONG")
+    close_side = "SELL" if is_buy else "BUY"
 
-    if entry_side == "BUY":
+    if is_buy:
         if sl_price >= actual_fill_price:
             raise ValueError(f"BUY position: SL ({sl_price}) must be below fill price ({actual_fill_price})")
         if tp_price <= actual_fill_price:
             raise ValueError(f"BUY position: TP ({tp_price}) must be above fill price ({actual_fill_price})")
-    elif entry_side == "SELL":
+    else:
         if sl_price <= actual_fill_price:
-            raise ValueError(f"SELL position: SL ({sl_price}) must be above fill price ({actual_fill_price})")
+            raise ValueError(f"SELL/SHORT position: SL ({sl_price}) must be above fill price ({actual_fill_price})")
         if tp_price >= actual_fill_price:
-            raise ValueError(f"SELL position: TP ({tp_price}) must be below fill price ({actual_fill_price})")
+            raise ValueError(f"SELL/SHORT position: TP ({tp_price}) must be below fill price ({actual_fill_price})")
 
     filters = _get_futures_symbol_filters(client, symbol)
     tick = filters["tick_size"]

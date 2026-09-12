@@ -32,6 +32,7 @@ app.register_blueprint(quantum_bp, url_prefix='/api/quantum')
 
 from api.control import control_bp
 from api.export import export_bp
+from api.friday_supervision import execute_friday_task, friday_supervision_bp
 from api.health import health_bp
 from api.master_control_api import master_control_bp
 from api.public_status import public_status_bp
@@ -43,6 +44,8 @@ app.register_blueprint(export_bp)
 app.register_blueprint(health_bp)
 app.register_blueprint(reporting_bp)
 app.register_blueprint(master_control_bp)
+app.register_blueprint(friday_supervision_bp)
+
 
 LOG_FILE = "trade_log.csv"
 
@@ -90,6 +93,13 @@ def api_v1_futuris_accuracy():
         return jsonify(futuris.get_accuracy_metrics())
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
+
+
+@app.route('/v1/task/execute', methods=['POST'])
+def api_v1_task_execute():
+    """Universal Task Protocol endpoint for Stratex (delegates to execute_friday_task)."""
+    return execute_friday_task()
+
 
 def require_bot_api_key(f):
     """
