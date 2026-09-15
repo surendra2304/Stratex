@@ -63,7 +63,7 @@ FUTURIS_URL=https://futuris-x4f4.onrender.com
 FUTURIS_API_KEY=futuris_api
 
 # 6. 🌐 Cortex Autonomous Web Operations & Intelligence
-CORTEX_URL=https://cortex-qifr.onrender.com
+CORTEX_URL=https://cortex-0m7c.onrender.com
 CORTEX_API_KEY=cortex_api
 
 # 7. 🛠️ Forge Local Software Engineering Engine

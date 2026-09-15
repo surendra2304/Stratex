@@ -1,4 +1,4 @@
-﻿services:
+services:
   - type: web
     name: stratex
     env: docker
@@ -39,7 +39,7 @@
       - key: INFERENCE_API_KEY
         value: "inference_api"
       - key: MEMORA_URL
-        value: "https://memora-9zr9.onrender.com"
+        value: "https://memora-cavc.onrender.com"
       - key: MEMORA_API_KEY
         value: "memora_api"
       - key: INTELX_URL
@@ -47,11 +47,11 @@
       - key: INTELX_API_KEY
         value: "intelx_api"
       - key: FUTURIS_URL
-        value: "https://futuris-x4f4.onrender.com"
+        value: "https://futuris-th6f.onrender.com"
       - key: FUTURIS_API_KEY
         value: "futuris_api"
       - key: CORTEX_URL
-        value: "https://cortex-qifr.onrender.com"
+        value: "https://cortex-0m7c.onrender.com"
       - key: CORTEX_API_KEY
         value: "cortex_api"
       - key: FORGE_URL
