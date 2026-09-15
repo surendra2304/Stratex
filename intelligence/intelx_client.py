@@ -39,8 +39,8 @@ class MarketResearchReport:
         }
 
 class IntelXMarketClient:
-    def __init__(self, base_url='https://intelx-3cz1.onrender.com', cache_ttl_seconds=1800, timeout_seconds=5):
-        self.base_url = (os.getenv('INTELX_URL') or os.getenv('INTELX_BASE_URL') or base_url or 'https://intelx-3cz1.onrender.com').rstrip('/')
+    def __init__(self, base_url='https://intelx-mygl.onrender.com', cache_ttl_seconds=1800, timeout_seconds=5):
+        self.base_url = (os.getenv('INTELX_URL') or os.getenv('INTELX_BASE_URL') or base_url or 'https://intelx-mygl.onrender.com').rstrip('/')
         self.api_key = os.getenv('INTELX_API_KEY', 'intelx_api')
         self.cache_ttl_seconds = cache_ttl_seconds
         self.timeout_seconds = timeout_seconds

@@ -43,7 +43,7 @@ services:
       - key: MEMORA_API_KEY
         value: "memora_api"
       - key: INTELX_URL
-        value: "https://intelx-3cz1.onrender.com"
+        value: "https://intelx-mygl.onrender.com"
       - key: INTELX_API_KEY
         value: "intelx_api"
       - key: FUTURIS_URL
