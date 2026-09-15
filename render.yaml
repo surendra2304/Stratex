@@ -59,6 +59,6 @@ services:
       - key: FORGE_API_KEY
         value: "forge_api"
       - key: SENTINEL_URL
-        value: "http://localhost:8003"
+        value: "https://sentinel-a861.onrender.com"
       - key: SENTINEL_API_KEY
         value: "sentinel_api"

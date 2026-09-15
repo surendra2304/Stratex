@@ -71,7 +71,7 @@ FORGE_URL=https://forge-u98k.onrender.com
 FORGE_API_KEY=forge_api
 
 # 8. 🛡️ Sentinel Local Cybersecurity & Threat Defense Shield
-SENTINEL_URL=http://localhost:8003
+SENTINEL_URL=https://sentinel-a861.onrender.com
 SENTINEL_API_KEY=sentinel_api
 
 # 9. 🤖 FRIDAY Central Desktop Operating System
