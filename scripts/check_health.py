@@ -35,13 +35,17 @@ def check_health():
     
     # 2. Check Binance Testnet Connectivity & Balance
     try:
-        client = get_exchange_client()
-        acc = client.get_account()
-        usdt = next((b for b in acc['balances'] if b['asset'] == 'USDT'), None)
-        free = float(usdt['free']) if usdt else 0.0
-        locked = float(usdt['locked']) if usdt else 0.0
-        total_balance = free + locked
-        print(f"Binance Wallet: ${total_balance:.2f} USDT (Free: ${free:.2f}, Locked: ${locked:.2f})")
+        from binance.client import Client
+        import config
+        client = Client(api_key=config.API_KEY, api_secret=config.SECRET_KEY, testnet=True)
+        client.FUTURES_URL = 'https://testnet.binancefuture.com/fapi'
+        
+        acc = client.futures_account()
+        usdt_asset = next((a for a in acc.get('assets', []) if a.get('asset') == 'USDT'), {})
+        total_wallet = float(usdt_asset.get('walletBalance', '0.0'))
+        available = float(usdt_asset.get('availableBalance', '0.0'))
+        locked = total_wallet - available
+        print(f"Binance Wallet: ${total_wallet:.2f} USDT (Free: ${available:.2f}, Locked: ${locked:.2f})")
     except Exception as e:
         print(f"Binance API   : ERROR ({e})")
         
