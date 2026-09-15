@@ -67,7 +67,7 @@ CORTEX_URL=https://cortex-0m7c.onrender.com
 CORTEX_API_KEY=cortex_api
 
 # 7. 🛠️ Forge Local Software Engineering Engine
-FORGE_URL=https://forge-u98k.onrender.com
+FORGE_URL=https://forge-e9kl.onrender.com
 FORGE_API_KEY=forge_api
 
 # 8. 🛡️ Sentinel Local Cybersecurity & Threat Defense Shield
