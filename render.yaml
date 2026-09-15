@@ -1,10 +1,74 @@
 services:
   - type: web
-    name: stratex-fra
+    name: friday-stratex
     env: docker
-    region: frankfurt
     plan: free
-    repo: https://github.com/surendra2304/stratex.git
-    branch: master
+    region: singapore
     healthCheckPath: /health
-    dockerCommand: python scripts/supervise_services.py
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: HOST
+        value: "0.0.0.0"
+      - key: ENVIRONMENT
+        value: "production"
+      - key: INTELX_BASE_URL
+        sync: false
+      - key: FUTURIS_BASE_URL
+        sync: false
+      - key: AI_UNIVERSE_API_KEY
+        sync: false
+      - key: BYBIT_API_KEY
+        sync: false
+      - key: BINANCE_API_KEY
+        sync: false
+      - key: FUTURIS_URL
+        sync: false
+      - key: OKX_API_SECRET
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: INFERENCE_API_KEY
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: BINANCE_API_SECRET
+        sync: false
+      - key: SECURITY_SECRET_KEY
+        sync: false
+      - key: AI_UNIVERSE_URL
+        sync: false
+      - key: INTELX_API_KEY
+        sync: false
+      - key: BYBIT_API_SECRET
+        sync: false
+      - key: TRADING_BOT_API_KEY_READ
+        sync: false
+      - key: API_KEY
+        sync: false
+      - key: MEMORA_URL
+        sync: false
+      - key: TRADING_BOT_API_KEY_CONTROL
+        sync: false
+      - key: STRATEX_URL
+        sync: false
+      - key: AI_UNIVERSE_BASE_URL
+        sync: false
+      - key: OKX_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: INFERENCE_URL
+        sync: false
+      - key: INTELX_URL
+        sync: false
+      - key: BOT_API_KEY
+        sync: false
+      - key: MEMORA_API_KEY
+        sync: false
+      - key: FUTURIS_API_KEY
+        sync: false
+      - key: WEBHOOK_URLS
+        sync: false
+      - key: STRATEX_API_KEY
+        sync: false
