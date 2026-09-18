@@ -45,7 +45,7 @@ class PredictionClient:
         cache_ttl_seconds: int = 900,  # 15 minutes
         timeout_seconds: int = 5
     ):
-        self.base_url = (os.getenv("INFERENCE_URL") or os.getenv("AI_UNIVERSE_URL") or base_url or "https://inference-3i2b.onrender.com").rstrip("/")
+        self.base_url = (os.getenv("INFERENCE_URL") or os.getenv("AI_UNIVERSE_URL") or base_url or "https://inference-r1sn.onrender.com").rstrip("/")
         self.cache_ttl_seconds = cache_ttl_seconds
         self.timeout_seconds = timeout_seconds
         self.cache: dict[str, AssetPrediction] = {}

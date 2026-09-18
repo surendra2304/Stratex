@@ -40,7 +40,7 @@ class AIUniverseClient:
         max_retries: int = 2,
         api_key: str | None = None
     ) -> None:
-        self.base_url = (base_url or os.getenv("INFERENCE_URL") or os.getenv("AI_UNIVERSE_URL") or "https://inference-3i2b.onrender.com").rstrip("/")
+        self.base_url = (base_url or os.getenv("INFERENCE_URL") or os.getenv("AI_UNIVERSE_URL") or "https://inference-r1sn.onrender.com").rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
         self.api_key = api_key or os.getenv("INFERENCE_API_KEY") or os.getenv("AI_UNIVERSE_API_KEY") or "inference_api"

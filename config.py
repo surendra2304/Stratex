@@ -43,7 +43,7 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
 GEMINI_ENABLED = os.getenv("GEMINI_ENABLED", "True").lower() == "true"
 
 # --- Inference Advisory Intelligence System ---
-INFERENCE_URL = os.getenv("INFERENCE_URL", os.getenv("AI_UNIVERSE_URL", os.getenv("AI_UNIVERSE_BASE_URL", "https://inference-3i2b.onrender.com")))
+INFERENCE_URL = os.getenv("INFERENCE_URL", os.getenv("AI_UNIVERSE_URL", os.getenv("AI_UNIVERSE_BASE_URL", "https://inference-r1sn.onrender.com")))
 INFERENCE_API_KEY = os.getenv("INFERENCE_API_KEY", os.getenv("AI_UNIVERSE_API_KEY", ""))
 AI_UNIVERSE_BASE_URL = INFERENCE_URL
 
