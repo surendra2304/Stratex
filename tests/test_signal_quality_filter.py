@@ -78,3 +78,51 @@ def test_signal_quality_valid_signal():
     ok, reason, detail = evaluate_signal_quality(df, "BUY", 106.0, 105.0, 107.0, "supertrend")
     assert ok is True
     assert reason == "QUALITY_OK"
+
+
+@pytest.mark.parametrize(
+    ("side", "close", "open_p", "ema21", "ema50", "ema200", "sl", "tp"),
+    [
+        ("BUY", 106.0, 104.0, 105.0, 100.0, 95.0, 105.0, 107.0),
+        ("SELL", 94.0, 96.0, 95.0, 100.0, 105.0, 95.0, 92.0),
+    ],
+)
+def test_signal_quality_uses_main_feature_column_names(
+    side, close, open_p, ema21, ema50, ema200, sl, tp
+):
+    """Main features.py emits ema_21/rsi_14, not ema_20/rsi."""
+    rows = []
+    for _ in range(25):
+        rows.append({
+            "open": open_p,
+            "high": max(open_p, close) + 1.0,
+            "low": min(open_p, close) - 1.0,
+            "close": close,
+            "volume": 1000.0,
+            "ema_21": ema21,
+            "ema_50": ema50,
+            "ema_200": ema200,
+            "atr_14": 1.0,
+            "rsi_14": 55.0,
+            # ADX is absent in the shared feature pipeline; that filter is
+            # intentionally fail-open when no real ADX measurement exists.
+        })
+    ok, reason, detail = evaluate_signal_quality(
+        pd.DataFrame(rows), side, close, sl, tp, "feature_column_regression"
+    )
+    assert ok is True
+    assert reason == "QUALITY_OK"
+    assert detail["ema_20"] == ema21
+    assert detail["rsi"] == 55.0
+
+
+def test_signal_quality_rejects_real_countertrend_using_feature_columns():
+    df = create_mock_df(adx=30.0, ema20=98.0, ema50=100.0, ema200=105.0)
+    # Simulate the actual features.py schema, which doesn't emit ema_20.
+    df = df.drop(columns=["ema_20"])
+    df["ema_21"] = 98.0
+    ok, reason, _ = evaluate_signal_quality(
+        df, "BUY", 106.0, 105.0, 107.0, "feature_column_regression"
+    )
+    assert ok is False
+    assert reason == "QUALITY_COUNTER_TREND"

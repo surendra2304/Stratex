@@ -87,10 +87,14 @@ def evaluate_signal_quality(df, side, entry_price, sl_price, tp_price, strategy_
     high = _f(last, "high")
     low = _f(last, "low")
     volume = _f(last, "volume")
-    ema20 = _f(last, "ema_20")
+    # The main feature pipeline names these columns ema_21 / rsi_14, while
+    # some standalone strategies and older frames use ema_20 / rsi.  Reading
+    # only the legacy names silently substituted 0.0 and made the strict
+    # trend gate reject every BUY and SELL signal.
+    ema20 = _f(last, "ema_20", _f(last, "ema_21"))
     ema50 = _f(last, "ema_50")
     ema200 = _f(last, "ema_200")
-    rsi = _f(last, "rsi", 50.0)
+    rsi = _f(last, "rsi", _f(last, "rsi_14", 50.0))
     atr = _f(last, "atr", 0.0)
     if atr <= 0:
         atr = _f(last, "atr_14", 0.0)
