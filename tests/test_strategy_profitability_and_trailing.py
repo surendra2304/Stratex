@@ -19,17 +19,28 @@ import strategy_bb_reversion
 import strategy_factory_winners
 
 
-def test_supertrend_governance_validation():
-    """Verify supertrend is VALIDATED and passes governance filter."""
+def test_supertrend_without_evidence_is_blocked_from_execution():
+    """An unsupported 80% prior must not authorize testnet orders."""
     assert "supertrend" in PRODUCTION_STRATEGY_REGISTRY
     entry = PRODUCTION_STRATEGY_REGISTRY["supertrend"]
-    assert entry["status"] == "VALIDATED", "supertrend must be VALIDATED in registry"
-    assert entry["rr_ratio"] >= 1.0, "supertrend must have RR ratio >= 1.0"
-    assert entry["oos_win_rate_prior"] >= 0.80, "supertrend must have 80%+ win rate prior"
+    assert entry["status"] == "OBSERVE_ONLY"
 
     filtered = governance_filter_strategies(config.ACTIVE_STRATEGIES)
-    assert "supertrend" in filtered, "supertrend must pass governance_filter_strategies"
-    assert "15m" in filtered["supertrend"]
+    assert "supertrend" not in filtered
+
+
+def test_unverified_candidates_are_not_executable():
+    candidates = {
+        "bb_reversion",
+        "factory_winner_1",
+        "factory_winner_2",
+        "factory_winner_3",
+        "factory_winner_4",
+        "factory_winner_5",
+    }
+    for name in candidates:
+        assert PRODUCTION_STRATEGY_REGISTRY[name]["status"] == "OBSERVE_ONLY"
+    assert candidates.isdisjoint(governance_filter_strategies(config.ACTIVE_STRATEGIES))
 
 
 def test_active_strategies_asymmetric_risk_reward():

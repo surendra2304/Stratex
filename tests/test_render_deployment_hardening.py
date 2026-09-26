@@ -36,7 +36,7 @@ class TestRenderDeploymentHardening:
         assert len(services) >= 1
         svc = services[0]
         assert svc["region"] == "singapore"
-        assert svc["env"] == "docker"
+        assert svc["runtime"] == "docker"
         assert svc["healthCheckPath"] == "/health"
 
     def test_dockerfile_specification(self):

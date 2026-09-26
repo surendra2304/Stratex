@@ -30,10 +30,9 @@ class TestProductionStrategyRegistry:
             if strat in PRODUCTION_STRATEGY_REGISTRY:
                 assert PRODUCTION_STRATEGY_REGISTRY[strat]["status"] == "DISABLED"
 
-        # Validated strategies (actively trading)
-        for strat in ["supertrend", "adx_ema"]:
-            if strat in PRODUCTION_STRATEGY_REGISTRY:
-                assert PRODUCTION_STRATEGY_REGISTRY[strat]["status"] == "VALIDATED"
+        # Only strategies with traceable OOS evidence may be marked validated.
+        assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["status"] == "VALIDATED"
+        assert PRODUCTION_STRATEGY_REGISTRY["supertrend"]["status"] == "OBSERVE_ONLY"
 
 class TestStrategyEquivalenceAndIntegrity:
     def test_causal_indicators_no_lookahead(self):

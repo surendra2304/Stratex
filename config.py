@@ -89,19 +89,12 @@ LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is im
 TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-09-01T00:00:00Z")
 
 # --- Strategies to Run ---
-# High Profit Factor quantitative strategies validated with asymmetric Risk/Reward (> 1.33:1)
+# Executable strategies with evidence-backed registry approval.
 ACTIVE_STRATEGIES = {
-    "supertrend": ["15m", "1h"],                      # Institutional Sniper: 15m/1h (eliminated 5m noise)
-    "bb_reversion": ["5m", "15m"],                     # Bollinger Mean Reversion (PF: 1.85, RR: 3.0:1)
-    "factory_winner_1": ["5m", "15m", "30m", "1h"],  # MACD + BB Confluence (PF: 1.481)
-    "factory_winner_2": ["5m", "15m", "30m", "1h"],  # MACD + BB Confluence (PF: 1.449)
-    "factory_winner_3": ["5m", "15m"],                # MACD + BB Fast (PF: 1.433)
-    "factory_winner_4": ["5m", "15m", "30m", "1h"],  # MACD + BB Wide Confluence (PF: 1.390)
-    "factory_winner_5": ["5m", "15m"],                # MACD + BB 15m (PF: 1.361)
-    "adx_ema": ["15m", "1h", "4h"],                   # 200 EMA + ADX Trend (PF: 2.36)
+    "adx_ema": ["4h"],
 }
 
-ACTIVE_STRATEGY = "factory_winner_1"
+ACTIVE_STRATEGY = "adx_ema"
 TIMEFRAME = "5m"
 ALL_ACTIVE_TIMEFRAMES = ["5m", "15m", "30m", "1h", "4h"]
 BYPASS_PROFITABILITY_GATE = False  # HARD SAFETY INVARIANT: Must never bypass mathematical edge calculation

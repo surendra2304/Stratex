@@ -229,7 +229,7 @@ PRODUCTION_STRATEGY_REGISTRY = {
         "reason": "Primary hyper-aggressive scalper running on all 6 timeframes.",
     },
     "bb_reversion": {
-        "status": "VALIDATED",
+        "status": "OBSERVE_ONLY",
         "version": "V1-bb-reversion (2026-09-09)",
         "timeframe": "5m",
         "timeframes": ["5m", "15m"],
@@ -247,7 +247,7 @@ PRODUCTION_STRATEGY_REGISTRY = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Bollinger Bands mean reversion with 3.0:1 R:R and 50% win rate.",
+        "reason": "Research only: no verified out-of-sample evidence supports the stored win-rate or edge prior.",
     },
     "rsi_burst": {
         "status": "DISABLED",
@@ -266,7 +266,7 @@ PRODUCTION_STRATEGY_REGISTRY = {
         "reason": "Secondary strategy available.",
     },
     "factory_winner_1": {
-        "status": "VALIDATED",
+        "status": "OBSERVE_ONLY",
         "version": "V1-factory (2026-08-24)",
         "timeframe": "5m",
         "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h"],
@@ -284,10 +284,10 @@ PRODUCTION_STRATEGY_REGISTRY = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Factory Winner #1 (5m, Net PF 1.481, 5,403 trades, +1794.5% return).",
+        "reason": "Research only: historical report is unverified; source data and provenance are absent.",
     },
     "factory_winner_2": {
-        "status": "VALIDATED",
+        "status": "OBSERVE_ONLY",
         "version": "V1-factory (2026-08-24)",
         "timeframe": "5m",
         "timeframes": ["5m", "15m", "30m", "1h", "4h"],
@@ -305,10 +305,10 @@ PRODUCTION_STRATEGY_REGISTRY = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Factory Winner #2 (5m, Net PF 1.449, 9,264 trades, +1793.4% return).",
+        "reason": "Research only: historical report is unverified; source data and provenance are absent.",
     },
     "factory_winner_3": {
-        "status": "VALIDATED",
+        "status": "OBSERVE_ONLY",
         "version": "V1-factory (2026-08-24)",
         "timeframe": "5m",
         "timeframes": ["5m", "15m", "30m", "1h", "4h"],
@@ -326,10 +326,10 @@ PRODUCTION_STRATEGY_REGISTRY = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Factory Winner #3 (5m, Net PF 1.433, 11,338 trades, +1370.1% return).",
+        "reason": "Research only: historical report is unverified; source data and provenance are absent.",
     },
     "factory_winner_4": {
-        "status": "VALIDATED",
+        "status": "OBSERVE_ONLY",
         "version": "V1-factory (2026-08-24)",
         "timeframe": "5m",
         "timeframes": ["5m", "15m", "30m", "1h", "4h"],
@@ -347,10 +347,10 @@ PRODUCTION_STRATEGY_REGISTRY = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Factory Winner #4 (5m, Net PF 1.390, 3,731 trades, +1381.5% return).",
+        "reason": "Research only: historical report is unverified; source data and provenance are absent.",
     },
     "factory_winner_5": {
-        "status": "VALIDATED",
+        "status": "OBSERVE_ONLY",
         "version": "V1-factory (2026-08-24)",
         "timeframe": "15m",
         "timeframes": ["5m", "15m", "30m", "1h", "4h"],
@@ -368,7 +368,7 @@ PRODUCTION_STRATEGY_REGISTRY = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Factory Winner #5 (15m, Net PF 1.361, 3,907 trades, +652.9% return).",
+        "reason": "Research only: historical report is unverified; source data and provenance are absent.",
     },
     "aggressor": {
         "status": "DISABLED",
@@ -383,7 +383,7 @@ PRODUCTION_STRATEGY_REGISTRY = {
         "reason": "Disabled: 1m scalp mean-reversion fails positive expectancy under 31 bps friction."
     },
     "supertrend": {
-        "status": "VALIDATED",
+        "status": "OBSERVE_ONLY",
         "version": "V2-supertrend-high-winrate (2026-09-12)",
         "timeframe": "15m",
         "timeframes": ["15m", "1h"],
@@ -401,7 +401,7 @@ PRODUCTION_STRATEGY_REGISTRY = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Supertrend + 200 EMA + Full trend alignment + 1:1 tight target sniper architecture for >80% win rate.",
+        "reason": "Research only: no verified out-of-sample evidence supports the stored 80% win-rate prior.",
     },
     "swing": {
         "status": "DISABLED",
