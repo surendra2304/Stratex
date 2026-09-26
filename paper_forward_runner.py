@@ -141,21 +141,17 @@ def evaluate_forward_paper_candidate(
     """Evaluate a candidate for this isolated, no-exchange paper experiment.
 
     Missing OOS evidence is never treated as a probability. The frozen swing
-    candidate may collect an explicitly unvalidated sample only in PAPER mode.
-    Exchange execution uses the separate testnet_engine gate, which rejects
-    rule-based signals without a verified prior.
+    candidate may collect an explicitly unvalidated sample in this dedicated
+    simulator regardless of the exchange engine's global TRADING_MODE. This
+    runner has no order client; exchange execution uses the separate
+    testnet_engine gate, which rejects rule-based signals without a verified
+    prior.
     """
     strategy_type = getattr(signal_result, "strategy_type", None)
     prior = getattr(signal_result, "win_rate_prior", None)
     if strategy_name == FROZEN_STRATEGY and strategy_type == "RULE_BASED" and (
         prior is None or not isinstance(prior, (int, float)) or not 0.0 < prior < 1.0
     ):
-        if getattr(config, "TRADING_MODE", "PAPER").upper() != "PAPER":
-            return False, {
-                "decision": "REJECTED",
-                "reason": "PAPER_EXPERIMENT_REQUIRES_PAPER_MODE",
-                "evidence_status": "UNVALIDATED_PAPER_EXPERIMENT",
-            }
         return True, {
             "decision": "PAPER_SAMPLE_ONLY",
             "reason": "UNVERIFIED_RULE_BASED_PRIOR",
@@ -192,6 +188,7 @@ def load_or_create_experiment() -> FrozenExperimentConfig:
     The experiment ID is persisted so crash restarts resume the same experiment.
     """
     os.makedirs(EXPERIMENT_DIR, exist_ok=True)
+    git_sha = _get_git_sha()
 
     # ── Resume existing experiment ─────────────────────────────────────────
     if os.path.exists(EXPERIMENT_ID_FILE):
@@ -201,15 +198,27 @@ def load_or_create_experiment() -> FrozenExperimentConfig:
         if os.path.exists(exp_path):
             cfg = FrozenExperimentConfig.load(exp_id, EXPERIMENT_DIR)
             if cfg.status == "RUNNING":
-                logger.info(f"RESUMED experiment: {cfg.experiment_id[:8]} (started {cfg.started_at})")
-                return cfg
+                if cfg.git_sha == git_sha:
+                    logger.info(f"RESUMED experiment: {cfg.experiment_id[:8]} (started {cfg.started_at})")
+                    return cfg
+                # The strategy/evidence gates are code too. Never combine
+                # samples collected under different revisions in one OOS run.
+                cfg.mark_aborted(
+                    f"CODE_REVISION_CHANGED:{cfg.git_sha}->{git_sha}; "
+                    "new revision requires a separate paper experiment"
+                )
+                cfg.save(EXPERIMENT_DIR)
+                _update_experiment_registry_status(cfg.experiment_id, cfg.status)
+                logger.warning(
+                    f"ABORTED experiment {cfg.experiment_id[:8]} after code revision "
+                    f"change {cfg.git_sha[:8]}->{git_sha[:8]}; prior records preserved."
+                )
             else:
                 logger.info(f"Experiment {exp_id[:8]} is {cfg.status} — creating fresh experiment.")
         else:
             logger.warning(f"Experiment ID file found but config missing: {exp_path}")
 
     # ── Create new experiment ──────────────────────────────────────────────
-    git_sha = _get_git_sha()
     cfg = FrozenExperimentConfig(
         experiment_name="forward_exp_001",
         strategy_name=FROZEN_STRATEGY,
@@ -252,6 +261,27 @@ def load_or_create_experiment() -> FrozenExperimentConfig:
         f"at {datetime.datetime.utcfromtimestamp(cfg.started_at).isoformat()}Z"
     )
     return cfg
+
+
+def _update_experiment_registry_status(experiment_id: str, status: str):
+    """Keep the summary registry aligned when an experiment is superseded."""
+    path = os.path.join(EXPERIMENT_DIR, "registry.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            registry = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return
+    changed = False
+    for record in registry.get("experiments", []):
+        if record.get("experiment_id") == experiment_id:
+            record["status"] = status
+            changed = True
+    if not changed:
+        return
+    tmp_path = path + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(registry, f, indent=4)
+    os.replace(tmp_path, path)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
