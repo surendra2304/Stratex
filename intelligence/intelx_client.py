@@ -41,7 +41,7 @@ class MarketResearchReport:
 class IntelXMarketClient:
     def __init__(self, base_url='https://intelx-mygl.onrender.com', cache_ttl_seconds=1800, timeout_seconds=5):
         self.base_url = (os.getenv('INTELX_URL') or os.getenv('INTELX_BASE_URL') or base_url or 'https://intelx-mygl.onrender.com').rstrip('/')
-        self.api_key = os.getenv('INTELX_API_KEY', 'intelx_api')
+        self.api_key = os.getenv('INTELX_API_KEY')
         self.cache_ttl_seconds = cache_ttl_seconds
         self.timeout_seconds = timeout_seconds
         self.cache: dict[str, MarketResearchReport] = {}
@@ -90,7 +90,7 @@ class IntelXMarketClient:
                 data = resp.json()
                 results = data.get('results', [])
                 summary_text = f"IntelX intelligence: {len(results)} active claims tracked for {symbol}."
-                drivers = ['High volume institutional positioning']
+                drivers = []
                 if results:
                     drivers = [r.get('text', '')[:100] for r in results[:3] if r.get('text')]
                 report = MarketResearchReport(
@@ -100,8 +100,8 @@ class IntelXMarketClient:
                     findings={'status': 'INTELX_LIVE', 'count': len(results), 'results': results},
                     summary=summary_text,
                     sentiment_drivers=drivers,
-                    regulatory_changes=['Standard regulatory baseline'],
-                    macro_events=['FOMC interest rate expectations'],
+                    regulatory_changes=[],
+                    macro_events=[],
                     timestamp=time.time(),
                     expires_at=time.time() + self.cache_ttl_seconds
                 )
@@ -119,20 +119,20 @@ class IntelXMarketClient:
                         query=query,
                         findings={'status': 'INTELX_FEED', 'items_count': len(items)},
                         summary=f"IntelX global intelligence feed: {len(items)} events tracked.",
-                        sentiment_drivers=drivers if drivers else ['Market liquidity flows'],
-                        regulatory_changes=['No imminent regulatory enforcement reported'],
-                        macro_events=['Correlated crypto market flows'],
+                        sentiment_drivers=drivers,
+                        regulatory_changes=[],
+                        macro_events=[],
                         timestamp=time.time(),
                         expires_at=time.time() + self.cache_ttl_seconds
                     )
                 else:
-                    report = self._generate_fallback_report(symbol, trigger_reason, query)
+                    report = self._unavailable_report(symbol, trigger_reason, query, f'HTTP_{f_resp.status_code}')
         except Exception as e:
-            logger.debug(f'[INTELX_CLIENT] Failed to connect to IntelX, generating defensive fallback: {e}')
-            report = self._generate_fallback_report(symbol, trigger_reason, query)
+            logger.warning(f'[INTELX_CLIENT] IntelX research unavailable: {type(e).__name__}')
+            report = self._unavailable_report(symbol, trigger_reason, query, 'CONNECTION_ERROR')
 
         if report is None:
-            report = self._generate_fallback_report(symbol, trigger_reason, query)
+            report = self._unavailable_report(symbol, trigger_reason, query, 'NO_RESPONSE')
 
         with self._lock:
             self.cache[symbol] = report
@@ -142,16 +142,16 @@ class IntelXMarketClient:
 
         return report
 
-    def _generate_fallback_report(self, symbol: str, trigger_reason: str, query: str) -> MarketResearchReport:
+    def _unavailable_report(self, symbol: str, trigger_reason: str, query: str, reason: str) -> MarketResearchReport:
         return MarketResearchReport(
             symbol=symbol,
             trigger_reason=trigger_reason,
             query=query,
-            findings={'status': 'FALLBACK_SYNTHETIC', 'risk_level': 'ELEVATED'},
-            summary=f'Market condition alert on {symbol} triggered by {trigger_reason}. Institutional flows and elevated volatility observed.',
-            sentiment_drivers=['Order book imbalance', 'Elevated options skew'],
-            regulatory_changes=['No imminent regulatory enforcement reported'],
-            macro_events=['Broad crypto market correlated volatility'],
+            findings={'status': 'UNAVAILABLE', 'reason': reason},
+            summary='',
+            sentiment_drivers=[],
+            regulatory_changes=[],
+            macro_events=[],
             timestamp=time.time(),
             expires_at=time.time() + self.cache_ttl_seconds
         )
@@ -165,7 +165,14 @@ class IntelXMarketClient:
             reason (str): Canonical verdict reason
             details (dict): Context summary for live scanner and opportunity log
         """
-        report = self.query_market_research(symbol, trigger_reason='TRADE_DECISION_EVAL')
+        try:
+            report = self.query_market_research(symbol, trigger_reason='TRADE_DECISION_EVAL')
+        except Exception as exc:
+            return False, 0.0, 'INTELX_RESEARCH_UNAVAILABLE', {
+                'symbol': symbol,
+                'status': 'UNAVAILABLE',
+                'error': type(exc).__name__,
+            }
         details = {
             'symbol': symbol,
             'side': side,
@@ -173,6 +180,9 @@ class IntelXMarketClient:
             'sentiment_drivers': report.sentiment_drivers[:2],
             'status': report.findings.get('status', 'NOMINAL')
         }
+
+        if report.findings.get('status') == 'UNAVAILABLE':
+            return False, 0.0, 'INTELX_RESEARCH_UNAVAILABLE', details
 
         combined_text = (report.summary + " " + " ".join(report.sentiment_drivers) + " " + " ".join(report.regulatory_changes)).lower()
         

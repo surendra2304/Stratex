@@ -179,3 +179,103 @@ class TestOpportunityDecisionFunnel:
         assert "rejection_breakdown" in data
         assert "bottleneck_diagnosis" in data
         assert "pipeline_state" in data
+
+    def test_signal_log_fallback_never_invents_success_or_performance(self, client, tmp_path, monkeypatch):
+        """Incomplete source records remain unknown; the API must not manufacture alpha."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "testnet_signals_log.jsonl").write_text(
+            json.dumps({
+                "signal_id": "rejected-without-gate-metadata",
+                "symbol": "BTCUSDT",
+                "side": "BUY",
+                "decision": "REJECTED",
+                "rejection_reason": "COUNTER_TREND",
+            }) + "\n",
+            encoding="utf-8",
+        )
+
+        response = client.get("/api/opportunity-log")
+        assert response.status_code == 200
+        record = response.get_json()["top_opportunities"][0]
+        assert record["decision"] == "REJECTED"
+        assert record["side"] == "BUY"
+        assert record["profitability_decision"] == "UNKNOWN"
+        assert record["risk_decision"] == "UNKNOWN"
+        assert record["reason"] == "COUNTER_TREND"
+        assert record["confidence"] is None
+        assert record["expected_net_return"] is None
+        assert "POSITIVE_ALPHA" not in response.get_data(as_text=True)
+        assert "1.8" not in response.get_data(as_text=True)
+
+    def test_opportunity_fallback_unknown_gate_is_not_reported_as_pass(self, client, tmp_path, monkeypatch):
+        """Missing profitability/risk evidence is not a passed gate in recent_signals."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "testnet_signals_log.jsonl").write_text(
+            json.dumps({"symbol": "BTCUSDT", "side": "BUY", "decision": "REJECTED"}) + "\n",
+            encoding="utf-8",
+        )
+        response = client.get("/api/funnel")
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["top_opportunities"] == []
+        # The funnel API has no recent_signals projection; with only a signal
+        # event available, it must not claim any qualified opportunity.
+        assert payload["QUALIFIED"] == 0
+
+    def test_live_scanner_does_not_synthesize_candidates_when_logs_are_empty(self, client, tmp_path, monkeypatch):
+        """No log evidence means an empty scanner response, not invented market candidates."""
+        monkeypatch.chdir(tmp_path)
+        response = client.get("/api/live-scanner")
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["count"] == 0
+        assert payload["signals"] == []
+
+    def test_paper_forward_status_reports_unavailable_without_evidence(self, client, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        response = client.get("/api/paper/forward-status")
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["status"] == "UNAVAILABLE"
+        assert payload["closed_trades"] is None
+        assert payload["net_realized_pnl"] is None
+
+    def test_paper_forward_status_uses_actual_persisted_records(self, client, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "forward_health.json").write_text(
+            json.dumps({"strategy": "OK", "last_update": 1000.0}), encoding="utf-8"
+        )
+        (tmp_path / "paper_portfolio.json").write_text(
+            json.dumps({"positions": {"open-1": {"status": "OPEN"}}}), encoding="utf-8"
+        )
+        (tmp_path / "forward_signal_log.jsonl").write_text(
+            json.dumps({"decision": "REJECTED"}) + "\n", encoding="utf-8"
+        )
+        (tmp_path / "paper_trade_ledger.jsonl").write_text(
+            json.dumps({"status": "CLOSED", "net_pnl": -2.5}) + "\n", encoding="utf-8"
+        )
+        payload = client.get("/api/paper/forward-status").get_json()
+        assert payload["status"] == "AVAILABLE"
+        assert payload["open_positions"] == 1
+        assert payload["signal_count"] == 1
+        assert payload["signal_decisions"] == {"REJECTED": 1}
+        assert payload["closed_trades"] == 1
+        assert payload["net_realized_pnl"] == -2.5
+
+    def test_early_signal_rejection_log_keeps_unmeasured_fields_unknown(self, tmp_path, monkeypatch):
+        from testnet_engine import service as service_module
+
+        log_path = tmp_path / "opportunities.jsonl"
+        monkeypatch.setattr(service_module, "TESTNET_OPPORTUNITY_LOG", str(log_path))
+        service = object.__new__(service_module.TestnetService)
+        service.log_opportunity("sig-1", "BTCUSDT", "BUY", {"reason": "QANAT_DECAY_FILTERED_NOISE"}, "REJECTED", "QANAT_DECAY_FILTERED_NOISE")
+
+        record = json.loads(log_path.read_text(encoding="utf-8"))
+        assert record["profitability_decision"] == "NOT_EVALUATED"
+        assert record["risk_decision"] == "NOT_EVALUATED"
+        assert record["confidence"] is None
+        assert record["entry"] is None
+        assert record["expected_gross"] is None
+        assert record["expected_net"] is None
+        assert record["fees"] is None
+        assert record["slippage"] is None

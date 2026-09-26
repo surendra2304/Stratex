@@ -52,6 +52,8 @@ class TestHealthAndHeartbeatArchitecture:
 
     def test_stale_heartbeat_reports_engine_offline(self, client, tmp_path, monkeypatch):
         """Stale heartbeat (>60s) must report engine offline even if dashboard is online."""
+        import config
+        monkeypatch.setattr(config, "TRADING_MODE", "FUTURES")
         hb_file = str(tmp_path / "testnet_heartbeat.json")
         monkeypatch.setenv("TESTNET_HEARTBEAT_FILE", hb_file)
         
@@ -124,10 +126,15 @@ class TestExecutionPolicyAndModeInvariants:
     def test_testnet_mode_allowed_only_with_testnet_enabled(self, monkeypatch):
         """ExecutionPolicy allows orders on TESTNET only when TESTNET_ENABLED=True and LIVE=False."""
         import execution
+        import config
         monkeypatch.setattr(execution, "TRADING_MODE", "TESTNET")
         monkeypatch.setattr(execution, "PAPER_SAFE_MODE", False)
         monkeypatch.setattr(execution, "TESTNET_ENABLED", True)
         monkeypatch.setattr(execution, "LIVE_TRADING_ENABLED", False)
+        monkeypatch.setattr(config, "TRADING_MODE", "TESTNET")
+        monkeypatch.setattr(config, "PAPER_SAFE_MODE", False)
+        monkeypatch.setattr(config, "TESTNET_ENABLED", True)
+        monkeypatch.setattr(config, "LIVE_TRADING_ENABLED", False)
         
         allowed, reason = ExecutionPolicy.can_place_order()
         assert allowed is True
@@ -135,6 +142,7 @@ class TestExecutionPolicyAndModeInvariants:
         
         # If TESTNET_ENABLED is False, order is blocked
         monkeypatch.setattr(execution, "TESTNET_ENABLED", False)
+        monkeypatch.setattr(config, "TESTNET_ENABLED", False)
         allowed, reason = ExecutionPolicy.can_place_order()
         assert allowed is False
         assert reason == "TESTNET_DISABLED"

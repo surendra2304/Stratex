@@ -1,3 +1,7 @@
+import os
+
+import pytest
+
 from advisory_telemetry import build_telemetry_payload
 from intelligence.intelx_client import IntelXMarketClient, get_intelx_client
 from monitoring.metrics import get_metrics_registry
@@ -26,6 +30,7 @@ def test_intelx_trigger_conditions():
     assert trig_nom is False
     assert reason_nom == 'NOMINAL'
 
+@pytest.mark.skipif(os.getenv('STRATEX_LIVE_PEER_TESTS') != '1', reason='set STRATEX_LIVE_PEER_TESTS=1 to call the live IntelX service')
 def test_intelx_research_query_and_advisory_context_integration():
     client = get_intelx_client()
     report = client.query_market_research('BTCUSDT', trigger_reason='VOLATILITY_2_SIGMA')

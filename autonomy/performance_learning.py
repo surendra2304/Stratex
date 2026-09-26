@@ -8,7 +8,10 @@ Capabilities:
 """
 
 from dataclasses import dataclass
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -76,7 +79,11 @@ class PerformanceLearningEngine:
                     context=f"regime:{p.regime}",
                     domain="quantitative_trading"
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "Memora learning write failed for pattern %s (%s)",
+                    p.pattern_id,
+                    type(exc).__name__,
+                )
 
         return patterns

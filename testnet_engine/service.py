@@ -1796,8 +1796,8 @@ class TestnetService:
                 break
 
     def log_opportunity(self, signal_id, symbol, side, metrics, decision, reason, current_price=0.0, rank=None, score=None, candidate=None):
-        def _safe_float(val, default=0.0):
-            """Convert val to float safely, returning default if val is None or invalid."""
+        def _safe_float(val, default=None):
+            """Convert measured values; absent/invalid evidence remains unavailable."""
             if val is None:
                 return default
             try:
@@ -1805,18 +1805,23 @@ class TestnetService:
             except (TypeError, ValueError):
                 return default
 
+        def _first_present(*values):
+            return next((value for value in values if value is not None), None)
+
         tf = metrics.get("timeframe") or (candidate.get("tf") if candidate else None) or "5m"
         strat = metrics.get("strategy") or (candidate.get("strategy") if candidate else None) or "adx_ema"
-        entry = _safe_float(current_price or metrics.get("entry_price") or metrics.get("current_price") or
-                            (candidate.get("entry") if candidate else None) or
-                            (candidate.get("current_price") if candidate else None), 0.0)
-        stop = _safe_float(metrics.get("sl_price") or metrics.get("sl") or (candidate.get("sl") if candidate else None), 0.0)
-        target = _safe_float(metrics.get("tp_price") or metrics.get("tp") or (candidate.get("tp") if candidate else None), 0.0)
-        conf = _safe_float(metrics.get("confidence") or metrics.get("prob_win") or metrics.get("win_rate_prior"), 0.5)
-        gross = _safe_float(metrics.get("gross_edge") or metrics.get("expected_gross_return") or metrics.get("expected_gross"), 0.0)
-        fees = _safe_float(metrics.get("estimated_fees") or metrics.get("fees") or (metrics.get("friction", 0.0031) * entry if entry > 0 else None), 0.0)
-        slippage = _safe_float(metrics.get("slippage") or metrics.get("slippage_pct") or (0.0011 * entry if entry > 0 else None), 0.0)
-        net = _safe_float(metrics.get("expected_net_return") or metrics.get("expected_net") or metrics.get("net_edge"), 0.0)
+        entry = _safe_float(_first_present(current_price or None, metrics.get("entry_price"), metrics.get("current_price"),
+                                           candidate.get("entry") if candidate else None,
+                                           candidate.get("current_price") if candidate else None))
+        stop = _safe_float(_first_present(metrics.get("sl_price"), metrics.get("sl"), candidate.get("sl") if candidate else None))
+        target = _safe_float(_first_present(metrics.get("tp_price"), metrics.get("tp"), candidate.get("tp") if candidate else None))
+        conf = _safe_float(_first_present(metrics.get("confidence"), metrics.get("prob_win"), metrics.get("win_rate_prior")))
+        gross = _safe_float(_first_present(metrics.get("gross_edge"), metrics.get("expected_gross_return"), metrics.get("expected_gross")))
+        calculated_fees = metrics.get("friction") * entry if entry is not None and entry > 0 and metrics.get("friction") is not None else None
+        fees = _safe_float(_first_present(metrics.get("estimated_fees"), metrics.get("fees"), calculated_fees))
+        calculated_slippage = metrics.get("slippage_pct") * entry if entry is not None and entry > 0 and metrics.get("slippage_pct") is not None else None
+        slippage = _safe_float(_first_present(metrics.get("slippage"), calculated_slippage))
+        net = _safe_float(_first_present(metrics.get("expected_net_return"), metrics.get("expected_net"), metrics.get("net_edge")))
 
         
         is_risk_stage = any(k in reason for k in [
@@ -1856,8 +1861,8 @@ class TestnetService:
             r_reason_val = ""
             e_reason_val = f"BLOCKED_BY_PROFITABILITY: {reason}"
         else:
-            p_dec = "REJECTED" if "REJECT" in decision else decision
-            r_dec = "REJECTED" if "REJECT" in decision else "PENDING"
+            p_dec = "NOT_EVALUATED"
+            r_dec = "NOT_EVALUATED"
             e_dec = "REJECTED"
             p_reason_val = reason
             r_reason_val = reason

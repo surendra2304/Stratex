@@ -25,14 +25,18 @@ from dashboard import app
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    monkeypatch.setenv("TRADING_BOT_API_KEY_READ", "stratex_read_test_key_0123456789abcdef")
+    monkeypatch.setenv("TRADING_BOT_API_KEY_CONTROL", "stratex_control_test_key_0123456789abcdef")
+    monkeypatch.setenv("BOT_API_KEY", "")
     app.config["TESTING"] = True
     with app.test_client() as client:
         yield client
 
 
 def test_public_status_endpoints(client):
-    headers = {"X-API-Key": "read_key_default_secret_123"}
+    headers = {"X-API-Key": "stratex_read_test_key_0123456789abcdef"}
 
     # 1. /api/v1/status
     res = client.get("/api/v1/status", headers=headers)
@@ -74,12 +78,12 @@ def test_api_key_role_permissions(client):
     assert res.status_code == 401
 
     # 2. Read key trying to pause -> 403 Forbidden
-    read_headers = {"X-API-Key": "read_key_default_secret_123"}
+    read_headers = {"X-API-Key": "stratex_read_test_key_0123456789abcdef"}
     res = client.post("/api/v1/control/pause", headers=read_headers)
     assert res.status_code == 403
 
     # 3. Control key pausing -> 200 OK
-    control_headers = {"X-API-Key": "control_key_default_secret_456"}
+    control_headers = {"X-API-Key": "stratex_control_test_key_0123456789abcdef"}
     res = client.post("/api/v1/control/pause", headers=control_headers)
     assert res.status_code == 200
     assert "paused" in res.get_json()["data"]["message"].lower()
@@ -89,8 +93,25 @@ def test_api_key_role_permissions(client):
     assert res.status_code == 200
 
 
+def test_production_auth_requires_distinct_strong_keys(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("TRADING_BOT_API_KEY_READ", raising=False)
+    monkeypatch.delenv("TRADING_BOT_API_KEY_CONTROL", raising=False)
+    client = app.test_client()
+    response = client.get("/api/v1/status")
+    assert response.status_code == 503
+    assert response.get_json()["error"] == "AUTH_NOT_CONFIGURED"
+
+    read_key = "stratex_read_production_test_key_0123456789"
+    control_key = "stratex_control_production_test_key_0123456789"
+    monkeypatch.setenv("TRADING_BOT_API_KEY_READ", read_key)
+    monkeypatch.setenv("TRADING_BOT_API_KEY_CONTROL", control_key)
+    response = client.get("/api/v1/status", headers={"X-API-Key": read_key})
+    assert response.status_code == 200
+
+
 def test_control_panic_confirmation_safety(client):
-    control_headers = {"X-API-Key": "control_key_default_secret_456"}
+    control_headers = {"X-API-Key": "stratex_control_test_key_0123456789abcdef"}
 
     # 1. Panic without confirmation payload -> 400 Bad Request
     res = client.post("/api/v1/control/panic", json={}, headers=control_headers)
@@ -107,7 +128,7 @@ def test_control_panic_confirmation_safety(client):
 
 
 def test_strategy_toggle_endpoint(client):
-    control_headers = {"X-API-Key": "control_key_default_secret_456"}
+    control_headers = {"X-API-Key": "stratex_control_test_key_0123456789abcdef"}
     res = client.post(
         "/api/v1/control/strategy/strategy_scalper/toggle",
         json={"enabled": False},
@@ -118,7 +139,7 @@ def test_strategy_toggle_endpoint(client):
 
 
 def test_data_export_endpoints(client):
-    read_headers = {"X-API-Key": "read_key_default_secret_123"}
+    read_headers = {"X-API-Key": "stratex_read_test_key_0123456789abcdef"}
 
     res = client.get("/api/v1/export/trades?format=json", headers=read_headers)
     assert res.status_code == 200
@@ -137,7 +158,7 @@ def test_health_endpoints(client):
     assert res.status_code == 200
     assert res.get_json()["status"] == "HEALTHY"
 
-    read_headers = {"X-API-Key": "read_key_default_secret_123"}
+    read_headers = {"X-API-Key": "stratex_read_test_key_0123456789abcdef"}
     res = client.get("/api/v1/health/detailed", headers=read_headers)
     assert res.status_code == 200
     assert "system_resources" in res.get_json()["data"]

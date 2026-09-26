@@ -10,6 +10,7 @@ Loads strictly from environment variables:
 - TRADING_BOT_API_KEY_CONTROL
 """
 
+import hmac
 import os
 from functools import wraps
 
@@ -18,10 +19,20 @@ from flask import jsonify, request
 from security_hardening import SecurityRateLimiter, mask_credential
 
 # Consumer-agnostic keys
-_DEFAULT_KEYS = {
-    "READ": os.getenv("TRADING_BOT_API_KEY_READ", "read_key_default_secret_123"),
-    "CONTROL": os.getenv("TRADING_BOT_API_KEY_CONTROL", "control_key_default_secret_456")
-}
+_KEY_ENV = {"READ": "TRADING_BOT_API_KEY_READ", "CONTROL": "TRADING_BOT_API_KEY_CONTROL"}
+_PLACEHOLDERS = {"changeme", "change-me", "password", "secret", "read_key_default_secret_123", "control_key_default_secret_456"}
+
+
+def _production_mode() -> bool:
+    return os.getenv("ENVIRONMENT", "").strip().lower() in {"production", "prod"}
+
+
+def _configured_key(role: str) -> str:
+    return os.getenv(_KEY_ENV[role], "").strip()
+
+
+def _strong_key(key: str) -> bool:
+    return len(key) >= 32 and key.lower() not in _PLACEHOLDERS and len(set(key)) > 1
 
 # Key permissions hierarchy
 PERMISSIONS = {
@@ -48,12 +59,13 @@ def get_key_role(api_key: str) -> str | None:
     """Identifies role of the provided API key."""
     if not api_key:
         return None
-    for role, secret in _DEFAULT_KEYS.items():
-        if api_key == secret:
+    for role in _KEY_ENV:
+        secret = _configured_key(role)
+        if secret and hmac.compare_digest(api_key, secret):
             return role
     # Fallback to legacy BOT_API_KEY as CONTROL
     legacy_key = os.getenv("BOT_API_KEY", "")
-    if legacy_key and api_key == legacy_key:
+    if legacy_key and not _production_mode() and hmac.compare_digest(api_key, legacy_key):
         return "CONTROL"
     return None
 
@@ -76,6 +88,16 @@ def require_permission(required_perm: str):
                 }), 429
 
             # 2. Extract Key & Check Permissions
+            if _production_mode():
+                read_key = _configured_key("READ")
+                control_key = _configured_key("CONTROL")
+                if not _strong_key(read_key) or not _strong_key(control_key) or read_key == control_key:
+                    return jsonify({
+                        "status": "ERROR",
+                        "error": "AUTH_NOT_CONFIGURED",
+                        "message": "Unique TRADING_BOT_API_KEY_READ and TRADING_BOT_API_KEY_CONTROL secrets are required.",
+                    }), 503
+
             key = extract_api_key()
             role = get_key_role(key)
 

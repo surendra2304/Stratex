@@ -122,9 +122,11 @@ _profitability_gate = ProfitabilityGate(cost_engine=COST_ENGINE)
 
 
 def _get_active_signal(df_feat):
-    strat = getattr(config, "ACTIVE_STRATEGY", "factory_winner_1")
+    # The forward experiment is preregistered and immutable. Never let the
+    # dashboard's globally selected strategy silently alter this experiment.
+    strat = FROZEN_STRATEGY
     try:
-        mod = importlib.import_module(f"strategy_{strat}")
+        mod = importlib.import_module("strategy_swing")
         if hasattr(mod, "get_signal"):
             return mod.get_signal(df_feat), strat
     except Exception as e:
@@ -678,8 +680,8 @@ def run():
                 last_known_price = portfolio.cash  # fallback
 
             # ── Fetch market data ────────────────────────────────────────
-            active_symbol = getattr(config, "SYMBOL", FROZEN_SYMBOL)
-            active_tf = getattr(config, "TIMEFRAME", FROZEN_TIMEFRAME)
+            active_symbol = cfg.symbols[0]
+            active_tf = cfg.timeframe
             df = fetch_candles(active_symbol, active_tf, limit=250)
 
             if df is None or df.empty:

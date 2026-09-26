@@ -12,9 +12,9 @@
 | Attribute | Production Configuration |
 | :--- | :--- |
 | **Live Production URL** | [https://stratex-8wj1.onrender.com](https://stratex-8wj1.onrender.com) |
-| **Health Check Endpoint** | https://stratex-8wj1.onrender.com/api/performance |
-| **Master API Key Variable** | STRATEX_API_KEY=stratex_api |
-| **Authentication Header** | Authorization: Bearer stratex_api / X-STRATEX-API-KEY: stratex_api |
+| **Configured Health Check Endpoint** | `/health` (live response/revision must be verified separately) |
+| **Master API Key Variable** | `STRATEX_API_KEY` (unique secret required; value is not stored here) |
+| **Authentication Header** | `Authorization: Bearer <STRATEX_API_KEY>` or `X-API-Key` |
 | **Database Topology** | SQLite Trade Ledger / State Backups / Connected to Memora |
 | **Database Connection** | sqlite+aiosqlite:///./data/trades.db |
 | **Hosting Platform** | Render Docker Web Service (Singapore / AWS Mumbai) |
@@ -42,41 +42,41 @@ Every agent in the universe communicates using standard environment variables:
 #               FRIDAY UNIVERSE MASTER ECOSYSTEM CONFIGURATION                  #
 # ============================================================================== #
 
-# 1. ⚡ Inference AI Multi-Model Gateway (25 Keys)
+# 1. ⚡ Inference AI Multi-Model Gateway
 INFERENCE_URL=https://inference-r1sn.onrender.com
-INFERENCE_API_KEY=inference_api
+# Set INFERENCE_API_KEY to the unique key issued by the Inference service.
 
 # 2. 🧠 Memora Cloud Persistent Memory (9 GB Turso AWS Mumbai)
 MEMORA_URL=https://memora-cavc.onrender.com
-MEMORA_API_KEY=memora_api
+# Set MEMORA_API_KEY to the unique key issued by the Memora service.
 
 # 3. 📈 Stratex 24/7 Algorithmic Trading Platform (Binance Futures)
 STRATEX_URL=https://stratex-8wj1.onrender.com
-STRATEX_API_KEY=stratex_api
+# Set STRATEX_API_KEY to the unique key issued by the Stratex service.
 
 # 4. 🧠 IntelX Evidence & Intelligence Research Engine (Turso AWS Mumbai)
 INTELX_URL=https://intelx-mygl.onrender.com
-INTELX_API_KEY=intelx_api
+# Set INTELX_API_KEY to the unique key issued by the IntelX service.
 
 # 5. 🔮 Futuris Calibrated Predictive Forecasting Engine
 FUTURIS_URL=https://futuris-th6f.onrender.com
-FUTURIS_API_KEY=futuris_api
+# Set FUTURIS_API_KEY to the unique key issued by the Futuris service.
 
 # 6. 🌐 Cortex Autonomous Web Operations & Intelligence
 CORTEX_URL=https://cortex-0m7c.onrender.com
-CORTEX_API_KEY=cortex_api
+# Set CORTEX_API_KEY to the unique key issued by the Cortex service.
 
 # 7. 🛠️ Forge Local Software Engineering Engine
 FORGE_URL=https://forge-e9kl.onrender.com
-FORGE_API_KEY=forge_api
+# Set FORGE_API_KEY to the unique key issued by Forge.
 
 # 8. 🛡️ Sentinel Local Cybersecurity & Threat Defense Shield
 SENTINEL_URL=https://sentinel-a861.onrender.com
-SENTINEL_API_KEY=sentinel_api
+# Set SENTINEL_API_KEY to the unique key issued by Sentinel.
 
 # 9. 🤖 FRIDAY Central Desktop Operating System
 FRIDAY_URL=https://friday-zw59.onrender.com
-FRIDAY_API_KEY=friday_api
+# Set FRIDAY_API_KEY to the unique key issued by FRIDAY.
 `
 
 ---
@@ -85,7 +85,7 @@ FRIDAY_API_KEY=friday_api
 
 When opening this directory in **Antigravity AI**:
 * **Identity:** You are working inside **Stratex** (d:\FRIDAY Universe\Stratex).
-* **Live Service:** This service is deployed live at https://stratex-8wj1.onrender.com.
-* **Authentication:** Incoming requests use STRATEX_API_KEY=stratex_api.
-* **Never Fake Tests:** All tests and verifications must be executed against real code and real endpoints.
+* **Configured Service URL:** https://stratex-8wj1.onrender.com. A URL in this manifest does not prove current deployment or health.
+* **Authentication:** Incoming requests require a unique STRATEX_API_KEY configured in the service environment.
+* **Test Evidence:** Label local tests, test doubles, and live endpoint checks separately; report only commands and results actually observed.
 * **No Unapproved Git Pushes:** Keep modifications local unless explicitly instructed to push.

@@ -217,25 +217,18 @@ def test_intelx_futuris_ranking_priority():
     assert candidates[1]['score'] == 0.50
 
 
-def test_intelx_and_futuris_fail_open_on_exception():
-    "Verify that if external APIs fail or raise exceptions, engine defaults to safe nominal operation."
+def test_intelx_and_futuris_fail_closed_on_exception():
+    "Verify that missing external evidence blocks trade approval."
     client_intelx = IntelXMarketClient()
     with patch.object(client_intelx, 'query_market_research', side_effect=Exception('Connection refused')):
-        try:
-            client_intelx.evaluate_market_sentiment('ETHUSDT', 'BUY')
-        except Exception:
-            # Client callers in service.py wrap with try/except and fail open
-            is_allowed, mult, reason = True, 1.0, 'INTELX_FAIL_OPEN'
-            assert is_allowed is True
-            assert mult == 1.0
-            assert reason == 'INTELX_FAIL_OPEN'
+        is_allowed, mult, reason, _ = client_intelx.evaluate_market_sentiment('ETHUSDT', 'BUY')
+        assert is_allowed is False
+        assert mult == 0.0
+        assert reason == 'INTELX_RESEARCH_UNAVAILABLE'
 
     client_futuris = FuturisMarketClient()
     with patch.object(client_futuris, 'fetch_forecast', side_effect=Exception('Timeout')):
-        try:
-            client_futuris.evaluate_forecast_alignment('ETHUSDT', 'BUY')
-        except Exception:
-            is_allowed, mult, reason = True, 1.0, 'FUTURIS_FAIL_OPEN'
-            assert is_allowed is True
-            assert mult == 1.0
-            assert reason == 'FUTURIS_FAIL_OPEN'
+        is_allowed, mult, reason, _ = client_futuris.evaluate_forecast_alignment('ETHUSDT', 'BUY')
+        assert is_allowed is False
+        assert mult == 0.0
+        assert reason == 'FUTURIS_FORECAST_UNAVAILABLE'

@@ -66,7 +66,10 @@ def test_structured_logger_execution(tmp_path):
         assert "CORR_999" in content
         assert "TEST_CORE" in content
 
-def test_monitoring_and_ops_endpoints():
+def test_monitoring_and_ops_endpoints(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    monkeypatch.setenv("TRADING_BOT_API_KEY_READ", "stratex_read_test_key_0123456789abcdef")
+    monkeypatch.setenv("TRADING_BOT_API_KEY_CONTROL", "stratex_control_test_key_0123456789abcdef")
     from dashboard import app
     client = app.test_client()
 
@@ -85,7 +88,7 @@ def test_monitoring_and_ops_endpoints():
     assert 'evolution_lab' in data
 
     # /api/v1/health/detailed endpoint
-    read_key = os.getenv("TRADING_BOT_API_KEY_READ", "read_key_default_secret_123")
+    read_key = os.getenv("TRADING_BOT_API_KEY_READ", "stratex_read_test_key_0123456789abcdef")
     res_h = client.get('/api/v1/health/detailed', headers={'X-API-Key': read_key})
     assert res_h.status_code == 200
     h_data = res_h.get_json()

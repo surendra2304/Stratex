@@ -19,6 +19,7 @@ class FuturisForecastContext:
     regime_outlook: dict[str, Any]
     timestamp: float = field(default_factory=time.time)
     expires_at: float = 0.0
+    status: str = 'LIVE'
 
     def is_valid(self) -> bool:
         return time.time() < self.expires_at
@@ -29,13 +30,14 @@ class FuturisForecastContext:
             'volatility_forecast': self.volatility_forecast,
             'drawdown_risk': self.drawdown_risk,
             'regime_outlook': self.regime_outlook,
-            'timestamp': datetime.datetime.utcfromtimestamp(self.timestamp).isoformat() + 'Z'
+            'timestamp': datetime.datetime.utcfromtimestamp(self.timestamp).isoformat() + 'Z',
+            'status': self.status,
         }
 
 class FuturisMarketClient:
     def __init__(self, base_url='https://futuris-th6f.onrender.com', cache_ttl_seconds=1800, timeout_seconds=3.0):
         self.base_url = (os.getenv('FUTURIS_URL') or os.getenv('FUTURIS_BASE_URL') or base_url or 'https://futuris-th6f.onrender.com').rstrip('/')
-        self.api_key = os.getenv('FUTURIS_API_KEY', 'futuris_api')
+        self.api_key = os.getenv('FUTURIS_API_KEY')
         self.cache_ttl_seconds = cache_ttl_seconds
         self.timeout_seconds = float(os.getenv('FUTURIS_TIMEOUT_SECONDS', str(timeout_seconds)))
         self.cache: dict[str, FuturisForecastContext] = {}
@@ -68,22 +70,26 @@ class FuturisMarketClient:
             )
             if resp.status_code == 200:
                 data = resp.json()
-                forecast = FuturisForecastContext(
-                    symbol=symbol,
-                    volatility_forecast=data.get('volatility_forecast', {'probability': 0.35, 'confidence': 0.82, 'horizon_hours': 24}),
-                    drawdown_risk=data.get('drawdown_risk', {'probability': 0.20, 'threshold_pct': 0.05, 'horizon_hours': 24}),
-                    regime_outlook=data.get('regime_outlook', {'current': 'TRENDING_BULL', 'transition_probability': 0.28, 'predicted_direction': 'NEUTRAL'}),
-                    timestamp=time.time(),
-                    expires_at=time.time() + self.cache_ttl_seconds
-                )
+                required = ('volatility_forecast', 'drawdown_risk', 'regime_outlook')
+                if isinstance(data, dict) and all(isinstance(data.get(key), dict) and data[key] for key in required):
+                    forecast = FuturisForecastContext(
+                        symbol=symbol,
+                        volatility_forecast=data['volatility_forecast'],
+                        drawdown_risk=data['drawdown_risk'],
+                        regime_outlook=data['regime_outlook'],
+                        timestamp=time.time(),
+                        expires_at=time.time() + self.cache_ttl_seconds,
+                    )
+                else:
+                    forecast = self._unavailable_forecast(symbol, 'INVALID_RESPONSE')
             else:
-                forecast = self._generate_fallback_forecast(symbol)
+                forecast = self._unavailable_forecast(symbol, f'HTTP_{resp.status_code}')
         except Exception as e:
-            logger.debug(f'[FUTURIS_CLIENT] Futuris server unreachable, using defensive synthetic forecast: {e}')
-            forecast = self._generate_fallback_forecast(symbol)
+            logger.warning(f'[FUTURIS_CLIENT] Futuris forecast unavailable: {type(e).__name__}')
+            forecast = self._unavailable_forecast(symbol, 'CONNECTION_ERROR')
 
         if forecast is None:
-            forecast = self._generate_fallback_forecast(symbol)
+            forecast = self._unavailable_forecast(symbol, 'NO_RESPONSE')
 
         with self._lock:
             self.cache[symbol] = forecast
@@ -93,14 +99,15 @@ class FuturisMarketClient:
 
         return forecast
 
-    def _generate_fallback_forecast(self, symbol: str) -> FuturisForecastContext:
+    def _unavailable_forecast(self, symbol: str, reason: str) -> FuturisForecastContext:
         return FuturisForecastContext(
             symbol=symbol,
-            volatility_forecast={'probability': 0.35, 'confidence': 0.78, 'horizon_hours': 24},
-            drawdown_risk={'probability': 0.18, 'threshold_pct': 0.05, 'horizon_hours': 24},
-            regime_outlook={'current': 'RANGING', 'transition_probability': 0.30, 'predicted_direction': 'NEUTRAL'},
+            volatility_forecast={},
+            drawdown_risk={},
+            regime_outlook={},
             timestamp=time.time(),
-            expires_at=time.time() + self.cache_ttl_seconds
+            expires_at=time.time() + min(self.cache_ttl_seconds, 60),
+            status=f'UNAVAILABLE:{reason}',
         )
 
     def evaluate_forecast_alignment(self, symbol: str, side: str) -> tuple[bool, float, str, dict[str, Any]]:
@@ -112,7 +119,19 @@ class FuturisMarketClient:
             reason (str): Canonical verdict reason
             details (dict): Context summary for live scanner and opportunity log
         """
-        forecast = self.fetch_forecast(symbol)
+        try:
+            forecast = self.fetch_forecast(symbol)
+        except Exception as exc:
+            return False, 0.0, 'FUTURIS_FORECAST_UNAVAILABLE', {
+                'symbol': symbol,
+                'status': 'UNAVAILABLE',
+                'error': type(exc).__name__,
+            }
+        if forecast.status != 'LIVE':
+            return False, 0.0, 'FUTURIS_FORECAST_UNAVAILABLE', {
+                'symbol': symbol,
+                'status': forecast.status,
+            }
         dd_prob = float(forecast.drawdown_risk.get('probability', 0.18))
         regime = str(forecast.regime_outlook.get('current', 'RANGING')).upper()
         pred_dir = str(forecast.regime_outlook.get('predicted_direction', 'NEUTRAL')).upper()
@@ -149,7 +168,19 @@ class FuturisMarketClient:
     def record_actual_outcome(self, symbol: str, actual_volatility_spike: bool, actual_drawdown_pct: float) -> dict[str, Any]:
         with self._lock:
             forecast = self.cache.get(symbol)
-            predicted_vol_prob = forecast.volatility_forecast.get('probability', 0.5) if forecast else 0.5
+            if not forecast or forecast.status != 'LIVE' or not forecast.is_valid():
+                return {
+                    'status': 'UNAVAILABLE',
+                    'reason': 'No fresh live forecast exists for this symbol.',
+                    'symbol': symbol,
+                }
+            predicted_vol_prob = forecast.volatility_forecast.get('probability')
+            if predicted_vol_prob is None:
+                return {
+                    'status': 'UNAVAILABLE',
+                    'reason': 'Live forecast has no volatility probability to evaluate.',
+                    'symbol': symbol,
+                }
             predicted_spike = predicted_vol_prob >= 0.50
 
             is_correct = (predicted_spike == actual_volatility_spike)
@@ -159,7 +190,8 @@ class FuturisMarketClient:
                 'predicted_vol_probability': predicted_vol_prob,
                 'actual_volatility_spike': actual_volatility_spike,
                 'actual_drawdown_pct': round(actual_drawdown_pct, 4),
-                'prediction_correct': is_correct
+                'prediction_correct': is_correct,
+                'status': 'RECORDED',
             }
             self.accuracy_records.append(record)
             if len(self.accuracy_records) > 100:
@@ -171,8 +203,8 @@ class FuturisMarketClient:
             if not self.accuracy_records:
                 return {
                     'total_evaluated': 0,
-                    'accuracy_pct': 100.0,
-                    'brier_score': 0.0,
+                    'accuracy_pct': None,
+                    'brier_score': None,
                     'status': 'AWAITING_DATA'
                 }
             correct = sum(1 for r in self.accuracy_records if r.get('prediction_correct'))

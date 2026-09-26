@@ -731,7 +731,9 @@ def get_engine_health_data():
             _paper = {"paper_runner_status": "UNKNOWN"}
 
         paper_alive = _paper.get("paper_runner_status") == "RUNNING" or _paper.get("alive") is True
-        if paper_alive and not is_healthy and getattr(config, "TRADING_MODE", "TESTNET").upper() in ["PAPER", "FUTURES"]:
+        # The paper runner is an independent process. In FUTURES/TESTNET mode
+        # its heartbeat must never conceal a stale execution-engine heartbeat.
+        if paper_alive and not is_healthy and getattr(config, "TRADING_MODE", "TESTNET").upper() == "PAPER":
             is_healthy = True
             engine_status = "ONLINE"
             worker_alive = True
@@ -765,7 +767,7 @@ def get_engine_health_data():
             _paper = {"paper_runner_status": "UNKNOWN"}
         
         paper_alive = _paper.get("paper_runner_status") == "RUNNING" or _paper.get("alive") is True
-        is_healthy = paper_alive and getattr(config, "TRADING_MODE", "TESTNET").upper() in ["PAPER", "FUTURES"]
+        is_healthy = paper_alive and getattr(config, "TRADING_MODE", "TESTNET").upper() == "PAPER"
         return {
             "engine_status": "ONLINE" if is_healthy else "OFFLINE",
             "healthy": is_healthy,
@@ -1893,9 +1895,9 @@ def get_scanner():
                     if not line.strip(): continue
                     try:
                         s = json.loads(line)
-                        p_dec = s.get("profitability_decision") or ("REJECTED" if "REJECT" in str(s.get("decision", "")) else "ACCEPTED")
-                        r_dec = s.get("risk_decision") or ("REJECTED" if "REJECT" in str(s.get("decision", "")) else "ACCEPTED")
-                        f_dec = s.get("final_decision") or s.get("decision") or "REJECTED"
+                        p_dec = s.get("profitability_decision") or "UNKNOWN"
+                        r_dec = s.get("risk_decision") or "UNKNOWN"
+                        f_dec = s.get("final_decision") or s.get("decision") or "UNKNOWN"
                         opps.append({
                             "timestamp": s.get("timestamp"),
                             "signal_id": s.get("signal_id"),
@@ -1904,14 +1906,14 @@ def get_scanner():
                             "strategy": s.get("strategy"),
                             "side": s.get("side", s.get("decision", "BUY")),
                             "decision": f_dec,
-                            "confidence": float(s.get("confidence", 0.5)),
-                            "expected_gross_return": float(s.get("expected_gross", s.get("gross_edge", 0.0))),
-                            "expected_net_return": float(s.get("expected_net", s.get("net_edge", 0.0))),
-                            "expected_net": float(s.get("expected_net", s.get("net_edge", 0.0))),
+                            "confidence": s.get("confidence"),
+                            "expected_gross_return": s.get("expected_gross", s.get("gross_edge")),
+                            "expected_net_return": s.get("expected_net", s.get("net_edge")),
+                            "expected_net": s.get("expected_net", s.get("net_edge")),
                             "profitability_decision": p_dec,
                             "risk_decision": r_dec,
                             "final_decision": f_dec,
-                            "reason": s.get("reason") or s.get("rejection_reason") or ("ALL_GATES_PASSED" if f_dec in ("ACCEPTED", "QUALIFIED") else "FILTERED_BY_GATE")
+                            "reason": s.get("reason") or s.get("rejection_reason") or s.get("profitability_reason") or "UNAVAILABLE"
                         })
                     except Exception:
                         pass
@@ -1925,11 +1927,12 @@ def get_scanner():
     # Each signal needs: timestamp, symbol, timeframe, strategy, side, entry_price, evaluation{}
     recent_signals = []
     for opp in sorted_opps[:20]:
-        p_decision = str(opp.get("profitability_decision", opp.get("decision", ""))).upper()
-        r_decision = str(opp.get("risk_decision", "")).upper()
+        p_decision = str(opp.get("profitability_decision") or "UNKNOWN").upper()
+        r_decision = str(opp.get("risk_decision") or "UNKNOWN").upper()
         prof_passed = p_decision in ("ACCEPTED", "QUALIFIED")
-        risk_passed = r_decision in ("ACCEPTED", "")  # empty means no explicit rejection
-        expected_net_pct = float(opp.get("expected_net", opp.get("expected_net_return", 0.0)))
+        risk_passed = r_decision == "ACCEPTED"
+        expected_net_raw = opp.get("expected_net", opp.get("expected_net_return"))
+        expected_net_pct = float(expected_net_raw) if expected_net_raw is not None else None
         recent_signals.append({
             "timestamp": opp.get("timestamp"),
             "signal_id": opp.get("signal_id"),
@@ -1943,13 +1946,13 @@ def get_scanner():
             "confidence": float(opp.get("confidence", 0.0)),
             "final_decision": str(opp.get("final_decision", opp.get("decision", ""))).upper(),
             "evaluation": {
-                "expected_net_percent": round(expected_net_pct, 4),
+                "expected_net_percent": round(expected_net_pct, 4) if expected_net_pct is not None else None,
                 "profitability": {
                     "passed": prof_passed,
-                    "expected_gross": float(opp.get("expected_gross_return", 0.0)),
+                    "expected_gross": opp.get("expected_gross_return"),
                     "expected_net": expected_net_pct,
-                    "fees": float(opp.get("fees_pct", 0.31)),
-                    "threshold": float(opp.get("threshold", 0.31)),
+                    "fees": opp.get("fees_pct"),
+                    "threshold": opp.get("threshold"),
                     "reason": opp.get("reason", opp.get("profitability_reason", ""))
                 },
                 "risk": {
@@ -2115,16 +2118,16 @@ def api_get_opportunities():
                             "symbol": s.get("symbol"),
                             "timeframe": s.get("timeframe"),
                             "strategy": s.get("strategy"),
-                            "side": s.get("decision", "BUY"),
-                            "decision": s.get("final_decision", "ACCEPTED"),
-                            "confidence": s.get("confidence", 0.8),
-                            "expected_gross_return": s.get("expected_gross", 2.0),
-                            "expected_net_return": s.get("expected_net", 1.8),
-                            "expected_net": s.get("expected_net", 1.8),
-                            "profitability_decision": s.get("profitability_decision", "ACCEPTED"),
-                            "risk_decision": s.get("risk_decision", "ACCEPTED"),
-                            "final_decision": s.get("final_decision", "ACCEPTED"),
-                            "reason": "POSITIVE_ALPHA"
+                            "side": s.get("side", "UNKNOWN"),
+                            "decision": s.get("final_decision") or s.get("decision") or "UNKNOWN",
+                            "confidence": s.get("confidence"),
+                            "expected_gross_return": s.get("expected_gross", s.get("gross_edge")),
+                            "expected_net_return": s.get("expected_net", s.get("net_edge")),
+                            "expected_net": s.get("expected_net", s.get("net_edge")),
+                            "profitability_decision": s.get("profitability_decision") or "UNKNOWN",
+                            "risk_decision": s.get("risk_decision") or "UNKNOWN",
+                            "final_decision": s.get("final_decision") or s.get("decision") or "UNKNOWN",
+                            "reason": s.get("reason") or s.get("rejection_reason") or s.get("profitability_reason") or "UNAVAILABLE"
                         })
                     except Exception:
                         pass
@@ -2174,6 +2177,77 @@ def api_get_opportunities():
             res[k] = 0
             
     return jsonify(res)
+
+
+@app.route('/api/paper/forward-status')
+def api_paper_forward_status():
+    """Expose only persisted forward-paper-runner evidence; missing files stay unavailable."""
+    paths = {
+        "health": os.getenv("PAPER_FORWARD_HEALTH_FILE", "forward_health.json"),
+        "portfolio": os.getenv("PAPER_PORTFOLIO_FILE", "paper_portfolio.json"),
+        "signals": os.getenv("PAPER_FORWARD_SIGNAL_LOG", "forward_signal_log.jsonl"),
+        "ledger": os.getenv("PAPER_LEDGER_FILE", "paper_trade_ledger.jsonl"),
+    }
+
+    def read_json(path):
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                value = json.load(handle)
+            return value if isinstance(value, dict) else None
+        except (OSError, ValueError):
+            return None
+
+    def read_jsonl(path):
+        records = []
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                for line in handle:
+                    if not line.strip():
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except ValueError:
+                        continue
+                    if isinstance(record, dict):
+                        records.append(record)
+        except OSError:
+            return None
+        return records
+
+    health_data = read_json(paths["health"])
+    portfolio = read_json(paths["portfolio"])
+    signals = read_jsonl(paths["signals"])
+    ledger = read_jsonl(paths["ledger"])
+    available = any(item is not None for item in (health_data, portfolio, signals, ledger))
+    signal_decisions = {}
+    for item in signals or []:
+        decision = str(item.get("decision") or "UNKNOWN").upper()
+        signal_decisions[decision] = signal_decisions.get(decision, 0) + 1
+    closed = [item for item in ledger or [] if str(item.get("status", "")).upper() == "CLOSED"]
+    realized = [item.get("net_pnl") for item in closed if isinstance(item.get("net_pnl"), (int, float))]
+    positions = portfolio.get("positions") if portfolio else None
+    positions = positions if isinstance(positions, dict) else None
+    open_positions = (
+        sum(1 for item in positions.values() if isinstance(item, dict) and item.get("status") == "OPEN")
+        if positions is not None else None
+    )
+    last_update = health_data.get("last_update") if health_data else None
+    heartbeat_age = max(0.0, time.time() - float(last_update)) if isinstance(last_update, (int, float)) else None
+
+    return jsonify({
+        "status": "AVAILABLE" if available else "UNAVAILABLE",
+        "mode": "PAPER",
+        "evidence_files": {key: os.path.exists(path) for key, path in paths.items()},
+        "runner_health": health_data,
+        "heartbeat_age_seconds": round(heartbeat_age, 2) if heartbeat_age is not None else None,
+        "portfolio_available": portfolio is not None,
+        "open_positions": open_positions,
+        "signal_count": len(signals) if signals is not None else None,
+        "signal_decisions": signal_decisions if signals is not None else None,
+        "closed_trades": len(closed) if ledger is not None else None,
+        "net_realized_pnl": round(sum(realized), 8) if ledger is not None else None,
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+    })
 
 @app.route('/api/export-trades')
 def api_export_trades():
@@ -2260,87 +2334,6 @@ def api_live_scanner():
             opps = t_mgr.get_signals_log(limit=50)
         except Exception:
             pass
-
-    # If empty on initial deployment, synthesize from active positions and live market scan
-    if not opps:
-        now_str = datetime.datetime.utcnow().isoformat() + "Z"
-        active_symbols = set()
-        # 1. Check live active positions directly from client or active_trades.json
-        try:
-            from bot import BinanceClientFactory
-            f_client = BinanceClientFactory.get_futures_client()
-            if f_client and hasattr(f_client, "futures_position_information"):
-                f_pos = f_client.futures_position_information()
-                for p in f_pos:
-                    amt = float(p.get("positionAmt", 0.0))
-                    if amt != 0.0:
-                        sym = p.get("symbol")
-                        active_symbols.add(sym)
-                        entry_p = float(p.get("entryPrice", 0.0))
-                        side = "BUY" if amt > 0 else "SELL"
-                        opps.append({
-                            "timestamp": now_str,
-                            "signal_id": f"exec-{sym.lower()}",
-                            "symbol": sym,
-                            "timeframe": "15m",
-                            "strategy": "SUPERTREND",
-                            "side": side,
-                            "entry": entry_p,
-                            "stop": round(entry_p * (0.99 if side == "BUY" else 1.01), 4),
-                            "target": round(entry_p * (1.02 if side == "BUY" else 0.98), 4),
-                            "expected_net_return": 0.0038,
-                            "decision": "EXECUTED",
-                            "reason": "ACTIVE_FUTURES_POSITION_BRACKET_PROTECTED",
-                            "execution_decision": "EXECUTED"
-                        })
-        except Exception:
-            pass
-
-        # 2. Add scanner evaluations across remaining tracked symbols
-        tracked = [
-            'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'LTCUSDT',
-            'DOGEUSDT', 'LINKUSDT', 'AVAXUSDT', 'ATOMUSDT', 'UNIUSDT', 'NEARUSDT',
-            'APTUSDT', 'ADAUSDT', 'DOTUSDT', 'INJUSDT'
-        ]
-        try:
-            from data_client import MarketDataClient
-            m_client = MarketDataClient()
-            tickers = m_client.get_ticker() if m_client.is_available() else []
-            t_map = {t.get("symbol"): t for t in tickers}
-        except Exception:
-            t_map = {}
-
-        for sym in tracked:
-            if sym in active_symbols:
-                continue
-            t = t_map.get(sym, {})
-            price = float(t.get("lastPrice", 0.0))
-            change = float(t.get("priceChangePercent", 0.0))
-            side = "SELL" if change < 0 else "BUY"
-            if abs(change) >= 2.5:
-                dec = "QUALIFIED"
-                reason = "TREND_MOMENTUM_VERIFIED_ADDED_TO_POOL"
-                net_edge = 0.0028
-            else:
-                dec = "REJECTED"
-                reason = "QANAT_DECAY_FILTERED_NOISE" if abs(change) < 0.8 else "BTC_REGIME_WAITING_FOR_PULLBACK"
-                net_edge = 0.0006
-
-            opps.append({
-                "timestamp": now_str,
-                "signal_id": f"scan-{sym.lower()}",
-                "symbol": sym,
-                "timeframe": "15m",
-                "strategy": "ADX_EMA" if "BTC" in sym or "ETH" in sym else "SUPERTREND",
-                "side": side,
-                "entry": price,
-                "stop": round(price * 0.988 if side == "BUY" else price * 1.012, 4) if price > 0 else 0.0,
-                "target": round(price * 1.025 if side == "BUY" else price * 0.975, 4) if price > 0 else 0.0,
-                "expected_net_return": net_edge,
-                "decision": dec,
-                "reason": reason,
-                "execution_decision": dec
-            })
 
     return jsonify({
         "status": "SUCCESS",

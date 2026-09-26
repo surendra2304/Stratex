@@ -1,3 +1,4 @@
+import os
 import pytest
 
 from advisory_telemetry import build_telemetry_payload
@@ -13,6 +14,7 @@ def client():
     with app.test_client() as c:
         yield c
 
+@pytest.mark.skipif(os.getenv('STRATEX_LIVE_PEER_TESTS') != '1', reason='set STRATEX_LIVE_PEER_TESTS=1 to call the live Futuris service')
 def test_futuris_forecast_generation_and_context():
     futuris = FuturisMarketClient()
     forecast = futuris.fetch_forecast('BTCUSDT')
@@ -33,15 +35,14 @@ def test_futuris_forecast_generation_and_context():
 
 def test_futuris_accuracy_tracking():
     futuris = FuturisMarketClient()
-    
-    # Record test outcomes
+    # No resolved outcome is present here; the client must not invent an accuracy sample.
     r1 = futuris.record_actual_outcome('BTCUSDT', actual_volatility_spike=True, actual_drawdown_pct=0.015)
-    assert 'prediction_correct' in r1
-    
+    assert r1['status'] == 'UNAVAILABLE'
+
     metrics = futuris.get_accuracy_metrics()
-    assert metrics['total_evaluated'] >= 1
-    assert 'accuracy_pct' in metrics
-    assert metrics['status'] == 'ACTIVE'
+    assert metrics['total_evaluated'] == 0
+    assert metrics['accuracy_pct'] is None
+    assert metrics['status'] == 'AWAITING_DATA'
 
 def test_futuris_dashboard_endpoints(client):
     res = client.get('/api/v1/futuris/forecast?symbol=BTCUSDT')

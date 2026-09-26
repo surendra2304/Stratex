@@ -28,7 +28,11 @@ from reporting.voice_summaries import (
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "test")
+    monkeypatch.setenv("TRADING_BOT_API_KEY_READ", "stratex_read_test_key_0123456789abcdef")
+    monkeypatch.setenv("TRADING_BOT_API_KEY_CONTROL", "stratex_control_test_key_0123456789abcdef")
+    monkeypatch.setenv("BOT_API_KEY", "")
     app.config["TESTING"] = True
     with app.test_client() as client:
         yield client
@@ -110,7 +114,7 @@ def test_statistical_anomaly_detection():
 
 
 def test_reporting_api_endpoints(client):
-    headers = {"X-API-Key": "read_key_default_secret_123"}
+    headers = {"X-API-Key": "stratex_read_test_key_0123456789abcdef"}
 
     # Latest daily report
     res = client.get("/api/v1/reports/daily/latest", headers=headers)
