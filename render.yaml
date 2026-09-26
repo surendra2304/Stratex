@@ -1,7 +1,7 @@
 services:
   - type: web
     name: stratex
-    env: docker
+    runtime: docker
     plan: free
     region: singapore
     healthCheckPath: /health
