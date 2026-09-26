@@ -31,14 +31,13 @@ class TestStrategyGovernance:
         assert "aggressor" not in filtered
         assert "scalper" not in filtered
 
-    def test_validated_strategy_pinned_to_validated_timeframe(self):
+    def test_observe_only_strategy_cannot_be_loaded_for_execution(self):
         filtered = governance_filter_strategies({"adx_ema": ["4h", "1h"]})
-        assert "adx_ema" in filtered
-        assert filtered["adx_ema"] == [PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["timeframe"]]
+        assert "adx_ema" not in filtered
 
-    def test_at_least_one_strategy_survives(self):
-        """Gate must not brick the engine: the VALIDATED strategy still loads."""
-        assert len(governance_filter_strategies(config.ACTIVE_STRATEGIES)) >= 1
+    def test_no_strategy_loads_without_reproducible_oos_evidence(self):
+        """An empty executable set is safer than promoting an unverified prior."""
+        assert governance_filter_strategies(config.ACTIVE_STRATEGIES) == {}
 
     def test_empty_input_is_safe(self):
         assert governance_filter_strategies({}) == {}
@@ -52,7 +51,7 @@ class TestSymbolGovernance:
             for tf in tfs:
                 strategies_by_tf.setdefault(tf, []).append((strat_name, None))
         assets = governance_validated_assets(strategies_by_tf)
-        assert "BTCUSDT" in assets
+        assert assets == set()
         # Assets implicated in historical unvalidated losses are excluded
         assert "PORTALUSDT" not in assets
         assert "SPCXBUSDT" not in assets
@@ -85,6 +84,6 @@ class TestHeartbeatReportsLoadedTruth:
         service = svc.TestnetService()
         service._write_heartbeat()
         hb = _json.loads(hb_file.read_text())
-        assert hb["strategies"] == ["adx_ema"]
-        assert hb["strategy"] == "adx_ema"
-        assert hb["timeframes"] == ["4h"]
+        assert hb["strategies"] == []
+        assert hb["strategy"] == "none"
+        assert hb["timeframes"] == []

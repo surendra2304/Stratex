@@ -135,6 +135,44 @@ def _get_active_signal(df_feat):
     return swing_signal(df_feat), "strategy_swing_macd_200ema"
 
 
+def evaluate_forward_paper_candidate(
+    strategy_name, signal_result, symbol, side, entry_price, sl_price, tp_price,
+):
+    """Evaluate a candidate for this isolated, no-exchange paper experiment.
+
+    Missing OOS evidence is never treated as a probability. The frozen swing
+    candidate may collect an explicitly unvalidated sample only in PAPER mode.
+    Exchange execution uses the separate testnet_engine gate, which rejects
+    rule-based signals without a verified prior.
+    """
+    strategy_type = getattr(signal_result, "strategy_type", None)
+    prior = getattr(signal_result, "win_rate_prior", None)
+    if strategy_name == FROZEN_STRATEGY and strategy_type == "RULE_BASED" and (
+        prior is None or not isinstance(prior, (int, float)) or not 0.0 < prior < 1.0
+    ):
+        if getattr(config, "TRADING_MODE", "PAPER").upper() != "PAPER":
+            return False, {
+                "decision": "REJECTED",
+                "reason": "PAPER_EXPERIMENT_REQUIRES_PAPER_MODE",
+                "evidence_status": "UNVALIDATED_PAPER_EXPERIMENT",
+            }
+        return True, {
+            "decision": "PAPER_SAMPLE_ONLY",
+            "reason": "UNVERIFIED_RULE_BASED_PRIOR",
+            "evidence_status": "UNVALIDATED_PAPER_EXPERIMENT",
+        }
+    accepted, metrics = _profitability_gate.evaluate_signal(
+        symbol=symbol,
+        side=side,
+        entry_price=entry_price,
+        sl_price=sl_price,
+        tp_price=tp_price,
+        signal_result=signal_result,
+    )
+    metrics.setdefault("evidence_status", "UNVALIDATED_PAPER_EXPERIMENT")
+    return accepted, metrics
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # EXPERIMENT LIFECYCLE
 # ══════════════════════════════════════════════════════════════════════════════
@@ -262,9 +300,11 @@ def log_signal_record(
     decision: str,
     rejection_reason: str = "",
     data_source: str = "BINANCE_REST",
+    evidence_status: str = "UNVALIDATED_PAPER_EXPERIMENT",
+    signal_id: str | None = None,
 ):
     record = {
-        "signal_id": str(uuid.uuid4()),
+        "signal_id": signal_id or str(uuid.uuid4()),
         "timestamp": timestamp,
         "strategy": strategy,
         "symbol": symbol,
@@ -277,6 +317,7 @@ def log_signal_record(
         "rejection_reason": rejection_reason,
         "data_source": data_source,
         "timeframe": FROZEN_TIMEFRAME,
+        "evidence_status": evidence_status,
     }
     signal_logger.log_signal(record)
 
@@ -294,6 +335,9 @@ def paper_execute(
     tp: float,
     current_prices: dict,
     ledger_file: str,
+    signal_id: str | None = None,
+    strategy_name: str = FROZEN_STRATEGY,
+    evidence_status: str = "UNVALIDATED_PAPER_EXPERIMENT",
 ):
     """
     Simulates paper execution with full CostEngine cost attribution.
@@ -332,7 +376,15 @@ def paper_execute(
         ev_open = str(uuid.uuid4())
         portfolio.allocate_margin(margin, ev_open)
         pos_id = str(uuid.uuid4())
-        portfolio.add_position(pos_id, symbol, direction, eff_entry, qty)
+        portfolio.add_position(
+            pos_id, symbol, direction, eff_entry, qty,
+            metadata={
+                "strategy": strategy_name,
+                "strategy_version": FROZEN_STRATEGY_VERSION,
+                "signal_id": signal_id,
+                "evidence_status": evidence_status,
+            },
+        )
 
         # Deduct entry fee
         fee_ev = str(uuid.uuid4())
@@ -445,12 +497,13 @@ def paper_exit_positions(
 # ══════════════════════════════════════════════════════════════════════════════
 
 class ForwardHealth:
-    def __init__(self):
+    def __init__(self, experiment_started_at=None):
         self.market_data = "OK"
         self.strategy = "OK"
         self.portfolio = "OK"
         self.persistence = "OK"
         self.reconciliation = "OK"
+        self.experiment_started_at = experiment_started_at
         self.last_update = time.time()
 
     def set(self, component: str, state: str):
@@ -472,6 +525,7 @@ class ForwardHealth:
                 "portfolio": self.portfolio,
                 "persistence": self.persistence,
                 "reconciliation": self.reconciliation,
+                "experiment_started_at": self.experiment_started_at,
                 "last_update": self.last_update,
             }
             tmp = HEALTH_FILE + ".tmp"
@@ -592,7 +646,7 @@ def run():
     portfolio.equity_file = EQUITY_CURVE_FILE
 
     signal_logger = SignalLogger(SIGNAL_LOG_FILE)
-    health = ForwardHealth()
+    health = ForwardHealth(experiment_started_at=cfg.started_at)
 
     last_day_str = None
     daily_signals = 0
@@ -783,14 +837,18 @@ def run():
                 time.sleep(POLL_INTERVAL_SECS)
                 continue
 
-            # Profitability Gate: Only execute positive mathematical net edge
-            accepted, gate_metrics = _profitability_gate.evaluate_signal(
+            # The paper experiment can sample this frozen candidate without
+            # pretending its missing prior is evidence. Exchange modes remain
+            # blocked by the independent testnet engine governance gate.
+            signal_id = str(uuid.uuid4())
+            accepted, gate_metrics = evaluate_forward_paper_candidate(
+                strategy_name=strat_name,
+                signal_result=sig_res,
                 symbol=active_symbol,
                 side=sig,
                 entry_price=last_known_price,
                 sl_price=sl,
                 tp_price=tp,
-                signal_result=sig_res,
             )
             if not accepted:
                 log_signal_record(
@@ -798,6 +856,10 @@ def run():
                     sig, raw_conf, last_known_price, sl, tp,
                     decision="REJECTED",
                     rejection_reason=gate_metrics.get("reason", "NEGATIVE_EXPECTED_NET_RETURN"),
+                    evidence_status=gate_metrics.get(
+                        "evidence_status", "UNVALIDATED_PAPER_EXPERIMENT"
+                    ),
+                    signal_id=signal_id,
                 )
                 portfolio.record_equity_snapshot(current_ts, current_prices)
                 time.sleep(POLL_INTERVAL_SECS)
@@ -807,6 +869,11 @@ def run():
             fill = paper_execute(
                 portfolio, sig, active_symbol,
                 last_known_price, sl, tp, current_prices, LEDGER_FILE,
+                signal_id=signal_id,
+                strategy_name=strat_name,
+                evidence_status=gate_metrics.get(
+                    "evidence_status", "UNVALIDATED_PAPER_EXPERIMENT"
+                ),
             )
 
             if fill["status"] == "FILLED":
@@ -815,12 +882,20 @@ def run():
                 log_signal_record(
                     signal_logger, current_ts, strat_name, active_symbol,
                     sig, raw_conf, last_known_price, sl, tp, decision="TRADED",
+                    evidence_status=gate_metrics.get(
+                        "evidence_status", "UNVALIDATED_PAPER_EXPERIMENT"
+                    ),
+                    signal_id=signal_id,
                 )
             else:
                 log_signal_record(
                     signal_logger, current_ts, strat_name, active_symbol,
                     sig, raw_conf, last_known_price, sl, tp,
                     decision="REJECTED", rejection_reason=fill["reason"],
+                    evidence_status=gate_metrics.get(
+                        "evidence_status", "UNVALIDATED_PAPER_EXPERIMENT"
+                    ),
+                    signal_id=signal_id,
                 )
 
             portfolio.record_equity_snapshot(current_ts, current_prices)

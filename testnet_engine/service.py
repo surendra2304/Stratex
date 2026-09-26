@@ -128,10 +128,14 @@ class TestnetService:
         print("BINANCE CONFIGURED: YES")
         print("TRADING MODE: TESTNET")
         print("LIVE ORDERS: BLOCKED")
-        print(f"Strategies: {', '.join(ACTIVE_STRATEGIES.keys())}")
+        eligible_strategies = governance_filter_strategies(ACTIVE_STRATEGIES)
+        print(
+            "Executable strategies: "
+            + (", ".join(eligible_strategies) if eligible_strategies else "none (no validated strategy)")
+        )
         
         self.strategies = {}
-        for strat_name, scan_tfs in governance_filter_strategies(ACTIVE_STRATEGIES).items():
+        for strat_name, scan_tfs in eligible_strategies.items():
             try:
                 mod = importlib.import_module(f"strategy_{strat_name}")
                 for tf in scan_tfs:

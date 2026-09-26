@@ -15,14 +15,11 @@ from testnet_engine.risk_gate import RiskGate
 
 class TestProductionStrategyRegistry:
     def test_registry_classifications(self):
-        """Ensure only strategies with defensible OOS proof are VALIDATED."""
+        """Historical ADX research without its source candles stays observe-only."""
         assert "adx_ema" in PRODUCTION_STRATEGY_REGISTRY
-        assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["status"] == "VALIDATED"
+        assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["status"] == "OBSERVE_ONLY"
         assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["timeframe"] == "4h"
-        # V2-spot upgrade (2026-08): long-only crossover @ADX20 + BTC-regime gate,
-        # 3×ATR SL/TP — see research/upgrade_2026_08/param_study.py.
-        # OOS 2024-2026 (136 long trades, crossover+retest): win 0.551, PF 2.36.
-        assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["oos_win_rate_prior"] == 0.551
+        assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["oos_win_rate_prior"] is None
         assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["rr_ratio"] == 1.0
         
         # Disabled strategies (only the truly obsolete ones remain disabled)
@@ -31,8 +28,15 @@ class TestProductionStrategyRegistry:
                 assert PRODUCTION_STRATEGY_REGISTRY[strat]["status"] == "DISABLED"
 
         # Only strategies with traceable OOS evidence may be marked validated.
-        assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["status"] == "VALIDATED"
+        assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["status"] == "OBSERVE_ONLY"
         assert PRODUCTION_STRATEGY_REGISTRY["supertrend"]["status"] == "OBSERVE_ONLY"
+
+    def test_unvalidated_registry_entries_carry_no_live_performance_priors(self):
+        for entry in PRODUCTION_STRATEGY_REGISTRY.values():
+            if entry["status"] != "VALIDATED":
+                assert entry.get("oos_win_rate_prior") is None
+                assert entry.get("expected_net_edge_bps") is None
+                assert entry.get("validated_assets") == []
 
 class TestStrategyEquivalenceAndIntegrity:
     def test_causal_indicators_no_lookahead(self):

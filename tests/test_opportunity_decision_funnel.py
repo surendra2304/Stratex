@@ -1,5 +1,6 @@
 import json
 import os
+import time
 
 import pytest
 
@@ -180,6 +181,22 @@ class TestOpportunityDecisionFunnel:
         assert "bottleneck_diagnosis" in data
         assert "pipeline_state" in data
 
+    def test_api_diagnostics_distinguishes_no_loaded_strategy_from_waiting_for_signal(
+        self, client, monkeypatch, tmp_path
+    ):
+        import dashboard as dashboard_module
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            dashboard_module,
+            "get_engine_health_data",
+            lambda: {"engine_status": "ONLINE", "strategies": []},
+        )
+        payload = client.get("/api/diagnostics").get_json()
+        assert payload["pipeline_state"] == "NO_EXECUTABLE_STRATEGY"
+        assert payload["executable_strategies"] == []
+        assert "no testnet signal can execute" in payload["bottleneck_diagnosis"]
+
     def test_signal_log_fallback_never_invents_success_or_performance(self, client, tmp_path, monkeypatch):
         """Incomplete source records remain unknown; the API must not manufacture alpha."""
         monkeypatch.chdir(tmp_path)
@@ -239,6 +256,8 @@ class TestOpportunityDecisionFunnel:
         assert payload["status"] == "UNAVAILABLE"
         assert payload["closed_trades"] is None
         assert payload["net_realized_pnl"] is None
+        assert payload["validation_status"] == "INCOMPLETE"
+        assert "PAPER_LEDGER_MISSING" in payload["validation_reasons"]
 
     def test_paper_forward_status_uses_actual_persisted_records(self, client, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -256,11 +275,39 @@ class TestOpportunityDecisionFunnel:
         )
         payload = client.get("/api/paper/forward-status").get_json()
         assert payload["status"] == "AVAILABLE"
+        assert payload["validation_status"] == "INCOMPLETE"
+        assert "MINIMUM_30_CLOSED_TRADES_NOT_MET" in payload["validation_reasons"]
+        assert "STATISTICAL_ACCEPTANCE_REVIEW_NOT_RECORDED" in payload["validation_reasons"]
         assert payload["open_positions"] == 1
         assert payload["signal_count"] == 1
         assert payload["signal_decisions"] == {"REJECTED": 1}
         assert payload["closed_trades"] == 1
         assert payload["net_realized_pnl"] == -2.5
+
+    def test_health_and_signal_files_only_do_not_claim_forward_validation(self, client, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "forward_health.json").write_text(
+            json.dumps({
+                "market_data": "OK",
+                "strategy": "OK",
+                "portfolio": "OK",
+                "persistence": "OK",
+                "reconciliation": "OK",
+                "last_update": time.time(),
+            }),
+            encoding="utf-8",
+        )
+        (tmp_path / "forward_signal_log.jsonl").write_text(
+            json.dumps({"decision": "NO_SIGNAL"}) + "\n", encoding="utf-8"
+        )
+
+        payload = client.get("/api/paper/forward-status").get_json()
+        assert payload["runner_status"] == "HEALTHY"
+        assert payload["status"] == "AVAILABLE"
+        assert payload["validation_status"] == "INCOMPLETE"
+        assert "PAPER_PORTFOLIO_MISSING" in payload["validation_reasons"]
+        assert "PAPER_LEDGER_MISSING" in payload["validation_reasons"]
+        assert "EXPERIMENT_START_TIME_NOT_PROVEN" in payload["validation_reasons"]
 
     def test_early_signal_rejection_log_keeps_unmeasured_fields_unknown(self, tmp_path, monkeypatch):
         from testnet_engine import service as service_module

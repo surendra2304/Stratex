@@ -11,7 +11,9 @@ class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_typ
         return self.win_rate_prior
 
 _STRATEGY_TYPE = "RULE_BASED"
-_OOS_WIN_RATE_PRIOR = 0.50  # 50% Win Rate on higher timeframes (2h/4h)
+# No reproducible OOS estimate is available. This strategy may collect an
+# explicitly unvalidated forward sample in the isolated paper simulator only.
+_OOS_WIN_RATE_PRIOR = None
 _RR_RATIO = 2.0             # 4.0 ATR TP / 2.0 ATR SL (1:2 RR)
 
 def get_signal(df):

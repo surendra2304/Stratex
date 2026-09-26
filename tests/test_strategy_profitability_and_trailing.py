@@ -1,7 +1,7 @@
 """
 tests/test_strategy_profitability_and_trailing.py
 Verifies:
-1. supertrend is VALIDATED in PRODUCTION_STRATEGY_REGISTRY and accepted by governance_filter_strategies().
+1. supertrend remains OBSERVE_ONLY without verified OOS evidence and is rejected by governance_filter_strategies().
 2. All active strategies enforce asymmetric Risk/Reward (>= 2.0:1) and protective stop losses (>= 1.5x ATR).
 3. Trailing stop engine accepts trades with state='PROTECTED' or status='OPEN'.
 4. Breakeven moves SL to cover entry + fee buffer at R >= 1.0.

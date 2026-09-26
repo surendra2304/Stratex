@@ -748,9 +748,9 @@ def get_engine_health_data():
             "pid_alive": pid_alive or paper_alive,
             "binance_connected": hb.get("binance_connected", True),
             "websocket_connected": hb.get("websocket_connected", True),
-            "active_strategy": hb.get("strategy", "aggressor"),
-            "strategies": hb.get("strategies", list(ACTIVE_STRATEGIES.keys())),
-            "timeframes": hb.get("timeframes", ["1m", "5m", "15m", "1h", "4h"]),
+            "active_strategy": hb.get("strategy", "none"),
+            "strategies": hb.get("strategies", []),
+            "timeframes": hb.get("timeframes", []),
             "symbols": hb.get("symbols", []),
             "symbol_count": hb.get("symbol_count", len(hb.get("symbols", []))),
             "last_market_update": hb.get("last_market_update") or _paper.get("started_at"),
@@ -2181,7 +2181,12 @@ def api_get_opportunities():
 
 @app.route('/api/paper/forward-status')
 def api_paper_forward_status():
-    """Expose only persisted forward-paper-runner evidence; missing files stay unavailable."""
+    """Expose runner availability separately from actual validation evidence.
+
+    A heartbeat or signal log proves the runner produced a file; it does not
+    prove a persisted paper portfolio, a sufficient forward sample, or a
+    completed statistical review.
+    """
     paths = {
         "health": os.getenv("PAPER_FORWARD_HEALTH_FILE", "forward_health.json"),
         "portfolio": os.getenv("PAPER_PORTFOLIO_FILE", "paper_portfolio.json"),
@@ -2233,9 +2238,62 @@ def api_paper_forward_status():
     )
     last_update = health_data.get("last_update") if health_data else None
     heartbeat_age = max(0.0, time.time() - float(last_update)) if isinstance(last_update, (int, float)) else None
+    health_components = (
+        "market_data", "strategy", "portfolio", "persistence", "reconciliation"
+    )
+    if health_data is None:
+        runner_status = "UNAVAILABLE"
+    elif heartbeat_age is None or heartbeat_age > 120:
+        runner_status = "STALE"
+    elif not all(key in health_data for key in health_components):
+        runner_status = "UNKNOWN"
+    elif all(health_data.get(key) == "OK" for key in health_components):
+        runner_status = "HEALTHY"
+    else:
+        runner_status = "DEGRADED"
+
+    validation_reasons = []
+    if health_data is None:
+        validation_reasons.append("RUNNER_HEALTH_EVIDENCE_MISSING")
+    elif runner_status != "HEALTHY":
+        validation_reasons.append("RUNNER_NOT_HEALTHY")
+    if portfolio is None:
+        validation_reasons.append("PAPER_PORTFOLIO_MISSING")
+    if ledger is None:
+        validation_reasons.append("PAPER_LEDGER_MISSING")
+    experiment_started_at = next((
+        health_data.get(key) for key in ("experiment_started_at", "started_at")
+        if health_data is not None and isinstance(health_data.get(key), (int, float))
+    ), None)
+    experiment_age_days = (
+        max(0.0, (time.time() - experiment_started_at) / 86400.0)
+        if experiment_started_at is not None and experiment_started_at <= time.time()
+        else None
+    )
+    if experiment_age_days is None:
+        validation_reasons.append("EXPERIMENT_START_TIME_NOT_PROVEN")
+    elif experiment_age_days < 30:
+        validation_reasons.append("MINIMUM_30_DAYS_NOT_MET")
+    if ledger is None or len(closed) < 30:
+        validation_reasons.append("MINIMUM_30_CLOSED_TRADES_NOT_MET")
+    # This endpoint does not compute or attest the complete preregistered
+    # statistical acceptance review, so file presence can never imply PASS.
+    validation_reasons.append("STATISTICAL_ACCEPTANCE_REVIEW_NOT_RECORDED")
+    incomplete_gates = [
+        reason for reason in validation_reasons
+        if reason != "STATISTICAL_ACCEPTANCE_REVIEW_NOT_RECORDED"
+    ]
+    validation_status = (
+        "READY_FOR_STATISTICAL_REVIEW" if not incomplete_gates and runner_status == "HEALTHY"
+        else "INCOMPLETE"
+    )
 
     return jsonify({
         "status": "AVAILABLE" if available else "UNAVAILABLE",
+        "runner_status": runner_status,
+        "validation_status": validation_status,
+        "validation_reasons": validation_reasons,
+        "experiment_age_days": round(experiment_age_days, 3) if experiment_age_days is not None else None,
         "mode": "PAPER",
         "evidence_files": {key: os.path.exists(path) for key, path in paths.items()},
         "runner_health": health_data,
@@ -2820,9 +2878,15 @@ def api_diagnostics():
         if e_dec == "REJECTED" and e_reas:
             exec_reasons[e_reas] = exec_reasons.get(e_reas, 0) + 1
 
-    # Bottleneck diagnosis
+    # Bottleneck diagnosis. A healthy web/market-data process with no
+    # governance-approved strategy is not a strategy pipeline waiting for a
+    # signal: it has no executable strategy loaded.
+    engine_data = get_engine_health_data()
+    executable_strategies = engine_data.get("strategies") or []
     bottleneck = "PIPELINE ACTIVE — Scanning live market for valid opportunities."
-    if stats["signals_generated"] > 0 and stats["orders_filled"] == 0 and stats["profitability_rejected"] > 0:
+    if not executable_strategies:
+        bottleneck = "NO_EXECUTABLE_STRATEGY — No governance-approved strategy is loaded; no testnet signal can execute."
+    elif stats["signals_generated"] > 0 and stats["orders_filled"] == 0 and stats["profitability_rejected"] > 0:
         drop_pct = (stats["profitability_rejected"] / max(1, stats["signals_generated"])) * 100
         bottleneck = f"{drop_pct:.1f}% of signals stopped at Profitability Gate due to expected net return failing the 0.31% friction hurdle."
     elif stats["profitability_accepted"] > 0 and stats["risk_rejected"] > 0:
@@ -2839,7 +2903,12 @@ def api_diagnostics():
             "execution_reasons": exec_reasons
         },
         "bottleneck_diagnosis": bottleneck,
-        "pipeline_state": "PIPELINE READY — WAITING FOR REAL SIGNAL" if stats["orders_filled"] == 0 else "ACTIVE_TRADING"
+        "executable_strategies": executable_strategies,
+        "pipeline_state": (
+            "NO_EXECUTABLE_STRATEGY" if not executable_strategies
+            else "PIPELINE READY — WAITING FOR REAL SIGNAL" if stats["orders_filled"] == 0
+            else "ACTIVE_TRADING"
+        )
     })
 
 @app.route('/api/strategy-metrics')

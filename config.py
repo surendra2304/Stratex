@@ -88,12 +88,15 @@ TESTNET_ENABLED = os.getenv("TESTNET_ENABLED", "True" if TRADING_MODE in ["TESTN
 LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is impossible by design
 TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-09-01T00:00:00Z")
 
-# --- Strategies to Run ---
-# Executable strategies with evidence-backed registry approval.
+# --- Strategy candidates ---
+# Entries here are requests, not execution authorization. The strategy registry
+# must mark an entry VALIDATED before the testnet engine loads it. At present
+# adx_ema remains OBSERVE_ONLY, so the executable set is intentionally empty.
 ACTIVE_STRATEGIES = {
     "adx_ema": ["4h"],
 }
 
+# Legacy single-strategy preference; it does not override registry governance.
 ACTIVE_STRATEGY = "adx_ema"
 TIMEFRAME = "5m"
 ALL_ACTIVE_TIMEFRAMES = ["5m", "15m", "30m", "1h", "4h"]

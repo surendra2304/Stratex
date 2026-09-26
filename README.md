@@ -5,7 +5,7 @@ A robust, multi-strategy quantitative trading and statistical validation platfor
 ![Platform](https://img.shields.io/badge/Platform-STRATEX-blue?logo=crystal)
 ![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
 ![Exchange](https://img.shields.io/badge/Exchange-Binance%20Testnet-yellow?logo=binance)
-![Tests](https://img.shields.io/badge/Tests-690%20Passing-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-not%20currently%20reported-blue)
 ![Status](https://img.shields.io/badge/Live%20Trading-BLOCKED-red)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -21,9 +21,9 @@ A robust, multi-strategy quantitative trading and statistical validation platfor
 ## Current Status & Deployment Gates
 
 > [!CAUTION]
-> **Live real-money trading is strictly BLOCKED.** Passing 690 software tests proves system correctness and risk-gate integrity only. It does **not** prove an economic edge. Live trading is gated until genuine out-of-sample forward validation criteria are satisfied.
+> **Live real-money trading is strictly BLOCKED.** Passing software tests proves implementation properties only; it does **not** prove an economic edge. Live trading is gated until genuine out-of-sample forward validation criteria are satisfied.
 
-### Deployment Gate Checklist (from `backtest_results/stage15/FINAL_REPORT.md`)
+### Deployment Gate Checklist
 
 | Criterion / Deployment Gate | Required Status | Current State | Notes |
 |---|---|---|---|
@@ -35,7 +35,10 @@ A robust, multi-strategy quantitative trading and statistical validation platfor
 | **Statistical Significance ($p < 0.05$)** | REQUIRED | ❌ UNPROVEN | Requires $\ge 30$ genuine forward trades |
 | **Positive Net Expectancy After Costs**| REQUIRED | ❌ UNPROVEN | Microsecond friction & fees must be overcome out-of-sample |
 | **Profit Factor $\ge 1.20$** | REQUIRED | ❌ UNPROVEN | Pre-registered quantitative acceptance threshold |
-| **Genuine Forward Validation Duration**| $\ge 30$ Days |  RUNNING | Actively running in `paper_engine` (`forward_exp_001`) |
+| **Executable Testnet Strategy** | REQUIRED | NONE | `adx_ema` is OBSERVE_ONLY until its historical inputs and OOS claims can be reproduced; the engine intentionally loads no trading strategy. |
+| **Genuine Forward Validation Duration**| $\ge 30$ Days |  NOT VERIFIED | The live `/api/paper/forward-status` currently has no persisted paper ledger or portfolio. A runner heartbeat and signal log are operational evidence only; validation also requires the preregistered sample and statistical review. |
+
+The checked-in `research/upgrade_2026_08/walk_forward_report.json` calls its parameter-selection result **FRAGILE** and reports 34 trades for the frozen configuration in its 2024–2026 holdout fold. The raw OHLCV inputs required to reproduce the study are not present in this checkout. Strategy performance figures in configuration are therefore not treated as validated priors or proof of a tradable edge.
 
 ---
 

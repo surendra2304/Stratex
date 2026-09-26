@@ -6,8 +6,8 @@ with ProfitabilityGate.
 
 CRITICAL REGRESSION GUARD (see bug report 2026-08-15):
   ADX+EMA MUST NEVER produce confidence=1.0 at the ProfitabilityGate.
-  The strategy is RULE_BASED and must use win_rate_prior (0.494), not
-  a fabricated ML confidence score.
+  The strategy is RULE_BASED and must use a measured prior only when that
+  prior has reproducible validation evidence; otherwise the gate is neutral.
 """
 
 import numpy as np
@@ -326,12 +326,14 @@ class TestProfitabilityGateIntegration:
         assert metrics["prob_win"] != 1.0, \
             "CRITICAL: ADX+EMA (RULE_BASED) must never produce prob_win=1.0"
 
-    def test_rule_based_uses_oos_win_rate_prior(self):
+    def test_unverified_oos_prior_is_rejected_by_profitability_gate(self):
         gate = self._gate()
         sr = self._adx_ema_signal("BUY")
-        _, metrics = gate.evaluate_signal("BTCUSDT", "BUY", 50_000, sr.sl, sr.tp, sr)
-        assert abs(metrics["prob_win"] - _OOS_WIN_RATE_PRIOR) < 1e-9, \
-            f"Expected prob_win={_OOS_WIN_RATE_PRIOR}, got {metrics['prob_win']}"
+        accepted, metrics = gate.evaluate_signal("BTCUSDT", "BUY", 50_000, sr.sl, sr.tp, sr)
+        assert sr.win_rate_prior is None
+        assert not accepted
+        assert metrics["reason"] == "UNVERIFIED_RULE_BASED_PRIOR"
+        assert metrics["prob_win"] is None
 
     def test_ml_float_confidence_path(self):
         """Legacy ML path: passing a float uses it as prob_win (PROBABILISTIC)."""
@@ -354,7 +356,7 @@ class TestProfitabilityGateIntegration:
     def test_expected_value_matches_benchmark_assumptions(self):
         """
         E[net] = P(win)×reward - P(loss)×risk - friction
-        With OOS win_rate=0.494, 1:1.5 RR, BTC entry=50k, 2×ATR SL, 3×ATR TP.
+        With an unavailable OOS prior, use the documented neutral 0.5 assumption.
         Verify the gate arithmetic is consistent with the benchmark formula.
         """
         gate = self._gate()
@@ -362,12 +364,13 @@ class TestProfitabilityGateIntegration:
         entry = 50_000.0
         sl    = entry - 2 * atr   # 49_000
         tp    = entry + 3 * atr   # 51_500
-        sr    = SignalResult("BUY", sl, tp, "RULE_BASED", _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+        assumed_prior = 0.5
+        sr    = SignalResult("BUY", sl, tp, "RULE_BASED", assumed_prior, _RR_RATIO)
         _, metrics = gate.evaluate_signal("BTCUSDT", "BUY", entry, sl, tp, sr)
 
         reward_pct = (tp - entry) / entry   # 3% for this example
         risk_pct   = (entry - sl) / entry   # 2%
-        p_win  = _OOS_WIN_RATE_PRIOR         # 0.494
+        p_win  = assumed_prior
         p_loss = 1 - p_win
 
         expected_gross = p_win * reward_pct - p_loss * risk_pct
@@ -382,27 +385,23 @@ class TestProfitabilityGateIntegration:
         sr = self._adx_ema_signal()
         _, metrics = gate.evaluate_signal("BTCUSDT", "BUY", 50_000, sr.sl, sr.tp, sr)
         assert metrics["strategy_type"] == "RULE_BASED"
-        assert "RULE_BASED" in metrics["prob_source"]
+        assert metrics["reason"] == "UNVERIFIED_RULE_BASED_PRIOR"
 
     def test_invalid_rr_rejected(self):
         """Entry = SL = TP (zero R:R) must be rejected before probability calculation."""
         gate = self._gate()
-        sr = SignalResult("BUY", 50_000, 50_000, "RULE_BASED", _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+        sr = SignalResult("BUY", 50_000, 50_000, "RULE_BASED", 0.5, _RR_RATIO)
         accepted, metrics = gate.evaluate_signal("BTCUSDT", "BUY", 50_000, 50_000, 50_000, sr)
         assert not accepted
         assert metrics["reason"] == "INVALID_RISK_REWARD"
 
-    def test_win_rate_prior_is_not_optimistic(self):
-        """V2 prior (0.60) must match the registry and be consistent with its PF.
-
-        Under V1 (rr 1.5) an honest prior had to sit below 50%. V2 uses rr 1.0
-        (3×ATR both sides), where a >50% win rate is the honestly measured OOS
-        statistic (2024-2026, 50 trades). The guard against fabricated optimism
-        is now: prior == registry value, and prior/PF combination must remain
-        economically plausible (win rate < 70%, PF < 3 after 31 bps friction).
-        """
+    def test_unverified_oos_metrics_are_not_runtime_priors(self):
+        """Missing source candles must not leave historical estimates in the live gate."""
         from config_strategy import ADX_EMA_STRATEGY_V2, PRODUCTION_STRATEGY_REGISTRY
+        assert ADX_EMA_STRATEGY_V2["OOS_VALIDATION_STATUS"] == "UNVERIFIED"
+        assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["status"] == "OBSERVE_ONLY"
         assert _OOS_WIN_RATE_PRIOR == ADX_EMA_STRATEGY_V2["OOS_WIN_RATE_PRIOR"]
         assert _OOS_WIN_RATE_PRIOR == PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["oos_win_rate_prior"]
-        assert 0.5 <= _OOS_WIN_RATE_PRIOR < 0.70, "win rate must reflect honest measured data"
-        assert 1.0 <= ADX_EMA_STRATEGY_V2["OOS_PROFIT_FACTOR"] < 3.0, "profit factor must be post-friction plausible"
+        assert _OOS_WIN_RATE_PRIOR is None
+        assert ADX_EMA_STRATEGY_V2["OOS_PROFIT_FACTOR"] is None
+        assert ADX_EMA_STRATEGY_V2["OOS_TRADE_COUNT"] is None

@@ -3,14 +3,18 @@ strategy_adx_ema.py — ADX + EMA Trend Following Engine (V2)
 
 STRATEGY TYPE: RULE_BASED (deterministic, no probabilistic output)
 
-V2 (2026-08-22 profitability upgrade — see config_strategy.ADX_EMA_STRATEGY_V2):
-  Win rate         : 0.60  (V2 multi-asset OOS benchmark 2024-2026)
+Observe-only V2 candidate — see config_strategy.ADX_EMA_STRATEGY_V2.
+Historical performance claims are not used because the underlying OOS candle
+data is missing from the checkout. Do not promote this strategy without
+reproducible holdout results.
+
+Current parameters:
   Risk:Reward      : 1:1.0 (3×ATR stop, 3×ATR target)
-  ADX threshold    : 30
+  ADX threshold    : 20
   EMA periods      : Fast=20, Slow=50, Direction=200
   ATR period       : 14 (for SL/TP sizing)
-  Pullback entry   : REMOVED — net-negative across 2021-2026 (PF 0.85 OOS with it on)
-All runtime parameters are sourced from ADX_EMA_STRATEGY_V2.
+  Pullback entry   : Disabled
+Runtime parameters are sourced from ADX_EMA_STRATEGY_V2.
 """
 
 from collections import namedtuple
@@ -31,7 +35,7 @@ class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_typ
 
 # Structural parameters sourced from the V2 validated config
 _STRATEGY_TYPE       = "RULE_BASED"
-_OOS_WIN_RATE_PRIOR  = _CFG["OOS_WIN_RATE_PRIOR"]   # 0.60 — V2 multi-asset OOS validated
+_OOS_WIN_RATE_PRIOR  = _CFG["OOS_WIN_RATE_PRIOR"]   # None until the historical OOS run is reproducible
 _RR_RATIO            = _CFG["RISK_REWARD_RATIO"]    # 3×ATR tp / 3×ATR sl
 _ADX_THRESHOLD       = _CFG["ADX_THRESHOLD"]        # 30
 _SL_ATR              = _CFG["SL_ATR_MULTIPLIER"]    # 3.0

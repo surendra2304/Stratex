@@ -186,5 +186,6 @@ class TestRetestEntryRev3:
         assert ADX_EMA_STRATEGY_V2["ENABLE_RETEST_ENTRY"] is True
         assert ADX_EMA_STRATEGY_V2["RETEST_WINDOW_BARS"] == 10
 
-    def test_inj_in_validated_universe(self):
-        assert "INJUSDT" in ADX_EMA_STRATEGY_V2["OOS_VALIDATED_ASSETS"]
+    def test_unverified_study_does_not_claim_validated_assets(self):
+        assert ADX_EMA_STRATEGY_V2["OOS_VALIDATION_STATUS"] == "UNVERIFIED"
+        assert ADX_EMA_STRATEGY_V2["OOS_VALIDATED_ASSETS"] == []

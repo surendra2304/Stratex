@@ -83,12 +83,9 @@ def test_service_strategy_loading(monkeypatch, mocker):
     
     service = TestnetService()
     
-    # Governance gate: adx_ema is VALIDATED (pinned to its 4h registry timeframe);
-    # aggressor is DISABLED in PRODUCTION_STRATEGY_REGISTRY and must never load.
-    assert list(service.strategies.keys()) == ["4h"]
-    
-    assert len(service.strategies["4h"]) == 1
-    assert service.strategies["4h"][0][0] == "adx_ema"
+    # Missing source candles keep adx_ema OBSERVE_ONLY; disabled strategies also
+    # cannot be loaded for execution.
+    assert service.strategies == {}
     
     assert "2h" not in service.strategies
     assert "1m" not in service.strategies

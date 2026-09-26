@@ -130,7 +130,10 @@ class PaperPortfolio:
         self.processed_event_ids.add(event_id)
         self._save()
 
-    def add_position(self, pos_id: str, symbol: str, direction: str, entry_price: float, quantity: float):
+    def add_position(
+        self, pos_id: str, symbol: str, direction: str, entry_price: float,
+        quantity: float, metadata: dict | None = None,
+    ):
         if pos_id in self.positions:
             return
             
@@ -143,6 +146,8 @@ class PaperPortfolio:
             "open_time": time.time(),
             "last_update_time": time.time()
         }
+        if metadata:
+            self.positions[pos_id].update(metadata)
         self._save()
 
     def close_position(self, pos_id: str, exit_price: float, exit_fee: float = 0.0, exit_time: float | None = None, funding_pnl: float = 0.0):
@@ -180,6 +185,9 @@ class PaperPortfolio:
                 "net_pnl": net_pnl,
                 "status": "CLOSED"
             }
+            for key in ("strategy", "strategy_version", "signal_id", "evidence_status"):
+                if key in pos:
+                    trade_record[key] = pos[key]
             
             self.record_completed_trade(trade_record)
             self._save()
@@ -327,4 +335,3 @@ class PaperPortfolio:
             raise StateCorruptionError(
                 f"Portfolio file '{self.filename}' is corrupted and cannot be loaded safely: {e}"
             ) from e
-

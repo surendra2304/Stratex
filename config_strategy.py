@@ -9,9 +9,10 @@ Runtime mode (TRADING_MODE) remains in config.py / environment.
 """
 
 # ==============================================================================
-# ADX + EMA TREND FOLLOWING STRATEGY (ACTIVE)
-# Validated: multi-asset OOS benchmark, 2024-Present holdout.
-# FROZEN — do not modify based on Testnet forward validation results.
+# ADX + EMA TREND FOLLOWING STRATEGY (OBSERVE ONLY)
+# Historical result files are present, but the source candle dataset is absent
+# from this checkout. Treat the recorded metrics as unverified until the exact
+# inputs and provenance are restored and the study is reproduced.
 # ==============================================================================
 
 ADX_EMA_STRATEGY = {
@@ -33,52 +34,22 @@ ADX_EMA_STRATEGY = {
     "TP_ATR_MULTIPLIER":      3.0,      # Target = 3×ATR above/below entry
     "RISK_REWARD_RATIO":      1.5,      # TP/SL ratio (3 / 2)
 
-    # ---- Validated OOS statistics (FROZEN) ----
-    # Source: strategy_benchmark.py, 2024-Present untouched holdout
-    # DO NOT update these based on Testnet forward results.
-    "OOS_WIN_RATE_PRIOR":     0.494,    # 49.4% win rate (multi-asset OOS)
-    "OOS_PROFIT_FACTOR":      1.26,     # Profit factor in OOS period
-    "OOS_EXPECTANCY_PER_TRADE": 30.8,  # USD expectancy per trade ($10k base)
-    "OOS_MAX_DRAWDOWN_PCT":   3.2,      # OOS max drawdown
-    "OOS_VALIDATED_ASSETS":   ["BTCUSDT", "ETHUSDT", "BNBUSDT",
-                                "SOLUSDT", "XRPUSDT", "LINKUSDT"],
-    "OOS_VALIDATION_STATUS":  "VALIDATED",
+    # Unverified historical values are deliberately unavailable to runtime gates.
+    "OOS_WIN_RATE_PRIOR":     None,
+    "OOS_PROFIT_FACTOR":      None,
+    "OOS_EXPECTANCY_PER_TRADE": None,
+    "OOS_MAX_DRAWDOWN_PCT":   None,
+    "OOS_VALIDATED_ASSETS":   [],
+    "OOS_VALIDATION_STATUS":  "UNVERIFIED",
 }
 
 # ==============================================================================
-# ADX + EMA V2 — PROFITABILITY UPGRADE (2026-08-22, rev 2: SPOT long-only)
-# Evidence: research/upgrade_2026_08/param_study.py — grid studies on 2021-2026
-# Binance 4h data (74k bars, 6 validated assets), 31 bps round-trip friction,
-# next-candle-open entries, conservative intrabar (SL-first) fills.
-#
-# rev 1 studied BOTH sides (ADX30: IS PF 2.12 / OOS PF 1.68) — but the spot
-# engine is LONG_ONLY (Binance Spot cannot short), and rev-1 params are
-# OOS-NEGATIVE for longs alone (PF 0.63, 2024-26). A dedicated long-only grid
-# (64 configs) found the spot-optimal setup:
-#
-#   Config (long-only)                     IS PF  OOS PF  2024   2025   2026
-#   rev1 ADX30 SL3 TP3 (long-only)         1.47   0.63    4.62   ~0     0.00
-#   rev2 ADX20 SL3 TP3 + BTC regime        2.04   2.30    2.25   3.21   1.05
-#
-# V2 (spot) changes vs V1:
-#   1. Pullback entry rule REMOVED — net-negative across 2021-2026.
-#   2. SL 2×ATR -> 3×ATR (fewer noise stop-outs; OOS win rate 0.494 -> 0.55).
-#   3. TP stays 3×ATR (rr 1.0 — win-rate-driven expectancy).
-#   4. NEW: BTC market-regime gate — BUY signals only when BTCUSDT 4h close is
-#      above its EMA200 (alts follow BTC; longs in BTC risk-off bleed).
-#   5. ADX threshold stays 20 for longs (long crossovers fire earlier than
-#      shorts; ADX30 was over-filtering the long side).
-#   6. NEW (rev 3): post-crossover EMA20-RETEST entry — if a qualified golden
-#      cross fires but price pulls back to EMA20 within 10 bars and prints a
-#      bullish close off it, enter on that bar. Adds ~55% more OOS trades at
-#      HIGHER PF (crossover-only 2.30 -> combined 2.36) and doubles 2026-regime
-#      PF (1.05 -> 2.08). Unlike the removed V1 pullback (always-on, any time),
-#      the retest only arms for 10 bars after a regime-qualified crossover.
-#   7. NEW (rev 3): INJUSDT added to validated assets (standalone OOS PF 1.74).
-#   1h timeframe STUDIED AND REJECTED: all variants OOS PF 0.38-0.73 —
-#   faster timeframe = friction destruction (see expansion_study.py Study A).
-# V2 OOS stats (2024-01-01 .. 2026-08, 136 long trades, 7 assets, crossover+retest):
-#   PF 2.36, win 0.551, +216 bps/trade at 1% risk (live uses 0.5%).
+# ADX + EMA V2 — OBSERVE-ONLY CANDIDATE (2026-08-22, rev 3)
+# The strategy parameters below are retained so the candidate can be inspected.
+# Historical comments and reports made OOS performance claims, but the source
+# OHLCV inputs are absent. The checked-in walk-forward report has only 34
+# frozen-config trades in its 2024–2026 fold and labels selection FRAGILE.
+# Treat all old OOS statistics as unverified; they are not runtime priors.
 # ==============================================================================
 
 ADX_EMA_STRATEGY_V2 = {
@@ -96,16 +67,13 @@ ADX_EMA_STRATEGY_V2 = {
     "ENABLE_RETEST_ENTRY":    True,    # rev 3: first EMA20 touch within 10 bars after qualified cross
     "RETEST_WINDOW_BARS":     10,
     "BTC_REGIME_FILTER":      True,    # BUY only when BTCUSDT 4h close > EMA200
-    "OOS_WIN_RATE_PRIOR":     0.551,
-    "OOS_PROFIT_FACTOR":      2.36,
-    "OOS_TRADE_COUNT":        136,
-    "OOS_EXPECTANCY_PER_TRADE": 216.2, # bps per trade at 1% risk sizing ($10k base)
-    "OOS_MAX_DRAWDOWN_PCT":   41.2,    # at 1% risk; live 0.5% risk halves this
-    "OOS_VALIDATED_ASSETS":   ["BTCUSDT", "ETHUSDT", "BNBUSDT",
-                                "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
-                                "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT",
-                                "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"],
-    "OOS_VALIDATION_STATUS":  "VALIDATED",
+    "OOS_WIN_RATE_PRIOR":     None,
+    "OOS_PROFIT_FACTOR":      None,
+    "OOS_TRADE_COUNT":        None,
+    "OOS_EXPECTANCY_PER_TRADE": None,
+    "OOS_MAX_DRAWDOWN_PCT":   None,
+    "OOS_VALIDATED_ASSETS":   [],
+    "OOS_VALIDATION_STATUS":  "UNVERIFIED",
     "SUPERSEDES":             "ADX_EMA_STRATEGY (V1)",
 }
 
@@ -168,7 +136,7 @@ TESTNET_RISK = {
 
 PRODUCTION_STRATEGY_REGISTRY = {
     "adx_ema": {
-        "status": "VALIDATED",
+        "status": "OBSERVE_ONLY",
         "version": "V2-spot rev3 (2026-08-22)",
         "timeframe": "4h",
         "execution_model": "RULE_BASED",
@@ -176,15 +144,12 @@ PRODUCTION_STRATEGY_REGISTRY = {
         "sl_method": "3.0 * ATR(14)",
         "tp_method": "3.0 * ATR(14)",
         "rr_ratio": 1.0,
-        "oos_win_rate_prior": 0.551,
+        "oos_win_rate_prior": None,
         "total_friction_bps": 31.0,
-        "expected_net_edge_bps": 216.0,
+        "expected_net_edge_bps": None,
         "minimum_required_edge": 0.0005,
-        "validated_assets": [
-            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
-            "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
-        ],
-        "reason": "V2-spot rev3: crossover + qualified retest entries, long-only grid on 2021-2026 data (research/upgrade_2026_08/expansion_study.py). OOS 2024-2026: 136 trades, PF 2.36, win 0.551, profitable all years (2024: 2.27, 2025: 2.57, 2026: 2.08). 1h timeframe studied and rejected (OOS PF<0.75 all variants). Universe expanded to include high-volume Spot Testnet verified altcoins.",
+        "validated_assets": [],
+        "reason": "Observe only: historical OOS claims are not reproducible because the referenced OHLCV inputs are absent; the checked-in walk-forward report records 34 frozen-config holdout trades and a FRAGILE verdict.",
     },
     "adx_ema_mtf": {
         "status": "DISABLED",
@@ -208,7 +173,7 @@ PRODUCTION_STRATEGY_REGISTRY = {
         "reason": "Disabled in favor of multi-timeframe hyper-aggressive scalper.",
     },
     "aggressive_scalper": {
-        "status": "VALIDATED",
+        "status": "OBSERVE_ONLY",
         "version": "V1-futures-all-tf (2026-08-24)",
         "timeframe": "1m",
         "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h"],
@@ -226,7 +191,7 @@ PRODUCTION_STRATEGY_REGISTRY = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Primary hyper-aggressive scalper running on all 6 timeframes.",
+        "reason": "Observe only: no reproducible out-of-sample evidence is available in this checkout.",
     },
     "bb_reversion": {
         "status": "OBSERVE_ONLY",
@@ -416,3 +381,13 @@ PRODUCTION_STRATEGY_REGISTRY = {
         "reason": "Disabled: Requires trained model artifacts with calibrated predict_proba >= 43.0%."
     }
 }
+
+# Stored research estimates are not runtime priors unless a strategy has been
+# explicitly promoted after a reproducible validation review. This also keeps
+# stale metrics from disabled or observe-only candidates out of accidental
+# direct callers that inspect the registry without applying governance.
+for _strategy_entry in PRODUCTION_STRATEGY_REGISTRY.values():
+    if _strategy_entry.get("status") != "VALIDATED":
+        _strategy_entry["oos_win_rate_prior"] = None
+        _strategy_entry["expected_net_edge_bps"] = None
+        _strategy_entry["validated_assets"] = []

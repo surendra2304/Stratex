@@ -9,9 +9,9 @@ PROBABILISTIC (e.g. ML):
 
 RULE_BASED (e.g. ADX+EMA):
     confidence carries NO probabilistic meaning.
-    prob_win is derived from win_rate_prior — the OOS-validated historical
-    win rate carried inside the SignalResult namedtuple.
-    We NEVER invent a prob_win for rule-based strategies.
+    prob_win must come from a validated historical win_rate_prior carried by
+    the SignalResult. A missing or invalid prior is rejected; it is not safe to
+    infer profitability from a neutral guess.
 
 If strategy_type is unknown or missing, the gate uses prob_win = 0.5
 (neutral assumption) and logs a warning — it does NOT silently use 1.0.
@@ -71,17 +71,28 @@ class ProfitabilityGate:
         strategy_type = _resolve_strategy_type(signal_result)
 
         if strategy_type == "RULE_BASED":
-            # Use the OOS-validated win rate prior embedded in the signal.
+            # Use a verified prior only. Missing evidence must never become an
+            # executable positive-EV estimate through the neutral fallback.
             win_rate_prior = getattr(signal_result, "win_rate_prior", None)
             if win_rate_prior is None or not (0.0 < win_rate_prior < 1.0):
                 logger.warning(
                     f"[PROFIT GATE] RULE_BASED signal for {symbol} has invalid "
-                    f"win_rate_prior={win_rate_prior}. Using neutral fallback {_UNKNOWN_WIN_RATE_FALLBACK}."
+                    f"win_rate_prior={win_rate_prior}. Rejecting without verified evidence."
                 )
-                prob_win = _UNKNOWN_WIN_RATE_FALLBACK
+                return False, {
+                    "decision": "REJECTED",
+                    "reason": "UNVERIFIED_RULE_BASED_PRIOR",
+                    "details": "A rule-based strategy requires a verified win-rate prior.",
+                    "strategy_type": strategy_type,
+                    "prob_source": "UNVERIFIED/NO_PRIOR",
+                    "prob_win": None,
+                    "prob_loss": None,
+                    "expected_gross_return": None,
+                    "expected_net_return": None,
+                }
             else:
                 prob_win = win_rate_prior
-            prob_source = f"RULE_BASED/OOS_PRIOR={prob_win:.4f}"
+                prob_source = f"RULE_BASED/OOS_PRIOR={prob_win:.4f}"
 
         elif strategy_type == "PROBABILISTIC":
             # ML path: confidence is a calibrated predict_proba output.

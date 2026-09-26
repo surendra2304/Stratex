@@ -51,6 +51,15 @@ class TestRenderDeploymentHardening:
 
     def test_health_distinguishes_process_vs_engine_health(self, tmp_path, monkeypatch, client):
         """Health endpoint must distinguish process alive vs stale heartbeat vs Binance disconnected."""
+        # This test exercises only the execution-engine heartbeat. The paper
+        # runner is an independent process and may legitimately report RUNNING
+        # in PAPER mode, so isolate it to keep stale-heartbeat assertions stable.
+        import paper_runner_supervisor
+        monkeypatch.setattr(
+            paper_runner_supervisor,
+            "get_status",
+            lambda: {"paper_runner_status": "STOPPED", "alive": False},
+        )
         hb_file = tmp_path / "testnet_heartbeat.json"
         
         # 1. Stale heartbeat (> 90s) -> OFFLINE
