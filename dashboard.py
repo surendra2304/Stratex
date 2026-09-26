@@ -2247,7 +2247,14 @@ def api_paper_forward_status():
         runner_status = "STALE"
     elif not all(key in health_data for key in health_components):
         runner_status = "UNKNOWN"
-    elif all(health_data.get(key) == "OK" for key in health_components):
+    elif (
+        all(health_data.get(key) == "OK" for key in health_components)
+        and health_data.get("portfolio_file_status") == "VALID"
+        and health_data.get("ledger_file_status") == "VALID"
+        and health_data.get("persistence") == "OK"
+        and portfolio is not None
+        and ledger is not None
+    ):
         runner_status = "HEALTHY"
     else:
         runner_status = "DEGRADED"
@@ -2291,6 +2298,16 @@ def api_paper_forward_status():
     return jsonify({
         "status": "AVAILABLE" if available else "UNAVAILABLE",
         "runner_status": runner_status,
+        "storage_scope": "CONTAINER_LOCAL_EPHEMERAL",
+        "durability_status": "NON_DURABLE_LOCAL_FILESYSTEM",
+        "cloud_persistence_status": "NOT_CONFIGURED",
+        "local_write_status": health_data.get("local_write_status") if health_data else "UNKNOWN",
+        "artifact_statuses": {
+            "health": "VALID" if health_data is not None else "MISSING_OR_INVALID",
+            "portfolio": "VALID" if portfolio is not None else "MISSING_OR_INVALID",
+            "signals": "VALID" if signals is not None else "MISSING_OR_INVALID",
+            "ledger": "VALID" if ledger is not None else "MISSING_OR_INVALID",
+        },
         "validation_status": validation_status,
         "validation_reasons": validation_reasons,
         "experiment_age_days": round(experiment_age_days, 3) if experiment_age_days is not None else None,

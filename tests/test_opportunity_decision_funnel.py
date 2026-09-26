@@ -258,6 +258,12 @@ class TestOpportunityDecisionFunnel:
         assert payload["net_realized_pnl"] is None
         assert payload["validation_status"] == "INCOMPLETE"
         assert "PAPER_LEDGER_MISSING" in payload["validation_reasons"]
+        assert payload["runner_status"] == "UNAVAILABLE"
+        assert payload["storage_scope"] == "CONTAINER_LOCAL_EPHEMERAL"
+        assert payload["durability_status"] == "NON_DURABLE_LOCAL_FILESYSTEM"
+        assert payload["cloud_persistence_status"] == "NOT_CONFIGURED"
+        assert payload["artifact_statuses"]["portfolio"] == "MISSING_OR_INVALID"
+        assert payload["artifact_statuses"]["ledger"] == "MISSING_OR_INVALID"
 
     def test_paper_forward_status_uses_actual_persisted_records(self, client, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -283,6 +289,9 @@ class TestOpportunityDecisionFunnel:
         assert payload["signal_decisions"] == {"REJECTED": 1}
         assert payload["closed_trades"] == 1
         assert payload["net_realized_pnl"] == -2.5
+        assert payload["runner_status"] == "STALE"
+        assert payload["artifact_statuses"]["portfolio"] == "VALID"
+        assert payload["artifact_statuses"]["ledger"] == "VALID"
 
     def test_health_and_signal_files_only_do_not_claim_forward_validation(self, client, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -302,12 +311,66 @@ class TestOpportunityDecisionFunnel:
         )
 
         payload = client.get("/api/paper/forward-status").get_json()
-        assert payload["runner_status"] == "HEALTHY"
+        assert payload["runner_status"] == "DEGRADED"
         assert payload["status"] == "AVAILABLE"
         assert payload["validation_status"] == "INCOMPLETE"
         assert "PAPER_PORTFOLIO_MISSING" in payload["validation_reasons"]
         assert "PAPER_LEDGER_MISSING" in payload["validation_reasons"]
         assert "EXPERIMENT_START_TIME_NOT_PROVEN" in payload["validation_reasons"]
+        assert payload["artifact_statuses"]["portfolio"] == "MISSING_OR_INVALID"
+        assert payload["artifact_statuses"]["ledger"] == "MISSING_OR_INVALID"
+        assert payload["durability_status"] == "NON_DURABLE_LOCAL_FILESYSTEM"
+
+    def test_fresh_no_signal_runner_does_not_report_missing_ledger_healthy(self, client, tmp_path, monkeypatch):
+        import paper_forward_runner
+
+        monkeypatch.chdir(tmp_path)
+        health = paper_forward_runner.ForwardHealth(experiment_started_at=time.time())
+        (tmp_path / "forward_signal_log.jsonl").write_text(
+            json.dumps({"decision": "NO_SIGNAL"}) + "\n", encoding="utf-8"
+        )
+        assert health.refresh_local_storage_status(
+            "paper_portfolio.json", "paper_trade_ledger.jsonl", "forward_signal_log.jsonl"
+        ) is True
+        assert health.persistence == "LOCAL_EPHEMERAL_ONLY"
+        assert health.portfolio_file_status == "MISSING"
+        assert health.ledger_file_status == "MISSING"
+
+        payload = client.get("/api/paper/forward-status").get_json()
+        assert payload["runner_status"] == "DEGRADED"
+        assert payload["signal_decisions"] == {"NO_SIGNAL": 1}
+        assert payload["portfolio_available"] is False
+        assert payload["closed_trades"] is None
+        assert "PAPER_PORTFOLIO_MISSING" in payload["validation_reasons"]
+        assert "PAPER_LEDGER_MISSING" in payload["validation_reasons"]
+
+    def test_forward_health_write_failure_is_explicit(self, tmp_path, monkeypatch):
+        import paper_forward_runner
+
+        monkeypatch.chdir(tmp_path)
+        health = paper_forward_runner.ForwardHealth()
+
+        def fail_replace(_source, _target):
+            raise OSError("simulated filesystem failure")
+
+        monkeypatch.setattr(paper_forward_runner.os, "replace", fail_replace)
+        assert health.set("strategy", "OK") is False
+        assert health.persistence == "WRITE_FAILED"
+        assert health.local_write_status == "WRITE_FAILED"
+
+    def test_forward_storage_probe_detects_unwritable_directory(self, tmp_path, monkeypatch):
+        import paper_forward_runner
+
+        monkeypatch.chdir(tmp_path)
+        health = paper_forward_runner.ForwardHealth()
+        missing_parent = tmp_path / "does-not-exist" / "paper_portfolio.json"
+        assert health.refresh_local_storage_status(
+            str(missing_parent),
+            str(tmp_path / "paper_trade_ledger.jsonl"),
+            str(tmp_path / "forward_signal_log.jsonl"),
+        ) is True
+        assert health.local_write_status == "WRITE_FAILED"
+        assert health.persistence == "WRITE_FAILED"
 
     def test_early_signal_rejection_log_keeps_unmeasured_fields_unknown(self, tmp_path, monkeypatch):
         from testnet_engine import service as service_module

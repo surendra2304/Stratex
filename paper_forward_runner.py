@@ -530,22 +530,65 @@ class ForwardHealth:
     def __init__(self, experiment_started_at=None):
         self.market_data = "OK"
         self.strategy = "OK"
-        self.portfolio = "OK"
-        self.persistence = "OK"
+        self.portfolio = "MISSING"
+        self.persistence = "LOCAL_EPHEMERAL_ONLY"
         self.reconciliation = "OK"
+        self.storage_scope = "CONTAINER_LOCAL_EPHEMERAL"
+        self.cloud_persistence_status = "NOT_CONFIGURED"
+        self.portfolio_file_status = "MISSING"
+        self.ledger_file_status = "MISSING"
+        self.signal_log_file_status = "UNKNOWN"
+        self.local_write_status = "UNKNOWN"
+        self.persistence_failure_latched = False
         self.experiment_started_at = experiment_started_at
         self.last_update = time.time()
 
     def set(self, component: str, state: str):
         setattr(self, component, state)
         self.last_update = time.time()
-        self._persist()
+        return self._persist()
+
+    def refresh_local_storage_status(self, portfolio_path, ledger_path, signal_path):
+        """Verify local artifacts without describing them as cloud-durable."""
+        self.portfolio_file_status = _verify_json_file(portfolio_path)
+        self.ledger_file_status = _verify_jsonl_file(ledger_path)
+        self.signal_log_file_status = _verify_jsonl_file(signal_path)
+        parent_dirs = [os.path.dirname(os.path.abspath(path)) for path in (
+            portfolio_path, ledger_path, signal_path, HEALTH_FILE,
+        )]
+        self.local_write_status = "WRITABLE" if all(_probe_directory_write(path) for path in parent_dirs) else "WRITE_FAILED"
+        if self.local_write_status == "WRITE_FAILED":
+            self.persistence = "WRITE_FAILED"
+            self.portfolio = "WRITE_FAILED"
+        else:
+            self.persistence = "LOCAL_EPHEMERAL_ONLY"
+            self.portfolio = "OK" if self.portfolio_file_status == "VALID" else self.portfolio_file_status
+        self.last_update = time.time()
+        if self.persistence_failure_latched:
+            self.persistence = "WRITE_FAILED"
+            self.portfolio = "WRITE_FAILED"
+        if not self._persist():
+            self.portfolio = "WRITE_FAILED"
+            return False
+        return True
+
+    def mark_persistence_failure(self):
+        self.persistence_failure_latched = True
+        self.persistence = "WRITE_FAILED"
+        self.portfolio = "WRITE_FAILED"
+        self.local_write_status = "WRITE_FAILED"
+        self.last_update = time.time()
+        return self._persist()
 
     def is_safe_to_trade(self) -> bool:
-        return all(
+        components_ok = all(
             s in ("OK", "DEGRADED")
-            for s in [self.market_data, self.strategy, self.portfolio, self.persistence]
+            for s in [self.market_data, self.strategy, self.portfolio]
         )
+        # Local-only simulation remains operational, but is never described as
+        # durable. Actual write failure blocks further entries.
+        persistence_ok = self.persistence in ("OK", "DEGRADED", "LOCAL_EPHEMERAL_ONLY")
+        return components_ok and persistence_ok
 
     def _persist(self):
         try:
@@ -555,6 +598,12 @@ class ForwardHealth:
                 "portfolio": self.portfolio,
                 "persistence": self.persistence,
                 "reconciliation": self.reconciliation,
+                "storage_scope": self.storage_scope,
+                "cloud_persistence_status": self.cloud_persistence_status,
+                "portfolio_file_status": self.portfolio_file_status,
+                "ledger_file_status": self.ledger_file_status,
+                "signal_log_file_status": self.signal_log_file_status,
+                "local_write_status": self.local_write_status,
                 "experiment_started_at": self.experiment_started_at,
                 "last_update": self.last_update,
             }
@@ -572,8 +621,13 @@ class ForwardHealth:
             with open(tmp_hb, "w") as f:
                 json.dump(hb_data, f)
             os.replace(tmp_hb, "heartbeat.json")
-        except Exception:
-            pass
+            return True
+        except Exception as exc:
+            logger.error("Forward health persistence failed: %s", type(exc).__name__)
+            self.persistence = "WRITE_FAILED"
+            self.local_write_status = "WRITE_FAILED"
+            self.persistence_failure_latched = True
+            return False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -650,6 +704,51 @@ def run_reconciliation(portfolio: PaperPortfolio, health: ForwardHealth) -> bool
         return False
 
 
+def _verify_json_file(path):
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            value = json.load(handle)
+        return "VALID" if isinstance(value, dict) else "INVALID"
+    except FileNotFoundError:
+        return "MISSING"
+    except (OSError, ValueError):
+        return "INVALID"
+
+
+def _verify_jsonl_file(path):
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.strip():
+                    value = json.loads(line)
+                    if not isinstance(value, dict):
+                        return "INVALID"
+        return "VALID"
+    except FileNotFoundError:
+        return "MISSING"
+    except (OSError, ValueError):
+        return "INVALID"
+
+
+def _probe_directory_write(path):
+    """Verify write access with a unique temporary file, without clobbering data."""
+    if not os.path.isdir(path):
+        return False
+    probe_path = os.path.join(path, f".stratex-write-probe-{uuid.uuid4().hex}.tmp")
+    try:
+        with open(probe_path, "x", encoding="utf-8") as handle:
+            handle.write("ok")
+        os.remove(probe_path)
+        return True
+    except OSError:
+        try:
+            if os.path.exists(probe_path):
+                os.remove(probe_path)
+        except OSError:
+            pass
+        return False
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # MAIN LOOP
 # ══════════════════════════════════════════════════════════════════════════════
@@ -675,8 +774,21 @@ def run():
     portfolio.ledger_file = LEDGER_FILE
     portfolio.equity_file = EQUITY_CURVE_FILE
 
+    # Materialize and validate the empty initial state as well. A runner with
+    # no signals must not report a healthy portfolio that has never been saved.
+    try:
+        portfolio._save()
+    except Exception:
+        logger.exception("Initial paper portfolio persistence failed")
+        initial_portfolio_persisted = False
+    else:
+        initial_portfolio_persisted = True
+
     signal_logger = SignalLogger(SIGNAL_LOG_FILE)
     health = ForwardHealth(experiment_started_at=cfg.started_at)
+    health.refresh_local_storage_status(portfolio.filename, LEDGER_FILE, SIGNAL_LOG_FILE)
+    if not initial_portfolio_persisted:
+        health.mark_persistence_failure()
 
     last_day_str = None
     daily_signals = 0
@@ -864,6 +976,7 @@ def run():
                 )
                 # Record equity snapshot every bar regardless
                 portfolio.record_equity_snapshot(current_ts, current_prices)
+                health.refresh_local_storage_status(portfolio.filename, LEDGER_FILE, SIGNAL_LOG_FILE)
                 time.sleep(POLL_INTERVAL_SECS)
                 continue
 
@@ -930,13 +1043,14 @@ def run():
 
             portfolio.record_equity_snapshot(current_ts, current_prices)
             health.set("portfolio", "OK")
-            health.set("persistence", "OK")
+            health.refresh_local_storage_status(portfolio.filename, LEDGER_FILE, SIGNAL_LOG_FILE)
 
         except KeyboardInterrupt:
             logger.info("Runner interrupted by operator.")
             break
         except Exception as e:
             logger.error(f"Unexpected error in main loop: {e}", exc_info=True)
+            health.mark_persistence_failure()
             health.set("strategy", "DEGRADED")
 
         time.sleep(POLL_INTERVAL_SECS)
