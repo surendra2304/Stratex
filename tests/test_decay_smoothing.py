@@ -16,6 +16,16 @@ def test_single_signal_conviction():
     assert res.persisted_bars == 1
 
 
+def test_unknown_confidence_smooths_direction_without_claiming_probability():
+    smoother = SignalDecaySmoother(decay_steps=4, confirmation_threshold=0.50)
+    result = smoother.update("BTCUSDT", "1h", "paper", "BUY", confidence=None)
+
+    assert result.action == "BUY"
+    assert result.is_confirmed is True
+    assert result.raw_signal == 1.0  # categorical direction only
+    assert result.confidence_status == "UNKNOWN_NOT_ESTIMATED"
+
+
 def test_alternating_twitches_filtered_as_noise():
     """Rapid twitching between BUY and SELL must be smoothed and filtered as noise."""
     smoother = SignalDecaySmoother(decay_steps=4, confirmation_threshold=0.50)

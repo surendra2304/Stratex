@@ -7,10 +7,14 @@ from paper_forward_runner import (
     FROZEN_STRATEGY,
     evaluate_forward_paper_candidate,
     load_or_create_experiment,
+    log_signal_record,
+    smooth_paper_signal,
 )
 import paper_forward_runner
 from paper_engine.experiment_config import FrozenExperimentConfig
+from paper_engine.signal_logger import SignalLogger
 from testnet_engine.profitability_gate import ProfitabilityGate
+from stratex_upgrade.decay import SignalDecaySmoother
 
 
 def test_missing_prior_is_allowed_only_for_frozen_paper_experiment(monkeypatch):
@@ -49,6 +53,30 @@ def test_exchange_profitability_gate_still_rejects_missing_prior():
 
     assert accepted is False
     assert metrics["reason"] == "UNVERIFIED_RULE_BASED_PRIOR"
+
+
+def test_paper_runner_uses_existing_smoother_api_with_unknown_confidence(monkeypatch):
+    smoother = SignalDecaySmoother(decay_steps=4, confirmation_threshold=0.50)
+    monkeypatch.setattr(paper_forward_runner, "_decay_smoother", smoother)
+
+    side, confidence_status = smooth_paper_signal("BTCUSDT", "1h", "BUY", None)
+
+    assert side == "BUY"
+    assert confidence_status == "UNKNOWN_NOT_ESTIMATED"
+
+
+def test_unknown_strategy_confidence_is_logged_as_unknown(tmp_path):
+    signal_log = tmp_path / "signals.jsonl"
+    logger = SignalLogger(str(signal_log))
+
+    log_signal_record(
+        logger, 1_790_000_000.0, FROZEN_STRATEGY, "BTCUSDT", "BUY", None,
+        100.0, 98.0, 104.0, decision="TRADED",
+    )
+
+    record = json.loads(signal_log.read_text(encoding="utf-8").strip())
+    assert record["confidence"] is None
+    assert record["confidence_status"] == "UNKNOWN_NOT_ESTIMATED"
 
 
 def test_closed_paper_ledger_keeps_unvalidated_experiment_provenance(tmp_path):

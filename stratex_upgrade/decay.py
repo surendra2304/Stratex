@@ -30,6 +30,7 @@ class DecayResult:
     persisted_bars: int          # How many consecutive bars signal has persisted
     is_confirmed: bool           # True if smoothed conviction >= threshold
     action: str                  # "BUY", "SELL", or "HOLD"/"FILTERED"
+    confidence_status: str = "KNOWN"
 
 
 class SignalDecaySmoother:
@@ -69,7 +70,7 @@ class SignalDecaySmoother:
         timeframe: str,
         strategy: str,
         side: str | None,
-        confidence: float = 1.0,
+        confidence: float | None = 1.0,
     ) -> DecayResult:
         """
         Ingest a new raw bar signal and compute its linear decayed value.
@@ -86,8 +87,10 @@ class SignalDecaySmoother:
             "BUY" / "LONG" -> +1.0 * confidence
             "SELL" / "SHORT" -> -1.0 * confidence
             None / "HOLD" -> 0.0
-        confidence : float
-            Raw confidence multiplier in [0.0, 1.0].
+        confidence : float | None
+            Raw confidence multiplier in [0.0, 1.0]. When unknown, smooth
+            categorical direction only. This is not a probability or
+            performance estimate.
 
         Returns
         -------
@@ -96,11 +99,13 @@ class SignalDecaySmoother:
         self.total_signals_received += 1
         key = (symbol, timeframe, strategy)
 
-        # Convert side to numeric
+        # Convert side to numeric. Unknown confidence does not become an
+        # estimated probability: it leaves only the categorical direction.
+        confidence_status = "KNOWN" if confidence is not None else "UNKNOWN_NOT_ESTIMATED"
         if side in ("BUY", "LONG"):
-            raw_val = 1.0 * max(0.0, min(1.0, confidence))
+            raw_val = 1.0 if confidence is None else max(0.0, min(1.0, confidence))
         elif side in ("SELL", "SHORT"):
-            raw_val = -1.0 * max(0.0, min(1.0, confidence))
+            raw_val = -1.0 if confidence is None else -max(0.0, min(1.0, confidence))
         else:
             raw_val = 0.0
 
@@ -154,6 +159,7 @@ class SignalDecaySmoother:
             persisted_bars=persisted_bars,
             is_confirmed=is_confirmed,
             action=action,
+            confidence_status=confidence_status,
         )
 
     def reset(self, symbol: str | None = None):

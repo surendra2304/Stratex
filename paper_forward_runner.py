@@ -169,6 +169,19 @@ def evaluate_forward_paper_candidate(
     return accepted, metrics
 
 
+def smooth_paper_signal(symbol, timeframe, side, confidence):
+    """Smooth a paper candidate without treating unknown confidence as a prior."""
+    result = _decay_smoother.update(
+        symbol, timeframe, FROZEN_STRATEGY, side, confidence=confidence
+    )
+    if result.confidence_status == "UNKNOWN_NOT_ESTIMATED":
+        logger.info(
+            "[PAPER_SIGNAL] strategy confidence is unknown; using categorical direction only "
+            "for smoothing (not a probability or profitability estimate)"
+        )
+    return (result.action if result.is_confirmed else None), result.confidence_status
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # EXPERIMENT LIFECYCLE
 # ══════════════════════════════════════════════════════════════════════════════
@@ -323,7 +336,7 @@ def log_signal_record(
     strategy: str,
     symbol: str,
     side: str | None,
-    confidence: float,
+    confidence: float | None,
     entry_price: float,
     sl: float | None,
     tp: float | None,
@@ -332,6 +345,7 @@ def log_signal_record(
     data_source: str = "BINANCE_REST",
     evidence_status: str = "UNVALIDATED_PAPER_EXPERIMENT",
     signal_id: str | None = None,
+    confidence_status: str | None = None,
 ):
     record = {
         "signal_id": signal_id or str(uuid.uuid4()),
@@ -340,6 +354,9 @@ def log_signal_record(
         "symbol": symbol,
         "side": side,
         "confidence": confidence,
+        "confidence_status": confidence_status or (
+            "UNKNOWN_NOT_ESTIMATED" if confidence is None else "STRATEGY_REPORTED_UNCALIBRATED"
+        ),
         "entry_price": entry_price,
         "sl": sl,
         "tp": tp,
@@ -925,7 +942,7 @@ def run():
             if not health.is_safe_to_trade():
                 log_signal_record(
                     signal_logger, current_ts, FROZEN_STRATEGY, active_symbol,
-                    None, 0.0, last_known_price, None, None,
+                    None, None, last_known_price, None, None,
                     decision="REJECTED", rejection_reason=f"HEALTH_{health.market_data}",
                 )
                 daily_signals += 1
@@ -952,7 +969,7 @@ def run():
                 logger.error(f"Signal generation failed: {e}")
                 log_signal_record(
                     signal_logger, current_ts, FROZEN_STRATEGY, active_symbol,
-                    None, 0.0, last_known_price, None, None,
+                    None, None, last_known_price, None, None,
                     decision="REJECTED", rejection_reason=f"STRATEGY_ERROR:{e}",
                 )
                 daily_signals += 1
@@ -961,17 +978,32 @@ def run():
 
             daily_signals += 1
 
-            # Qanat Linear Decay Smoothing filter
+            # Qanat Linear Decay Smoothing filter. Missing OOS confidence stays
+            # unknown; the smoother uses categorical direction and reports that
+            # distinction rather than receiving a fabricated confidence value.
+            confidence_status = "UNKNOWN_NOT_ESTIMATED" if raw_conf is None else "STRATEGY_REPORTED_UNCALIBRATED"
             if sig is not None:
-                smoothed_sig = _decay_smoother.smooth(active_symbol, active_tf, sig, raw_conf)
-                if smoothed_sig is None:
-                    logger.info(f"[QANAT DECAY] Single-bar transient twitch filtered on {active_symbol} {active_tf}")
-                    sig = None
+                raw_side = sig
+                sig, confidence_status = smooth_paper_signal(
+                    active_symbol, active_tf, sig, raw_conf
+                )
+                if sig is None:
+                    logger.info(f"[QANAT DECAY] Candidate filtered on {active_symbol} {active_tf}")
+                    log_signal_record(
+                        signal_logger, current_ts, strat_name, active_symbol,
+                        raw_side, raw_conf, last_known_price, sl, tp,
+                        decision="REJECTED", rejection_reason="SIGNAL_DECAY_FILTERED",
+                        confidence_status=confidence_status,
+                    )
+                    portfolio.record_equity_snapshot(current_ts, current_prices)
+                    health.refresh_local_storage_status(portfolio.filename, LEDGER_FILE, SIGNAL_LOG_FILE)
+                    time.sleep(POLL_INTERVAL_SECS)
+                    continue
 
             if sig is None:
                 log_signal_record(
                     signal_logger, current_ts, strat_name, active_symbol,
-                    None, 1.0, last_known_price, None, None,
+                    None, None, last_known_price, None, None,
                     decision="NO_SIGNAL",
                 )
                 # Record equity snapshot every bar regardless
@@ -1003,6 +1035,7 @@ def run():
                         "evidence_status", "UNVALIDATED_PAPER_EXPERIMENT"
                     ),
                     signal_id=signal_id,
+                    confidence_status=confidence_status,
                 )
                 portfolio.record_equity_snapshot(current_ts, current_prices)
                 time.sleep(POLL_INTERVAL_SECS)
@@ -1029,6 +1062,7 @@ def run():
                         "evidence_status", "UNVALIDATED_PAPER_EXPERIMENT"
                     ),
                     signal_id=signal_id,
+                    confidence_status=confidence_status,
                 )
             else:
                 log_signal_record(
@@ -1039,6 +1073,7 @@ def run():
                         "evidence_status", "UNVALIDATED_PAPER_EXPERIMENT"
                     ),
                     signal_id=signal_id,
+                    confidence_status=confidence_status,
                 )
 
             portfolio.record_equity_snapshot(current_ts, current_prices)
