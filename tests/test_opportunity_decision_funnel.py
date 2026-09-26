@@ -279,3 +279,27 @@ class TestOpportunityDecisionFunnel:
         assert record["expected_net"] is None
         assert record["fees"] is None
         assert record["slippage"] is None
+
+    def test_exchange_error_is_logged_as_execution_failure_not_risk_rejection(self, tmp_path, monkeypatch):
+        from testnet_engine import service as service_module
+
+        log_path = tmp_path / "opportunities.jsonl"
+        monkeypatch.setattr(service_module, "TESTNET_OPPORTUNITY_LOG", str(log_path))
+        service = object.__new__(service_module.TestnetService)
+        service.log_opportunity(
+            "sig-exchange-error", "BTCUSDT", "BUY",
+            {
+                "profitability_decision": "ACCEPTED",
+                "risk_decision": "ACCEPTED",
+                "execution_error_code": -1013,
+                "execution_error_message": "Filter failure: LOT_SIZE",
+            },
+            "FAILED", "BINANCE_API_ERROR_400",
+        )
+
+        record = json.loads(log_path.read_text(encoding="utf-8"))
+        assert record["profitability_decision"] == "ACCEPTED"
+        assert record["risk_decision"] == "ACCEPTED"
+        assert record["execution_decision"] == "FAILED"
+        assert record["execution_error_code"] == -1013
+        assert record["execution_error_message"] == "Filter failure: LOT_SIZE"

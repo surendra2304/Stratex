@@ -1721,8 +1721,21 @@ class TestnetService:
                         except BinanceAPIException as e:
                             self.stats["ORDERS_SUBMITTED"] += 1
                             self.stats["ORDERS_FAILED"] += 1
-                            logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: BINANCE_API_ERROR_{e.status_code}")
-                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", f"BINANCE_API_ERROR_{e.status_code}", current_price=current_price)
+                            error_code = f"BINANCE_API_ERROR_{e.status_code}"
+                            error_metrics = {
+                                **fresh_metrics,
+                                "execution_error_code": getattr(e, "code", None),
+                                "execution_error_message": getattr(e, "message", None) or str(e),
+                            }
+                            logger.warning(
+                                f"[ORDER_FAILED] {symbol} {side} | Reason: {error_code} "
+                                f"| Exchange code: {error_metrics['execution_error_code']} "
+                                f"| Message: {error_metrics['execution_error_message']}"
+                            )
+                            self.log_opportunity(
+                                signal_id, symbol, side, error_metrics, "FAILED", error_code,
+                                current_price=current_price
+                            )
                             self.telemetry.record_execution_event({
                                 "event_type": "order_failed",
                                 "symbol": symbol,
@@ -1839,6 +1852,15 @@ class TestnetService:
             p_reason_val = "NET_EDGE_POSITIVE"
             r_reason_val = "WITHIN_LIMITS"
             e_reason_val = reason
+        elif decision == "FAILED":
+            # A dispatch failure occurs after the signal passed its gates.
+            # Keep gate outcomes separate from exchange execution status.
+            p_dec = metrics.get("profitability_decision", "ACCEPTED")
+            r_dec = metrics.get("risk_decision", "ACCEPTED")
+            e_dec = "FAILED"
+            p_reason_val = metrics.get("profitability_reason", "NET_EDGE_POSITIVE")
+            r_reason_val = metrics.get("risk_reason", "WITHIN_LIMITS")
+            e_reason_val = reason
         elif decision in ["ACCEPTED", "ALL_GATES_PASSED"]:
             p_dec = "ACCEPTED"
             r_dec = "ACCEPTED"
@@ -1899,6 +1921,8 @@ class TestnetService:
             "risk_reason": r_reason_val,
             "execution_decision": e_dec,
             "execution_reason": e_reason_val,
+            "execution_error_code": metrics.get("execution_error_code"),
+            "execution_error_message": metrics.get("execution_error_message"),
             "rank": rank or (candidate.get("rank") if candidate else None),
             "score": score or (candidate.get("score") if candidate else None),
             "decision": decision,

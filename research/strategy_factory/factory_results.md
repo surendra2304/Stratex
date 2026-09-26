@@ -1,5 +1,7 @@
 # Strategy Factory Mass Backtest Report
 
+> **UNVERIFIED HISTORICAL OUTPUT — DO NOT USE FOR STRATEGY SELECTION OR DEPLOYMENT.** The candle datasets and provenance used for these figures are not present in this checkout. The backtest code at the time could substitute generated synthetic candles after a fetch failure, so the source of these results cannot be established from available evidence. These figures are not verified Binance performance.
+
 **Total Variations Tested**: 204
 **Assets**: BTCUSDT, ETHUSDT, SOLUSDT
 **Friction Model**: 8 bps round-trip Maker/Taker Futures model
@@ -20,7 +22,7 @@
 | 10 | `factory_macd_bb_confluence_15m_188` | 15m | macd_bb_confluence | 1730 | 36.4% | **1.15** | +373.9% |
 
 
-## Top 5 Strategies Selected for Live Deployment
+## Top 5 Candidates (Historical, Unverified)
 
 ### Winner #1: `factory_macd_bb_confluence_5m_182`
 - **Timeframe**: 5m

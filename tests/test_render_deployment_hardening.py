@@ -26,7 +26,7 @@ class TestRenderDeploymentHardening:
             yield c
 
     def test_render_yaml_specification(self):
-        """render.yaml must configure Frankfurt region, Docker env, supervisor command, and /health."""
+        """render.yaml must match Stratex's Singapore Docker service and /health endpoint."""
         render_file = "render.yaml"
         assert os.path.exists(render_file)
         with open(render_file, "r") as f:
@@ -35,10 +35,9 @@ class TestRenderDeploymentHardening:
         services = spec.get("services", [])
         assert len(services) >= 1
         svc = services[0]
-        assert svc["region"] == "frankfurt"
+        assert svc["region"] == "singapore"
         assert svc["env"] == "docker"
         assert svc["healthCheckPath"] == "/health"
-        assert "supervise_services.py" in svc["dockerCommand"]
 
     def test_dockerfile_specification(self):
         """Dockerfile must specify Python 3.11-slim, expose port 5000, and run supervisor."""

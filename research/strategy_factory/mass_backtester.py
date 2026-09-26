@@ -10,10 +10,10 @@ Fast vectorized/event backtester for all strategy variations in strategy_variati
 """
 
 import json
+import hashlib
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -61,26 +61,44 @@ def load_market_data(symbols, timeframes, start_str="2025-01-01"):
     cache_dir = Path("data_cache/factory_data")
     cache_dir.mkdir(parents=True, exist_ok=True)
     data = {}
-
-    tf_to_pandas_freq = {
-        "1m": "1min",
-        "5m": "5min",
-        "15m": "15min",
-        "30m": "30min",
-        "1h": "1h",
-        "4h": "4h"
-    }
+    required = {"open", "high", "low", "close", "volume"}
 
     for sym in symbols:
         for tf in timeframes:
             cache_file = cache_dir / f"{sym}_{tf}.csv"
+            provenance_file = cache_file.with_suffix(cache_file.suffix + ".json")
             if cache_file.exists():
-                df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
-                print(f"Loaded cached {sym} {tf} ({len(df)} bars)")
+                if not provenance_file.exists():
+                    raise RuntimeError(
+                        f"Unverified research cache {cache_file}: missing provenance sidecar. "
+                        "Move it aside and fetch real exchange candles again before backtesting."
+                    )
+                try:
+                    metadata = json.loads(provenance_file.read_text(encoding="utf-8"))
+                    digest = hashlib.sha256(cache_file.read_bytes()).hexdigest()
+                    if metadata.get("sha256") != digest:
+                        raise RuntimeError(f"Research cache hash mismatch for {cache_file}")
+                    if metadata.get("symbol") != sym or metadata.get("timeframe") != tf:
+                        raise RuntimeError(f"Research cache identity mismatch for {cache_file}")
+                    if metadata.get("requested_start") != start_str:
+                        raise RuntimeError(f"Research cache start-date mismatch for {cache_file}")
+                    if not metadata.get("source"):
+                        raise RuntimeError(f"Research cache source is missing for {cache_file}")
+                    df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
+                    if metadata.get("rows") != len(df):
+                        raise RuntimeError(f"Research cache row-count mismatch for {cache_file}")
+                    print(
+                        f"Loaded verified {sym} {tf} ({len(df)} bars; "
+                        f"source={metadata['source']}; sha256={digest[:12]})"
+                    )
+                except (OSError, ValueError, KeyError) as exc:
+                    raise RuntimeError(f"Could not verify research cache {cache_file}: {exc}") from exc
             else:
                 print(f"Fetching {sym} {tf} from {start_str}...")
                 try:
                     raw_klines = client.futures_historical_klines(sym, tf, start_str=start_str)
+                    if not raw_klines:
+                        raise RuntimeError("exchange returned no historical candles")
                     df = pd.DataFrame(raw_klines, columns=[
                         'timestamp', 'open', 'high', 'low', 'close', 'volume',
                         'close_time', 'quote_asset_volume', 'number_of_trades',
@@ -90,22 +108,54 @@ def load_market_data(symbols, timeframes, start_str="2025-01-01"):
                     for col in ['open', 'high', 'low', 'close', 'volume']:
                         df[col] = df[col].astype(float)
                     df.set_index('timestamp', inplace=True)
-                    df.to_csv(cache_file)
-                    print(f"Downloaded & saved {sym} {tf} ({len(df)} bars)")
                 except Exception as e:
-                    print(f"Warning: Failed to fetch {sym} {tf}: {e}. Generating synthetic backup.")
-                    pfreq = tf_to_pandas_freq.get(tf, "5min")
-                    timestamps = pd.date_range(start_str, periods=5000, freq=pfreq)
-                    np.random.seed(42)
-                    p = 50000.0 + np.cumsum(np.random.randn(5000) * 100)
-                    df = pd.DataFrame({
-                        'open': p,
-                        'high': p + abs(np.random.randn(5000) * 50),
-                        'low': p - abs(np.random.randn(5000) * 50),
-                        'close': p + np.random.randn(5000) * 20,
-                        'volume': np.random.uniform(100, 1000, 5000)
-                    }, index=timestamps)
-                    df.to_csv(cache_file)
+                    raise RuntimeError(
+                        f"Cannot run a research backtest for {sym} {tf}: real exchange candles "
+                        f"could not be fetched ({e}). No substitute data was generated."
+                    ) from e
+
+                missing = required.difference(df.columns)
+                if df.empty or missing:
+                    raise RuntimeError(
+                        f"Invalid real candle response for {sym} {tf}: "
+                        f"rows={len(df)}, missing_columns={sorted(missing)}"
+                    )
+                csv_bytes = df.to_csv().encode("utf-8")
+                digest = hashlib.sha256(csv_bytes).hexdigest()
+                source = getattr(client, "data_source", None)
+                if not source:
+                    raise RuntimeError(
+                        f"Cannot save {sym} {tf} candles without an identified exchange data source"
+                    )
+                metadata = {
+                    "symbol": sym,
+                    "timeframe": tf,
+                    "requested_start": start_str,
+                    "source": source,
+                    "fetched_at_utc": pd.Timestamp.now(tz="UTC").isoformat(),
+                    "rows": len(df),
+                    "sha256": digest,
+                }
+                cache_tmp = cache_file.with_suffix(cache_file.suffix + ".tmp")
+                provenance_tmp = provenance_file.with_suffix(provenance_file.suffix + ".tmp")
+                cache_tmp.write_bytes(csv_bytes)
+                provenance_tmp.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+                cache_tmp.replace(cache_file)
+                provenance_tmp.replace(provenance_file)
+                print(
+                    f"Downloaded & saved verified {sym} {tf} ({len(df)} bars; "
+                    f"source={source}; sha256={digest[:12]})"
+                )
+
+            missing = required.difference(df.columns)
+            if df.empty or missing:
+                raise RuntimeError(
+                    f"Invalid candle cache for {sym} {tf}: rows={len(df)}, "
+                    f"missing_columns={sorted(missing)}"
+                )
+            # Keep a stable, minimal schema independent of the exchange SDK's
+            # inferred types for unused kline columns.
+            df = df.loc[:, ["open", "high", "low", "close", "volume"]].astype(float)
             data[(sym, tf)] = df
     return data
 
@@ -299,7 +349,8 @@ def run_mass_backtest():
         f.write("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
         f.writelines(f"| {rank} | `{r['name']}` | {r['timeframe']} | {r['type']} | {r['total_trades']} | {r['win_rate']*100:.1f}% | **{r['net_pf']:.2f}** | {r['total_return_pct']:+.1f}% |\n" for rank, r in enumerate(results[:10], 1))
 
-        f.write("\n\n## Top 5 Strategies Selected for Live Deployment\n\n")
+        f.write("\n\n## Top 5 Candidates for Further Validation\n\n")
+        f.write("These are in-sample rankings only. They are not approved for deployment and do not establish profitability.\n\n")
         for rank, r in enumerate(results[:5], 1):
             f.write(f"### Winner #{rank}: `{r['name']}`\n")
             f.write(f"- **Timeframe**: {r['timeframe']}\n")
