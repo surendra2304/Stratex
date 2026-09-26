@@ -2,7 +2,7 @@
 
 > **Official Subsystem Name:** Stratex  
 > **Role in Ecosystem:** 24/7 Automated Binance Futures Execution Engine & Live Trading Dashboard  
-> **Repository:** [surendra2304/algorithmic-trading-bot](https://github.com/surendra2304/algorithmic-trading-bot) (Branch: master)  
+> **Repository:** [surendra2304/algorithmic-trading-bot](https://github.com/surendra2304/algorithmic-trading-bot) (Branch: main)
 > **Workspace Path:** d:\FRIDAY Universe\Stratex  
 
 ---

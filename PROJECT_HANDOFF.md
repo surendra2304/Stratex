@@ -3,7 +3,7 @@
 > **Target Audience**: Incoming AI Engineering Agent (Claude, Codex, Gemini, GPT, etc.)  
 > **Repository**: `https://github.com/surendra2304/stratex.git`  
 > **Local Workspace**: `D:/MT5/python_bot`  
-> **Active Branch**: `master`  
+> **Active Branch**: `main`
 > **Production / Render Dashboard**: `https://stratex-fra.onrender.com`  
 > **System State**: TESTNET / PAPER ONLY — Live Trading Permanently Locked (`LIVE_TRADING_ENABLED = False`)
 
