@@ -303,8 +303,13 @@ def _update_experiment_registry_status(experiment_id: str, status: str):
 
 def fetch_candles(symbol: str, interval: str, limit: int = 250) -> pd.DataFrame | None:
     """
-    Fetches recent OHLCV candles from Binance via MarketDataClient (read-only).
+    Fetches completed OHLCV candles from Binance via MarketDataClient (read-only).
     Returns None on failure — DO NOT substitute synthetic data.
+
+    Binance includes the currently forming candle in klines. The frozen
+    experiment is defined on 1H bars, so exposing that partial bar here would
+    let the runner evaluate the same bar every minute and count repeated
+    intrabar changes as independent observations.
     """
     try:
         mdc = MarketDataClient()
@@ -320,10 +325,30 @@ def fetch_candles(symbol: str, interval: str, limit: int = 250) -> pd.DataFrame 
             df[col] = pd.to_numeric(df[col])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         df = df.sort_values("timestamp").reset_index(drop=True)
-        return df
+        return filter_closed_candles(df)
     except Exception as e:
         logger.error(f"fetch_candles failed for {symbol}/{interval}: {e}")
         return None
+
+
+def filter_closed_candles(df: pd.DataFrame, now_ms: float | None = None) -> pd.DataFrame:
+    """Return only exchange candles whose close time has passed.
+
+    A missing or malformed close-time column is treated as unusable input:
+    guessing whether a bar is complete would contaminate the forward sample.
+    """
+    if df is None or df.empty or "close_time" not in df.columns:
+        return pd.DataFrame(columns=[] if df is None else df.columns)
+
+    close_times = pd.to_numeric(df["close_time"], errors="coerce")
+    cutoff = time.time() * 1000 if now_ms is None else float(now_ms)
+    closed = df.loc[close_times.notna() & (close_times < cutoff)].copy()
+    return closed.reset_index(drop=True)
+
+
+def is_new_completed_bar(timestamp, last_processed_timestamp) -> bool:
+    """Accept each completed bar once and reject repeats or out-of-order bars."""
+    return last_processed_timestamp is None or timestamp > last_processed_timestamp
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -777,7 +802,6 @@ def run():
     logger.info("=" * 70)
 
     # Safety gate
-    import config
     if getattr(config, "LIVE_TRADING_ENABLED", False):
         logger.critical("SAFETY FAILURE: LIVE trading is enabled — aborting paper runner")
         sys.exit(1)
@@ -812,6 +836,7 @@ def run():
     daily_trades = 0
     data_events = {"gaps": 0, "stale": 0, "unavailable": 0}
     last_candle_ts = None
+    last_processed_candle_ts = None
     open_positions_meta = {}   # pos_id -> {sl, tp}
     last_known_price = None    # set once market data is fetched; guards daily report
 
@@ -915,10 +940,33 @@ def run():
                     data_events["gaps"] += 1
                     logger.warning(f"DATA GAP detected: {actual_gap}")
 
-            last_candle_ts = df["timestamp"].iloc[-1]
+            new_candle_ts = df["timestamp"].iloc[-1]
+            # Polling is more frequent than the strategy timeframe. Process a
+            # completed 1H bar once; otherwise one bar could be counted dozens
+            # of times and drive the decay smoother with repeated observations.
+            if not is_new_completed_bar(new_candle_ts, last_processed_candle_ts):
+                time.sleep(POLL_INTERVAL_SECS)
+                continue
+            last_processed_candle_ts = new_candle_ts
+            last_candle_ts = new_candle_ts
             last_known_price = float(df["close"].iloc[-1])
             current_prices = {active_symbol: last_known_price}
             current_ts = df["timestamp"].iloc[-1].timestamp()
+            bar_identity = (
+                f"{FROZEN_STRATEGY}:{active_symbol}:{active_tf}:"
+                f"{pd.Timestamp(new_candle_ts).isoformat()}"
+            )
+            bar_signal_id = str(uuid.uuid5(uuid.NAMESPACE_URL, bar_identity))
+            if signal_logger.has_signal_id(bar_signal_id) or any(
+                pos.get("signal_id") == bar_signal_id
+                for pos in portfolio.positions.values()
+            ):
+                # The signal log and portfolio are persisted independently.
+                # Check both so a restart after a fill but before its log write
+                # cannot simulate the same completed bar a second time.
+                logger.info("[PAPER_SIGNAL] completed bar already recorded; skipping replay")
+                time.sleep(POLL_INTERVAL_SECS)
+                continue
 
             # ── Compute features (no lookahead) ──────────────────────────
             try:
@@ -944,6 +992,7 @@ def run():
                     signal_logger, current_ts, FROZEN_STRATEGY, active_symbol,
                     None, None, last_known_price, None, None,
                     decision="REJECTED", rejection_reason=f"HEALTH_{health.market_data}",
+                    signal_id=bar_signal_id,
                 )
                 daily_signals += 1
                 time.sleep(POLL_INTERVAL_SECS)
@@ -971,6 +1020,7 @@ def run():
                     signal_logger, current_ts, FROZEN_STRATEGY, active_symbol,
                     None, None, last_known_price, None, None,
                     decision="REJECTED", rejection_reason=f"STRATEGY_ERROR:{e}",
+                    signal_id=bar_signal_id,
                 )
                 daily_signals += 1
                 time.sleep(POLL_INTERVAL_SECS)
@@ -994,6 +1044,7 @@ def run():
                         raw_side, raw_conf, last_known_price, sl, tp,
                         decision="REJECTED", rejection_reason="SIGNAL_DECAY_FILTERED",
                         confidence_status=confidence_status,
+                        signal_id=bar_signal_id,
                     )
                     portfolio.record_equity_snapshot(current_ts, current_prices)
                     health.refresh_local_storage_status(portfolio.filename, LEDGER_FILE, SIGNAL_LOG_FILE)
@@ -1005,6 +1056,7 @@ def run():
                     signal_logger, current_ts, strat_name, active_symbol,
                     None, None, last_known_price, None, None,
                     decision="NO_SIGNAL",
+                    signal_id=bar_signal_id,
                 )
                 # Record equity snapshot every bar regardless
                 portfolio.record_equity_snapshot(current_ts, current_prices)
@@ -1015,7 +1067,7 @@ def run():
             # The paper experiment can sample this frozen candidate without
             # pretending its missing prior is evidence. Exchange modes remain
             # blocked by the independent testnet engine governance gate.
-            signal_id = str(uuid.uuid4())
+            signal_id = bar_signal_id
             accepted, gate_metrics = evaluate_forward_paper_candidate(
                 strategy_name=strat_name,
                 signal_result=sig_res,

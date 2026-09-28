@@ -127,3 +127,7 @@ class SignalLogger:
         if sig_id:
             self._seen_ids.add(sig_id)
         return True
+
+    def has_signal_id(self, signal_id: str) -> bool:
+        """Report whether a stable event ID is already present in the log."""
+        return bool(signal_id) and signal_id in self._seen_ids
