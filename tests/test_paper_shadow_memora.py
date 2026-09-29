@@ -110,6 +110,49 @@ def test_memora_outage_and_invalid_query_fail_closed():
         store.load_latest(processor())
 
 
+def test_rate_limit_status_reports_only_allowlisted_origin_headers():
+    safe_metadata = {
+        "server": "cloudflare",
+        "render_origin": "uvicorn",
+        "render_request_id": "3d84049d-6172-4873",
+        "cf_ray": "a4134d8cf9b2f088-DFW",
+        "retry_after_seconds": "120",
+        "authorization": "Bearer do-not-leak",
+    }
+    store = MemoraShadowStore(
+        api_key="test-key",
+        transport=lambda *_args: (429, {
+            "_rate_limit_metadata": safe_metadata,
+            "body": "sensitive provider details must not escape",
+        }),
+    )
+    with pytest.raises(ShadowPersistenceError) as raised:
+        store.load_latest(processor())
+    message = str(raised.value)
+    assert "HTTP 429" in message
+    assert "server=cloudflare" in message
+    assert "render_origin=uvicorn" in message
+    assert "render_request_id=3d84049d-6172-4873" in message
+    assert "cf_ray=a4134d8cf9b2f088-DFW" in message
+    assert "retry_after_seconds=120" in message
+    assert "do-not-leak" not in message
+    assert "sensitive provider details" not in message
+
+
+def test_rate_limit_metadata_rejects_untrusted_header_values():
+    from email.message import Message
+
+    from paper_shadow_memora import _safe_rate_limit_headers
+
+    headers = Message()
+    headers["Server"] = "attacker.example; Authorization=secret"
+    headers["X-Render-Origin-Server"] = "uvicorn\nAuthorization: secret"
+    headers["Rndr-Id"] = "secret-token"
+    headers["CF-Ray"] = "not-a-ray"
+    headers["Retry-After"] = "999999"
+    assert _safe_rate_limit_headers(headers) == {}
+
+
 def test_configuration_mismatch_and_foreign_snapshot_are_not_restored():
     state = json.dumps({"kind": "other-agent.checkpoint"})
     store = MemoraShadowStore(

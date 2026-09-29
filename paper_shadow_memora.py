@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from typing import Any, Callable
@@ -129,6 +130,12 @@ class MemoraShadowStore:
         except Exception as exc:
             raise ShadowPersistenceError(f"Memora request failed ({type(exc).__name__})") from exc
         if not 200 <= status < 300:
+            if status == 429:
+                metadata = _format_rate_limit_metadata(
+                    body.get("_rate_limit_metadata") if isinstance(body, dict) else None
+                )
+                suffix = f" ({metadata})" if metadata else " (origin headers unavailable)"
+                raise ShadowPersistenceError(f"Memora returned HTTP 429{suffix}")
             raise ShadowPersistenceError(f"Memora returned HTTP {status}")
         return body
 
@@ -224,4 +231,55 @@ def _http_transport(
             body = response.read()
             return response.status, json.loads(body.decode("utf-8")) if body else {}
     except urllib.error.HTTPError as exc:
-        return exc.code, {"error": "Memora request rejected"}
+        # Keep only a small, validated set of public diagnostics for rate
+        # limit responses. Never copy the upstream body or arbitrary headers
+        # into the status endpoint.
+        metadata = _safe_rate_limit_headers(exc.headers) if exc.code == 429 else {}
+        return exc.code, {"_rate_limit_metadata": metadata}
+
+
+def _safe_rate_limit_headers(headers: Any) -> dict[str, str]:
+    """Extract allowlisted, sanitized headers without retaining credentials."""
+    if headers is None:
+        return {}
+    get = getattr(headers, "get", None)
+    if not callable(get):
+        return {}
+    result: dict[str, str] = {}
+    server = str(get("Server", "")).strip().lower()
+    if server in {"cloudflare", "uvicorn", "render", "nginx"}:
+        result["server"] = server
+    origin = str(get("X-Render-Origin-Server", "")).strip().lower()
+    if origin in {"uvicorn", "nginx", "render"}:
+        result["render_origin"] = origin
+    render_id = str(get("Rndr-Id", "")).strip()
+    if re.fullmatch(r"[A-Fa-f0-9-]{16,64}", render_id):
+        result["render_request_id"] = render_id
+    ray = str(get("CF-Ray", "")).strip()
+    if re.fullmatch(r"[A-Fa-f0-9]{16}-[A-Za-z0-9]{2,8}", ray):
+        result["cf_ray"] = ray
+    retry_after = str(get("Retry-After", "")).strip()
+    if re.fullmatch(r"\d{1,5}", retry_after) and int(retry_after) <= 86400:
+        result["retry_after_seconds"] = retry_after
+    return result
+
+
+def _format_rate_limit_metadata(metadata: Any) -> str:
+    """Format only schema-checked transport metadata for safe status output."""
+    if not isinstance(metadata, dict):
+        return ""
+    safe: list[str] = []
+    for key in ("server", "render_origin"):
+        value = metadata.get(key)
+        if value in {"cloudflare", "uvicorn", "render", "nginx"}:
+            safe.append(f"{key}={value}")
+    render_id = metadata.get("render_request_id")
+    if isinstance(render_id, str) and re.fullmatch(r"[A-Fa-f0-9-]{16,64}", render_id):
+        safe.append(f"render_request_id={render_id}")
+    ray = metadata.get("cf_ray")
+    if isinstance(ray, str) and re.fullmatch(r"[A-Fa-f0-9]{16}-[A-Za-z0-9]{2,8}", ray):
+        safe.append(f"cf_ray={ray}")
+    retry_after = metadata.get("retry_after_seconds")
+    if isinstance(retry_after, str) and re.fullmatch(r"\d{1,5}", retry_after) and int(retry_after) <= 86400:
+        safe.append(f"retry_after_seconds={retry_after}")
+    return "; ".join(safe)
