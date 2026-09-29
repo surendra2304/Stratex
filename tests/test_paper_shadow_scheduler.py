@@ -120,7 +120,7 @@ def test_memora_unavailable_prevents_market_access_and_all_state_transitions():
     status = scheduler.get_status()
     assert status["shadow_paper_status"] == "DEGRADED"
     assert status["shadow_paper_ready"] is False
-    assert "memora_bootstrap_failed" in status["shadow_paper_reason"]
+    assert "memora_bootstrap_write_failed" in status["shadow_paper_reason"]
     assert not client.calls
     assert not scheduler.processor.last_timestamps
     assert scheduler.process_once() is False  # retries the durable preflight
@@ -139,7 +139,7 @@ def test_memora_bootstrap_reports_safe_adapter_failure_detail():
 
     assert scheduler.process_once() is False
     reason = scheduler.get_status()["shadow_paper_reason"]
-    assert reason == "memora_bootstrap_failed:Memora returned HTTP 401"
+    assert reason == "memora_restore_failed:Memora returned HTTP 401"
     assert "Bearer" not in reason
     assert not scheduler.processor.last_timestamps
     assert scheduler.process_once() is False  # retries without exposing credentials

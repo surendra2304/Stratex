@@ -120,13 +120,22 @@ class ShadowPaperScheduler:
             return False
         try:
             restored = self.store.load_latest(self.processor)
+        except Exception as exc:
+            detail = _safe_persistence_detail(exc)
+            self._set_status(
+                "DEGRADED",
+                f"memora_restore_failed:{detail}",
+                shadow_paper_ready=False,
+            )
+            return False
+        try:
             receipt = self.store.save(self.processor)
             _require_durable_receipt(receipt)
         except Exception as exc:
             detail = _safe_persistence_detail(exc)
             self._set_status(
                 "DEGRADED",
-                f"memora_bootstrap_failed:{detail}",
+                f"memora_bootstrap_write_failed:{detail}",
                 shadow_paper_ready=False,
             )
             return False
