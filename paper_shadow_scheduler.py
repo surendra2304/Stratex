@@ -3,8 +3,8 @@
 This scheduler is separate from the frozen ``paper_forward_runner`` and never
 imports the testnet execution service. It will not request candles until a
 Memora checkpoint has been restored (if present) and a durable receipt for the
-current state has been confirmed. A failed checkpoint discards the trial state
-and terminally degrades the scheduler until process restart.
+current state has been confirmed. A failed checkpoint discards trial state and
+retries the durable preflight after the next poll interval.
 """
 
 from __future__ import annotations
@@ -123,7 +123,6 @@ class ShadowPaperScheduler:
             receipt = self.store.save(self.processor)
             _require_durable_receipt(receipt)
         except Exception as exc:
-            self.stopped = True
             detail = _safe_persistence_detail(exc)
             self._set_status(
                 "DEGRADED",
@@ -222,7 +221,6 @@ class ShadowPaperScheduler:
             receipt = self.store.save(trial)
             _require_durable_receipt(receipt)
         except Exception as exc:
-            self.stopped = True
             detail = _safe_persistence_detail(exc)
             self._set_status(
                 "DEGRADED",
@@ -248,7 +246,7 @@ class ShadowPaperScheduler:
         return True
 
     def run_forever(self) -> None:
-        """Poll until disabled or a Memora durability failure requires a stop."""
+        """Poll until disabled or explicitly stopped, retrying transient failures."""
         if not self.enabled:
             self._bootstrap()
             return

@@ -123,7 +123,7 @@ def test_memora_unavailable_prevents_market_access_and_all_state_transitions():
     assert "memora_bootstrap_failed" in status["shadow_paper_reason"]
     assert not client.calls
     assert not scheduler.processor.last_timestamps
-    assert scheduler.process_once() is False  # terminal until process restart
+    assert scheduler.process_once() is False  # retries the durable preflight
     assert not client.calls
 
 
@@ -142,7 +142,7 @@ def test_memora_bootstrap_reports_safe_adapter_failure_detail():
     assert reason == "memora_bootstrap_failed:Memora returned HTTP 401"
     assert "Bearer" not in reason
     assert not scheduler.processor.last_timestamps
-    assert scheduler.process_once() is False  # terminal until process restart
+    assert scheduler.process_once() is False  # retries without exposing credentials
 
 
 def test_non_public_or_testnet_candle_client_is_rejected_before_use():
@@ -168,11 +168,14 @@ def test_non_public_or_testnet_candle_client_is_rejected_before_use():
     assert not scheduler.processor.last_timestamps
 
 
-def test_checkpoint_failure_discards_trial_cursor_and_stops_scheduler(monkeypatch):
+def test_checkpoint_failure_discards_trial_cursor_and_retries_without_restart(monkeypatch):
     class FailAfterBootstrap(FakeMemora):
+        failed_checkpoint = False
+
         def save(self, processor):
             self.save_calls += 1
-            if self.save_calls > 1:
+            if self.save_calls > 1 and not self.failed_checkpoint:
+                self.failed_checkpoint = True
                 raise ShadowPersistenceError("checkpoint unavailable")
             return {"storage_durable": True, "memory_id": "bootstrap"}
 
@@ -196,10 +199,16 @@ def test_checkpoint_failure_discards_trial_cursor_and_stops_scheduler(monkeypatc
     )
 
     assert scheduler.process_once() is False
-    assert scheduler.stopped is True
+    assert scheduler.stopped is False
     assert not scheduler.processor.last_timestamps  # trial state was never adopted
     assert scheduler.get_status()["shadow_paper_status"] == "DEGRADED"
     assert "memora_checkpoint_failed" in scheduler.get_status()["shadow_paper_reason"]
+
+    # Durable storage recovers without restarting the service. The old cursor
+    # is reloaded and the same candle can be safely retried.
+    assert scheduler.process_once() is True
+    assert scheduler.get_status()["shadow_paper_status"] == "RUNNING"
+    assert scheduler.processor.last_timestamps
 
 
 def test_scheduler_has_no_exchange_execution_imports_or_order_calls():
