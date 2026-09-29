@@ -124,9 +124,10 @@ class ShadowPaperScheduler:
             _require_durable_receipt(receipt)
         except Exception as exc:
             self.stopped = True
+            detail = _safe_persistence_detail(exc)
             self._set_status(
                 "DEGRADED",
-                f"memora_bootstrap_failed:{type(exc).__name__}",
+                f"memora_bootstrap_failed:{detail}",
                 shadow_paper_ready=False,
             )
             return False
@@ -222,9 +223,10 @@ class ShadowPaperScheduler:
             _require_durable_receipt(receipt)
         except Exception as exc:
             self.stopped = True
+            detail = _safe_persistence_detail(exc)
             self._set_status(
                 "DEGRADED",
-                f"memora_checkpoint_failed:{type(exc).__name__}",
+                f"memora_checkpoint_failed:{detail}",
                 shadow_paper_ready=False,
                 shadow_paper_uncommitted_transitions=transitions,
             )
@@ -259,6 +261,13 @@ class ShadowPaperScheduler:
 def _require_durable_receipt(receipt: Any) -> None:
     if not isinstance(receipt, dict) or receipt.get("storage_durable") is not True:
         raise ShadowPersistenceError("Memora durable checkpoint receipt was not confirmed")
+
+
+def _safe_persistence_detail(exc: Exception) -> str:
+    """Expose only adapter-authored persistence diagnostics, never raw errors."""
+    if isinstance(exc, ShadowPersistenceError):
+        return str(exc).replace("\n", " ")[:160] or type(exc).__name__
+    return type(exc).__name__
 
 
 def _create_read_only_market_data_client() -> Any:

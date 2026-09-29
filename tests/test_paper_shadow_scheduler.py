@@ -127,6 +127,24 @@ def test_memora_unavailable_prevents_market_access_and_all_state_transitions():
     assert not client.calls
 
 
+def test_memora_bootstrap_reports_safe_adapter_failure_detail():
+    class UnauthorizedMemora:
+        def load_latest(self, _processor):
+            raise ShadowPersistenceError("Memora returned HTTP 401")
+
+        def save(self, _processor):
+            raise AssertionError("save must not happen after failed restore")
+
+    scheduler = ShadowPaperScheduler(store=UnauthorizedMemora(), enabled=True)
+
+    assert scheduler.process_once() is False
+    reason = scheduler.get_status()["shadow_paper_reason"]
+    assert reason == "memora_bootstrap_failed:Memora returned HTTP 401"
+    assert "Bearer" not in reason
+    assert not scheduler.processor.last_timestamps
+    assert scheduler.process_once() is False  # terminal until process restart
+
+
 def test_non_public_or_testnet_candle_client_is_rejected_before_use():
     class TestnetOnlyClient(ReadOnlyPublicClient):
         public_data_source = "BINANCE_TESTNET_READ_ONLY"
