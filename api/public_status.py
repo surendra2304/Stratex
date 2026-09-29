@@ -13,19 +13,107 @@ Endpoints:
 
 import json
 import os
+from datetime import datetime, timezone
+from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
 from advisory_ledger import read_recent_advisory_entries
 from advisory_params import get_advisory_overlay
 from api.auth import require_permission
-from api.data_shapes import (
-    create_display_hint,
-    format_api_response,
-    format_iso_timestamp,
-)
+from api.data_shapes import format_api_response
 
 public_status_bp = Blueprint("public_status", __name__, url_prefix="/api/v1")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+HEARTBEAT_MAX_AGE_SECONDS = 180
+
+
+def _read_json(name: str) -> dict:
+    try:
+        value = json.loads((PROJECT_ROOT / name).read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def _read_jsonl(name: str) -> list[dict]:
+    rows = []
+    try:
+        with (PROJECT_ROOT / name).open(encoding="utf-8") as stream:
+            for line in stream:
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(row, dict):
+                    rows.append(row)
+    except OSError:
+        pass
+    return rows
+
+
+def _timestamp_seconds(value) -> float | None:
+    try:
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return None
+
+
+def _closed_trade_metrics() -> dict:
+    trades = [
+        row for row in _read_jsonl("paper_trade_ledger.jsonl")
+        if row.get("status") == "CLOSED" or row.get("closed_at") or row.get("exit_timestamp")
+    ]
+    pnl_values = []
+    for trade in trades:
+        pnl = trade.get("net_pnl", trade.get("pnl"))
+        try:
+            pnl = float(pnl)
+        except (TypeError, ValueError):
+            continue
+        if pnl == pnl and abs(pnl) != float("inf"):
+            pnl_values.append((trade, pnl))
+    wins = [pnl for _, pnl in pnl_values if pnl > 0]
+    losses = [pnl for _, pnl in pnl_values if pnl < 0]
+    gross_loss = abs(sum(losses))
+    return {
+        "trades": len(pnl_values),
+        "win_rate": (len(wins) / len(pnl_values) * 100) if pnl_values else None,
+        "profit_factor": (sum(wins) / gross_loss) if gross_loss else None,
+        "net_pnl": sum(pnl for _, pnl in pnl_values) if pnl_values else None,
+        "last_trade_timestamp": next((
+            trade.get("closed_at") or trade.get("exit_timestamp") or trade.get("timestamp")
+            for trade, _ in reversed(pnl_values)
+            if trade.get("closed_at") or trade.get("exit_timestamp") or trade.get("timestamp")
+        ), None),
+    }
+
+
+def _fresh_paper_runner() -> tuple[dict, bool, float | None]:
+    heartbeat = _read_json("paper_runner_heartbeat.json")
+    stamp = _timestamp_seconds(heartbeat.get("timestamp"))
+    age = max(0.0, datetime.now(timezone.utc).timestamp() - stamp) if stamp is not None else None
+    fresh = bool(
+        heartbeat.get("alive") is True
+        and heartbeat.get("status") == "RUNNING"
+        and age is not None
+        and age <= HEARTBEAT_MAX_AGE_SECONDS
+    )
+    return heartbeat, fresh, age
+
+
+def _fresh_engine_snapshot() -> list[str]:
+    snapshot = _read_json("engine-health.json")
+    stamp = _timestamp_seconds(snapshot.get("timestamp"))
+    age = max(0.0, datetime.now(timezone.utc).timestamp() - stamp) if stamp is not None else None
+    strategies = snapshot.get("strategies", [])
+    return strategies if age is not None and age <= HEARTBEAT_MAX_AGE_SECONDS and isinstance(strategies, list) else []
 
 
 def _add_cors_headers(response):
@@ -43,33 +131,48 @@ def apply_cors_and_caching(response):
 @public_status_bp.route("/status", methods=["GET"])
 @require_permission("read")
 def get_bot_status():
-    """Returns complete bot status rollup."""
+    """Return persisted paper telemetry with freshness and evidence stated."""
     overlay = get_advisory_overlay()
     recent_adv = read_recent_advisory_entries(limit=1)
     last_adv = recent_adv[0] if recent_adv else None
 
-    daily_pnl = 45.50
-    equity = 5035.98
-    drawdown_pct = 2.1
+    heartbeat, runner_fresh, heartbeat_age = _fresh_paper_runner()
+    curve = _read_jsonl("paper_equity_curve.jsonl")
+    latest_curve = curve[-1] if curve else {}
+    curve_stamp = _timestamp_seconds(latest_curve.get("timestamp"))
+    curve_age = max(0.0, datetime.now(timezone.utc).timestamp() - curve_stamp) if curve_stamp is not None else None
+    metrics = _closed_trade_metrics()
+    portfolio = _read_json("paper_portfolio.json")
+    equity = latest_curve.get("equity")
+    realized_pnl = latest_curve.get("realized_pnl")
+    unrealized_pnl = latest_curve.get("unrealized_pnl")
+    positions = portfolio.get("positions", {})
+    open_positions = [
+        position for position in positions.values()
+        if isinstance(position, dict) and position.get("status") == "OPEN"
+    ] if isinstance(positions, dict) else []
 
     overlay_state = overlay.get_state()
     active_overrides = overlay_state.get("active_overrides", {})
 
     status_data = {
-        "mode": "TESTNET",
-        "trading_active": True,
+        "mode": os.getenv("TRADING_MODE", "PAPER").upper(),
+        "trading_active": runner_fresh,
+        "runner_status": "RUNNING" if runner_fresh else "STALE_OR_UNAVAILABLE",
+        "runner_heartbeat_age_seconds": heartbeat_age,
+        "last_persisted_sample_age_seconds": curve_age,
+        "persisted_sample_stale": curve_age is None or curve_age > HEARTBEAT_MAX_AGE_SECONDS,
+        "evidence_status": "PAPER_LEDGER" if metrics["trades"] else "NO_CLOSED_TRADE_LEDGER",
         "equity": equity,
-        "unrealized_pnl": 15.20,
-        "realized_pnl": 420.50,
-        "daily_pnl": daily_pnl,
-        "daily_pnl_display": create_display_hint(daily_pnl),
-        "win_rate": 62.5,
-        "profit_factor": 1.68,
-        "max_drawdown_pct": drawdown_pct,
-        "open_positions_count": 2,
-        "strategies_active": [
-            "strategy_scalper", "strategy_supertrend", "strategy_adx_ema", "strategy_swing"
-        ],
+        "unrealized_pnl": unrealized_pnl,
+        "realized_pnl": realized_pnl,
+        "daily_pnl": None,
+        "daily_pnl_display": None,
+        "win_rate": metrics["win_rate"],
+        "profit_factor": metrics["profit_factor"],
+        "max_drawdown_pct": None,
+        "open_positions_count": len(open_positions) if runner_fresh else None,
+        "strategies_active": _fresh_engine_snapshot() if runner_fresh else [],
         "advisory_status": {
             "shadow_mode": os.getenv("TESTNET_ADVISORY_SHADOW_MODE", "True").lower() == "true",
             "active_overrides_count": len(active_overrides),
@@ -77,14 +180,15 @@ def get_bot_status():
             "last_verdict": last_adv.get("verdict") if last_adv else "NO_DATA"
         },
         "risk_status": {
-            "daily_loss_pct": 0.8,
-            "drawdown_pct": drawdown_pct,
-            "max_drawdown_limit_pct": 15.0,
-            "drawdown_headroom_pct": round(15.0 - drawdown_pct, 2),
-            "risk_state": "NOMINAL"
+            "daily_loss_pct": None,
+            "drawdown_pct": None,
+            "max_drawdown_limit_pct": None,
+            "drawdown_headroom_pct": None,
+            "risk_state": "UNKNOWN"
         },
-        "uptime_seconds": 184520,
-        "last_trade_timestamp": format_iso_timestamp()
+        "uptime_seconds": None,
+        "last_trade_timestamp": metrics["last_trade_timestamp"],
+        "heartbeat_error": heartbeat.get("last_error"),
     }
     return jsonify(format_api_response(status_data))
 
@@ -92,39 +196,16 @@ def get_bot_status():
 @public_status_bp.route("/positions", methods=["GET"])
 @require_permission("read")
 def get_positions():
-    """Returns active open positions across all strategies."""
-    # Synthetic / state-backed active positions
+    """Return open paper positions from the current portfolio snapshot only."""
+    _, runner_fresh, _ = _fresh_paper_runner()
+    portfolio = _read_json("paper_portfolio.json")
+    stored = portfolio.get("positions", {})
     positions = [
-        {
-            "position_id": "POS_BTC_001",
-            "symbol": "BTC/USDT",
-            "exchange": "binance",
-            "strategy": "strategy_supertrend",
-            "side": "LONG",
-            "quantity": 0.05,
-            "entry_price": 60150.0,
-            "mark_price": 60500.0,
-            "unrealized_pnl": 17.50,
-            "unrealized_pnl_pct": 0.58,
-            "display": create_display_hint(17.50),
-            "opened_at": format_iso_timestamp()
-        },
-        {
-            "position_id": "POS_ETH_002",
-            "symbol": "ETH/USDT",
-            "exchange": "bybit",
-            "strategy": "strategy_scalper",
-            "side": "LONG",
-            "quantity": 1.0,
-            "entry_price": 3020.0,
-            "mark_price": 3050.0,
-            "unrealized_pnl": 30.0,
-            "unrealized_pnl_pct": 0.99,
-            "display": create_display_hint(30.0),
-            "opened_at": format_iso_timestamp()
-        }
-    ]
-    return jsonify(format_api_response(positions))
+        {"position_id": key, **value}
+        for key, value in stored.items()
+        if runner_fresh and isinstance(value, dict) and value.get("status") == "OPEN"
+    ] if isinstance(stored, dict) else []
+    return jsonify(format_api_response(positions, error=None if runner_fresh else "PAPER_POSITION_SNAPSHOT_STALE_OR_UNAVAILABLE"))
 
 
 @public_status_bp.route("/trades", methods=["GET"])
@@ -134,20 +215,10 @@ def get_recent_trades():
     page = int(request.args.get("page", 1))
     limit = min(int(request.args.get("limit", 20)), 100)
 
-    # Read from paper trade ledger or testnet forward logs
-    ledger_file = "paper_trade_ledger.jsonl"
-    trades = []
-    if os.path.exists(ledger_file):
-        try:
-            with open(ledger_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    if line.strip():
-                        trades.append(json.loads(line.strip()))
-        except Exception:
-            pass
-
-    # Reverse to show latest first
-    trades = trades[::-1]
+    trades = list(reversed([
+        row for row in _read_jsonl("paper_trade_ledger.jsonl")
+        if row.get("status") == "CLOSED" or row.get("closed_at") or row.get("exit_timestamp")
+    ]))
     total_count = len(trades)
     start_idx = (page - 1) * limit
     page_trades = trades[start_idx : start_idx + limit]
@@ -164,13 +235,29 @@ def get_recent_trades():
 @public_status_bp.route("/strategies", methods=["GET"])
 @require_permission("read")
 def get_strategies_breakdown():
-    """Returns performance breakdown by individual quantitative strategy."""
+    """Return governance status; metrics stay unknown without a real closed ledger."""
+    try:
+        from config_strategy import PRODUCTION_STRATEGY_REGISTRY
+    except Exception:
+        PRODUCTION_STRATEGY_REGISTRY = {}
+    metrics = _closed_trade_metrics()
     strat_data = {
-        "strategy_scalper": {"status": "ACTIVE", "trades": 142, "win_rate": 64.2, "profit_factor": 1.72, "net_pnl": 185.20},
-        "strategy_supertrend": {"status": "ACTIVE", "trades": 89, "win_rate": 58.4, "profit_factor": 1.84, "net_pnl": 210.40},
-        "strategy_adx_ema": {"status": "ACTIVE", "trades": 76, "win_rate": 61.8, "profit_factor": 1.55, "net_pnl": 94.10},
-        "strategy_swing": {"status": "ACTIVE", "trades": 45, "win_rate": 55.5, "profit_factor": 1.48, "net_pnl": 65.80}
+        name: {
+            "status": spec.get("status", "UNKNOWN"),
+            "trades": None,
+            "win_rate": None,
+            "profit_factor": None,
+            "net_pnl": None,
+            "evidence_status": "NO_CLOSED_TRADE_LEDGER",
+        }
+        for name, spec in PRODUCTION_STRATEGY_REGISTRY.items()
     }
+    if metrics["trades"]:
+        strat_data["ledger_summary"] = {
+            "status": "PAPER_LEDGER_AGGREGATE",
+            **metrics,
+            "evidence_status": "PAPER_LEDGER_AGGREGATE_NOT_PER_STRATEGY",
+        }
     return jsonify(format_api_response(strat_data))
 
 
@@ -192,17 +279,18 @@ def get_advisory_status():
 @public_status_bp.route("/risk", methods=["GET"])
 @require_permission("read")
 def get_risk_metrics():
-    """Returns current risk limits and headroom proximity."""
+    """Return configured limits; do not invent live risk measurements."""
     data = {
-        "current_drawdown_pct": 2.1,
-        "max_drawdown_limit_pct": 15.0,
-        "drawdown_headroom_pct": 12.9,
-        "daily_loss_pct": 0.8,
-        "max_daily_loss_limit_pct": 5.0,
-        "daily_loss_headroom_pct": 4.2,
-        "circuit_breaker_status": "NORMAL",
-        "var_95_pct": 1.8,
-        "cvar_95_pct": 2.4
+        "current_drawdown_pct": None,
+        "max_drawdown_limit_pct": None,
+        "drawdown_headroom_pct": None,
+        "daily_loss_pct": None,
+        "max_daily_loss_limit_pct": None,
+        "daily_loss_headroom_pct": None,
+        "circuit_breaker_status": "UNKNOWN",
+        "var_95_pct": None,
+        "cvar_95_pct": None,
+        "evidence_status": "LIVE_RISK_SNAPSHOT_UNAVAILABLE",
     }
     return jsonify(format_api_response(data))
 
@@ -210,10 +298,10 @@ def get_risk_metrics():
 @public_status_bp.route("/history/equity", methods=["GET"])
 @require_permission("read")
 def get_equity_history():
-    """Returns historical equity curve points."""
+    """Return persisted equity samples, never seeded display values."""
     points = [
-        {"timestamp": "2026-08-25T00:00:00Z", "equity": 5000.0},
-        {"timestamp": "2026-08-26T00:00:00Z", "equity": 5020.50},
-        {"timestamp": "2026-08-27T00:00:00Z", "equity": 5035.98}
+        {"timestamp": row.get("timestamp"), "equity": row.get("equity"), "realized_pnl": row.get("realized_pnl"), "unrealized_pnl": row.get("unrealized_pnl")}
+        for row in _read_jsonl("paper_equity_curve.jsonl")
+        if row.get("timestamp") is not None and row.get("equity") is not None
     ]
     return jsonify(format_api_response(points))
