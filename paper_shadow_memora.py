@@ -140,6 +140,7 @@ def _snapshot_processor(processor: Any) -> dict[str, Any]:
         "kind": "stratex.paper_shadow.checkpoint",
         "schema_version": SCHEMA_VERSION,
         "evidence_status": "UNVALIDATED_PAPER_SHADOW",
+        "market_data_source": getattr(processor, "market_data_source", None),
         "configuration": {
             "starting_capital": float(processor.starting_capital),
             "risk_fraction": float(processor.risk_fraction),
@@ -175,6 +176,8 @@ def _restore_processor(processor: Any, snapshot: dict[str, Any]) -> None:
     expected = _snapshot_processor(processor)["configuration"]
     if snapshot.get("configuration") != expected:
         raise ShadowPersistenceError("checkpoint risk or cost configuration differs from this processor")
+    if snapshot.get("market_data_source") != getattr(processor, "market_data_source", None):
+        raise ShadowPersistenceError("checkpoint market data source differs from this scheduler")
     try:
         equity = float(snapshot["realized_equity"])
         positions = {_parse_key(k): v for k, v in snapshot["positions"].items()}

@@ -12,6 +12,10 @@ services:
         value: "0.0.0.0"
       - key: ENVIRONMENT
         value: "production"
+      # Cloud public-market shadow research is enabled by default; set this to
+      # false in Render to stop it immediately without changing testnet mode.
+      - key: STRATEX_SHADOW_PAPER_ENABLED
+        value: "true"
       - key: TRADING_MODE
         value: "FUTURES"
       - key: TESTNET_ONLY

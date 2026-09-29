@@ -88,6 +88,16 @@ class MarketDataClient:
     """
 
     def __init__(self):
+        # This client is always anonymous and read-only. Keep its public USD-M
+        # feed independent of TRADING_MODE: the cloud paper shadow runner uses
+        # production market candles even while the order engine stays on testnet.
+        try:
+            self.__public_client = Client("", "", testnet=False, ping=False)
+            self.public_data_source = "BINANCE_PUBLIC"
+        except Exception:
+            self.__public_client = None
+            self.public_data_source = "DATA_UNAVAILABLE"
+
         if TRADING_MODE == "PAPER":
             self.__client = None
             self.data_source = "DATA_UNAVAILABLE"
@@ -184,6 +194,19 @@ class MarketDataClient:
             except Exception:
                 pass
         return []
+
+    def get_public_futures_klines(self, **kwargs):
+        """Read production USD-M public klines without credentials or fallback.
+
+        This explicit path is for public-market research. It never uses the
+        testnet client and never calls account or order endpoints. Callers may
+        validate ``public_data_source == 'BINANCE_PUBLIC'`` before use.
+        """
+        if self.__public_client is None or self.public_data_source != "BINANCE_PUBLIC":
+            return []
+        return _execute_with_rate_limit_protection(
+            self.__public_client.futures_klines, **kwargs
+        )
 
     def futures_historical_klines(self, symbol, interval, start_str, end_str=None, **kwargs):
         """Historical futures klines for a symbol."""

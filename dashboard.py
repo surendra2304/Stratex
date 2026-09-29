@@ -2324,6 +2324,22 @@ def api_paper_forward_status():
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
     })
 
+
+@app.route('/api/paper/shadow-status')
+def api_paper_shadow_status():
+    """Expose Memora durability-gated shadow-paper scheduler status only."""
+    try:
+        from paper_shadow_scheduler import get_shadow_scheduler_status
+        return jsonify(get_shadow_scheduler_status())
+    except Exception as exc:
+        return jsonify({
+            "shadow_paper_status": "DEGRADED",
+            "shadow_paper_enabled": os.getenv("STRATEX_SHADOW_PAPER_ENABLED", "true").lower() not in {"0", "false", "no", "off"},
+            "shadow_paper_evidence_status": "UNVALIDATED_PAPER_SHADOW",
+            "shadow_paper_data_source": "NOT_CONNECTED",
+            "shadow_paper_reason": f"status_unavailable:{type(exc).__name__}",
+        }), 503
+
 @app.route('/api/export-trades')
 def api_export_trades():
     """Generates downloadable CSV export of the verified trade ledger."""
@@ -5821,6 +5837,14 @@ try:
     start_supervised_runner()
 except Exception as _paper_err:
     print(f"[DASHBOARD] paper runner supervisor unavailable: {_paper_err}")
+
+# Shadow research has its own scheduler and durable Memora namespace. It never
+# modifies the frozen forward experiment or enables the exchange engine.
+try:
+    from paper_shadow_scheduler import start_shadow_paper_scheduler
+    start_shadow_paper_scheduler()
+except Exception as _shadow_paper_err:
+    print(f"[DASHBOARD] paper shadow scheduler unavailable: {_shadow_paper_err}")
 
 if __name__ == '__main__':
     print("🚀 Starting Unified Live Trading Dashboard...")
