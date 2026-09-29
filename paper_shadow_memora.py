@@ -1,7 +1,7 @@
 """Durable, cloud-only checkpoints for the observe-only shadow paper processor.
 
-This adapter stores append-only snapshots in Stratex's dedicated Memora
-namespace. It is deliberately not wired into a scheduler or exchange engine.
+This adapter stores append-only snapshots in Stratex's private Memora namespace.
+It is deliberately not wired into a scheduler or exchange engine.
 If Memora is missing, unavailable, or reports non-durable storage, calls fail
 closed and the caller must not continue as though state had been persisted.
 """
@@ -19,7 +19,7 @@ import pandas as pd
 
 from paper_shadow_processor import SHADOW_CANDIDATES
 
-NAMESPACE = "memora://stratex/paper-shadow"
+NAMESPACE = "memora://stratex/private/paper-shadow"
 TASK_ID = "paper-shadow-checkpoint"
 SCHEMA_VERSION = 1
 MAX_SNAPSHOT_BYTES = 900_000
