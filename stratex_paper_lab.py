@@ -117,6 +117,7 @@ def evaluate_candidate(
     risk_fraction: float = DEFAULT_RISK_FRACTION,
     cost_engine: CostEngine | None = None,
     signal_fn: Callable | None = None,
+    evaluation_start: int = 0,
 ) -> dict:
     """Evaluate one strategy causally: close signal, next-open entry, OHLC exit.
 
@@ -134,6 +135,8 @@ def evaluate_candidate(
     frame = candles.reset_index(drop=True)
     if frame.empty:
         raise ValueError("candles must contain at least one market candle")
+    if not isinstance(evaluation_start, int) or not 0 <= evaluation_start < len(frame):
+        raise ValueError("evaluation_start must identify a candle index in the frame")
     if signal_fn is None:
         module_name, fn_name = STRATEGIES[strategy_name]
         strategy_module = importlib.import_module(module_name)
@@ -199,7 +202,7 @@ def evaluate_candidate(
                 max_drawdown = max(max_drawdown, (peak - equity) / peak)
 
         # Signals are calculated after this candle closes; fills are on next open.
-        if position is None and equity > 0 and i + 1 < len(frame):
+        if position is None and equity > 0 and i >= evaluation_start and i + 1 < len(frame):
             history = frame.iloc[max(0, i - 255): i + 1]
             signal = signal_fn(history)
             side, stop, target = _signal_fields(signal)
@@ -306,6 +309,7 @@ def run_lab(csv_path: Path, manifest_path: Path, output_dir: Path, strategies: l
             "risk_fraction": DEFAULT_RISK_FRACTION,
             "leverage_limit": 1.0,
             "costs": CostEngine.get_binance_taker_config().get_report_dict(),
+            "funding": "not modeled; futures results may be overstated for holding periods charged funding",
             "claim_limit": "historical paper research only; not forward evidence or profitability claim",
         },
         "data": {**provenance, "rows": len(candles), "first_timestamp": candles.timestamp.iloc[0].isoformat(), "last_timestamp": candles.timestamp.iloc[-1].isoformat()},

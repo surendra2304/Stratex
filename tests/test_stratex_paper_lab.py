@@ -41,6 +41,15 @@ def test_candidate_uses_next_open_and_accounts_for_all_taker_costs():
     )
 
 
+def test_evaluation_start_uses_earlier_bars_only_as_indicator_context():
+    result = evaluate_candidate(
+        candles(), "test", signal_fn=signal_on_first_bar, evaluation_start=2
+    )
+    assert result["trade_count"] == 0
+    with pytest.raises(ValueError, match="evaluation_start"):
+        evaluate_candidate(candles(), "test", signal_fn=signal_on_first_bar, evaluation_start=4)
+
+
 def test_stop_wins_when_stop_and_target_touch_same_candle():
     data = candles()
     data.loc[2, ["high", "low"]] = [111.0, 98.0]

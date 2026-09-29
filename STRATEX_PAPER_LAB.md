@@ -50,7 +50,8 @@ slippage, and 1 bp spread on each side. Exposure is capped at 1x equity.
 Drawdown is marked on completed candle closes while positions are open.
 Intrabar stop and target ambiguity is resolved in favor of the stop. Donchian
 exits also use the opposite 10-bar channel. Remaining positions close at the
-final candle close.
+final candle close. Funding is not modeled, so futures performance can be
+overstated for positions held through funding intervals.
 
 Results are historical paper research only. They do not establish out-of-
 sample profitability, forward validation, or permission to promote or execute
