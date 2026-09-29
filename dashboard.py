@@ -4867,19 +4867,37 @@ def api_performance():
 
 @app.route('/api/strategies')
 def api_strategies():
-    """Returns list of active strategies and their runtime configuration."""
+    """Report configured candidates separately from governance-loaded strategies."""
     try:
+        from config_strategy import PRODUCTION_STRATEGY_REGISTRY
+
+        engine = get_engine_health_data()
+        loaded = {
+            str(name).lower()
+            for name in (engine.get("strategies") or [])
+            if isinstance(name, str)
+        }
         strategies_data = []
-        for s_name in getattr(config, "ACTIVE_STRATEGIES", []):
+        candidates = getattr(config, "ACTIVE_STRATEGIES", {})
+        for s_name, timeframes in candidates.items():
+            name = str(s_name).lower()
+            evidence = PRODUCTION_STRATEGY_REGISTRY.get(name, {})
+            executable = name in loaded
             strategies_data.append({
-                "name": s_name,
-                "status": "ACTIVE",
+                "name": name,
+                "status": "EXECUTABLE" if executable else evidence.get("status", "UNREGISTERED"),
+                "execution_enabled": executable,
+                "configured_timeframes": timeframes if isinstance(timeframes, list) else [timeframes],
+                "reason": None if executable else evidence.get(
+                    "reason", "Strategy is not loaded by the runtime governance gate."
+                ),
                 "mode": getattr(config, "TRADING_MODE", "TESTNET"),
-                "allocated_risk_pct": 1.0
+                "allocated_risk_pct": 1.0 if executable else 0.0,
             })
         return jsonify({
             "status": "OK",
             "count": len(strategies_data),
+            "executable_count": sum(item["execution_enabled"] for item in strategies_data),
             "strategies": strategies_data
         })
     except Exception as e:

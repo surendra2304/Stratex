@@ -60,6 +60,59 @@ def test_api_strategy_metrics_covers_all_six_strategies(client):
         assert "fills" in strat_info
         assert "net_pnl" in strat_info
 
+def test_api_strategies_does_not_label_unvalidated_candidate_as_active(client, monkeypatch):
+    import dashboard
+    import config
+
+    monkeypatch.setattr(config, "ACTIVE_STRATEGIES", {"adx_ema": ["4h"]})
+    monkeypatch.setattr(
+        dashboard,
+        "get_engine_health_data",
+        lambda: {"strategies": []},
+    )
+
+    response = client.get("/api/strategies")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["executable_count"] == 0
+    assert payload["strategies"] == [{
+        "name": "adx_ema",
+        "status": "OBSERVE_ONLY",
+        "execution_enabled": False,
+        "configured_timeframes": ["4h"],
+        "reason": (
+            "Observe only: historical OOS claims are not reproducible because the referenced OHLCV "
+            "inputs are absent; the checked-in walk-forward report records 34 frozen-config holdout "
+            "trades and a FRAGILE verdict."
+        ),
+        "mode": config.TRADING_MODE,
+        "allocated_risk_pct": 0.0,
+    }]
+
+def test_api_strategies_marks_loaded_validated_candidate_executable(client, monkeypatch):
+    import dashboard
+    import config
+    from config_strategy import PRODUCTION_STRATEGY_REGISTRY
+
+    monkeypatch.setattr(config, "ACTIVE_STRATEGIES", {"validated_fixture": ["1h"]})
+    monkeypatch.setitem(
+        PRODUCTION_STRATEGY_REGISTRY,
+        "validated_fixture",
+        {"status": "VALIDATED", "reason": ""},
+    )
+    monkeypatch.setattr(
+        dashboard,
+        "get_engine_health_data",
+        lambda: {"strategies": ["validated_fixture"]},
+    )
+
+    response = client.get("/api/strategies")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["executable_count"] == 1
+    assert payload["strategies"][0]["status"] == "EXECUTABLE"
+    assert payload["strategies"][0]["execution_enabled"] is True
+
 def test_api_strategy_metrics_matrix_structure(client):
     """Verify Strategy x Timeframe matrix structure."""
     res = client.get('/api/strategy-metrics')

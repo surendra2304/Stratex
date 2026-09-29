@@ -1,0 +1,39 @@
+name: Stratex Strategy Runtime Truth
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dashboard.py"
+      - "config.py"
+      - "config_strategy.py"
+      - "tests/test_markets_and_strategies.py"
+      - ".github/workflows/strategy-truth.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "dashboard.py"
+      - "config.py"
+      - "config_strategy.py"
+      - "tests/test_markets_and_strategies.py"
+      - ".github/workflows/strategy-truth.yml"
+
+jobs:
+  strategy-runtime-truth:
+    runs-on: ubuntu-latest
+    env:
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install Stratex dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Verify API reports governed runtime truth
+        run: >-
+          python -m pytest -q
+          tests/test_markets_and_strategies.py
+          -k api_strategies
