@@ -108,12 +108,6 @@ def api_v1_futuris_accuracy():
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
 
-@app.route('/v1/task/execute', methods=['POST'])
-def api_v1_task_execute():
-    """Universal Task Protocol endpoint for Stratex (delegates to execute_friday_task)."""
-    return execute_friday_task()
-
-
 def require_bot_api_key(f):
     """
     Decorator protecting sensitive modification endpoints (e.g. POST /api/panic, POST /api/settings).
@@ -778,20 +772,34 @@ def get_engine_health_data():
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         }
 
-@app.route('/health')
-@app.route('/ready')
-@app.route('/api/health')
-@app.route('/api/ready')
-def health():
+def _health_payload(evidence_class):
     engine_data = get_engine_health_data()
-    return jsonify({
+    return {
         "status": "ok",
         "dashboard": "online",
         "engine": engine_data["engine_status"].lower(),
         "engine_healthy": engine_data["healthy"],
         "mode": getattr(config, "TRADING_MODE", "TESTNET"),
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-    }), 200
+        "evidence_class": evidence_class,
+        "observed_at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+
+
+@app.route('/health')
+@app.route('/api/health')
+def health_liveness():
+    """Render liveness: confirms this HTTP process answered, not engine readiness."""
+    return jsonify(_health_payload("process_liveness")), 200
+
+
+@app.route('/ready')
+@app.route('/api/ready')
+def health_readiness():
+    """Engine readiness based on its observed heartbeat, distinct from process liveness."""
+    payload = _health_payload("engine_readiness")
+    ready = payload["engine_healthy"]
+    payload["status"] = "ready" if ready else "not_ready"
+    return jsonify(payload), 200 if ready else 503
 
 @app.route('/api/engine-health')
 def api_engine_health():

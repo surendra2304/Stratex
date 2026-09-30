@@ -1,43 +1,43 @@
-# 🏛️ SYSTEM MANIFEST — Stratex 24/7 Algorithmic Trading Platform
+# 🏛️ SYSTEM MANIFEST — Stratex Paper/Testnet Strategy Platform
 
 > **Official Subsystem Name:** Stratex  
-> **Role in Ecosystem:** 24/7 Automated Binance Futures Execution Engine & Live Trading Dashboard  
+> **Role in Ecosystem:** Paper/Testnet Futures Strategy Service
 > **Repository:** [surendra2304/algorithmic-trading-bot](https://github.com/surendra2304/algorithmic-trading-bot) (Branch: main)
 > **Workspace Path:** d:\FRIDAY Universe\Stratex  
 
 ---
 
-## ☁️ 1. Live Cloud Infrastructure & Deployment
+## ☁️ 1. Configured service (runtime unverified)
 
-| Attribute | Production Configuration |
+| Attribute | Repository configuration |
 | :--- | :--- |
-| **Live Production URL** | [https://stratex-8wj1.onrender.com](https://stratex-8wj1.onrender.com) |
+| **Configured Service URL (deployment unverified)** | [https://stratex-8wj1.onrender.com](https://stratex-8wj1.onrender.com) |
 | **Configured Health Check Endpoint** | `/health` (live response/revision must be verified separately) |
-| **Master API Key Variable** | `STRATEX_API_KEY` (unique secret required; value is not stored here) |
+| **API key variable (keep value in secret environment)** | `STRATEX_API_KEY` (unique secret required; value is not stored here) |
 | **Authentication Header** | `Authorization: Bearer <STRATEX_API_KEY>` or `X-API-Key` |
-| **Database Topology** | SQLite Trade Ledger / State Backups / Connected to Memora |
-| **Database Connection** | sqlite+aiosqlite:///./data/trades.db |
-| **Hosting Platform** | Render Docker Web Service (Singapore / AWS Mumbai) |
+| **Configured database topology (runtime unverified)** | SQLite Trade Ledger / State Backups / Connected to Memora |
+| **Configured database URL or namespace (not a secret)** | sqlite+aiosqlite:///./data/trades.db |
+| **Configured host (plan, region, and runtime unverified)** | Render service configured (current plan, region, and deployment unverified) |
 
 ---
 
 ## 🎯 2. Purpose & Responsibilities
 
 ### What Stratex IS:
-* Stratex is the 24/7 automated cryptocurrency futures execution platform. It runs 16 quant strategies, manages risk overlays, features a full web dashboard, and connects to Inference, Memora, IntelX, and Futuris.
+* Stratex is the paper/testnet strategy and risk-analysis service. The configured executable strategy set and runtime dependencies must be verified from current evidence. Live-money orders remain blocked in source.
 
 ### What Stratex DOES:
-* Operates as the **24/7 Automated Binance Futures Execution Engine & Live Trading Dashboard** within the 9-agent FRIDAY Universe.
+* Operates as the **Paper/Testnet Futures Strategy Service** within the 9-agent FRIDAY Universe.
 * Communicates directly with peer agents via authenticated REST and WebSocket protocols.
 * Persists private long-term memory records to **Memora** under memora://stratex/private.
 
 ---
 
-## 🌐 3. Full Ecosystem Network Connectivity
+## 🌐 3. Ecosystem endpoint configuration
 
-Every agent in the universe communicates using standard environment variables:
+These variable names and URLs are references only; they do not prove live communication. Set real credentials in secret environments.
 
-`env
+```env
 # ============================================================================== #
 #               FRIDAY UNIVERSE MASTER ECOSYSTEM CONFIGURATION                  #
 # ============================================================================== #
@@ -46,15 +46,15 @@ Every agent in the universe communicates using standard environment variables:
 INFERENCE_URL=https://inference-r1sn.onrender.com
 # Set INFERENCE_API_KEY to the unique key issued by the Inference service.
 
-# 2. 🧠 Memora Cloud Persistent Memory (9 GB Turso AWS Mumbai)
+# 2. Memora cloud memory service (active backend/capacity not verified)
 MEMORA_URL=https://memora-cavc.onrender.com
 # Set MEMORA_API_KEY to the unique key issued by the Memora service.
 
-# 3. 📈 Stratex 24/7 Algorithmic Trading Platform (Binance Futures)
+# 3. 📈 Stratex Paper/Testnet Strategy Platform (Binance Futures)
 STRATEX_URL=https://stratex-8wj1.onrender.com
 # Set STRATEX_API_KEY to the unique key issued by the Stratex service.
 
-# 4. 🧠 IntelX Evidence & Intelligence Research Engine (Turso AWS Mumbai)
+# 4. IntelX research service (active storage backend not verified)
 INTELX_URL=https://intelx-mygl.onrender.com
 # Set INTELX_API_KEY to the unique key issued by the IntelX service.
 
@@ -77,13 +77,13 @@ SENTINEL_URL=https://sentinel-a861.onrender.com
 # 9. 🤖 FRIDAY Central Desktop Operating System
 FRIDAY_URL=https://friday-zw59.onrender.com
 # Set FRIDAY_API_KEY to the unique key issued by FRIDAY.
-`
+```
 
 ---
 
-## 🤖 4. Antigravity AI Session Guide
+## 🤖 4. Repository guide
 
-When opening this directory in **Antigravity AI**:
+When opening this repository:
 * **Identity:** You are working inside **Stratex** (d:\FRIDAY Universe\Stratex).
 * **Configured Service URL:** https://stratex-8wj1.onrender.com. A URL in this manifest does not prove current deployment or health.
 * **Authentication:** Incoming requests require a unique STRATEX_API_KEY configured in the service environment.

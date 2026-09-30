@@ -60,6 +60,16 @@ class TestRenderDeploymentHardening:
             "get_status",
             lambda: {"paper_runner_status": "STOPPED", "alive": False},
         )
+        liveness = client.get("/health")
+        assert liveness.status_code == 200
+        assert liveness.get_json()["evidence_class"] == "process_liveness"
+        assert liveness.get_json()["observed_at"].endswith("Z")
+
+        readiness = client.get("/ready")
+        assert readiness.status_code == 503
+        assert readiness.get_json()["status"] == "not_ready"
+        assert readiness.get_json()["evidence_class"] == "engine_readiness"
+
         hb_file = tmp_path / "testnet_heartbeat.json"
         
         # 1. Stale heartbeat (> 90s) -> OFFLINE

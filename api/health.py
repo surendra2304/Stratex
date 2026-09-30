@@ -9,6 +9,7 @@ Endpoints:
 
 import os
 import time
+from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify
 
@@ -22,10 +23,14 @@ health_bp = Blueprint("ecosystem_health", __name__, url_prefix="/api/v1/health")
 @health_bp.route("", methods=["GET"])
 def fast_liveness():
     """Ultra-fast liveness check without heavy database or network queries."""
+    observed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     return jsonify({
         "status": "HEALTHY",
-        "timestamp": time.time(),
-        "bot_mode": "TESTNET"
+        "timestamp": time.time(),  # Backward-compatible epoch timestamp.
+        "observed_at": observed_at,
+        "evidence_class": "process_liveness",
+        "readiness_assessed": False,
+        "bot_mode": os.getenv("TRADING_MODE", "TESTNET").upper()
     })
 
 

@@ -157,6 +157,9 @@ def test_health_endpoints(client):
     res = client.get("/api/v1/health")
     assert res.status_code == 200
     assert res.get_json()["status"] == "HEALTHY"
+    assert res.get_json()["evidence_class"] == "process_liveness"
+    assert res.get_json()["readiness_assessed"] is False
+    assert res.get_json()["observed_at"].endswith("Z")
 
     read_headers = {"X-API-Key": "stratex_read_test_key_0123456789abcdef"}
     res = client.get("/api/v1/health/detailed", headers=read_headers)
