@@ -210,6 +210,7 @@ def simulate(
     tp_atr_mult: float,
     atr: pd.Series,
     holdout_start_index: int,
+    holdout_end_index: int | None = None,
     fee_rate: float = DEFAULT_FEE_RATE,
     slippage_rate: float = DEFAULT_SLIPPAGE_RATE,
     risk_per_trade: float = 0.005,
@@ -220,7 +221,14 @@ def simulate(
     ``signal_fn`` receives a dataframe ending at the current bar and returns
     "BUY", "SELL" or "". It must be causal — anything it reads is by construction
     history up to and including the current bar.
+
+    ``holdout_end_index`` bounds the window. It is not optional in practice: a
+    caller measuring a specific regime must be able to stop the simulation there,
+    because without it every such measurement silently runs on to the end of the
+    dataset and the windows overlap, which makes their statistics converge on the
+    same answer and look like a stable result.
     """
+    last_index = len(df) - 1 if holdout_end_index is None else min(holdout_end_index, len(df) - 1)
     equity = starting_equity
     peak = equity
     max_dd = 0.0
@@ -235,7 +243,7 @@ def simulate(
     lows = df["low"].to_numpy()
     atrs = atr.to_numpy()
 
-    for i in range(holdout_start_index, len(df)):
+    for i in range(holdout_start_index, last_index + 1):
         # 1. Manage an open position first: exits take priority over new entries.
         if position is not None:
             exited = False
@@ -278,7 +286,7 @@ def simulate(
         # at the OPEN of bar i+1. Entering at closes[i] would be trading on the
         # very print that produced the signal, which is a look-ahead the project's
         # own BACKTEST_ASSUMPTIONS explicitly forbid ("next_candle_open").
-        if position is None and i + 1 < len(df) and atrs[i] and atrs[i] > 0:
+        if position is None and i + 1 <= last_index and atrs[i] and atrs[i] > 0:
             side = signal_fn(df.iloc[: i + 1])
             if side in ("BUY", "SELL"):
                 entry = opens[i + 1]
@@ -298,7 +306,7 @@ def simulate(
     # Any position still open at the end is closed at the last close, so the
     # reported equity is a realisable number rather than a mark-to-model one.
     if position is not None:
-        exit_price = closes[-1]
+        exit_price = closes[last_index]
         direction = 1 if position["side"] == "LONG" else -1
         gross = (exit_price - position["entry"]) * direction
         pnl = gross * position["units"] - (

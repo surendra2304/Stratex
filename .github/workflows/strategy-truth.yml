@@ -13,6 +13,7 @@ on:
       - "tests/test_markets_and_strategies.py"
       - "tests/test_oos_claims_are_not_runtime_priors.py"
       - "tests/test_holdout_validation.py"
+      - "tests/test_regime_holdout.py"
       - "tests/test_governance_enforcement.py"
       - ".github/workflows/strategy-truth.yml"
   pull_request:
@@ -27,6 +28,7 @@ on:
       - "tests/test_markets_and_strategies.py"
       - "tests/test_oos_claims_are_not_runtime_priors.py"
       - "tests/test_holdout_validation.py"
+      - "tests/test_regime_holdout.py"
       - "tests/test_governance_enforcement.py"
       - ".github/workflows/strategy-truth.yml"
 
@@ -57,5 +59,6 @@ jobs:
           python -m pytest -q
           tests/test_oos_claims_are_not_runtime_priors.py
           tests/test_holdout_validation.py
+          tests/test_regime_holdout.py
           tests/test_governance_enforcement.py
           -p pytest_mock

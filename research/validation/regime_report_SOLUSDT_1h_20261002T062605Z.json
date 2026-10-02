@@ -1,0 +1,153 @@
+{
+  "generated_at": "2026-10-02T06:26:05.032646+00:00",
+  "symbol": "SOLUSDT",
+  "timeframe": "1h",
+  "bars_total": 32886,
+  "range": [
+    "2023-01-01 00:00:00",
+    "2026-10-02 05:00:00"
+  ],
+  "drawdown_threshold_pct": 25.0,
+  "episodes_found": 7,
+  "episodes_with_verdict": 1,
+  "episodes_survived": 1,
+  "episodes_failed": 0,
+  "results": [
+    {
+      "window": {
+        "start": "2023-01-22 01:00:00",
+        "trough": "2023-02-12 04:00:00",
+        "end": "2023-02-19 21:00:00",
+        "depth_pct": -30.15,
+        "bars": 508
+      },
+      "trades": 12,
+      "expectancy": 43.85202714197073,
+      "profit_factor": 17.914133920519607,
+      "win_rate": 0.9166666666666666,
+      "max_drawdown_pct": 0.2946909631994039,
+      "net_return_pct": 5.262243257036516,
+      "verdict": "INSUFFICIENT_EVIDENCE",
+      "reasons": [
+        "12 trades in the episode; a verdict needs >= 100"
+      ]
+    },
+    {
+      "window": {
+        "start": "2023-02-20 02:00:00",
+        "trough": "2023-06-15 16:00:00",
+        "end": "2023-07-14 01:00:00",
+        "depth_pct": -47.78,
+        "bars": 2775
+      },
+      "trades": 8,
+      "expectancy": 24.475213058966972,
+      "profit_factor": 2.905106959509148,
+      "win_rate": 0.75,
+      "max_drawdown_pct": 0.509931425771363,
+      "net_return_pct": 1.9580170447173442,
+      "verdict": "INSUFFICIENT_EVIDENCE",
+      "reasons": [
+        "8 trades in the episode; a verdict needs >= 100"
+      ]
+    },
+    {
+      "window": {
+        "start": "2023-07-16 16:00:00",
+        "trough": "2023-09-11 19:00:00",
+        "end": "2023-10-23 22:00:00",
+        "depth_pct": -42.62,
+        "bars": 1372
+      },
+      "trades": 6,
+      "expectancy": 16.018811834929195,
+      "profit_factor": 1.930661327269361,
+      "win_rate": 0.6666666666666666,
+      "max_drawdown_pct": 1.0125484864344538,
+      "net_return_pct": 0.9611287100957816,
+      "verdict": "INSUFFICIENT_EVIDENCE",
+      "reasons": [
+        "6 trades in the episode; a verdict needs >= 100"
+      ]
+    },
+    {
+      "window": {
+        "start": "2023-12-25 19:00:00",
+        "trough": "2024-01-08 09:00:00",
+        "end": "2024-03-01 04:00:00",
+        "depth_pct": -37.69,
+        "bars": 327
+      },
+      "trades": 7,
+      "expectancy": 6.462514099918344,
+      "profit_factor": 1.2933380564143517,
+      "win_rate": 0.5714285714285714,
+      "max_drawdown_pct": 1.5120083909870026,
+      "net_return_pct": 0.4523759869942842,
+      "verdict": "INSUFFICIENT_EVIDENCE",
+      "reasons": [
+        "7 trades in the episode; a verdict needs >= 100",
+        "profit factor 1.293 does not clear 1.30"
+      ]
+    },
+    {
+      "window": {
+        "start": "2024-03-18 10:00:00",
+        "trough": "2024-05-01 07:00:00",
+        "end": "2024-11-11 12:00:00",
+        "depth_pct": -50.0,
+        "bars": 1054
+      },
+      "trades": 23,
+      "expectancy": 33.02208414258204,
+      "profit_factor": 4.53780929320027,
+      "win_rate": 0.8260869565217391,
+      "max_drawdown_pct": 1.009811616734721,
+      "net_return_pct": 7.595079352793836,
+      "verdict": "INSUFFICIENT_EVIDENCE",
+      "reasons": [
+        "23 trades in the episode; a verdict needs >= 100"
+      ]
+    },
+    {
+      "window": {
+        "start": "2024-11-21 19:00:00",
+        "trough": "2024-12-20 11:00:00",
+        "end": "2025-01-19 05:00:00",
+        "depth_pct": -40.41,
+        "bars": 689
+      },
+      "trades": 10,
+      "expectancy": 43.161081129174605,
+      "profit_factor": 21.434483670147376,
+      "win_rate": 0.9,
+      "max_drawdown_pct": 0.20206858937089045,
+      "net_return_pct": 4.316108112917464,
+      "verdict": "INSUFFICIENT_EVIDENCE",
+      "reasons": [
+        "10 trades in the episode; a verdict needs >= 100"
+      ]
+    },
+    {
+      "window": {
+        "start": "2025-01-19 11:00:00",
+        "trough": "2026-06-06 04:00:00",
+        "end": "2026-10-02 05:00:00",
+        "depth_pct": -80.39,
+        "bars": 12066
+      },
+      "trades": 115,
+      "expectancy": 29.592218873462382,
+      "profit_factor": 3.173281656077074,
+      "win_rate": 0.7913043478260869,
+      "max_drawdown_pct": 1.8777771875451112,
+      "net_return_pct": 34.031051704481726,
+      "verdict": "SURVIVED_DRAWDOWN",
+      "reasons": []
+    }
+  ],
+  "regime_verdict": "SURVIVED_ALL_MEASURED",
+  "data_source": "BINANCE_TESTNET_READ_ONLY",
+  "data_sha256": "58dcf744aefbe1c4773c1cf79413b8a61ac150f5d1a045b071f6c6ff6f78617a",
+  "strategy_id": "adx_ema (shipped config)"
+}

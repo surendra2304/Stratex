@@ -1,0 +1,97 @@
+{
+  "generated_at": "2026-10-02T06:22:19.676001+00:00",
+  "symbol": "BTCUSDT",
+  "timeframe": "1h",
+  "bars_total": 32886,
+  "range": [
+    "2023-01-01 00:00:00",
+    "2026-10-02 05:00:00"
+  ],
+  "drawdown_threshold_pct": 25.0,
+  "episodes_found": 4,
+  "episodes_with_verdict": 0,
+  "episodes_survived": 0,
+  "episodes_failed": 0,
+  "results": [
+    {
+      "window": {
+        "start": "2024-04-07 05:00:00",
+        "trough": "2024-08-05 06:00:00",
+        "end": "2024-11-10 02:00:00",
+        "depth_pct": -30.03,
+        "bars": 2882
+      },
+      "trades": 45,
+      "expectancy": 18.167407977401158,
+      "profit_factor": 2.124558976336062,
+      "win_rate": 0.7111111111111111,
+      "max_drawdown_pct": 1.2399721648080202,
+      "net_return_pct": 8.17533358983046,
+      "verdict": "INSUFFICIENT_EVIDENCE",
+      "reasons": [
+        "45 trades in the episode; a verdict needs >= 100"
+      ]
+    },
+    {
+      "window": {
+        "start": "2025-01-19 00:00:00",
+        "trough": "2025-02-28 10:00:00",
+        "end": "2025-03-05 21:00:00",
+        "depth_pct": -29.12,
+        "bars": 971
+      },
+      "trades": 8,
+      "expectancy": 23.245381667424567,
+      "profit_factor": 2.7788019054671618,
+      "win_rate": 0.75,
+      "max_drawdown_pct": 0.5144450710538139,
+      "net_return_pct": 1.8596305333939744,
+      "verdict": "INSUFFICIENT_EVIDENCE",
+      "reasons": [
+        "8 trades in the episode; a verdict needs >= 100"
+      ]
+    },
+    {
+      "window": {
+        "start": "2025-03-05 21:00:00",
+        "trough": "2025-04-24 11:00:00",
+        "end": "2025-07-10 17:00:00",
+        "depth_pct": -58.41,
+        "bars": 1191
+      },
+      "trades": 25,
+      "expectancy": 21.231811208186087,
+      "profit_factor": 2.622699826872368,
+      "win_rate": 0.76,
+      "max_drawdown_pct": 1.0307957753874495,
+      "net_return_pct": 5.307952802046493,
+      "verdict": "INSUFFICIENT_EVIDENCE",
+      "reasons": [
+        "25 trades in the episode; a verdict needs >= 100"
+      ]
+    },
+    {
+      "window": {
+        "start": "2025-07-16 03:00:00",
+        "trough": "2026-06-30 17:00:00",
+        "end": "2026-10-02 05:00:00",
+        "depth_pct": -60.55,
+        "bars": 8391
+      },
+      "trades": 64,
+      "expectancy": 7.971758658648377,
+      "profit_factor": 1.3881593879170504,
+      "win_rate": 0.640625,
+      "max_drawdown_pct": 3.670066159152105,
+      "net_return_pct": 5.101925541534984,
+      "verdict": "INSUFFICIENT_EVIDENCE",
+      "reasons": [
+        "64 trades in the episode; a verdict needs >= 100"
+      ]
+    }
+  ],
+  "regime_verdict": "INSUFFICIENT_EVIDENCE",
+  "data_source": "BINANCE_TESTNET_READ_ONLY",
+  "data_sha256": "28b5e95d9f6c999cf03339e8b1429dbee1fc3aec07608f0bf5062694ad70edae",
+  "strategy_id": "adx_ema (shipped config)"
+}
