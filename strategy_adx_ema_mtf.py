@@ -31,7 +31,7 @@ class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_typ
 
 
 _STRATEGY_TYPE      = "RULE_BASED"
-_OOS_WIN_RATE_PRIOR = _CFG.get("OOS_WIN_RATE_PRIOR", 0.516)
+_OOS_WIN_RATE_PRIOR = _CFG.get("OOS_WIN_RATE_PRIOR")
 _RR_RATIO           = _CFG.get("RISK_REWARD_RATIO", 1.33)
 _ADX_THRESHOLD      = _CFG.get("ADX_THRESHOLD", 25)
 _SL_ATR             = _CFG.get("SL_ATR_MULTIPLIER", 3.0)

@@ -92,13 +92,17 @@ ADX_EMA_MTF_STRATEGY = {
     "RISK_REWARD_RATIO":      1.33,
     "ENABLE_RETEST_ENTRY":    True,
     "RETEST_WINDOW_BARS":     10,
-    "OOS_WIN_RATE_PRIOR":     0.516,
+    # OOS fields are NOT runtime priors for this strategy.
+    # PRODUCTION_STRATEGY_REGISTRY marks adx_ema_mtf DISABLED and the null-out
+    # block at the end of this file clears the registry copy, but this raw dict is
+    # what strategy_adx_ema_mtf reads directly — so leaving a figure here would
+    # smuggle an unverified win rate into every live signal it emits, and would
+    # report 16 "validated" assets that no reproducible holdout has cleared.
+    # The same reasoning and comments already applied to the V1/V2 dicts above.
+    "OOS_WIN_RATE_PRIOR":     None,
     "TRADING_MODE":           "FUTURES", # Gated strictly to Futures
-    "OOS_VALIDATED_ASSETS":   ["BTCUSDT", "ETHUSDT", "BNBUSDT",
-                                "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
-                                "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT",
-                                "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"],
-    "OOS_VALIDATION_STATUS":  "VALIDATED",
+    "OOS_VALIDATED_ASSETS":   [],
+    "OOS_VALIDATION_STATUS":  "UNVERIFIED",
 }
 
 # ==============================================================================

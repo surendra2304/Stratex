@@ -7,7 +7,13 @@ on:
       - "dashboard.py"
       - "config.py"
       - "config_strategy.py"
+      - "strategy_adx_ema.py"
+      - "strategy_adx_ema_mtf.py"
+      - "research/validation/**"
       - "tests/test_markets_and_strategies.py"
+      - "tests/test_oos_claims_are_not_runtime_priors.py"
+      - "tests/test_holdout_validation.py"
+      - "tests/test_governance_enforcement.py"
       - ".github/workflows/strategy-truth.yml"
   pull_request:
     branches: [main]
@@ -15,7 +21,13 @@ on:
       - "dashboard.py"
       - "config.py"
       - "config_strategy.py"
+      - "strategy_adx_ema.py"
+      - "strategy_adx_ema_mtf.py"
+      - "research/validation/**"
       - "tests/test_markets_and_strategies.py"
+      - "tests/test_oos_claims_are_not_runtime_priors.py"
+      - "tests/test_holdout_validation.py"
+      - "tests/test_governance_enforcement.py"
       - ".github/workflows/strategy-truth.yml"
 
 jobs:
@@ -37,3 +49,13 @@ jobs:
           python -m pytest -q
           tests/test_markets_and_strategies.py
           -k api_strategies
+      # An out-of-sample claim that governance has withdrawn must not reach a live
+      # signal. These tests are the gate for that, so they run on every change to
+      # a strategy config, a strategy module, or the holdout validator.
+      - name: Verify no unpromoted strategy carries an out-of-sample claim
+        run: >-
+          python -m pytest -q
+          tests/test_oos_claims_are_not_runtime_priors.py
+          tests/test_holdout_validation.py
+          tests/test_governance_enforcement.py
+          -p pytest_mock
