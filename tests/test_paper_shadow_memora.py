@@ -79,12 +79,35 @@ def test_save_and_restore_uses_dedicated_memora_namespace_and_durable_receipt():
     assert query["task_id"] == "paper-shadow-checkpoint"
 
 
-def test_missing_key_fails_closed_before_transport():
+def test_missing_key_fails_closed_before_transport(monkeypatch):
+    # The store resolves `self.api_key or os.getenv("STRATEX_API_KEY")`, and
+    # config.py calls load_dotenv() at import time. This test therefore only
+    # means "missing key" while the variable is genuinely absent -- previously it
+    # passed only because no .env existed, and turned red as soon as a real key
+    # was configured. Make the precondition explicit so the property is tested
+    # rather than assumed.
+    monkeypatch.delenv("STRATEX_API_KEY", raising=False)
     calls = []
     store = MemoraShadowStore(api_key="", transport=lambda *args: calls.append(args))
     with pytest.raises(ShadowPersistenceError, match="STRATEX_API_KEY"):
         store.save(processor())
     assert calls == []
+
+
+def test_env_key_is_used_when_constructor_key_is_absent(monkeypatch):
+    """Documented fallback: no constructor key means "use the environment".
+
+    Guards the counterpart of the test above so tightening the missing-key path
+    can never silently break the normal production wiring.
+    """
+    monkeypatch.setenv("STRATEX_API_KEY", "stratex_env_key_for_test")
+    calls = []
+    store = MemoraShadowStore(transport=lambda *args: calls.append(args) or (201, {
+        "id": "memory-1", "storage_durable": True,
+    }))
+    assert store.save(processor())["memory_id"] == "memory-1"
+    assert len(calls) == 1
+    assert calls[0][2]["Authorization"] == "Bearer stratex_env_key_for_test"
 
 
 def test_non_durable_receipt_fails_closed():

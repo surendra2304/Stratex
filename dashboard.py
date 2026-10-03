@@ -732,9 +732,40 @@ def get_engine_health_data():
             engine_status = "ONLINE"
             worker_alive = True
 
+        # Liveness is not capability. A live process that loaded zero strategies
+        # and has not evaluated a candle in 38 minutes is answering "ONLINE"
+        # while being economically inert. Measured on the deployed service
+        # 2026-10-03: healthy=True, ONLINE, strategies=[], candle feed 38m stale.
+        # `healthy` keeps its liveness meaning (tests and /health depend on it);
+        # capability is reported separately and never inferred from liveness.
+        loaded_strategies = hb.get("strategies") or []
+        capability_reasons = []
+        if not loaded_strategies:
+            capability_reasons.append(
+                "NO_EXECUTABLE_STRATEGY: governance gate loaded zero validated strategies"
+            )
+        last_eval = hb.get("last_strategy_evaluation")
+        if not last_eval:
+            capability_reasons.append("NO_STRATEGY_EVALUATION: engine has never evaluated a strategy")
+        else:
+            try:
+                eval_dt = datetime.datetime.fromisoformat(str(last_eval).replace("Z", "+00:00")).replace(tzinfo=None)
+                eval_age = (now - eval_dt).total_seconds()
+            except Exception:
+                eval_age = 0.0
+                capability_reasons.append("UNREADABLE_EVALUATION_TIMESTAMP")
+            # 15m is generous for any timeframe the engine actually loads.
+            if eval_age > 900:
+                capability_reasons.append(
+                    f"STALE_STRATEGY_EVALUATION: last evaluation {int(eval_age)}s ago (>900s)"
+                )
+        trading_capable = is_healthy and not capability_reasons
+
         return {
             "engine_status": engine_status,
             "healthy": is_healthy,
+            "trading_capable": trading_capable,
+            "capability_reasons": capability_reasons,
             "worker_alive": worker_alive,
             "heartbeat_age_seconds": round(age, 2),
             **_paper,
@@ -779,6 +810,8 @@ def _health_payload(evidence_class):
         "dashboard": "online",
         "engine": engine_data["engine_status"].lower(),
         "engine_healthy": engine_data["healthy"],
+        "engine_trading_capable": engine_data.get("trading_capable", False),
+        "capability_reasons": engine_data.get("capability_reasons", []),
         "mode": getattr(config, "TRADING_MODE", "TESTNET"),
         "evidence_class": evidence_class,
         "observed_at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -795,9 +828,14 @@ def health_liveness():
 @app.route('/ready')
 @app.route('/api/ready')
 def health_readiness():
-    """Engine readiness based on its observed heartbeat, distinct from process liveness."""
+    """Engine readiness based on its observed heartbeat, distinct from process liveness.
+
+    Readiness requires a live engine AND the demonstrated ability to act on it.
+    A process that is up but has loaded zero executable strategies is not ready
+    to trade, so it must not pass this gate.
+    """
     payload = _health_payload("engine_readiness")
-    ready = payload["engine_healthy"]
+    ready = payload["engine_healthy"] and payload.get("engine_trading_capable", False)
     payload["status"] = "ready" if ready else "not_ready"
     return jsonify(payload), 200 if ready else 503
 
@@ -883,15 +921,18 @@ def get_live_account_and_holdings(force_refresh=False):
         port_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
         active_bot_assets = set()
 
-        # GOVERNANCE-SCOPED valuation: the testnet wallet carries hundreds of
-        # faucet airdrops; only OOS-validated assets may ever count as engine
-        # positions/active market value (a stray locked junk coin otherwise
-        # inflates equity by tens of thousands of dollars).
-        try:
-            from config_strategy import ADX_EMA_STRATEGY_V2
-            validated_bases = {s[:-4] for s in ADX_EMA_STRATEGY_V2.get("OOS_VALIDATED_ASSETS", [])}
-        except Exception:
-            validated_bases = set()
+        # Faucet-coin protection: the testnet wallet carries hundreds of airdrops,
+        # and a stray locked junk coin would otherwise inflate equity by tens of
+        # thousands of dollars. The correct authority is the portfolio's OPEN
+        # positions -- those are the positions the engine is actually managing.
+        #
+        # This previously ALSO required membership in ADX_EMA_STRATEGY_V2's
+        # OOS_VALIDATED_ASSETS, which is deliberately [] while the strategy is
+        # OBSERVE_ONLY. That conjunct made is_bot_trade permanently False, so
+        # active_trade_holdings_value was always 0.0 and every real open position
+        # vanished from equity calculations. The portfolio check alone already
+        # excludes faucet residue, because an airdropped token is never an OPEN
+        # position in the portfolio file.
         if os.path.exists(port_file):
             try:
                 with open(port_file, "r") as pf:
@@ -992,7 +1033,10 @@ def get_live_account_and_holdings(force_refresh=False):
                             usd_val = total_qty
                             
                         if usd_val > 0.05:
-                            is_bot_trade = (asset in validated_bases) and (asset in active_bot_assets)
+                            # An open portfolio position is engine-managed exposure,
+                            # whether or not its asset is OOS-validated. Valuation is a
+                            # statement about what we hold, not about statistical proof.
+                            is_bot_trade = asset in active_bot_assets
                             h_info = {
                                 "asset": asset,
                                 "symbol": pair if price > 0 else asset,
@@ -1310,8 +1354,14 @@ def get_status():
     components["binance"] = "OK" if engine_data.get("binance_connected") else "ERROR"
     components["data"] = "OK" if engine_data.get("websocket_connected") else "ERROR"
     components["execution"] = "OK" if engine_data["healthy"] else "ERROR"
-    components["strategy"] = "OK" if engine_data["healthy"] else "ERROR"
+    # The strategy component must reflect whether the engine can actually
+    # generate a signal. Reporting "OK" while zero validated strategies are
+    # loaded is the exact lie this status endpoint was measured serving.
+    components["strategy"] = "OK" if engine_data.get("trading_capable") else "IDLE"
     if not engine_data["healthy"]:
+        overall = "DEGRADED"
+    elif not engine_data.get("trading_capable"):
+        # Alive but inert: distinct from offline, and must not read as healthy.
         overall = "DEGRADED"
         
     risk_used = 0.0
@@ -1327,6 +1377,8 @@ def get_status():
         "overall_health": overall,
         "engine_status": engine_data["engine_status"],
         "engine_healthy": engine_data["healthy"],
+        "engine_trading_capable": engine_data.get("trading_capable", False),
+        "capability_reasons": engine_data.get("capability_reasons", []),
         "engine_data": engine_data,
         "components": components,
         "session": session_info,

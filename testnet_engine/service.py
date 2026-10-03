@@ -89,6 +89,10 @@ def compute_btc_regime(btc_df, min_bars=200):
 _TF_SECONDS = {"1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "2h": 7200, "4h": 14400, "6h": 21600, "8h": 28800, "12h": 43200, "1d": 86400}
 _COOLDOWN_SECONDS = float(os.getenv("SIGNAL_COOLDOWN_SECONDS", "300"))  # 5 minutes default (bypassed dynamically for aggressive scalper)
 
+# Quote assets are settlement/margin, never a tradeable base. They must not be
+# turned into a symbol candidate during reconciliation (USDT -> "USDTUSDT").
+_QUOTE_ASSETS = {"USDT", "USDC", "BUSD"}
+
 TESTNET_LEDGER_FILE = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
 TESTNET_OPPORTUNITY_LOG = os.getenv("TESTNET_OPPORTUNITY_LOG", "testnet_opportunity_log.jsonl")
 TESTNET_PORTFOLIO_FILE = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
@@ -517,15 +521,35 @@ class TestnetService:
         try:
             if TRADING_MODE == "FUTURES":
                 open_orders = self.client.futures_get_open_orders() if hasattr(self.client, "futures_get_open_orders") else []
-                validated = governance_validated_assets(self.strategies)
                 positions = account.get("positions", [])
-                open_symbols_from_assets = {p["symbol"] for p in positions if abs(float(p.get("positionAmt", 0.0))) > 0 and p["symbol"] in validated}
+                # Exchange truth, not the strategy registry: a position that exists
+                # must be adopted and protected whatever governance currently
+                # allows. Gating this on `validated` emptied the set whenever no
+                # strategy was OOS-validated (the live state), which made EVERY
+                # resting OCO look "floating" -- so a restart cancelled the
+                # stop-loss on real positions instead of reconstructing them.
+                open_symbols_from_assets = {
+                    p["symbol"] for p in positions
+                    if abs(float(p.get("positionAmt", 0.0))) > 0
+                }
             else:
                 open_orders = self.client.get_open_orders()
-                validated = governance_validated_assets(self.strategies)
                 assets = [item for item in account.get('balances', []) if float(item['free']) > 0 or float(item['locked']) > 0]
+                # Same rule as above: any non-quote holding is a real position.
+                # Faucet residue is excluded later by the post-baseline trade
+                # history check, which is the mechanism actually designed for it.
                 open_symbols_from_assets = {a['asset'] + "USDT" for a in assets
-                                            if a['asset'] != "USDT" and (a['asset'] + "USDT") in validated}
+                                            if a['asset'] not in _QUOTE_ASSETS}
+
+            # Governance no longer decides *what* we reconcile, but it is still
+            # worth surfacing: a holding outside the OOS-validated universe cannot
+            # be managed by any enabled strategy and needs a human decision.
+            unvalidated_holdings = sorted(open_symbols_from_assets - governance_validated_assets(self.strategies))
+            if unvalidated_holdings:
+                logger.warning(
+                    f"[RECOVERY] {len(unvalidated_holdings)} holding(s) outside the OOS-validated "
+                    f"universe: {unvalidated_holdings}. They will still be adopted and protected."
+                )
             
             from execution import _load_active_trades
             try:
@@ -578,7 +602,7 @@ class TestnetService:
                     except Exception:
                         engine_symbols.add(sym)  # fail-safe: treat as engine-managed
                 logger.info(f"[RECONCILIATION] Baseline scope: {len(engine_symbols)} of {len(open_symbols_from_assets)} "
-                            f"validated holdings have post-baseline history (faucet residue ignored)")
+                            f"holdings have post-baseline history (faucet residue ignored)")
 
             # 1. Cancel any floating OCOs (orders open, but no engine position)
             floating_ocos = protected_symbols - engine_symbols
@@ -2163,14 +2187,31 @@ class TestnetService:
     def _rebuild_testnet_state(self):
         """Authoritatively reconstructs exact trade history, PnL, and fees directly from Binance API"""
         try:
-            from config_strategy import ADX_EMA_STRATEGY
-            strategy_assets = ADX_EMA_STRATEGY.get("OOS_VALIDATED_ASSETS", ["BTCUSDT"])
-            # GOVERNANCE-SCOPED rebuild: never import trade history for assets the
-            # registry has not validated (testnet faucet coins carry stress-era
-            # trades that would contaminate a freshly-reset ledger).
-            validated = governance_validated_assets(self.strategies) | set(strategy_assets)
-            symbols_to_check = set(list(self.active_positions.keys()) + strategy_assets) & validated
-            
+            # Which symbols must the ledger cover?
+            #
+            # This used to be `ADX_EMA_STRATEGY["OOS_VALIDATED_ASSETS"]`, which is a
+            # category error twice over:
+            #   * OOS-validated assets record where a strategy has statistical proof.
+            #     That list is deliberately [] while adx_ema is OBSERVE_ONLY (enforced
+            #     by tests/test_oos_claims_are_not_runtime_priors.py), so it is empty
+            #     exactly when the engine still holds -- or recently held -- real
+            #     exposure that still has to be accounted for.
+            #   * `[]` is indistinguishable from "key absent", so the
+            #     `.get(..., ["BTCUSDT"])` fallback never fired.
+            # Together they emptied symbols_to_check and the rebuild imported zero
+            # trades: a completed BTCUSDT round trip vanished from the ledger rather
+            # than being double counted.
+            #
+            # Accounting is scoped by what the engine trades and holds, never by what
+            # it has proven. Governance decides whether NEW signals may be emitted;
+            # it must not decide whether past trades were real. Faucet residue stays
+            # excluded through the post-baseline cutoff applied further below.
+            engine_assets = set()
+            _cfg_symbol = str(getattr(config, "SYMBOL", "") or "").strip().upper()
+            if _cfg_symbol:
+                engine_assets.add(_cfg_symbol)
+            symbols_to_check = set(self.active_positions.keys()) | engine_assets
+
             # Include all symbols from active scanner if available
             if hasattr(self, 'scanner') and getattr(self.scanner, 'symbols', None):
                 symbols_to_check.update(self.scanner.symbols)
@@ -2797,13 +2838,34 @@ class TestnetService:
         for o in open_orders:
             orders_by_symbol.setdefault(o["symbol"], []).append(o)
 
-        # Candidate symbols: validated assets with a base-asset balance OR resting orders
+        # Candidate symbols come from EXCHANGE TRUTH (balances + resting orders),
+        # never from the strategy registry.
+        #
+        # This function is damage control: an orphan OCO left on the book can
+        # trigger an entry with no position behind it, and a naked position has
+        # no stop. Both are dangerous regardless of which strategies governance
+        # currently permits to *open* trades. Deriving candidates from
+        # governance_validated_assets() meant that whenever the registry held no
+        # OOS-validated assets -- which is the live state, adx_ema is OBSERVE_ONLY
+        # with validated_assets=[] -- the loop body never ran, so orphan orders
+        # were never cancelled and naked positions were never protected.
+        #
+        # Governance still gates signal generation in run(); it must not gate
+        # repair of already-existing exchange exposure.
         validated_assets = governance_validated_assets(self.strategies)
         candidates = set()
-        for sym in validated_assets:
-            base = sym.removesuffix("USDT")
-            if balances.get(base, 0.0) > 0.0 or sym in orders_by_symbol:
-                candidates.add(sym)
+        for base, qty in balances.items():
+            if qty > 0.0 and base not in _QUOTE_ASSETS:
+                candidates.add(base + "USDT")
+        candidates.update(orders_by_symbol)
+        # Report holdings that sit outside the validated universe: they cannot be
+        # managed by a strategy, but they still must be reconciled.
+        unvalidated = sorted(c for c in candidates if c not in validated_assets)
+        if unvalidated:
+            logger.warning(
+                f"[RECONCILE] {len(unvalidated)} exchange holding/order symbol(s) outside "
+                f"the OOS-validated universe being reconciled for safety: {unvalidated}"
+            )
         summary["checked_symbols"] = len(candidates)
 
         for sym in sorted(candidates):
