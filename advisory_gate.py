@@ -60,6 +60,16 @@ class BoundedRecommendation:
         }
 
 
+# Statuses that authorize a parameter change to be applied.
+AI_EXECUTION_AUTHORIZED_STATUSES = frozenset({"APPROVED", "RECOMMENDED", "SUCCESS", "VALIDATED"})
+
+# Statuses a peer may legitimately return that carry advice rather than authorization.
+# Inference declares RECOMMENDATION as the literal on its trading-consult contract
+# (app/schemas/trading_consult.py), so treating it as an unknown status misreported
+# a working peer as malformed.
+AI_ADVISORY_ONLY_STATUSES = frozenset({"RECOMMENDATION"})
+
+
 @dataclass
 class AdvisoryResult:
     verdict: str  # "APPLY" | "REJECT" | "SHADOW_LOG_ONLY" | "PENDING_AUTHORIZATION"
@@ -230,10 +240,28 @@ class AdvisoryGate:
                 bounds_checked=bounds_checked
             )
 
-        # Check 1: AI status must be APPROVED or RECOMMENDED
+        # Check 1: the AI must affirmatively authorize, not merely advise.
         ai_status = str(decision.get("status", "")).upper()
-        if ai_status not in ["APPROVED", "RECOMMENDED", "SUCCESS", "VALIDATED"]:
-            rationale = f"AI decision status '{ai_status}' is not approved for execution."
+        if ai_status in AI_ADVISORY_ONLY_STATUSES:
+            # Inference's trading-consult contract emits RECOMMENDATION, which is an
+            # opinion rather than an authorization. Record it truthfully instead of
+            # rejecting it as though the peer had sent an unrecognized status, and
+            # apply nothing: the scheduler only acts on an APPLY verdict.
+            return AdvisoryResult(
+                verdict="SHADOW_LOG_ONLY",
+                decision_id=decision_id,
+                rationale=(
+                    f"AI returned '{ai_status}', which is advisory only and does not "
+                    f"authorize execution. Logged for review; no parameter changes applied."
+                ),
+                rejected_changes=[
+                    {"change": c, "reason": "AI returned an advisory status, not an authorization"}
+                    for c in parameter_changes
+                ],
+                bounds_checked=bounds_checked
+            )
+        if ai_status not in AI_EXECUTION_AUTHORIZED_STATUSES:
+            rationale = f"AI decision status '{ai_status}' is not a recognized execution authorization."
             return AdvisoryResult(
                 verdict="REJECT",
                 decision_id=decision_id,
