@@ -4112,23 +4112,198 @@ def api_system_events():
 
 
 
+def _read_jsonl_records(path):
+    """Reads a JSONL log, skipping unreadable lines instead of failing the whole query."""
+    records = []
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    records.append(json.loads(line))
+                except (json.JSONDecodeError, ValueError):
+                    continue
+    except (FileNotFoundError, NotADirectoryError, IsADirectoryError, PermissionError):
+        return []
+    return records
+
+
+def _epoch_to_iso(value):
+    """Normalizes an epoch number or an existing ISO string into an ISO string."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, str):
+        # Already an ISO timestamp; only epoch-as-text needs conversion.
+        try:
+            seconds = float(value)
+        except (TypeError, ValueError):
+            return value
+        if seconds <= 0:
+            return value
+        return datetime.datetime.utcfromtimestamp(seconds).isoformat() + "Z"
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return None
+    if seconds <= 0:
+        return None
+    return datetime.datetime.utcfromtimestamp(seconds).isoformat() + "Z"
+
+
+def _normalize_ledger_trade(record):
+    """Maps an execution-ledger trade onto the field names the dashboard consumes.
+
+    The ledger was written by the execution path (``action``/``pnl``/``fees``/``timestamp``)
+    while the desk reads ``side``/``net_pnl``/``total_fees``/``close_timestamp``. Serving
+    the ledger directly without this mapping made real trades render as blank rows.
+    """
+    close_timestamp = _epoch_to_iso(
+        record.get("close_timestamp")
+        or record.get("close_time")
+        or record.get("exit_timestamp")
+        or record.get("timestamp")
+        or record.get("exit_time")
+    )
+    if not close_timestamp:
+        close_timestamp = _epoch_to_iso(record.get("entry_timestamp") or record.get("opened_at"))
+    net_pnl = record.get("net_pnl")
+    if net_pnl is None:
+        net_pnl = record.get("pnl")
+    if net_pnl is None:
+        net_pnl = record.get("realized_pnl", 0.0)
+    fees = record.get("total_fees")
+    if fees is None:
+        fees = record.get("fees", 0.0)
+    return {
+        "trade_id": record.get("trade_id") or record.get("order_id") or f"{record.get('symbol')}-{close_timestamp}",
+        "order_id": record.get("order_id"),
+        "symbol": record.get("symbol"),
+        "side": record.get("side") or record.get("action"),
+        "strategy": record.get("strategy"),
+        "timeframe": record.get("timeframe"),
+        "status": str(record.get("status") or "CLOSED").upper(),
+        "quantity": record.get("quantity"),
+        "entry_price": record.get("entry_price"),
+        "exit_price": record.get("exit_price"),
+        "net_pnl": float(net_pnl),
+        "total_fees": float(fees),
+        "close_timestamp": close_timestamp,
+        "source": record.get("source", "EXECUTION_LEDGER"),
+    }
+
+
+def _normalize_forward_signal(record):
+    """Maps a forward-runner signal record onto the desk's signal contract."""
+    timestamp = record.get("timestamp")
+    if isinstance(timestamp, (int, float)):
+        timestamp = _epoch_to_iso(timestamp)
+    return {
+        "signal_id": record.get("signal_id"),
+        "timestamp": timestamp,
+        "symbol": record.get("symbol"),
+        "side": record.get("side"),
+        "strategy": record.get("strategy"),
+        "timeframe": record.get("timeframe"),
+        "decision": record.get("decision"),
+        "final_decision": record.get("decision"),
+        "confidence": record.get("confidence"),
+        "entry_price": record.get("entry_price"),
+        "reason": record.get("rejection_reason") or record.get("reason") or "",
+        "data_source": record.get("data_source"),
+    }
+
+
+def _merge_unique(primary, secondary, key_fields):
+    """Keeps primary records and appends only secondary records not already present.
+
+    Trades that share no distinguishing timestamp are deduplicated on their full
+    economic identity instead, so a repeated ledger entry cannot render twice.
+    """
+    merged = []
+    seen = set()
+
+    def identity_for(record):
+        key = tuple(record.get(field) for field in key_fields)
+        if all(part not in (None, "") for part in key):
+            return key
+        return (
+            record.get("symbol"),
+            record.get("side"),
+            record.get("quantity"),
+            record.get("entry_price"),
+            record.get("exit_price"),
+            record.get("order_id"),
+        )
+
+    for record in primary:
+        identity = identity_for(record)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        merged.append(record)
+    for record in secondary:
+        identity = identity_for(record)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        merged.append(record)
+    return merged
+
+
+def _authoritative_trades():
+    """Closed trades from the execution ledger, which is the store executions write to.
+
+    The canonical telemetry index is loaded once per process, so it cannot see trades
+    written by the engine process after startup and reported zero on a live deployment
+    that had genuinely closed trades.
+    """
+    try:
+        ledger = _get_trades_data()
+    except Exception:
+        logger.warning("[TELEMETRY] Trade ledger unavailable for telemetry query", exc_info=True)
+        return []
+    return [_normalize_ledger_trade(record) for record in ledger.get("positions", [])]
+
+
+def _authoritative_signals():
+    """Signal funnel records from the forward runner's log, which is what actually runs."""
+    path = os.getenv("PAPER_FORWARD_SIGNAL_LOG", "forward_signal_log.jsonl")
+    return [_normalize_forward_signal(record) for record in _read_jsonl_records(path)]
+
+
 @app.route('/api/telemetry/trades')
 def api_telemetry_trades():
-    """Returns canonical trades from the unified telemetry ledger with filtering."""
+    """Returns closed trades from the execution ledger.
+
+    The ledger is the only store executions are written to, and it is also the store
+    _get_trades_data reconciles Binance Futures history into. The canonical telemetry
+    index is deliberately NOT merged in: it is a per-process singleton loaded once at
+    startup, so it cannot observe trades the engine process writes afterwards, and
+    merging it back re-invents rows the ledger does not contain.
+    """
     try:
-        from testnet_engine.telemetry import get_telemetry_manager
-        tm = get_telemetry_manager()
         symbol = request.args.get('symbol')
         strategy = request.args.get('strategy')
         timeframe = request.args.get('timeframe')
         status = request.args.get('status')
         limit = safe_int_param('limit', default=100, min_val=1, max_val=1000)
-        
-        trades = tm.query_trades(status=status, symbol=symbol, strategy=strategy, timeframe=timeframe, limit=limit)
+
+        trades = _authoritative_trades()
+        if status and status.upper() != "ALL":
+            trades = [t for t in trades if str(t.get("status", "")).upper() == status.upper()]
+        if symbol:
+            trades = [t for t in trades if t.get("symbol") == symbol]
+        if strategy:
+            trades = [t for t in trades if t.get("strategy") == strategy]
+        if timeframe:
+            trades = [t for t in trades if t.get("timeframe") == timeframe]
+        trades.sort(key=lambda t: str(t.get("close_timestamp") or ""), reverse=True)
         return jsonify({
             "status": "OK",
-            "count": len(trades),
-            "trades": trades,
+            "count": len(trades[:limit]),
+            "trades": trades[:limit],
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         })
     except Exception as e:
@@ -4136,17 +4311,25 @@ def api_telemetry_trades():
 
 @app.route('/api/telemetry/signals')
 def api_telemetry_signals():
-    """Returns signal funnel and opportunity telemetry."""
+    """Returns signal funnel records from the forward runner's log.
+
+    As with trades, the on-disk log the runner actually writes is authoritative; the
+    per-process canonical index is only consulted when no such log exists at all.
+    """
     try:
-        from testnet_engine.telemetry import get_telemetry_manager
-        tm = get_telemetry_manager()
         symbol = request.args.get('symbol')
         limit = safe_int_param('limit', default=100, min_val=1, max_val=1000)
-        signals = tm.query_signals(symbol=symbol, limit=limit)
+        signals = _authoritative_signals()
+        if not signals and not os.path.exists(os.getenv("PAPER_FORWARD_SIGNAL_LOG", "forward_signal_log.jsonl")):
+            from testnet_engine.telemetry import get_telemetry_manager
+            signals = get_telemetry_manager().query_signals(limit=1000)
+        if symbol:
+            signals = [s for s in signals if s.get("symbol") == symbol]
+        signals.sort(key=lambda s: str(s.get("timestamp") or ""), reverse=True)
         return jsonify({
             "status": "OK",
-            "count": len(signals),
-            "signals": signals,
+            "count": len(signals[:limit]),
+            "signals": signals[:limit],
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         })
     except Exception as e:
