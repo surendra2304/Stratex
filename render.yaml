@@ -43,7 +43,7 @@ services:
       - key: FRIDAY_API_KEY
         sync: false
       - key: INFERENCE_URL
-        value: "https://inference-r1sn.onrender.com"
+        value: "https://inference-h7bn.onrender.com"
       - key: INFERENCE_API_KEY
         sync: false
       - key: MEMORA_URL
