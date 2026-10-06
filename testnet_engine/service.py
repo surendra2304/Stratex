@@ -2566,10 +2566,46 @@ class TestnetService:
             return
 
         if len(closed_trades) < window:
-            # Not enough strategy trades to judge degradation; maintain active trading
+            # Not enough strategy trades to judge degradation. Recovery from an
+            # existing halt is still allowed here — a ledger dominated by
+            # administrative/RECOVERED entries legitimately leaves too few real
+            # strategy trades to justify staying halted — but only once the
+            # minimum halt duration has elapsed. Without that guard a truncated,
+            # rotated or partially-read ledger could disarm the safety gate
+            # instantly, which is the opposite of fail-safe.
             if self.observe_only:
-                logger.info(f"[SERVICE] 🟢 Insufficient closed trade sample ({len(closed_trades)}/{window}) to justify degradation halt. Resetting to ACTIVE trading.")
-                self.observe_only = False
+                halted_at = getattr(self, "observe_only_since", None)
+                if halted_at is None:
+                    # Unknown halt age must be treated as a FRESH halt, never as
+                    # an already-expired one; otherwise losing the timestamp
+                    # alone would disarm the gate. A numeric 0 is NOT unknown:
+                    # production only ever assigns time.time() here, so 0 is an
+                    # explicit epoch timestamp meaning "halted a very long time
+                    # ago" and the cooldown has genuinely elapsed.
+                    self.observe_only_since = time.time()
+                    logger.warning(
+                        "[SERVICE] OBSERVE-ONLY active without a recorded start time and an "
+                        "insufficient trade sample. Adopting the current time and remaining "
+                        "halted."
+                    )
+                    self._strategy_performance_gate()
+                    return
+                elapsed = time.time() - halted_at
+                if elapsed >= cooldown_sec:
+                    logger.info(
+                        f"[SERVICE] 🟢 Insufficient closed trade sample "
+                        f"({len(closed_trades)}/{window}) to justify degradation halt, and the "
+                        f"minimum halt has elapsed ({elapsed:.0f}s >= {cooldown_sec:.0f}s). "
+                        f"Resetting to ACTIVE trading."
+                    )
+                    self.observe_only = False
+                else:
+                    logger.info(
+                        f"[SERVICE] ⚠️ Insufficient closed trade sample "
+                        f"({len(closed_trades)}/{window}), but only {elapsed:.0f}s of the "
+                        f"{cooldown_sec:.0f}s minimum halt has passed. REMAINING in OBSERVE-ONLY "
+                        f"mode — a shrinking sample must not clear a fresh halt."
+                    )
             self._strategy_performance_gate()
             return
 
@@ -2587,12 +2623,39 @@ class TestnetService:
                 self.observe_only = True
                 self.observe_only_since = time.time()
         else:
-            # Self-healing: resume live trading if PnL is positive, win rate recovered, or cooldown elapsed
+            # Self-healing: resume live trading once PnL is positive or the win
+            # rate has recovered — but never before the configured minimum halt
+            # duration has actually elapsed. `cooldown_sec` used to be assigned
+            # and then never read, so OBSERVE_ONLY_COOLDOWN_SECONDS was dead
+            # config and a single large winner could resume live order submission
+            # instantly even while the win rate was still below the threshold.
             if self.observe_only:
-                elapsed = time.time() - getattr(self, "observe_only_since", 0)
+                halted_at = getattr(self, "observe_only_since", None)
+                if halted_at is None:
+                    # Unknown halt time: adopt "now" and stay halted rather than
+                    # treating an unmeasured halt as already expired.
+                    self.observe_only_since = time.time()
+                    logger.warning(
+                        "[SERVICE] OBSERVE-ONLY active without a recorded start time. "
+                        "Adopting the current time and remaining halted."
+                    )
+                    self._strategy_performance_gate()
+                    return
+
+                elapsed = time.time() - halted_at
+                if elapsed < cooldown_sec:
+                    logger.info(
+                        f"[SERVICE] ⏳ Metrics recovered (PnL ${recent_pnl:.2f}, win rate "
+                        f"{win_rate:.2%}) but the minimum halt has not elapsed: "
+                        f"{elapsed:.0f}s / {cooldown_sec:.0f}s. REMAINING in OBSERVE-ONLY mode."
+                    )
+                    self._strategy_performance_gate()
+                    return
+
                 logger.info(
                     f"[SERVICE] 🟢 RECOVERING FROM OBSERVE-ONLY MODE. "
-                    f"Recent PnL: ${recent_pnl:.2f}, Win rate: {win_rate:.2%}, Cooldown elapsed: {elapsed:.0f}s. "
+                    f"Recent PnL: ${recent_pnl:.2f}, Win rate: {win_rate:.2%}, "
+                    f"Cooldown elapsed: {elapsed:.0f}s >= {cooldown_sec:.0f}s. "
                     f"Resuming live order execution."
                 )
                 self.observe_only = False
