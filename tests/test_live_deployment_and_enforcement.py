@@ -106,7 +106,7 @@ def test_isolated_live_ledger(tmp_path):
     assert bad_rec is False
     assert bad_disc > 0.5
 
-def test_live_dashboard_endpoints():
+def test_live_dashboard_endpoints(control_auth):
     from dashboard import app
     client = app.test_client()
 
@@ -117,9 +117,21 @@ def test_live_dashboard_endpoints():
     assert 'level_spec' in data
     assert 'voice_summary' in data
 
-    post_halt = client.post('/api/live/emergency/halt')
+    # Emergency endpoints are control-scope protected. An authenticated caller
+    # reaches the enforcer and gets FLATTEN_ALL; an anonymous caller must be
+    # refused rather than silently allowed to flatten a real portfolio.
+    post_halt = client.post('/api/live/emergency/halt', headers=control_auth)
     assert post_halt.status_code == 200
 
-    post_flat = client.post('/api/live/emergency/flatten')
+    post_flat = client.post('/api/live/emergency/flatten', headers=control_auth)
     assert post_flat.status_code == 200
     assert post_flat.get_json()['enforcer_action']['action'] == 'FLATTEN_ALL'
+
+    anon_halt = client.post('/api/live/emergency/halt')
+    assert anon_halt.status_code in (401, 403, 503), (
+        f"Anonymous emergency halt must not be accepted, got {anon_halt.status_code}"
+    )
+    anon_flat = client.post('/api/live/emergency/flatten')
+    assert anon_flat.status_code in (401, 403, 503), (
+        f"Anonymous emergency flatten must not be accepted, got {anon_flat.status_code}"
+    )

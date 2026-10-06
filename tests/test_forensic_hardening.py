@@ -44,9 +44,17 @@ class TestForensicHardening:
         assert config.BACKTEST_RISK_PER_TRADE == 0.01
         assert config.RISK_PER_TRADE == 0.01
 
-    def test_api_config_security_and_validation(self):
-        """Proof that /api/config rejects invalid types, live mode, and values exceeding safety ceilings."""
+    def test_api_config_security_and_validation(self, control_auth):
+        """Proof that /api/config rejects invalid types, live mode, and values exceeding safety ceilings.
+
+        Sends a control-scope key: the mutating branch is now authenticated, so
+        reaching the validation logic requires presenting one. Every original
+        assertion below is unchanged.
+        """
         client = app.test_client()
+
+        def post(url, **kwargs):
+            return client.post(url, headers=control_auth, **kwargs)
 
         # 1. GET returns valid config with live_trading_enabled: False
         res = client.get('/api/config')
@@ -56,32 +64,32 @@ class TestForensicHardening:
         assert data["status"] == "OK"
 
         # 2. POST attempting to enable live trading is rejected (403)
-        res = client.post('/api/config', json={"live_trading_enabled": True})
+        res = post('/api/config', json={"live_trading_enabled": True})
         assert res.status_code == 403
         assert "Live trading is permanently disabled" in res.get_json()["error"]
 
         # 3. POST attempting to change trading mode to LIVE is rejected (403)
-        res = client.post('/api/config', json={"trading_mode": "LIVE"})
+        res = post('/api/config', json={"trading_mode": "LIVE"})
         assert res.status_code == 403
 
         # 4. POST with negative max_open_trades is rejected (400)
-        res = client.post('/api/config', json={"max_open_trades": -5})
+        res = post('/api/config', json={"max_open_trades": -5})
         assert res.status_code == 400
 
         # 5. POST with max_open_trades > safety ceiling (20) is rejected (400)
-        res = client.post('/api/config', json={"max_open_trades": 25})
+        res = post('/api/config', json={"max_open_trades": 25})
         assert res.status_code == 400
 
         # 6. POST with invalid string for max_open_trades is rejected (400)
-        res = client.post('/api/config', json={"max_open_trades": "invalid_num"})
+        res = post('/api/config', json={"max_open_trades": "invalid_num"})
         assert res.status_code == 400
 
         # 7. POST with max_trades_per_day > safety ceiling (200) is rejected (400)
-        res = client.post('/api/config', json={"max_trades_per_day": 500})
+        res = post('/api/config', json={"max_trades_per_day": 500})
         assert res.status_code == 400
 
         # 8. POST with valid bounded parameters succeeds (200)
-        res = client.post('/api/config', json={"max_open_trades": 8, "max_trades_per_day": 40})
+        res = post('/api/config', json={"max_open_trades": 8, "max_trades_per_day": 40})
         assert res.status_code == 200
         assert res.get_json()["status"] == "success"
         assert config.MAX_OPEN_TRADES == 8
