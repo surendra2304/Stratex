@@ -2,6 +2,8 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Create a global temporary directory for tests
@@ -24,3 +26,26 @@ os.environ["TESTNET_ONLY"] = "TRUE"
 # Clear any secret keys for unauthenticated local test client assertions
 for k in ["BOT_API_KEY", "API_KEY_CONTROL", "API_KEY_READONLY", "API_KEY_FRIDAY"]:
     os.environ[k] = ""
+
+
+# Deliberately hyphenated so it contains no long alphanumeric run: a real
+# Binance-style key is one long run, and tests/test_credentials.py flags those.
+# This value is monkeypatched into the environment for a single test and is
+# never written to disk or sent to an exchange.
+CONTROL_API_KEY = "pytest-control-scope-key-not-a-real-credential"
+
+
+@pytest.fixture
+def control_auth(monkeypatch):
+    """Configures a control-scope API key for one test and returns its headers.
+
+    Mutating endpoints now fail CLOSED (503 AUTH_NOT_CONFIGURED) when no API key
+    is configured, so any test that needs to reach a mutating handler's business
+    logic must present a key. Returning the header keeps every existing assertion
+    about validation bounds, live-trading rejection and enforcer actions intact,
+    and additionally proves the handler is reachable only to an authenticated
+    control-scope caller.
+    """
+    monkeypatch.setenv("API_KEY_CONTROL", CONTROL_API_KEY)
+    monkeypatch.delenv("TRADING_BOT_API_KEY", raising=False)
+    return {"X-API-KEY": CONTROL_API_KEY}

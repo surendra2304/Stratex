@@ -8,13 +8,22 @@ from typing import Any
 
 @dataclass(frozen=True)
 class StrategyVersion:
-    """Immutable record of a strategy version, its source code hash, and frozen parameters."""
+    """Immutable record of a strategy version, its source code hash, and frozen parameters.
+
+    ``evidence`` carries the reproducibility provenance block recorded alongside a
+    version (artifact path, git sha, data range, evidence grade, promotion
+    status). It is part of the committed governance artifact, so the model has to
+    be able to represent it: reading a registry whose records carry evidence used
+    to raise ``TypeError: unexpected keyword argument 'evidence'`` and take down
+    every registry read path with a 500.
+    """
     strategy_id: str
     version: str
     source_hash: str
     created_at: str
     parameters: dict[str, Any]
     status: str = "RESEARCH"  # RESEARCH, OOS_VALIDATED, APPROVED, ACTIVE, RETIRED
+    evidence: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

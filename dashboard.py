@@ -71,6 +71,7 @@ def add_header(response):
 
 from security_hardening import (
     SCOPE_CONTROL,
+    control_scope_denial,
     get_security_status_report,
     require_api_scope,
 )
@@ -277,6 +278,9 @@ def handle_strategy_registry():
     registry = StrategyRegistry()
 
     if request.method == 'POST':
+        denial = control_scope_denial()
+        if denial:
+            return denial
         data = request.get_json(force=True, silent=True) or {}
         strategy_id = data.get("strategy_id")
         version = data.get("version")
@@ -301,6 +305,7 @@ def handle_strategy_registry():
 
 
 @app.route('/api/strategy-registry/promote', methods=['POST'])
+@require_bot_api_key
 def promote_strategy_version():
     """Promotes a strategy version through explicit lifecycle state transitions."""
     from stratex_quantdinger.registry import StrategyRegistry
@@ -330,6 +335,9 @@ def handle_research_jobs():
     store = JobStore()
 
     if request.method == 'POST':
+        denial = control_scope_denial()
+        if denial:
+            return denial
         data = request.get_json(force=True, silent=True) or {}
         job_type = data.get("job_type", "BACKTEST").upper()
         strategy_id = data.get("strategy_id", "adx_ema")
@@ -339,18 +347,74 @@ def handle_research_jobs():
 
         runner = ResearchJobRunner(store=store)
 
-        def mock_backtest_runner(s, j_id):
-            time.sleep(0.5)
-            s.update(j_id, progress=0.5)
-            time.sleep(0.5)
-            s.update(
-                j_id,
-                status="COMPLETED",
-                progress=1.0,
-                result={"total_trades": 12, "profit_factor": 1.42, "win_rate": 58.3, "net_pnl": 145.20}
-            )
+        def real_backtest_runner(s, j_id):
+            """Runs a genuine BacktestEngine pass over real candles.
 
-        job = runner.submit_and_execute_async(job_id, job_type, mock_backtest_runner, metadata=metadata)
+            Replaces the former ``mock_backtest_runner``, which slept for a
+            second and then wrote a hardcoded ``profit_factor: 1.42 /
+            win_rate: 58.3 / net_pnl: 145.20`` into the durable store as
+            COMPLETED. Publishing invented performance figures for a strategy
+            whose only reproducible measurement is PF 0.82 over 2 OOS trades
+            (see strategy_registry.json) contradicts the core invariant of this
+            repository. Any input that cannot be obtained now FAILS the job with
+            an explicit reason instead of producing a number.
+            """
+            import importlib
+
+            from backtest_engine import BacktestEngine, DataValidator
+            from data import add_indicators, get_candles
+            from metrics import calculate_metrics
+
+            symbol = str(metadata.get("symbol", config.SYMBOL)).upper()
+            timeframe = str(metadata.get("timeframe", config.TIMEFRAME))
+            candles = int(metadata.get("candles", 500))
+
+            try:
+                strat_mod = importlib.import_module(f"strategy_{strategy_id}")
+            except ImportError as exc:
+                raise RuntimeError(
+                    f"STRATEGY_MODULE_UNAVAILABLE: no module 'strategy_{strategy_id}' ({exc})"
+                ) from exc
+
+            s.update(j_id, progress=0.2)
+            df = get_candles(symbol, timeframe, limit=candles)
+            if df is None or df.empty:
+                raise RuntimeError(
+                    f"DATA_UNAVAILABLE: could not fetch {symbol} {timeframe} candles. "
+                    "Refusing to report a backtest that was never computed."
+                )
+            df = add_indicators(df)
+            if df is None or df.empty:
+                raise RuntimeError(
+                    f"INDICATORS_UNAVAILABLE: {symbol} {timeframe} frame was empty after "
+                    "indicator construction (insufficient history for the warmup window)."
+                )
+            DataValidator.validate(df)
+
+            s.update(j_id, progress=0.5)
+            engine = BacktestEngine(
+                df, [strat_mod],
+                config.BACKTEST_FEE_RATE, config.BACKTEST_SLIPPAGE_RATE,
+                config.STARTING_BALANCE, config.BACKTEST_RISK_PER_TRADE,
+                symbol=symbol, long_only=getattr(config, "LONG_ONLY", True),
+            )
+            trades, equity_df = engine.run()
+            result = calculate_metrics(trades, equity_df, config.STARTING_BALANCE)
+            result["provenance"] = {
+                "engine": "BacktestEngine",
+                "strategy_id": strategy_id,
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "bars": int(len(df)),
+                "fee_rate": config.BACKTEST_FEE_RATE,
+                "slippage_rate": config.BACKTEST_SLIPPAGE_RATE,
+                "evidence_class": "in_sample_backtest",
+                "note": "In-sample backtest only. Not out-of-sample evidence and "
+                        "not authorization to execute; see strategy_registry.json.",
+            }
+            s.update(j_id, status="COMPLETED", progress=1.0, result=result)
+
+        job = runner.submit_and_execute_async(job_id, job_type, real_backtest_runner, metadata=metadata)
         return jsonify({"status": "OK", "job": job.__dict__}), 202
 
     # GET
@@ -414,6 +478,9 @@ def agent_gateway_jobs():
     gateway = ResearchAgentGateway()
 
     if request.method == 'POST':
+        denial = control_scope_denial()
+        if denial:
+            return denial
         data = request.get_json(force=True, silent=True) or {}
         action = data.get("action", "BACKTEST").upper()
         strategy_id = data.get("strategy_id", "adx_ema")
@@ -2770,6 +2837,7 @@ def api_positions():
     })
 
 @app.route('/api/testnet/positions/close-all', methods=['POST'])
+@require_bot_api_key
 def api_testnet_positions_close_all():
     """Closes all open positions on Binance Futures testnet and flattens account."""
     from execution import get_exchange_client
@@ -2831,6 +2899,7 @@ def api_testnet_positions_close_all():
 
 
 @app.route('/api/testnet/positions/close', methods=['POST'])
+@require_bot_api_key
 def api_testnet_positions_close():
     """Closes a specific open position on Binance Futures testnet."""
     from execution import get_exchange_client
@@ -4537,14 +4606,12 @@ def api_config():
     try:
         import config
         if request.method == 'POST':
-            expected_key = os.getenv("BOT_API_KEY", "").strip()
-            if expected_key:
-                incoming_key = (request.headers.get("X-BOT-API-KEY") or request.headers.get("X-Bot-Api-Key") or "").strip()
-                if not incoming_key or incoming_key != expected_key:
-                    return jsonify({
-                        "status": "UNAUTHORIZED",
-                        "error": "Unauthorized: Missing or invalid X-BOT-API-KEY header"
-                    }), 401
+            # Was: `if expected_key:` — an empty BOT_API_KEY skipped the check
+            # entirely, so an unconfigured deployment accepted anonymous runtime
+            # config mutation. Delegate to the shared fail-closed guard.
+            denial = control_scope_denial()
+            if denial:
+                return denial
 
             data = request.get_json(silent=True)
             if not isinstance(data, dict):
@@ -5152,6 +5219,9 @@ def api_alerts_manager():
     from monitoring_system import get_monitoring_system
     mon = get_monitoring_system()
     if request.method == 'POST':
+        denial = control_scope_denial()
+        if denial:
+            return denial
         data = request.get_json() or {}
         alert_id = data.get("alert_id")
         if alert_id and mon.acknowledge_alert(alert_id):
@@ -5786,6 +5856,7 @@ def api_multiexchange_health():
 # ==============================================================================
 
 @app.route('/api/live/emergency/flatten', methods=['POST'])
+@require_bot_api_key
 def api_live_emergency_flatten():
     """Emergency endpoint: Flattens all live positions and halts live trading immediately."""
     try:
@@ -5802,6 +5873,7 @@ def api_live_emergency_flatten():
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
 @app.route('/api/live/emergency/halt', methods=['POST'])
+@require_bot_api_key
 def api_live_emergency_halt():
     """Emergency endpoint: Halts new entries without liquidating existing bracket-protected positions."""
     try:

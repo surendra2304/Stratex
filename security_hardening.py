@@ -307,12 +307,23 @@ def authenticate_request(required_scope: str = SCOPE_READ) -> tuple[bool, str | 
     If no keys are configured in environment (open demo / dev mode), allows read gracefully.
     """
     configured_keys = get_configured_api_keys()
-    
-    # If no keys configured at all in env, permit read in dev mode, but require key for control if BOT_API_KEY is defined
+
+    # An unconfigured deployment must never grant authority it has no way to
+    # verify. Anonymous READ stays open (public status/health pages depend on
+    # it); every scope above read FAILS CLOSED. Granting SCOPE_CONTROL here let
+    # an unauthenticated caller flatten positions, trip the panic kill switch
+    # and mutate runtime config whenever BOT_API_KEY / API_KEY_CONTROL /
+    # API_KEY_READONLY / API_KEY_FRIDAY were all unset — which is the shipped
+    # default (.env.example leaves them empty, render.yaml marks them sync:false).
     if not configured_keys:
         if required_scope == SCOPE_READ:
             return True, "ANONYMOUS_DEV", {"role": "DEV", "scopes": [SCOPE_READ]}
-        return True, "ANONYMOUS_DEV", {"role": "DEV", "scopes": [SCOPE_READ, SCOPE_CONTROL]}
+        logger.critical(
+            f"[SECURITY] Rejecting '{required_scope}' request to {request.path}: no API keys are "
+            "configured (BOT_API_KEY / API_KEY_CONTROL / API_KEY_READONLY / API_KEY_FRIDAY are all "
+            "unset). Control authority fails closed — set a key to enable this endpoint."
+        )
+        return False, "AUTH_NOT_CONFIGURED", None
 
     incoming_key = (
         request.headers.get("X-API-KEY")
@@ -342,6 +353,34 @@ def authenticate_request(required_scope: str = SCOPE_READ) -> tuple[bool, str | 
     return True, None, key_info
 
 
+def control_scope_denial(required_scope: str = SCOPE_CONTROL):
+    """Inline control-scope guard for views that mix GET and POST in one function.
+
+    ``require_api_scope`` is a decorator, so it cannot protect only the mutating
+    branch of a combined ``methods=['GET','POST']`` view without also gating the
+    read branch. This returns ``None`` when the caller is authorized, otherwise a
+    ready-to-return ``(response, status_code)`` tuple:
+
+      * 503 AUTH_NOT_CONFIGURED — no API key is configured at all. The server
+        cannot verify anyone, so it must not accept control commands.
+      * 401 UNAUTHORIZED        — keys are configured and this caller lacks one.
+    """
+    auth_ok, auth_err, _key_info = authenticate_request(required_scope=required_scope)
+    if auth_ok:
+        return None
+    if auth_err == "AUTH_NOT_CONFIGURED":
+        return jsonify({
+            "status": "UNAUTHORIZED",
+            "error": "AUTH_NOT_CONFIGURED",
+            "message": "No API key is configured on this deployment; control endpoints "
+                       "fail closed. Set BOT_API_KEY or API_KEY_CONTROL.",
+        }), 503
+    return jsonify({
+        "status": "UNAUTHORIZED",
+        "error": f"Authentication failed: {auth_err}",
+    }), 401
+
+
 def require_api_scope(scope: str = SCOPE_READ, is_control: bool = False):
     """
     Flask Decorator for role-based scope verification, rate limiting, and audit logging.
@@ -363,6 +402,16 @@ def require_api_scope(scope: str = SCOPE_READ, is_control: bool = False):
             # 2. Key Scope & Auth Check
             auth_ok, auth_err, key_info = authenticate_request(required_scope=scope)
             if not auth_ok:
+                # An unconfigured deployment cannot verify anyone: report 503 so
+                # operators see a server-side misconfiguration rather than being
+                # told their (impossible) credentials were wrong.
+                if auth_err == "AUTH_NOT_CONFIGURED":
+                    return jsonify({
+                        "status": "UNAUTHORIZED",
+                        "error": "AUTH_NOT_CONFIGURED",
+                        "message": "No API key is configured on this deployment; control "
+                                   "endpoints fail closed. Set BOT_API_KEY or API_KEY_CONTROL.",
+                    }), 503
                 return jsonify({
                     "status": "UNAUTHORIZED",
                     "error": f"Authentication failed: {auth_err}"

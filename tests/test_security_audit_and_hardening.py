@@ -37,14 +37,18 @@ def test_immutable_live_trading_invariant():
     assert config.LIVE_TRADING_ENABLED is False
     assert getattr(config, "TESTNET_ONLY", True) is True
 
-def test_api_rejects_live_trading_activation_attempts(client):
-    """Verifies that API endpoints strictly reject attempts to enable live trading."""
-    res1 = client.post("/api/config", json={"LIVE_TRADING_ENABLED": True})
+def test_api_rejects_live_trading_activation_attempts(client, control_auth):
+    """Verifies that API endpoints strictly reject attempts to enable live trading.
+
+    A control-scope key is presented so the request reaches the live-trading
+    guard itself instead of being stopped earlier at the authentication gate.
+    """
+    res1 = client.post("/api/config", json={"LIVE_TRADING_ENABLED": True}, headers=control_auth)
     assert res1.status_code in [400, 403]
 
-    res2 = client.post("/api/settings", json={"live_trading": True})
+    res2 = client.post("/api/settings", json={"live_trading": True}, headers=control_auth)
     assert res2.status_code in [400, 403]
-    
+
     assert config.LIVE_TRADING_ENABLED is False
 
 def test_api_endpoints_do_not_leak_secrets(client):
@@ -62,12 +66,16 @@ def test_api_endpoints_do_not_leak_secrets(client):
         assert "SECRET_KEY" not in text
         assert "PRIVATE_KEY" not in text
 
-def test_malformed_json_and_payload_sanitization(client):
-    """Verifies endpoints reject invalid JSON and oversized/malformed payloads."""
+def test_malformed_json_and_payload_sanitization(client, control_auth):
+    """Verifies endpoints reject invalid JSON and oversized/malformed payloads.
+
+    Authenticated with a control-scope key so the JSON parser is what rejects the
+    request rather than the auth gate.
+    """
     res = client.post(
         "/api/config",
         data="not a json payload",
-        headers={"Content-Type": "application/json"}
+        headers={"Content-Type": "application/json", **control_auth}
     )
     assert res.status_code == 400
 

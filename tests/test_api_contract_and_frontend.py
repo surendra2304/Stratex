@@ -135,17 +135,21 @@ def test_api_candles_contract_and_parameter_semantics(client):
     assert data_bad["status"] == "ERROR"
     assert "Invalid timeframe" in data_bad["error"]
 
-def test_api_post_endpoints_validation_and_safety(client):
-    """Verifies POST endpoints reject bad payloads safely without secret leakage."""
+def test_api_post_endpoints_validation_and_safety(client, control_auth):
+    """Verifies POST endpoints reject bad payloads safely without secret leakage.
+
+    A control-scope key is presented so the assertions still exercise the real
+    validation logic rather than stopping at the authentication gate.
+    """
     # /api/settings POST with empty and invalid bodies
-    res1 = client.post("/api/settings", data="", content_type="application/json")
+    res1 = client.post("/api/settings", data="", content_type="application/json", headers=control_auth)
     assert res1.status_code == 400
 
-    res2 = client.post("/api/settings", data="{bad_json}", content_type="application/json")
+    res2 = client.post("/api/settings", data="{bad_json}", content_type="application/json", headers=control_auth)
     assert res2.status_code == 400
 
     # /api/settings POST forbidden live trading toggle
-    res3 = client.post("/api/settings", json={"live_trading_enabled": True})
+    res3 = client.post("/api/settings", json={"live_trading_enabled": True}, headers=control_auth)
     assert res3.status_code == 403
     assert "SECURITY FORBIDDEN" in res3.get_json()["error"]
 

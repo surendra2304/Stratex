@@ -113,6 +113,13 @@ class ProductionMonitoringSystem:
 
     def get_system_resource_metrics(self) -> dict[str, Any]:
         """Collects CPU, memory, disk, and process utilization."""
+        # These values used to fall back to plausible-looking constants
+        # (12.5% CPU, 34.2% memory, 1024/8192 MB). Because psutil was never
+        # declared in requirements.txt, those constants were the ONLY path that
+        # ever ran in a real deployment — a fabricated resource report presented
+        # as measurement. Unmeasured is now reported as None with an explicit
+        # source marker.
+        resources_source = "psutil"
         if _HAS_PSUTIL and psutil is not None:
             try:
                 cpu_pct = psutil.cpu_percent(interval=None)
@@ -120,30 +127,34 @@ class ProductionMonitoringSystem:
                 mem_pct = mem.percent
                 mem_used_mb = mem.used / (1024 * 1024)
                 mem_total_mb = mem.total / (1024 * 1024)
-            except Exception:
-                cpu_pct, mem_pct, mem_used_mb, mem_total_mb = 12.5, 34.2, 1024.0, 8192.0
+            except Exception as exc:
+                cpu_pct = mem_pct = mem_used_mb = mem_total_mb = None
+                resources_source = f"UNAVAILABLE:{type(exc).__name__}"
         else:
-            cpu_pct, mem_pct, mem_used_mb, mem_total_mb = 12.5, 34.2, 1024.0, 8192.0
+            cpu_pct = mem_pct = mem_used_mb = mem_total_mb = None
+            resources_source = "UNAVAILABLE:psutil_not_installed"
 
         disk = shutil.disk_usage(os.getcwd())
         disk_pct = (disk.used / disk.total) * 100.0 if disk.total > 0 else 0.0
 
-        # Check resource alerts
-        if cpu_pct >= 80.0:
+        # Check resource alerts (None means "not measured" — never alert on it,
+        # and never crash comparing against it).
+        if cpu_pct is not None and cpu_pct >= 80.0:
             self.emit_alert("WARNING", "RESOURCE", f"High CPU utilization: {cpu_pct:.1f}%")
-        if mem_pct >= 80.0:
+        if mem_pct is not None and mem_pct >= 80.0:
             self.emit_alert("WARNING", "RESOURCE", f"High Memory utilization: {mem_pct:.1f}%")
         if disk_pct >= 85.0:
             self.emit_alert("WARNING", "RESOURCE", f"High Disk utilization: {disk_pct:.1f}%")
 
         return {
-            "cpu_percent": round(cpu_pct, 1),
-            "memory_percent": round(mem_pct, 1),
-            "memory_used_mb": round(mem_used_mb, 1),
-            "memory_total_mb": round(mem_total_mb, 1),
+            "cpu_percent": round(cpu_pct, 1) if cpu_pct is not None else None,
+            "memory_percent": round(mem_pct, 1) if mem_pct is not None else None,
+            "memory_used_mb": round(mem_used_mb, 1) if mem_used_mb is not None else None,
+            "memory_total_mb": round(mem_total_mb, 1) if mem_total_mb is not None else None,
             "disk_percent": round(disk_pct, 1),
             "disk_free_gb": round(disk.free / (1024 * 1024 * 1024), 2),
             "process_pid": os.getpid(),
+            "resources_source": resources_source,
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         }
 
