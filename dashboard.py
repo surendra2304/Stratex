@@ -5548,20 +5548,9 @@ def api_ecosystem_mode():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
-@app.route('/api/ecosystem/report')
-def api_ecosystem_report():
-    """Returns latest daily performance and ecosystem operations report."""
-    try:
-        import json
-        import os
-        report_path = "reports/daily/report_2026-08-28.json"
-        if os.path.exists(report_path):
-            with open(report_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return jsonify({"status": "OK", "report": data})
-        return jsonify({"status": "OK", "message": "No report found for today"})
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+# NOTE: /api/ecosystem/report is served by api.master_control_api
+# (registered blueprint wins for this URL). The previous duplicate here read a
+# hardcoded 2026-08-28 report file and was removed — do not re-add.
 
 # ==============================================================================
 # STRATEGY EVOLUTION LABORATORY & HUMAN GOVERNANCE ENDPOINTS

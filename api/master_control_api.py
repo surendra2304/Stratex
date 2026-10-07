@@ -86,13 +86,88 @@ def set_autonomy_mode():
     }))
 
 
+def _real_daily_metrics() -> dict:
+    """Computes today's actual trading metrics from the ledger.
+
+    Never invents numbers: when the ledger is absent the metrics are zero and
+    the `metrics_source` field says so. Drawdown is measured along today's
+    cumulative-PnL path and is only expressed in percent when a real equity
+    base (portfolio initial deposit) is available.
+    """
+    import json
+    import os
+
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    trades_count = 0
+    daily_pnl = 0.0
+    pnl_path: list[float] = []
+    source = "NO_DATA"
+    ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
+
+    if os.path.exists(ledger_file):
+        source = "LEDGER"
+        try:
+            with open(ledger_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except Exception:
+                        continue
+                    if not str(rec.get("timestamp", "")).startswith(today):
+                        continue
+                    trades_count += 1
+                    try:
+                        daily_pnl += float(rec.get("net_pnl", rec.get("pnl", 0.0)) or 0.0)
+                    except (TypeError, ValueError):
+                        pass
+                    pnl_path.append(daily_pnl)
+        except Exception:
+            source = "LEDGER_ERROR"
+
+    drawdown_pct = 0.0
+    drawdown_source = "UNVERIFIED_NO_EQUITY_BASE"
+    portfolio_file = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+    base = None
+    if os.path.exists(portfolio_file):
+        try:
+            with open(portfolio_file, "r", encoding="utf-8") as f:
+                base = float(json.load(f).get("initial_deposit") or 0.0) or None
+        except Exception:
+            base = None
+    if base and pnl_path:
+        peak = pnl_path[0]
+        worst = 0.0
+        for value in pnl_path:
+            peak = max(peak, value)
+            worst = min(worst, value - peak)
+        drawdown_pct = max(0.0, (-worst / base) * 100.0)
+        drawdown_source = "LEDGER_PATH_VS_INITIAL_DEPOSIT"
+
+    return {
+        "trades_count": trades_count,
+        "daily_pnl": round(daily_pnl, 2),
+        "max_drawdown_reached": round(drawdown_pct, 2),
+        "decisions_count": len(_director.decision_log),
+        "metrics_source": source,
+        "drawdown_source": drawdown_source,
+    }
+
+
 @master_control_bp.route("/report", methods=["GET"])
 def get_operational_report():
-    """Returns full operational and compliance dossier."""
+    """Returns full operational and compliance dossier built from REAL ledger
+    metrics (regression guard: this endpoint used to return fabricated
+    trades_count/daily_pnl constants)."""
+    metrics = _real_daily_metrics()
     dossier = _compliance.generate_daily_compliance_dossier(
-        trades_count=24,
-        daily_pnl=68.50,
-        max_drawdown_reached=1.8,
-        decisions_count=len(_director.decision_log)
+        trades_count=metrics["trades_count"],
+        daily_pnl=metrics["daily_pnl"],
+        max_drawdown_reached=metrics["max_drawdown_reached"],
+        decisions_count=metrics["decisions_count"],
     )
+    dossier["metrics_source"] = metrics["metrics_source"]
+    dossier["drawdown_source"] = metrics["drawdown_source"]
     return jsonify(format_api_response(dossier))

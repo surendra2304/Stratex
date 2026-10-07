@@ -137,3 +137,47 @@ def test_compliance_reporter():
         assert dossier["metrics"]["net_pnl_dollars"] == 145.50
         assert "signature" in dossier
         assert "voice_summary" in dossier
+
+
+def test_compliance_dossier_invariants_are_computed_not_hardcoded():
+    """Regression (2026-10-07): compliance reports must never fabricate PASS."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reporter = ComplianceReporter(reports_dir=tmpdir, retention_days=90)
+
+        # Healthy day: all invariants pass and the signature self-verifies.
+        ok_dossier = reporter.generate_daily_compliance_dossier(
+            trades_count=5, daily_pnl=12.0, max_drawdown_reached=3.0, decisions_count=4
+        )
+        inv = ok_dossier["regulatory_invariants"]
+        assert inv["zero_live_order_policy_honored"] is True
+        assert inv["max_drawdown_limit_within_bounds"] is True
+        assert inv["cryptographic_signatures_verified"] is True
+
+        # Drawdown breach must flip the corridor invariant and the markdown verdict.
+        import datetime as _dt
+        import json as _json
+        import os as _os
+        breach = reporter.generate_daily_compliance_dossier(
+            trades_count=5, daily_pnl=-40.0, max_drawdown_reached=22.5, decisions_count=4
+        )
+        assert breach["regulatory_invariants"]["max_drawdown_limit_within_bounds"] is False
+        day_tag = _dt.datetime.utcnow().strftime("%Y-%m-%d")
+        md = open(_os.path.join(tmpdir, f"compliance_daily_{day_tag}.md")).read()
+        assert "Drawdown Corridor: FAIL" in md
+        on_disk = _json.load(open(_os.path.join(tmpdir, f"compliance_daily_{day_tag}.json")))
+        assert on_disk["regulatory_invariants"]["max_drawdown_limit_within_bounds"] is False
+
+        # Evidence of a live order must flip the live-order invariant.
+        live = reporter.generate_daily_compliance_dossier(
+            trades_count=1, daily_pnl=0.0, max_drawdown_reached=0.0, decisions_count=0,
+            live_order_evidence=True
+        )
+        assert live["regulatory_invariants"]["zero_live_order_policy_honored"] is False
+
+
+def test_quarterly_package_status_is_honest():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reporter = ComplianceReporter(reports_dir=tmpdir, retention_days=90)
+        pkg = reporter.generate_quarterly_audit_package()
+        assert pkg["status"] == "GENERATED_SIGNED"
+        assert "signature" in pkg
