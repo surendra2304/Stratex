@@ -6183,4 +6183,8 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print(f"👉 Open http://127.0.0.1:{port} in your browser")
     is_debug = os.environ.get('FLASK_DEBUG') == '1'
-    app.run(host='0.0.0.0', debug=is_debug, port=port, load_dotenv=False)
+    # threaded=True is REQUIRED: /api/stream is a Server-Sent Events endpoint
+    # whose connection stays open indefinitely. With the default single-threaded
+    # Werkzeug server, ONE connected dashboard tab would block every other
+    # request (including the same page's API calls).
+    app.run(host='0.0.0.0', debug=is_debug, port=port, load_dotenv=False, threaded=True)

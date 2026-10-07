@@ -213,3 +213,62 @@ def test_ccxt_health_telemetry():
     # Ensure no secrets leak
     assert "apiKey" not in health
     assert "secret" not in health
+
+
+# ---------------------------------------------------------------------------
+# Error-contract regression tests (2026-10-07 endpoint census findings)
+# ---------------------------------------------------------------------------
+
+def test_ticker_upstream_failure_returns_503_without_leaking_internals(monkeypatch):
+    """Network failures against the exchange are upstream problems (503) and
+    must never leak raw ccxt messages (internal URLs) to the client."""
+    from api import ccxt_routes
+    from dashboard import app
+
+    class FakeNetErr(Exception):
+        pass
+
+    # Make our fake class count as a ccxt NetworkError
+    monkeypatch.setattr(ccxt_routes, "_CCXT_NETWORK_ERRORS", (FakeNetErr,))
+
+    def boom(_exchange):
+        raise FakeNetErr("https://secret-internal-host:8443/api/v3/exchangeInfo failed (SSL handshake EOF)")
+
+    monkeypatch.setattr(ccxt_routes.ccxt_hub, "get_exchange", boom)
+    app.config["TESTING"] = True
+    with app.test_client() as c:
+        res = c.get("/api/v1/ccxt/ticker?symbol=BTCUSDT&exchange=binance")
+    assert res.status_code == 503
+    body = res.get_json()
+    assert body["error"] == "UPSTREAM_UNAVAILABLE"
+    assert "secret-internal-host" not in res.get_data(as_text=True)
+
+
+def test_depth_invalid_levels_returns_400():
+    from dashboard import app
+    app.config["TESTING"] = True
+    with app.test_client() as c:
+        res = c.get("/api/v1/ccxt/depth?symbol=BTCUSDT&levels=notanint")
+    assert res.status_code == 400
+    assert res.get_json()["error"] == "INVALID_LEVELS"
+
+
+def test_arbitrage_upstream_failure_returns_503(monkeypatch):
+    from api import ccxt_routes
+    from dashboard import app
+
+    class FakeNetErr(Exception):
+        pass
+
+    monkeypatch.setattr(ccxt_routes, "_CCXT_NETWORK_ERRORS", (FakeNetErr,))
+
+    def boom(_symbol):
+        raise FakeNetErr("connection refused to internal host")
+
+    monkeypatch.setattr(ccxt_routes.ccxt_hub, "scan_arbitrage", boom)
+    app.config["TESTING"] = True
+    with app.test_client() as c:
+        res = c.get("/api/v1/ccxt/arbitrage?symbol=BTCUSDT")
+    assert res.status_code == 503
+    assert res.get_json()["error"] == "UPSTREAM_UNAVAILABLE"
+    assert "internal host" not in res.get_data(as_text=True)

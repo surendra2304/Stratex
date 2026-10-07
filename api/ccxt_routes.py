@@ -19,6 +19,34 @@ from stratex_ccxt_adapter import ccxt_hub
 
 ccxt_bp = Blueprint("ccxt_bp", __name__, url_prefix="/api/v1/ccxt")
 
+try:
+    import ccxt as _ccxt
+    _CCXT_NETWORK_ERRORS = (_ccxt.NetworkError, _ccxt.ExchangeNotAvailable, _ccxt.RequestTimeout, _ccxt.DDoSProtection)
+except Exception:  # pragma: no cover - ccxt is a declared dependency; guard anyway
+    _CCXT_NETWORK_ERRORS = ()
+
+
+def _upstream_error_response(e: Exception):
+    """Maps exchange-adapter failures to honest, non-leaking responses.
+
+    Network/exchange-availability problems are upstream failures (503), not
+    internal server errors; raw ccxt messages can contain internal URLs and
+    request details, so they are never forwarded to the client.
+    """
+    if _CCXT_NETWORK_ERRORS and isinstance(e, _CCXT_NETWORK_ERRORS):
+        return jsonify({
+            "status": "ERROR",
+            "error": "UPSTREAM_UNAVAILABLE",
+            "message": "The exchange could not be reached or refused the request. Try again later.",
+        }), 503
+    if isinstance(e, (_ccxt.BadSymbol, _ccxt.BadRequest)) if _CCXT_NETWORK_ERRORS else False:
+        return jsonify({"status": "ERROR", "error": "INVALID_REQUEST", "message": str(e)[:200]}), 400
+    return jsonify({
+        "status": "ERROR",
+        "error": "INTERNAL_ERROR",
+        "message": "Unexpected error while querying the exchange adapter.",
+    }), 500
+
 
 @ccxt_bp.route("/status", methods=["GET"])
 def get_status():
@@ -53,23 +81,25 @@ def get_ticker():
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": asdict(ticker),
         }), 200
+    except KeyError:
+        return jsonify({"status": "ERROR", "error": "UNKNOWN_EXCHANGE", "message": f"Unsupported exchange: {exchange}"}), 400
     except Exception as e:
-        return jsonify({
-            "status": "ERROR",
-            "message": str(e),
-        }), 500
+        return _upstream_error_response(e)
 
 
 @ccxt_bp.route("/arbitrage", methods=["GET"])
 def get_arbitrage():
     """Scans and compares prices across multiple exchanges to detect arbitrage spreads."""
     symbol = request.args.get("symbol", "BTCUSDT")
-    opp = ccxt_hub.scan_arbitrage(symbol)
-    return jsonify({
-        "status": "OK",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "data": asdict(opp),
-    }), 200
+    try:
+        opp = ccxt_hub.scan_arbitrage(symbol)
+        return jsonify({
+            "status": "OK",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "data": asdict(opp),
+        }), 200
+    except Exception as e:
+        return _upstream_error_response(e)
 
 
 @ccxt_bp.route("/depth", methods=["GET"])
@@ -77,22 +107,33 @@ def get_depth():
     """Analyzes orderbook depth, liquidity, and volume-weighted micro-price."""
     symbol = request.args.get("symbol", "BTCUSDT")
     exchange = request.args.get("exchange", "binance").lower()
-    levels = int(request.args.get("levels", 15))
-    analysis = ccxt_hub.analyze_depth(symbol, exchange_id=exchange, depth_levels=levels)
-    return jsonify({
-        "status": "OK",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "data": asdict(analysis),
-    }), 200
+    try:
+        levels = int(request.args.get("levels", 15))
+    except (TypeError, ValueError):
+        return jsonify({"status": "ERROR", "error": "INVALID_LEVELS", "message": "'levels' must be an integer."}), 400
+    try:
+        analysis = ccxt_hub.analyze_depth(symbol, exchange_id=exchange, depth_levels=levels)
+        return jsonify({
+            "status": "OK",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "data": asdict(analysis),
+        }), 200
+    except KeyError:
+        return jsonify({"status": "ERROR", "error": "UNKNOWN_EXCHANGE", "message": f"Unsupported exchange: {exchange}"}), 400
+    except Exception as e:
+        return _upstream_error_response(e)
 
 
 @ccxt_bp.route("/funding", methods=["GET"])
 def get_funding():
     """Compares perpetual futures funding rates across exchanges."""
     symbol = request.args.get("symbol", "BTCUSDT")
-    funding = ccxt_hub.compare_funding_rates(symbol)
-    return jsonify({
-        "status": "OK",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "data": asdict(funding),
-    }), 200
+    try:
+        funding = ccxt_hub.compare_funding_rates(symbol)
+        return jsonify({
+            "status": "OK",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "data": asdict(funding),
+        }), 200
+    except Exception as e:
+        return _upstream_error_response(e)
