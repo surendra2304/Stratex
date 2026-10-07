@@ -59,9 +59,11 @@ probe (render.yaml; tests/test_render_deployment_hardening.py).
 
 ## 4. Runtime verification (this pass) — not just unit tests
 
-**[FACT]** Test suite: **1,143 passed / 6 skipped / 0 failed** across repeated full
-runs (~85 s), green from inside and outside the repo root. ruff clean; mypy clean
-on the changed core modules.
+**[FACT]** Test suite: **1,146 passed / 6 skipped / 0 failed** across repeated full
+runs (~84 s), green from inside and outside the repo root. ruff clean; mypy clean
+on the changed core modules. All 6 skips are intentional: 2 opt-in live-network
+peer tests and 4 artifact-absent validation guards that refuse to fabricate
+evidence.
 
 **[FACT]** Stress evidence (harnesses run from `/home/user/stress/`):
 - `run_complete_e2e_system_test.py` → **13/13 stages PASS** (security invariants,
@@ -138,6 +140,45 @@ claim verification without performing it:
    config attrs; execution-module import-time bindings leaked through the OR
    fallback in `_resolve_execution_flags`. Fixed by pinning both (documented
    in-test).
+
+## 4c. Phase-3 findings — full endpoint census (all 205 routes exercised live)
+
+**[FACT]** Every GET route (165) and every POST route (40) was exercised
+against a running dashboard instance with real keys:
+- GET census: 158 OK · 4 AUTH fail-closed · 3 benign 404s · **0 server errors**.
+- POST census: **0 unhandled 500s**; every protected route fails closed;
+  emergency routes require explicit confirmation; the FRIDAY task protocol
+  returns 403 FORBIDDEN for any order/execute action from external agents
+  (deterministic execution-authority invariant held).
+- Control-plane fuzz: garbage bytes / wrong content-type / 2 MB body /
+  300-level nested JSON → all degrade to a clean empty payload, never crash,
+  never echo into the audit trail.
+- Header security: duplicate same-name headers with different keys fail
+  CLOSED (invalid-key rejected); single valid key works in any casing.
+
+Two phase-3 defects found and fixed:
+1. **Single-threaded server + SSE = total lockout** — `app.run()` lacked
+   `threaded=True` while `/api/stream` (dashboard.py:6107) is an SSE endpoint
+   that holds its connection open forever. ONE open dashboard tab blocked
+   every other request, including the same page's API calls. Reproduced live
+   (census froze permanently after hitting /api/stream), fixed
+   (dashboard.py `app.run(..., threaded=True)`), re-verified: /health answers
+   in 2 ms while an SSE stream is open.
+2. **ccxt routes leaked internals via 500** — `/api/v1/ccxt/ticker` returned
+   500 with raw ccxt messages (internal URLs); `/arbitrage`, `/depth`,
+   `/funding` had no error handling at all. Fixed: upstream/network failures
+   → sanitized 503 UPSTREAM_UNAVAILABLE, bad input → 400, unexpected →
+   generic 500 without leakage (api/ccxt_routes.py + 3 regression tests).
+
+**[FACT]** All three stress harnesses re-run green on the final code:
+e2e 13/13 stages · soak 500 cycles/4000 signals with balanced invariants and
+flat RAM · 100,000-event simulation with 1,000 duplicates and 667 gaps
+handled, no crash.
+
+**[FACT]** Nautilus research endpoints are safe unauthenticated: the adapter
+raises PermissionError on any live-routing attempt because
+`LIVE_TRADING_ENABLED = False` is permanent
+(stratex_nautilus_adapter/client.py:55-59).
 
 ## 5. Defects found and fixed this pass (code, not just reports)
 
