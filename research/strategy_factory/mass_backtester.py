@@ -85,6 +85,11 @@ def load_market_data(symbols, timeframes, start_str="2025-01-01"):
                     if not metadata.get("source"):
                         raise RuntimeError(f"Research cache source is missing for {cache_file}")
                     df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
+                    # Canonical index resolution: pandas may parse CSV dates at a
+                    # different unit (us/ns) than the fetch path (ms). Normalize
+                    # so cache round-trips compare equal and hashes stay stable.
+                    if hasattr(df.index, "as_unit"):
+                        df.index = df.index.as_unit("us")
                     if metadata.get("rows") != len(df):
                         raise RuntimeError(f"Research cache row-count mismatch for {cache_file}")
                     print(
@@ -108,6 +113,10 @@ def load_market_data(symbols, timeframes, start_str="2025-01-01"):
                     for col in ['open', 'high', 'low', 'close', 'volume']:
                         df[col] = df[col].astype(float)
                     df.set_index('timestamp', inplace=True)
+                    # Match the cache-read path's canonical resolution (see note
+                    # there) so first-load and cached loads are byte-comparable.
+                    if hasattr(df.index, "as_unit"):
+                        df.index = df.index.as_unit("us")
                 except Exception as e:
                     raise RuntimeError(
                         f"Cannot run a research backtest for {sym} {tf}: real exchange candles "

@@ -17,6 +17,7 @@ import hmac
 import json
 import os
 import re
+import secrets
 import threading
 import time
 from collections.abc import Callable
@@ -30,8 +31,35 @@ from logger import get_logger
 logger = get_logger("security_hardening")
 
 CONTROL_AUDIT_LOG_FILE = os.getenv("CONTROL_AUDIT_LOG_FILE", "control_audit.jsonl")
-_SECRET_KEY = os.getenv("SECURITY_SECRET_KEY", "prod_fallback_secret_key_change_me_998124").encode("utf-8")
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "prod_webhook_hmac_secret_998124")
+
+# --- Secret material policy -------------------------------------------------
+# NEVER fall back to a hardcoded secret shipped in source: anyone who can read
+# the repository could then forge audit-chain signatures and webhook payloads.
+# If SECURITY_SECRET_KEY is unset we generate an ephemeral per-process secret
+# (signatures stay internally consistent for this process lifetime but do not
+# survive restarts) and scream about it in the logs. Production MUST set it.
+_env_audit_secret = os.getenv("SECURITY_SECRET_KEY", "").strip()
+if _env_audit_secret:
+    _SECRET_KEY = _env_audit_secret.encode("utf-8")
+else:
+    _SECRET_KEY = secrets.token_bytes(32)
+    logger.critical(
+        "[SECURITY] SECURITY_SECRET_KEY is NOT set. Generated an ephemeral "
+        "per-process audit secret: control-audit signatures cannot be verified "
+        "across restarts or processes. Set SECURITY_SECRET_KEY in the "
+        "deployment environment."
+    )
+
+# Inbound webhook verification FAILS CLOSED when no secret is configured:
+# an unset WEBHOOK_SECRET means no signature can ever validate.
+_env_webhook_secret = os.getenv("WEBHOOK_SECRET", "").strip()
+WEBHOOK_SECRET = _env_webhook_secret or None
+if WEBHOOK_SECRET is None:
+    logger.critical(
+        "[SECURITY] WEBHOOK_SECRET is NOT set. Inbound webhook signature "
+        "verification is DISABLED (all signatures will be rejected). Set "
+        "WEBHOOK_SECRET to accept signed webhooks."
+    )
 
 # Scopes
 SCOPE_READ = "read"
@@ -294,8 +322,13 @@ def verify_webhook_signature(payload_bytes: bytes, signature_header: str, secret
     """
     if not signature_header or not payload_bytes:
         return False
-    
-    sec = (secret or WEBHOOK_SECRET).encode("utf-8")
+
+    effective_secret = secret or WEBHOOK_SECRET
+    if not effective_secret:
+        # Fail closed: without a configured secret no webhook can be trusted.
+        return False
+
+    sec = effective_secret.encode("utf-8")
     clean_sig = signature_header.split("=")[-1].strip()
     expected = hmac.new(sec, payload_bytes, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, clean_sig)

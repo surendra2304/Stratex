@@ -44,11 +44,17 @@ class TestMarketDataIntegrity:
                     assert data.get("candles") == []
 
     def test_websocket_unavailable_uses_rest_fallback(self):
-        """When WebSocket stream misses, REST client fallback is utilized."""
+        """When WebSocket stream misses, REST client fallback is utilized.
+
+        Hermetic: availability is mocked so the test does not depend on host
+        credentials or exchange reachability (PAPER/no-credential environments
+        report is_available()=False by design — see MarketDataClient).
+        """
         mock_rest_data = [
             [1786896900000, "63200.0", "63250.0", "63150.0", "63210.0", "15.2", 1786896959999, "960000.0", 120, "8.0", "505680.0", "0"]
         ]
-        with patch("data_client.MarketDataClient.get_klines", return_value=mock_rest_data):
+        with patch("data_client.MarketDataClient.is_available", return_value=True), \
+             patch("data_client.MarketDataClient.get_klines", return_value=mock_rest_data):
             df = fetch_candles("BTCUSDT", "1m", limit=1)
             assert not df.empty
             assert float(df["close"].iloc[-1]) == 63210.0

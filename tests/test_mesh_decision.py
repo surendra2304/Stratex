@@ -54,10 +54,18 @@ def test_evaluate_advisory_records_real_policy_verdict(advisory_payload):
 
 
 def test_live_mode_is_forbidden_by_design(advisory_payload, monkeypatch):
+    import config
     import execution
     from execution import ExecutionPolicy
 
     monkeypatch.setattr(execution, "TRADING_MODE", "LIVE", raising=False)
+    # The pinned safety truth table (tests/test_safety_gates.py) resolves
+    # PAPER_SAFE_MODE before the LIVE branch: to observe the LIVE-specific
+    # rejection reason both the execution-module binding and the config value
+    # must be cleared. (The no-credentials config fallback sets PAPER_SAFE_MODE
+    # to True in the test environment.)
+    monkeypatch.setattr(execution, "PAPER_SAFE_MODE", False, raising=False)
+    monkeypatch.setattr(config, "PAPER_SAFE_MODE", False, raising=False)
     allowed, reason = ExecutionPolicy.can_place_order()
     assert allowed is False
     assert reason == "LIVE_FORBIDDEN_BY_DESIGN"

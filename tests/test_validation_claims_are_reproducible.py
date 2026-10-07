@@ -30,6 +30,21 @@ def research_registry():
 
 @pytest.fixture(scope="module")
 def optimization():
+    # The artifact this fixture loads is the ONLY admissible evidence for the
+    # adx_ema metrics recorded in the registry. If it is absent from the
+    # checkout, those metrics are UNVERIFIABLE — the tests that compare against
+    # them must then skip loudly rather than error (FileNotFoundError) or, far
+    # worse, be weakened into passing. Claim-level governance does NOT depend
+    # on this fixture: test_no_strategy_claims_validated_without_an_evidence_artifact
+    # fails independently if any entry re-claims VALIDATED/ACTIVE while the
+    # artifact is missing.
+    if not OPTIMIZATION_ARTIFACT.exists():
+        pytest.skip(
+            f"UNVERIFIABLE IN THIS CHECKOUT: evidence artifact {OPTIMIZATION_ARTIFACT} "
+            "is absent. The adx_ema OOS metrics in strategy_registry.json cannot be "
+            "re-verified until the real optimization run's artifact is committed. "
+            "Do NOT fabricate this file."
+        )
     return json.loads(OPTIMIZATION_ARTIFACT.read_text(encoding="utf-8"))
 
 

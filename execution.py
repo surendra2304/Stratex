@@ -252,6 +252,88 @@ def _save_active_trades(trades):
         json.dump(trades, f)
     os.replace(temp_file, ACTIVE_TRADES_FILE)
 
+# ==============================================================================
+# LEDGER DEDUP CACHE
+# The duplicate-signal scan must consult the whole trade ledger, but re-reading
+# an unbounded JSONL file on every order is O(history) per order. We therefore
+# keep an incremental index of every dedup ID seen so far and only parse the
+# bytes appended since the last scan. Identity is (dev, inode): rotation or
+# replacement of the file forces a clean full re-scan, and a shrink (size <
+# offset) is treated as truncation and re-scanned from the start. Semantics are
+# identical to a full scan: a record matches when signal_id, entry_client_id,
+# trade_id or str(entry_order_id) equals the candidate ID. Malformed lines are
+# skipped without aborting the check (strictly safer than the old all-or-nothing
+# try/except).
+# ==============================================================================
+_LEDGER_ID_CACHE = {"identity": None, "offset": 0, "ids": set()}
+_LEDGER_ID_FIELDS = ("signal_id", "entry_client_id", "trade_id")
+
+
+def _ledger_identity_and_size(ledger_file):
+    try:
+        st = os.stat(ledger_file)
+    except OSError:
+        return None, 0
+    return (st.st_dev, st.st_ino), st.st_size
+
+
+def _extract_record_ids(rec):
+    ids = set()
+    for field in _LEDGER_ID_FIELDS:
+        val = rec.get(field)
+        if val is not None and str(val) != "":
+            ids.add(str(val))
+    entry_order_id = rec.get("entry_order_id")
+    if entry_order_id is not None:
+        ids.add(str(entry_order_id))
+    return ids
+
+
+def ledger_contains_id(ledger_file, client_order_id):
+    """O(new-lines) duplicate check against the trade ledger.
+
+    Returns True when any ledger record already carries ``client_order_id``
+    as signal_id / entry_client_id / trade_id / entry_order_id.
+    """
+    identity, size = _ledger_identity_and_size(ledger_file)
+    if identity is None:
+        return False
+
+    cache = _LEDGER_ID_CACHE
+    if cache["identity"] != identity or size < cache["offset"]:
+        # New/rotated/truncated file: rebuild from the beginning.
+        cache["identity"] = identity
+        cache["offset"] = 0
+        cache["ids"] = set()
+
+    if size > cache["offset"]:
+        try:
+            with open(ledger_file, "r", encoding="utf-8") as lf:
+                lf.seek(cache["offset"])
+                for line in lf:
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+                    try:
+                        rec = json.loads(stripped)
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+                    if isinstance(rec, dict):
+                        cache["ids"].update(_extract_record_ids(rec))
+                cache["offset"] = lf.tell()
+        except OSError:
+            # Unreadable right now: fall through with whatever we have indexed.
+            pass
+
+    return str(client_order_id) in cache["ids"]
+
+
+def reset_ledger_id_cache():
+    """Test hook: drop the incremental ledger index."""
+    _LEDGER_ID_CACHE["identity"] = None
+    _LEDGER_ID_CACHE["offset"] = 0
+    _LEDGER_ID_CACHE["ids"] = set()
+
 def get_open_orders(symbol):
     """Returns the count of locally tracked active trades for a symbol."""
     # We DO NOT catch StateCorruptionError here. It must propagate.
@@ -294,18 +376,11 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                     sys_logger.warning(f"[{strategy_name}] 🚫 Duplicate Client/Signal ID {client_order_id} rejected.")
                     return None
             # Also check recent ledger records for deduplication
+            # (incremental index — O(new lines) instead of O(whole history)).
             ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
-            if os.path.exists(ledger_file):
-                try:
-                    with open(ledger_file, "r", encoding="utf-8") as lf:
-                        for line in lf:
-                            if not line.strip(): continue
-                            rec = json.loads(line)
-                            if rec.get("signal_id") == client_order_id or rec.get("entry_client_id") == client_order_id or rec.get("trade_id") == client_order_id or str(rec.get("entry_order_id")) == str(client_order_id):
-                                sys_logger.warning(f"[{strategy_name}] 🚫 Duplicate signal already executed in ledger: {client_order_id}")
-                                return None
-                except Exception:
-                    pass
+            if os.path.exists(ledger_file) and ledger_contains_id(ledger_file, client_order_id):
+                sys_logger.warning(f"[{strategy_name}] 🚫 Duplicate signal already executed in ledger: {client_order_id}")
+                return None
     except StateCorruptionError as e:
         sys_logger.critical(f"State corruption prevents new orders: {e}")
         raise

@@ -70,7 +70,16 @@ def get_logger(name="system"):
     if not logger.handlers:
         logger.setLevel(logging.INFO)
         
-        log_file = "test_bot.log" if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("TESTING") else "bot.log"
+        # Test modules import this at collection time, before PYTEST_CURRENT_TEST
+        # exists; also treat "pytest is loaded" as test mode so suite runs never
+        # write a production bot.log into the repository root.
+        import sys as _sys
+        _under_test = (
+            os.environ.get("PYTEST_CURRENT_TEST")
+            or os.environ.get("TESTING")
+            or "pytest" in _sys.modules
+        )
+        log_file = "test_bot.log" if _under_test else "bot.log"
         handler = SafeRotatingFileHandler(
             log_file, 
             maxBytes=10 * 1024 * 1024, # 10 MB

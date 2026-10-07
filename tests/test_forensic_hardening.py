@@ -19,9 +19,14 @@ class TestForensicHardening:
                 importlib.reload(config)
         importlib.reload(config)
 
-        # 2. Even if execution is monkeypatched with TRADING_MODE='LIVE', it is rejected
+        # 2. Even if execution is monkeypatched with TRADING_MODE='LIVE', it is rejected.
+        #    The pinned truth table (tests/test_safety_gates.py) resolves PAPER_SAFE_MODE
+        #    before the LIVE branch, so both the execution-module binding and the config
+        #    value must be cleared to observe the LIVE-specific rejection reason.
         with mock.patch("execution.TRADING_MODE", "LIVE"), \
-             mock.patch("execution.LIVE_TRADING_ENABLED", True):
+             mock.patch("execution.LIVE_TRADING_ENABLED", True), \
+             mock.patch("execution.PAPER_SAFE_MODE", False), \
+             mock.patch("config.PAPER_SAFE_MODE", False):
             allowed, reason = execution.ExecutionPolicy.can_place_order()
             assert allowed is False
             assert "LIVE" in reason or "FORBIDDEN" in reason

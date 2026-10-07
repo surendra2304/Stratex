@@ -48,6 +48,7 @@ forward_health.json
 health.json
 *heartbeat.json
 panic_state.json
+trading_pause_state.json
 slippage_log.json
 paper_portfolio.json
 render_scanner.json
@@ -79,7 +80,11 @@ reports/
 compliance_reports/
 # diary/
 !diary/*.md
-optimization_results/
+# optimization_results/ holds the governance EVIDENCE ARTIFACTS that
+# strategy_registry.json cites as the reproducible source of its OOS metrics
+# (see tests/test_validation_claims_are_reproducible.py). They must be tracked,
+# not ignored: a validation claim whose artifact can never exist in a clone is
+# unverifiable by design. Do not re-ignore this directory.
 backtest_results/
 trade_log.csv
 cache_*.csv

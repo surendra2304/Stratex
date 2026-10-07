@@ -14,6 +14,7 @@ never places exchange orders. Disable with SUPERVISE_PAPER_RUNNER=0.
 import datetime
 import json
 import os
+import sys
 import threading
 import time
 import traceback
@@ -99,7 +100,11 @@ def start_supervised_runner(force=False):
         logger.info("[PAPER_SUPERVISOR] Disabled via SUPERVISE_PAPER_RUNNER=0")
         _write_heartbeat("DISABLED")
         return False
-    if os.environ.get("PYTEST_CURRENT_TEST") and not force:
+    # Never start under pytest. PYTEST_CURRENT_TEST alone is NOT sufficient:
+    # test modules import dashboard at collection time, before any test (and
+    # therefore before that variable exists) — match the shadow scheduler's
+    # stronger "pytest is loaded" guard.
+    if (os.environ.get("PYTEST_CURRENT_TEST") or "pytest" in sys.modules) and not force:
         return False
     with _lock:
         t = _state["thread"]

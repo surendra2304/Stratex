@@ -6163,21 +6163,31 @@ def serve_static(path):
     return send_from_directory('static', path)
 
 
-# Upgrade 3: supervise the paper forward runner inside the dashboard process
-# (guarded — never in pytest; disable with SUPERVISE_PAPER_RUNNER=0).
-try:
-    from paper_runner_supervisor import start_supervised_runner
-    start_supervised_runner()
-except Exception as _paper_err:
-    print(f"[DASHBOARD] paper runner supervisor unavailable: {_paper_err}")
+# Upgrade 3: supervise the paper forward runner inside the dashboard process.
+# Production daemons must ONLY start when the dashboard is executed as a program
+# (`python dashboard.py` — the Docker/compose/Render entrypoint) or when
+# explicitly forced with STRATEX_AUTOSTART_SERVICES=1. Importing this module
+# (tests, tooling, WSGI inspection) must never spawn background writers: they
+# raced with the test suite and contaminated state files in arbitrary CWDs.
+# Disable individually with SUPERVISE_PAPER_RUNNER=0 / STRATEX_SHADOW_PAPER_ENABLED=0.
+_AUTOSTART_SERVICES = (
+    __name__ == "__main__"
+    or os.getenv("STRATEX_AUTOSTART_SERVICES", "0").strip().lower() in {"1", "true", "yes", "on"}
+)
+if _AUTOSTART_SERVICES:
+    try:
+        from paper_runner_supervisor import start_supervised_runner
+        start_supervised_runner()
+    except Exception as _paper_err:
+        print(f"[DASHBOARD] paper runner supervisor unavailable: {_paper_err}")
 
-# Shadow research has its own scheduler and durable Memora namespace. It never
-# modifies the frozen forward experiment or enables the exchange engine.
-try:
-    from paper_shadow_scheduler import start_shadow_paper_scheduler
-    start_shadow_paper_scheduler()
-except Exception as _shadow_paper_err:
-    print(f"[DASHBOARD] paper shadow scheduler unavailable: {_shadow_paper_err}")
+    # Shadow research has its own scheduler and durable Memora namespace. It
+    # never modifies the frozen forward experiment or enables the exchange engine.
+    try:
+        from paper_shadow_scheduler import start_shadow_paper_scheduler
+        start_shadow_paper_scheduler()
+    except Exception as _shadow_paper_err:
+        print(f"[DASHBOARD] paper shadow scheduler unavailable: {_shadow_paper_err}")
 
 if __name__ == '__main__':
     print("🚀 Starting Unified Live Trading Dashboard...")

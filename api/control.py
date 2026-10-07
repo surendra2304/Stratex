@@ -22,11 +22,15 @@ from api.auth import require_permission
 from api.data_shapes import format_api_response, format_iso_timestamp
 from logger import get_logger
 from security_hardening import sign_audit_record
+from trading_pause import is_trading_paused, set_trading_paused
 
 logger = get_logger("control_api")
 control_bp = Blueprint("control_api", __name__, url_prefix="/api/v1/control")
 
 CONTROL_AUDIT_FILE = "control_audit.jsonl"
+# NOTE: the engine runs in a separate process, so the authoritative pause state
+# lives in the durable file flag managed by trading_pause.py. This in-process
+# mirror is kept only for backwards-compatible responses.
 _GLOBAL_TRADING_PAUSED = False
 _STRATEGY_STATES = {
     "strategy_scalper": True,
@@ -61,23 +65,33 @@ def log_control_action(action: str, target: str, payload: dict, caller_ip: str, 
 @control_bp.route("/pause", methods=["POST"])
 @require_permission("control")
 def pause_trading():
-    """Pauses opening new trades."""
+    """Pauses opening new trades (durable, cross-process flag)."""
     global _GLOBAL_TRADING_PAUSED
     _GLOBAL_TRADING_PAUSED = True
     caller_ip = request.remote_addr or "127.0.0.1"
+    try:
+        set_trading_paused(True, actor=f"api:/api/v1/control/pause:{getattr(request, 'api_key_role', 'UNKNOWN')}@{caller_ip}")
+    except Exception as e:
+        logger.error(f"[CONTROL] Failed to persist trading pause: {e}")
+        return jsonify({"status": "ERROR", "error": "PAUSE_PERSISTENCE_FAILED", "message": str(e)}), 500
     audit = log_control_action("PAUSE_TRADING", "engine", {}, caller_ip, getattr(request, "api_key_role", "UNKNOWN"))
-    return jsonify(format_api_response({"message": "New entries paused. Open positions maintained.", "audit": audit}))
+    return jsonify(format_api_response({"message": "New entries paused (durable flag written). Open positions maintained.", "audit": audit}))
 
 
 @control_bp.route("/resume", methods=["POST"])
 @require_permission("control")
 def resume_trading():
-    """Resumes trade execution."""
+    """Resumes trade execution (clears the durable pause flag)."""
     global _GLOBAL_TRADING_PAUSED
     _GLOBAL_TRADING_PAUSED = False
     caller_ip = request.remote_addr or "127.0.0.1"
+    try:
+        set_trading_paused(False, actor=f"api:/api/v1/control/resume:{getattr(request, 'api_key_role', 'UNKNOWN')}@{caller_ip}")
+    except Exception as e:
+        logger.error(f"[CONTROL] Failed to persist trading resume: {e}")
+        return jsonify({"status": "ERROR", "error": "RESUME_PERSISTENCE_FAILED", "message": str(e)}), 500
     audit = log_control_action("RESUME_TRADING", "engine", {}, caller_ip, getattr(request, "api_key_role", "UNKNOWN"))
-    return jsonify(format_api_response({"message": "Trading execution resumed.", "audit": audit}))
+    return jsonify(format_api_response({"message": "Trading resumed (pause flag cleared).", "audit": audit}))
 
 
 @control_bp.route("/panic", methods=["POST"])
@@ -137,6 +151,6 @@ def get_control_risk_limits():
         "max_daily_loss_pct": 5.0,
         "max_position_size_pct": 10.0,
         "max_leverage": 1.0,
-        "trading_paused": _GLOBAL_TRADING_PAUSED
+        "trading_paused": _GLOBAL_TRADING_PAUSED or is_trading_paused()
     }
     return jsonify(format_api_response(limits))

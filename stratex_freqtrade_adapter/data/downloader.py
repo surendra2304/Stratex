@@ -17,6 +17,32 @@ import requests
 logger = logging.getLogger("stratex.freqtrade.downloader")
 
 
+def to_pandas_freq(timeframe: str) -> str:
+    """Convert an exchange timeframe (e.g. ``5m``, ``1h``, ``1d``) to a pandas
+    offset alias that is valid across pandas 2.x and 3.x.
+
+    pandas 3.0 removed the upper/lower-ambiguous minute alias ``m`` (and ``M``
+    now means month-end only), so ``"5m"`` must become ``"5min"``. Hours
+    (``h``) and days (``D``) remain valid aliases.
+    """
+    tf = str(timeframe).strip()
+    if not tf:
+        raise ValueError("empty timeframe")
+    unit = tf[-1].lower()
+    mult = tf[:-1] or "1"
+    if not mult.isdigit():
+        raise ValueError(f"invalid timeframe: {timeframe!r}")
+    if unit == "m":
+        return f"{mult}min"
+    if unit == "h":
+        return f"{mult}h"
+    if unit == "d":
+        return f"{mult}D"
+    if unit == "w":
+        return f"{mult}W"
+    raise ValueError(f"unsupported timeframe: {timeframe!r}")
+
+
 class FreqtradeDataDownloader:
     """Downloads and caches OHLCV candles from free Binance public endpoints."""
 
@@ -89,7 +115,7 @@ class FreqtradeDataDownloader:
         # Fallback synthetic OHLCV if offline / unauthenticated rate limit
         logger.warning(f"Using synthetic fallback candles for {symbol} ({timeframe})")
         now = pd.Timestamp.now(tz="UTC")
-        dates = pd.date_range(end=now, periods=limit, freq=timeframe)
+        dates = pd.date_range(end=now, periods=limit, freq=to_pandas_freq(timeframe))
         np.random.seed(42)
         base_price = 60000.0 if "BTC" in symbol else 3000.0
         returns = np.random.normal(0.0001, 0.005, limit)

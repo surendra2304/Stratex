@@ -20,6 +20,7 @@ from logger import get_logger
 from paper_engine.exceptions import ZeroFillError
 from research_phase9.cost_engine import CostEngine
 from testnet_engine.discovery import SymbolDiscoveryService
+from trading_pause import is_trading_paused
 from testnet_engine.market_scanner import MarketScanner
 from testnet_engine.profitability_gate import ProfitabilityGate
 from testnet_engine.risk_gate import RiskGate
@@ -1204,6 +1205,29 @@ class TestnetService:
         except Exception as outer_err:
             logger.error(f"[ON_CANDLE_CLOSED_ERROR] Uncaught error in on_candle_closed for {symbol} ({tf}): {outer_err}", exc_info=True)
 
+    def _reject_paused_candidates(self, candidates):
+        """Reject a batch of candidates when the durable trading-pause flag is
+        active (trading_pause.is_trading_paused). Returns True when paused and
+        every candidate was rejected; False when trading may proceed.
+
+        This is the engine-side enforcement of POST /api/v1/control/pause: the
+        control API writes a durable file flag because the dashboard and the
+        engine run in separate processes.
+        """
+        if not is_trading_paused():
+            return False
+        for c in candidates:
+            self.stats["TRADING_PAUSED_SKIPPED"] = self.stats.get("TRADING_PAUSED_SKIPPED", 0) + 1
+            self.log_opportunity(
+                c.get("signal_id"), c.get("symbol"), c.get("side"),
+                {"reason": "TRADING_PAUSED"}, "REJECTED", "TRADING_PAUSED",
+            )
+        logger.warning(
+            f"[TRADING_PAUSE] Durable pause flag active — blocked {len(candidates)} new entr"
+            f"{'y' if len(candidates) == 1 else 'ies'} (open positions keep SL/TP protection)"
+        )
+        return True
+
     def execution_loop(self):
         """Stage 6: Multi-Asset Opportunity Ranking and Execution"""
         while True:
@@ -1222,7 +1246,13 @@ class TestnetService:
                     
             if not candidates:
                 continue
-                
+
+            # Durable cross-process pause (POST /api/v1/control/pause).
+            # Blocks NEW entries before ranking; open positions keep SL/TP
+            # protection and the panic switch stays independent.
+            if self._reject_paused_candidates(candidates):
+                continue
+
             try:
                 # Opportunity Ranking:
                 # Deterministic Score Formula: score = round((expected_net_return * confidence) / max(0.001, risk_pct), 6)
@@ -1483,6 +1513,14 @@ class TestnetService:
                             self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
                             self.log_opportunity(signal_id, symbol, side, {"reason": "MANUAL_PANIC_SWITCH"}, "REJECTED", "MANUAL_PANIC_SWITCH")
                             logger.warning("[PANIC] Manual kill-switch active — order submission blocked (OCO protection unaffected)")
+                            continue
+
+                        # Belt-and-braces: re-check the durable pause flag at the
+                        # submission boundary (it can flip mid-batch).
+                        if is_trading_paused():
+                            self.stats["TRADING_PAUSED_SKIPPED"] = self.stats.get("TRADING_PAUSED_SKIPPED", 0) + 1
+                            self.log_opportunity(signal_id, symbol, side, {"reason": "TRADING_PAUSED"}, "REJECTED", "TRADING_PAUSED")
+                            logger.warning("[TRADING_PAUSE] Durable pause flag active — new entry blocked (open positions still protected)")
                             continue
 
                         # Pre-Trade Margin Check in Service Loop
