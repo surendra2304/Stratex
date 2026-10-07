@@ -101,6 +101,7 @@ def _real_daily_metrics() -> dict:
     trades_count = 0
     daily_pnl = 0.0
     pnl_path: list[float] = []
+    strategy_pnl: dict[str, float] = {}
     source = "NO_DATA"
     ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
 
@@ -119,13 +120,24 @@ def _real_daily_metrics() -> dict:
                     if not str(rec.get("timestamp", "")).startswith(today):
                         continue
                     trades_count += 1
+                    trade_pnl = 0.0
                     try:
-                        daily_pnl += float(rec.get("net_pnl", rec.get("pnl", 0.0)) or 0.0)
+                        trade_pnl = float(rec.get("net_pnl", rec.get("pnl", 0.0)) or 0.0)
                     except (TypeError, ValueError):
-                        pass
+                        trade_pnl = 0.0
+                    daily_pnl += trade_pnl
+                    strategy = str(rec.get("strategy") or "").strip().lower()
+                    if strategy:
+                        strategy_pnl[strategy] = strategy_pnl.get(strategy, 0.0) + trade_pnl
                     pnl_path.append(daily_pnl)
         except Exception:
             source = "LEDGER_ERROR"
+
+    # Today's strongest strategy comes from the ledger itself; when no trade
+    # carries a strategy tag, no winner can be determined.
+    best_strategy = None
+    if strategy_pnl:
+        best_strategy = max(strategy_pnl.items(), key=lambda kv: kv[1])[0]
 
     drawdown_pct = 0.0
     drawdown_source = "UNVERIFIED_NO_EQUITY_BASE"
@@ -153,6 +165,7 @@ def _real_daily_metrics() -> dict:
         "decisions_count": len(_director.decision_log),
         "metrics_source": source,
         "drawdown_source": drawdown_source,
+        "best_strategy": best_strategy,
     }
 
 
@@ -167,6 +180,7 @@ def get_operational_report():
         daily_pnl=metrics["daily_pnl"],
         max_drawdown_reached=metrics["max_drawdown_reached"],
         decisions_count=metrics["decisions_count"],
+        best_strategy=metrics["best_strategy"],
     )
     dossier["metrics_source"] = metrics["metrics_source"]
     dossier["drawdown_source"] = metrics["drawdown_source"]

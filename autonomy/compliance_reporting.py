@@ -34,7 +34,8 @@ class ComplianceReporter:
         daily_pnl: float,
         max_drawdown_reached: float,
         decisions_count: int,
-        live_order_evidence: bool = False
+        live_order_evidence: bool = False,
+        best_strategy: str | None = None
     ) -> dict[str, Any]:
         """Produces signed daily compliance certificate in JSON, Markdown, and HTML.
 
@@ -50,7 +51,7 @@ class ComplianceReporter:
         now_str = datetime.datetime.utcnow().isoformat() + "Z"
         voice_summary = generate_daily_voice_summary(
             net_pnl_pct=round(daily_pnl / 50.0, 2),
-            best_strategy="strategy_supertrend",
+            best_strategy=best_strategy,
             trades_count=trades_count,
             risk_headroom_pct=max(0.0, 15.0 - max_drawdown_reached)
         )
@@ -66,7 +67,8 @@ class ComplianceReporter:
                 "total_trades": trades_count,
                 "net_pnl_dollars": round(daily_pnl, 2),
                 "peak_drawdown_pct": round(max_drawdown_reached, 2),
-                "autonomous_decisions_executed": decisions_count
+                "autonomous_decisions_executed": decisions_count,
+                "best_strategy": best_strategy or "NONE_DETERMINED"
             },
             "regulatory_invariants": {
                 "zero_live_order_policy_honored": live_policy_ok,

@@ -194,9 +194,9 @@ def test_ecosystem_report_uses_real_ledger_metrics_not_fabricated(tmp_path, monk
     ledger = tmp_path / "ledger.jsonl"
     now_iso = _dt.datetime.utcnow().isoformat() + "Z"
     records = [
-        {"timestamp": now_iso, "net_pnl": 1.25},
-        {"timestamp": now_iso, "net_pnl": -3.75},
-        {"timestamp": "2020-01-01T00:00:00Z", "net_pnl": 999.0},
+        {"timestamp": now_iso, "net_pnl": 1.25, "strategy": "alpha"},
+        {"timestamp": now_iso, "net_pnl": -3.75, "strategy": "beta"},
+        {"timestamp": "2020-01-01T00:00:00Z", "net_pnl": 999.0, "strategy": "beta"},
     ]
     ledger.write_text("\n".join(_json.dumps(r) for r in records) + "\n")
     portfolio = tmp_path / "portfolio.json"
@@ -215,6 +215,7 @@ def test_ecosystem_report_uses_real_ledger_metrics_not_fabricated(tmp_path, monk
     assert data["metrics"]["peak_drawdown_pct"] == 3.75
     assert data["metrics_source"] == "LEDGER"
     assert data["drawdown_source"] == "LEDGER_PATH_VS_INITIAL_DEPOSIT"
+    assert data["metrics"]["best_strategy"] == "alpha"
 
 
 def test_ecosystem_report_without_ledger_is_honest(monkeypatch, tmp_path):
@@ -233,3 +234,5 @@ def test_ecosystem_report_without_ledger_is_honest(monkeypatch, tmp_path):
     assert data["metrics"]["net_pnl_dollars"] == 0.0
     assert data["metrics_source"] == "NO_DATA"
     assert data["drawdown_source"] == "UNVERIFIED_NO_EQUITY_BASE"
+    assert data["metrics"]["best_strategy"] == "NONE_DETERMINED"
+    assert "No single strategy could be confirmed" in data["voice_summary"]

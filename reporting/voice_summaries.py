@@ -10,17 +10,26 @@ Generates conversational, spoken-language text for audio synthesis:
 
 def generate_daily_voice_summary(
     net_pnl_pct: float,
-    best_strategy: str,
+    best_strategy: str | None,
     trades_count: int,
     risk_headroom_pct: float
 ) -> str:
-    """Produces a conversational spoken summary of daily trading performance."""
+    """Produces a conversational spoken summary of daily trading performance.
+
+    best_strategy may be None when no strategy can be determined from real
+    data — the summary then says so instead of naming a fabricated winner.
+    """
     pnl_text = f"gained {abs(net_pnl_pct):.1f} percent" if net_pnl_pct >= 0 else f"lost {abs(net_pnl_pct):.1f} percent"
-    clean_strat = best_strategy.replace("strategy_", "").title()
+
+    if best_strategy:
+        clean_strat = best_strategy.replace("strategy_", "").title()
+        strat_line = f"{clean_strat} was your strongest performing strategy. "
+    else:
+        strat_line = "No single strategy could be confirmed as today's strongest. "
 
     summary = (
         f"Today you {pnl_text} across {trades_count} trades. "
-        f"{clean_strat} was your strongest performing strategy. "
+        f"{strat_line}"
         f"Your risk budget for tomorrow is {risk_headroom_pct:.0f} percent available."
     )
     return summary
