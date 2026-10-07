@@ -181,3 +181,55 @@ def test_quarterly_package_status_is_honest():
         pkg = reporter.generate_quarterly_audit_package()
         assert pkg["status"] == "GENERATED_SIGNED"
         assert "signature" in pkg
+
+
+def test_ecosystem_report_uses_real_ledger_metrics_not_fabricated(tmp_path, monkeypatch):
+    """Regression (2026-10-07): /api/ecosystem/report must reflect the actual
+    ledger — it previously returned hardcoded trades_count=24, pnl=68.50."""
+    import datetime as _dt
+    import json as _json
+
+    from dashboard import app as flask_app
+
+    ledger = tmp_path / "ledger.jsonl"
+    now_iso = _dt.datetime.utcnow().isoformat() + "Z"
+    records = [
+        {"timestamp": now_iso, "net_pnl": 1.25},
+        {"timestamp": now_iso, "net_pnl": -3.75},
+        {"timestamp": "2020-01-01T00:00:00Z", "net_pnl": 999.0},
+    ]
+    ledger.write_text("\n".join(_json.dumps(r) for r in records) + "\n")
+    portfolio = tmp_path / "portfolio.json"
+    portfolio.write_text(_json.dumps({"initial_deposit": 100.0}))
+    monkeypatch.setenv("TESTNET_LEDGER_FILE", str(ledger))
+    monkeypatch.setenv("TESTNET_PORTFOLIO_FILE", str(portfolio))
+
+    flask_app.config["TESTING"] = True
+    with flask_app.test_client() as c:
+        res = c.get("/api/ecosystem/report")
+    assert res.status_code == 200
+    payload = res.get_json()
+    data = payload.get("data", payload)
+    assert data["metrics"]["total_trades"] == 2
+    assert data["metrics"]["net_pnl_dollars"] == -2.5
+    assert data["metrics"]["peak_drawdown_pct"] == 3.75
+    assert data["metrics_source"] == "LEDGER"
+    assert data["drawdown_source"] == "LEDGER_PATH_VS_INITIAL_DEPOSIT"
+
+
+def test_ecosystem_report_without_ledger_is_honest(monkeypatch, tmp_path):
+    import json as _json
+
+    from dashboard import app as flask_app
+
+    monkeypatch.setenv("TESTNET_LEDGER_FILE", str(tmp_path / "missing.jsonl"))
+    flask_app.config["TESTING"] = True
+    with flask_app.test_client() as c:
+        res = c.get("/api/ecosystem/report")
+    assert res.status_code == 200
+    payload = res.get_json()
+    data = payload.get("data", payload)
+    assert data["metrics"]["total_trades"] == 0
+    assert data["metrics"]["net_pnl_dollars"] == 0.0
+    assert data["metrics_source"] == "NO_DATA"
+    assert data["drawdown_source"] == "UNVERIFIED_NO_EQUITY_BASE"
