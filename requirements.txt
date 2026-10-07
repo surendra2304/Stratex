@@ -1,10 +1,11 @@
 python-binance==1.0.37
+# NOTE: the suite is verified green on pandas 3.x (2026-10-07 hardening pass);
+# requirements.lock pins the exact verified set for reproducible installs.
 pandas>=2.2.0
 numpy>=1.26.0
 scikit-learn>=1.5
 scipy>=1.11.0
 xgboost>=2.0.0
-ta>=0.11.0
 requests>=2.31.0
 flask>=3.0.0
 flask-cors
@@ -18,3 +19,6 @@ ccxt>=4.0.0
 # Real CPU/memory/disk measurement for the health endpoints. Without this the
 # monitoring fallbacks can only report "UNAVAILABLE", never invented numbers.
 psutil>=5.9.0
+# Production WSGI server for the dashboard (docs claim it; it was never declared).
+# Dev/run-as-script mode still uses Flask's built-in server via `python dashboard.py`.
+gunicorn>=21.2.0
