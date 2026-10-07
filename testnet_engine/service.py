@@ -199,7 +199,30 @@ class TestnetService:
             self.last_equity_snapshot = 0.0
             logger.info(f"[SERVICE] Actual Binance Balance: {actual_binance_balance} | Local Initial Deposit: {self.initial_deposit}")
         except Exception as e:
-            raise RuntimeError(f"CRITICAL ERROR: Failed to fetch Testnet account balance. Valid Testnet credentials are REQUIRED. Reason: {e}")
+            # Classify the failure so operators don't chase credential problems
+            # that are actually network problems (and vice versa). Fail-fast is
+            # intentional: the engine must never run without a verifiable
+            # account state.
+            try:
+                from requests.exceptions import RequestException as _RequestException
+            except Exception:  # requests is a declared dependency; guard anyway
+                _RequestException = ()
+            _is_auth_err = (
+                isinstance(e, BinanceAPIException)
+                and (getattr(e, "status_code", None) in (401, 403) or "2015" in str(e))
+            )
+            if _is_auth_err:
+                raise RuntimeError(
+                    "CRITICAL ERROR: Testnet AUTHENTICATION failed — verify API_KEY/SECRET_KEY "
+                    f"are the TESTNET keys issued by testnet.binance.vision. Reason: {e}"
+                )
+            if isinstance(e, (_RequestException, ConnectionError, TimeoutError, OSError)) and not _is_auth_err:
+                raise RuntimeError(
+                    "CRITICAL ERROR: Testnet exchange is UNREACHABLE (network/DNS/TLS) — the "
+                    "account could not be verified, so the engine refuses to start. This is a "
+                    f"connectivity problem, not (necessarily) a credential problem. Reason: {e}"
+                )
+            raise RuntimeError(f"CRITICAL ERROR: Failed to fetch Testnet account balance. Reason: {e}")
 
         # Initialize core components
         if TRADING_MODE == "FUTURES":
