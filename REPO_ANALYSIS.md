@@ -59,9 +59,9 @@ probe (render.yaml; tests/test_render_deployment_hardening.py).
 
 ## 4. Runtime verification (this pass) — not just unit tests
 
-**[FACT]** Test suite: **1,129 passed / 6 skipped / 0 failed**, three consecutive full
-runs (~84 s), green from inside and outside the repo root. ruff clean; mypy clean on
-dashboard.py, config.py, execution.py, trading_pause.py, testnet_engine/service.py.
+**[FACT]** Test suite: **1,143 passed / 6 skipped / 0 failed** across repeated full
+runs (~85 s), green from inside and outside the repo root. ruff clean; mypy clean
+on the changed core modules.
 
 **[FACT]** Stress evidence (harnesses run from `/home/user/stress/`):
 - `run_complete_e2e_system_test.py` → **13/13 stages PASS** (security invariants,
@@ -84,6 +84,60 @@ pause/resume, bad-key 401, no-key 503, rate-limit 429, security status.
 classified error (auth vs network vs other) instead of a misleading credential
 message (testnet_engine/service.py:201-223). [INFERENCE] In a deployment with
 real testnet reachability, the same boot path proceeds to reconcile + discovery.
+
+**[FACT]** Phase-2 runtime drills (all run live in this workspace):
+- Control-plane concurrency race: 20 parallel pause/resume calls → state file
+  stays valid JSON with actor attribution; HMAC audit chain still verifies;
+  rate limiter caps at 10/min (429s after budget).
+- Corruption drill: garbage writes into active-trades / pause / panic / audit
+  files → all endpoints return 200 with graceful degradation; pause treats
+  corruption as NOT-paused with loud logging (trading_pause.py:50-70).
+- HTTP load: 330 requests across 11 endpoints, 20 concurrent → zero 5xx.
+- Production supervisor drill (scripts/supervise_services.py): bot.py
+  crash-looped 18× against unreachable exchange → every crash auto-recovered
+  with backoff while the dashboard stayed up; SIGTERM → graceful cascade
+  shutdown of all children.
+- gunicorn (newly declared dependency) serves the app: /health 200, / 200.
+- Production render.yaml env boot (FUTURES mode, no creds) → safe fallback
+  to PAPER with fail-closed control endpoints.
+
+## 4b. Phase-2 defects found and fixed (integrity of reported truth)
+
+Stress testing exposed a *reporting-integrity* defect class — endpoints that
+claim verification without performing it:
+
+1. **Audit integrity hardcoded** — `/api/v1/security/status` returned
+   `"integrity": "HMAC_CHAIN_VERIFIED"` without ever running the verifier
+   (security_hardening.py:514 pre-fix). A corrupted audit ledger was silently
+   reported VERIFIED. Fixed: `audit_trail_integrity()` reads the ledger and
+   re-verifies on every call; verdicts now VERIFIED / BROKEN / DEGRADED:N
+   corrupt lines / NO_AUDIT_RECORDS. Unsigned records are tampering evidence,
+   not skips (security_hardening.py:302+).
+2. **Fabricated compliance verdicts** — the daily compliance dossier hardcoded
+   `zero_live_order_policy_honored: True`, markdown always printed
+   “Live Order Invariant: PASS / Drawdown Corridor: PASS”, and the voice
+   summary named a hardcoded “strategy_supertrend” winner
+   (autonomy/compliance_reporting.py pre-fix). Fixed: all three are computed
+   (drawdown from measured data, live-order flag from caller evidence,
+   signature self-verified by recomputation; markdown prints PASS/FAIL
+   accordingly; best strategy derived from the ledger, voice summary admits
+   when no winner is known).
+3. **Fabricated operational metrics** — `/api/ecosystem/report` returned
+   hardcoded `trades_count=24, daily_pnl=68.50, max_drawdown=1.8`
+   (api/master_control_api.py:92 pre-fix). Fixed: metrics computed from the
+   real ledger with honest provenance fields (`metrics_source`: LEDGER /
+   NO_DATA / LEDGER_ERROR; `drawdown_source`). A shadowing duplicate route in
+   dashboard.py that read a hardcoded 2026-08-28 report file was removed.
+4. **Stale advisory overlays lived forever** — AI-suggested parameter
+   overrides never expired. Fixed: `AdvisoryParameterOverlay` now enforces a
+   staleness TTL (default 72 h, `STRATEX_ADVISORY_MAX_AGE_HOURS`); expired or
+   provenance-less overlays fall back to strategy defaults and report
+   `overlay_status: STALE_IGNORED` (advisory_params.py; 8 dedicated tests;
+   verified live via /api/advisory/state with a 200 h-old overlay).
+5. **Order-dependent test** — tests/test_prompt8_stratex.py patched only
+   config attrs; execution-module import-time bindings leaked through the OR
+   fallback in `_resolve_execution_flags`. Fixed by pinning both (documented
+   in-test).
 
 ## 5. Defects found and fixed this pass (code, not just reports)
 
@@ -113,14 +167,16 @@ real testnet reachability, the same boot path proceeds to reconcile + discovery.
 
 ## 6. Remaining open items
 
-- **[INFERENCE]** External intelligence sources (Futuris, IntelX, AI-Universe) are
-  network-dependent; offline they degrade to last-known parameters with advisory
-  warnings — correct behavior, but long-term staleness has no TTL eviction policy.
+- **[FIXED]** Stale advisory overlays: now TTL-enforced (see §4b item 4).
 - **[HYPOTHESIS]** Full walk-forward regime pipeline at scale beyond the 13-stage
   e2e is not exercised in CI; recommend a scheduled long-horizon job on Render.
 - **[FACT]** `engine_trading_capable=false` until a strategy passes governance as
   VALIDATED — this is the designed gate, not a defect; current best candidate
   adx_ema sits at OBSERVE_ONLY (PF 0.8236) and is correctly non-executable.
+- **[INFERENCE]** Under extreme HTTP bursts the Flask dev server queues requests
+  (a minority of 30-parallel requests time out client-side); production
+  deployments should run gunicorn (now declared in requirements.txt) rather
+  than the dev server.
 
 ## 7. How to run
 

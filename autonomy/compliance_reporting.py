@@ -80,10 +80,13 @@ class ComplianceReporter:
         dossier["signature"] = sig
 
         # Actually verify the signature we just produced instead of asserting it.
-        unsigned = {k: v for k, v in dossier.items() if k != "signature"}
-        unsigned["regulatory_invariants"]["cryptographic_signatures_verified"] = False
+        unsigned: dict[str, Any] = {k: v for k, v in dossier.items() if k != "signature"}
+        unsigned_invariants = dict(unsigned["regulatory_invariants"])
+        unsigned_invariants["cryptographic_signatures_verified"] = False
+        unsigned["regulatory_invariants"] = unsigned_invariants
         sig_ok = sign_audit_record(unsigned) == sig
-        dossier["regulatory_invariants"]["cryptographic_signatures_verified"] = sig_ok
+        dossier_invariants: dict[str, Any] = dossier["regulatory_invariants"]
+        dossier_invariants["cryptographic_signatures_verified"] = sig_ok
 
         def _verdict(ok: bool) -> str:
             return "PASS" if ok else "FAIL"
