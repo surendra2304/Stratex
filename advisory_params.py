@@ -40,7 +40,49 @@ class AdvisoryParameterOverlay:
         self._history: list[dict[str, Any]] = []         # History of applied batches
         self._pending_recommendations: dict[str, dict[str, Any]] = {} # Staged bounded recommendations
         self._last_applied_time: datetime.datetime | None = None
+        self._max_age_hours = self._resolve_max_age_hours()
+        self._stale_logged = False
         self._load_state()
+
+    @staticmethod
+    def _resolve_max_age_hours() -> float:
+        """Maximum age of AI-suggested parameter overrides before they stop
+        steering trades. AI-Universe advisories must be re-validated within
+        this window or the overlay silently degrades to strategy defaults.
+        Set STRATEX_ADVISORY_MAX_AGE_HOURS<=0 to disable enforcement."""
+        raw = os.getenv("STRATEX_ADVISORY_MAX_AGE_HOURS", "72").strip()
+        try:
+            return float(raw)
+        except ValueError:
+            logger.warning(f"[ADVISORY_PARAMS] Invalid STRATEX_ADVISORY_MAX_AGE_HOURS={raw!r}; using 72h")
+            return 72.0
+
+    def _overlay_expired(self) -> bool:
+        """True when active overrides are older than the staleness budget.
+
+        Fail-safe conventions:
+        - TTL disabled (<=0) -> never expired.
+        - No overrides -> not expired (nothing to serve).
+        - Overrides present but no provenance timestamp -> expired (we cannot
+          prove they are fresh, so they must not steer trades).
+        """
+        if self._max_age_hours <= 0:
+            return False
+        if not self._overrides:
+            return False
+        if self._last_applied_time is None:
+            return True
+        age = datetime.datetime.utcnow() - self._last_applied_time
+        return age > datetime.timedelta(hours=self._max_age_hours)
+
+    def _log_stale_once(self) -> None:
+        if not self._stale_logged:
+            logger.warning(
+                f"[ADVISORY_PARAMS] Parameter overlay is older than {self._max_age_hours}h "
+                f"(last applied: {self._last_applied_time}) — ignoring AI-suggested overrides "
+                "and falling back to strategy defaults until the advisory re-validates them."
+            )
+            self._stale_logged = True
 
     def _load_state(self) -> None:
         """Loads state from disk on startup."""
@@ -98,6 +140,10 @@ class AdvisoryParameterOverlay:
         param_key = param_name.strip().lower()
 
         with self._lock:
+            # Stale overlay must never steer trades: fall through to defaults.
+            if self._overlay_expired():
+                self._log_stale_once()
+                return default
             # 1. Strategy-specific override
             if strat_key in self._overrides and param_key in self._overrides[strat_key]:
                 return self._overrides[strat_key][param_key]
@@ -123,12 +169,15 @@ class AdvisoryParameterOverlay:
             reg = config_strategy.PRODUCTION_STRATEGY_REGISTRY[strat_key]
             params.update({k.lower(): v for k, v in reg.items()})
 
-        # Apply global overrides
+        # Apply global overrides — but never from an expired overlay.
         with self._lock:
-            if "global" in self._overrides:
-                params.update(self._overrides["global"])
-            if strat_key in self._overrides:
-                params.update(self._overrides[strat_key])
+            if not self._overlay_expired():
+                if "global" in self._overrides:
+                    params.update(self._overrides["global"])
+                if strat_key in self._overrides:
+                    params.update(self._overrides[strat_key])
+            else:
+                self._log_stale_once()
 
         return params
 
@@ -292,6 +341,7 @@ class AdvisoryParameterOverlay:
 
             self._history.append(batch_record)
             self._last_applied_time = now.replace(tzinfo=None)
+            self._stale_logged = False
             self._save_state()
             logger.info(f"[ADVISORY_PARAMS] Successfully applied decision {decision_id} ({len(changes)} parameter changes).")
             return True
@@ -352,8 +402,24 @@ class AdvisoryParameterOverlay:
     def get_state(self) -> dict[str, Any]:
         """Returns the full runtime overlay state."""
         with self._lock:
+            expired = self._overlay_expired()
+            age_hours = None
+            if self._last_applied_time is not None:
+                age_hours = round((datetime.datetime.utcnow() - self._last_applied_time).total_seconds() / 3600.0, 2)
+            overlay_status = "EMPTY"
+            if self._overrides:
+                if self._max_age_hours <= 0:
+                    overlay_status = "ACTIVE_TTL_DISABLED"
+                elif expired:
+                    overlay_status = "STALE_IGNORED"
+                else:
+                    overlay_status = "ACTIVE"
             return {
                 "last_applied_timestamp": self._last_applied_time.isoformat() + "Z" if self._last_applied_time else None,
+                "overlay_age_hours": age_hours,
+                "max_age_hours": self._max_age_hours if self._max_age_hours > 0 else None,
+                "overlay_status": overlay_status,
+                "overrides_active": bool(self._overrides) and not expired,
                 "active_overrides": self._overrides,
                 "pending_recommendations_count": len(self._pending_recommendations),
                 "pending_recommendations": list(self._pending_recommendations.values()),

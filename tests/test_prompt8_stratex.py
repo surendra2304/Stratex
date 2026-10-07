@@ -87,11 +87,19 @@ def test_paper_mode_runs_with_no_external_orders(monkeypatch):
 # ==============================================================================
 
 def test_binance_testnet_explicit_config_only(monkeypatch):
-    """Verify Stratex only executes on Binance testnet when explicitly enabled with credentials."""
+    """Verify Stratex only executes on Binance testnet when explicitly enabled with credentials.
+
+    NOTE: _resolve_execution_flags ORs execution-module bindings with config
+    attributes, so BOTH must be pinned here — patching config alone is
+    order-dependent (import-time bindings leak through).
+    """
     # Case A: TESTNET mode but TESTNET_ENABLED is False -> Blocked
     monkeypatch.setattr(config, "TRADING_MODE", "TESTNET")
     monkeypatch.setattr(config, "TESTNET_ENABLED", False)
     monkeypatch.setattr(config, "PAPER_SAFE_MODE", False)
+    monkeypatch.setattr(execution, "TRADING_MODE", "TESTNET")
+    monkeypatch.setattr(execution, "TESTNET_ENABLED", False)
+    monkeypatch.setattr(execution, "PAPER_SAFE_MODE", False)
 
     allowed, reason = ExecutionPolicy.can_place_order()
     assert allowed is False
@@ -102,6 +110,7 @@ def test_binance_testnet_explicit_config_only(monkeypatch):
 
     # Case B: Explicitly configured TESTNET
     monkeypatch.setattr(config, "TESTNET_ENABLED", True)
+    monkeypatch.setattr(execution, "TESTNET_ENABLED", True)
     monkeypatch.setattr(config, "API_KEY", "testnet_dummy_key")
     monkeypatch.setattr(config, "SECRET_KEY", "testnet_dummy_secret")
 
