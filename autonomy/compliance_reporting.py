@@ -1,12 +1,16 @@
 """
-autonomy/compliance_reporting.py — Automated Multi-Horizon Regulatory & Compliance Reporter.
+autonomy/compliance_reporting.py — Automated Regulatory & Compliance Reporter.
 
-Generates:
-1. Daily Audit Report (Trades, Autonomous Decisions, Risk Breaches) generated at 00:05 UTC.
-2. Weekly Operational & Strategy Performance Report with Attribution Analysis.
-3. Monthly Comprehensive Audit Review.
-4. Quarterly Formal Audit-Ready Dossier with Cryptographic Signatures.
-5. All reports generated in JSON, Markdown, and HTML formats with a voice_summary field and 90-day retention.
+Implemented report types:
+1. Daily compliance dossier (trades, PnL, drawdown, autonomous decisions) with
+   computed — never hardcoded — regulatory invariants, written as JSON,
+   Markdown, and HTML alongside a voice_summary field.
+2. Quarterly audit package stub (generated + signed; independently audited
+   status is NOT claimed).
+
+Note: earlier documentation described weekly/monthly reports and a 90-day
+retention sweeper; those are not implemented in this module. The
+`retention_days` value is only reported inside the quarterly package metadata.
 """
 
 import datetime
