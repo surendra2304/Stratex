@@ -12,12 +12,15 @@ Verifies:
 9. Cryptographically signed audit trail (control_audit.jsonl) integrity.
 10. GET /api/v1/security/status contract and fields.
 """
+import json
+
 import pytest
 
 import config
 from dashboard import app
 from security_hardening import (
     SecurityRateLimiter,
+    audit_trail_integrity,
     mask_credential,
     sanitize_input,
     sign_audit_record,
@@ -155,3 +158,52 @@ def test_credential_masking_and_sanitization():
     assert cleaned["name"] == "scriptalert(1)/scripthello"
     assert cleaned["nested"][0] == "ab"
 
+
+
+def test_audit_trail_integrity_is_live_computed_not_hardcoded(tmp_path):
+    """The security report must actually read and verify the ledger — never
+    return a hardcoded VERIFIED verdict (regression: 2026-10-07 hardening)."""
+    missing = tmp_path / "missing.jsonl"
+    assert audit_trail_integrity(str(missing)) == "NO_AUDIT_RECORDS"
+
+    r1 = {"id": "EV1", "action": "PAUSE_TRADING", "timestamp": "2026-10-07T00:00:00Z"}
+    sig1 = sign_audit_record(r1, prev_hash="")
+    r1["signature"] = sig1
+    r2 = {"id": "EV2", "action": "RESUME_TRADING", "timestamp": "2026-10-07T00:01:00Z"}
+    sig2 = sign_audit_record(r2, prev_hash=sig1)
+    r2["signature"] = sig2
+
+    f = tmp_path / "audit.jsonl"
+    f.write_text(json.dumps(r1) + "\n" + json.dumps(r2) + "\n")
+    assert audit_trail_integrity(str(f)) == "HMAC_CHAIN_VERIFIED"
+
+    # Tampered content must be detected
+    r1_bad = dict(r1)
+    r1_bad["action"] = "EVIL_EDIT"
+    f.write_text(json.dumps(r1_bad) + "\n" + json.dumps(r2) + "\n")
+    assert audit_trail_integrity(str(f)).startswith("HMAC_CHAIN_BROKEN")
+
+    # Corrupt/unparseable line must be surfaced, never silently skipped
+    f.write_text(json.dumps(r1) + "\n" + "\x00\x00garbage\n")
+    assert audit_trail_integrity(str(f)).startswith("HMAC_CHAIN_DEGRADED")
+
+    # Unsigned record is signature-stripping evidence, not a skip
+    r1_unsigned = {k: v for k, v in r1.items() if k != "signature"}
+    f.write_text(json.dumps(r1_unsigned) + "\n")
+    assert audit_trail_integrity(str(f)).startswith("HMAC_CHAIN_BROKEN")
+
+
+def test_security_status_reports_degraded_integrity_on_corrupt_audit(tmp_path, monkeypatch):
+    """End-to-end: /api/v1/security/status must report corruption live."""
+    import security_hardening as sh
+
+    audit_file = tmp_path / "control_audit.jsonl"
+    audit_file.write_text('{"id": "EV1", "action": "X", "signature": "deadbeef"}\n')
+    monkeypatch.setattr(sh, "CONTROL_AUDIT_LOG_FILE", str(audit_file))
+    app.config["TESTING"] = True
+    with app.test_client() as c:
+        res = c.get("/api/v1/security/status")
+    assert res.status_code == 200
+    verdict = res.get_json()["audit_trail"]["integrity"]
+    assert verdict != "HMAC_CHAIN_VERIFIED"
+    assert verdict.startswith("HMAC_CHAIN_BROKEN")

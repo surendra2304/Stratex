@@ -300,12 +300,18 @@ def log_control_action(action: str, user_or_key: str, details: dict[str, Any], s
 
 
 def verify_audit_chain(records: list[dict[str, Any]]) -> bool:
-    """Verifies that an audit log ledger has not been tampered with or truncated."""
+    """Verifies that an audit log ledger has not been tampered with or truncated.
+
+    Every audit record is signed at write time, so an *unsigned* record inside
+    the ledger is itself evidence of tampering (signature-stripping attack)
+    and must fail verification — it is NOT skipped.
+    """
     prev_hash = ""
     for r in records:
         expected_sig = r.get("signature")
         if not expected_sig:
-            continue
+            logger.error(f"[SECURITY] Audit record missing signature (tampering evidence) — record ID: {r.get('id')}")
+            return False
         data_to_verify = {k: v for k, v in r.items() if k not in ("signature", "prev_signature")}
         computed = sign_audit_record(data_to_verify, prev_hash=prev_hash)
         if computed != expected_sig:
@@ -313,6 +319,55 @@ def verify_audit_chain(records: list[dict[str, Any]]) -> bool:
             return False
         prev_hash = expected_sig
     return True
+
+
+def _load_audit_records(path: str | None = None) -> tuple[list[dict[str, Any]], int]:
+    """Parse the audit ledger strictly.
+
+    Returns (records, corrupt_line_count). A line that is not a JSON object is
+    counted as corrupt — corruption must be surfaced, never silently skipped.
+    """
+    audit_path = path or CONTROL_AUDIT_LOG_FILE
+    records: list[dict[str, Any]] = []
+    corrupt = 0
+    try:
+        with open(audit_path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    obj = json.loads(stripped)
+                except Exception:
+                    corrupt += 1
+                    continue
+                if isinstance(obj, dict):
+                    records.append(obj)
+                else:
+                    corrupt += 1
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        logger.error(f"[SECURITY] Audit ledger unreadable: {e}")
+        corrupt += 1
+    return records, corrupt
+
+
+def audit_trail_integrity(path: str | None = None) -> str:
+    """Compute the live audit-trail integrity verdict for the security report.
+
+    Never returns a hardcoded VERIFIED: the ledger is actually read and the
+    HMAC chain actually re-verified on every call.
+    """
+    records, corrupt = _load_audit_records(path)
+    if corrupt:
+        logger.error(f"[SECURITY] Audit ledger has {corrupt} corrupt/unparseable line(s)")
+        return f"HMAC_CHAIN_DEGRADED: {corrupt} corrupt line(s) detected"
+    if not records:
+        return "NO_AUDIT_RECORDS"
+    if verify_audit_chain(records):
+        return "HMAC_CHAIN_VERIFIED"
+    return "HMAC_CHAIN_BROKEN: signature mismatch detected"
 
 
 def verify_webhook_signature(payload_bytes: bytes, signature_header: str, secret: str | None = None) -> bool:
@@ -511,7 +566,7 @@ def get_security_status_report() -> dict[str, Any]:
         "self_monitoring": _security_monitor.get_status(),
         "audit_trail": {
             "audit_file": CONTROL_AUDIT_LOG_FILE,
-            "integrity": "HMAC_CHAIN_VERIFIED"
+            "integrity": audit_trail_integrity()
         }
     }
 
