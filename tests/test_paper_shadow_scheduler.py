@@ -212,7 +212,7 @@ def test_checkpoint_failure_discards_trial_cursor_and_retries_without_restart(mo
 
 
 def test_scheduler_has_no_exchange_execution_imports_or_order_calls():
-    source = Path("paper_shadow_scheduler.py").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[1] / "paper_shadow_scheduler.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     imported_modules = {
         node.module
