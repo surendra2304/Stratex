@@ -20,6 +20,7 @@ from config import (
     TRADING_MODE,
 )
 from logger import get_logger, log_trade
+from numeric_safety import finite_float, positive_float
 from paper_engine.exceptions import StateCorruptionError, ZeroFillError
 from testnet_engine.protection import (
     check_futures_bracket_status,
@@ -210,6 +211,44 @@ def _validate_trade_schema(trade: dict):
         if trade.get("tp_price") is not None or trade.get("sl_price") is not None:
             raise StateCorruptionError("oco_id cannot be None if tp_price or sl_price are set.")
 
+class InvalidOrderRequest(ValueError):
+    """An entry request is malformed; refused before anything reaches the venue."""
+
+
+def _validate_entry_request(side, quantity, sl, tp, *, require_protection: bool = True):
+    """Validate an entry *before* the market order is submitted.
+
+    Previously quantity/SL/TP were only checked inside the protection step,
+    i.e. after the entry had already filled: a NaN or wrong-side stop cost a
+    full round trip (entry fill, failed OCO, emergency market close), and
+    ``if sl and tp`` treated ``NaN`` as present while a half-specified bracket
+    (only SL or only TP) silently produced an unprotected, untracked position.
+
+    Returns ``(quantity, sl, tp)`` as floats (sl/tp ``None`` only when
+    protection is not required and neither was supplied).
+    """
+    if side not in ("BUY", "SELL"):
+        raise InvalidOrderRequest(f"side must be 'BUY' or 'SELL', got {side!r}")
+    qty = positive_float(quantity)
+    if qty is None:
+        raise InvalidOrderRequest(f"quantity must be a finite number > 0, got {quantity!r}")
+    if sl is None and tp is None and not require_protection:
+        return qty, None, None
+    if sl is None or tp is None:
+        raise InvalidOrderRequest(
+            f"UNPROTECTED_ENTRY_REFUSED: both stop-loss and take-profit are required (sl={sl!r}, tp={tp!r})"
+        )
+    sl_value = positive_float(sl)
+    tp_value = positive_float(tp)
+    if sl_value is None or tp_value is None:
+        raise InvalidOrderRequest(f"sl/tp must be finite numbers > 0 (sl={sl!r}, tp={tp!r})")
+    if side == "BUY" and not sl_value < tp_value:
+        raise InvalidOrderRequest(f"BUY entry requires sl < tp (sl={sl_value}, tp={tp_value})")
+    if side == "SELL" and not sl_value > tp_value:
+        raise InvalidOrderRequest(f"SELL entry requires sl > tp (sl={sl_value}, tp={tp_value})")
+    return qty, sl_value, tp_value
+
+
 def _load_active_trades():
     if not os.path.exists(ACTIVE_TRADES_FILE):
         return []
@@ -383,6 +422,13 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
         sys_logger.critical(f"State corruption prevents new orders: {e}")
         raise
 
+    try:
+        quantity, sl, tp = _validate_entry_request(side, quantity, sl, tp)
+    except InvalidOrderRequest as e:
+        sys_logger.error(f"[{strategy_name}] 🚫 Entry refused before submission: {e}")
+        if client_order_id:
+            get_idempotency_store().remove(client_order_id)
+        raise
 
     client = get_exchange_client()
     state = OrderState.ENTRY_SUBMITTED
@@ -524,6 +570,16 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                         f"UNPROTECTED POSITION ACTIVE for {symbol}. Error: {ce}",
                         extra={"strategy": strategy_name, "symbol": symbol}
                     )
+                # The entry DID reach the venue. Record a terminal result so a
+                # retry of this client_order_id returns it instead of the PENDING
+                # record going stale after 60s and a duplicate entry being sent.
+                if client_order_id:
+                    get_idempotency_store().complete_request(client_order_id, {
+                        "status": "PROTECTION_FAILED",
+                        "orderId": order_id,
+                        "_final_state": state.value,
+                        "_executed_qty": executed_qty,
+                    })
                 return None
 
 
@@ -617,6 +673,18 @@ def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, 
         if client_order_id:
             get_idempotency_store().remove(client_order_id)
         return None
+
+    try:
+        quantity, sl, tp = _validate_entry_request(side, quantity, sl, tp)
+        lev_value = finite_float(leverage)
+        if lev_value is None or not 1 <= lev_value <= 125 or not float(lev_value).is_integer():
+            raise InvalidOrderRequest(f"leverage must be a whole number between 1 and 125, got {leverage!r}")
+        leverage = int(lev_value)
+    except InvalidOrderRequest as e:
+        sys_logger.error(f"[{strategy_name}] 🚫 Futures entry refused before submission: {e}")
+        if client_order_id:
+            get_idempotency_store().remove(client_order_id)
+        raise
 
     client = get_exchange_client()
     state = OrderState.ENTRY_SUBMITTED
@@ -744,10 +812,19 @@ def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, 
                 )
                 try:
                     emergency_futures_market_close(client, symbol, side, executed_qty)
+                    state = OrderState.EMERGENCY_CLOSE
                 except Exception as ce:
+                    state = OrderState.UNKNOWN
                     sys_logger.critical(f"[FUTURES] 🚨 FATAL: Emergency close failed for {symbol}: {ce}")
+                # The entry reached the venue: removing the key here let an
+                # immediate retry of the same signal open a second position.
                 if client_order_id:
-                    get_idempotency_store().remove(client_order_id)
+                    get_idempotency_store().complete_request(client_order_id, {
+                        "status": "PROTECTION_FAILED",
+                        "orderId": order_id,
+                        "_final_state": state.value,
+                        "_executed_qty": executed_qty,
+                    })
                 return None
 
         log_trade(strategy_name, symbol, side, executed_qty, actual_price, sl, tp, order_id, state)
@@ -956,14 +1033,19 @@ def monitor_open_trades():
                     f"Position may be unprotected. Attempting emergency close.",
                     extra={"strategy": t["strategy"], "symbol": t["symbol"]}
                 )
+                closed_flat = False
                 try:
                     from testnet_engine.protection import emergency_market_close
                     ec = emergency_market_close(
                         client, t["symbol"], t["side"], float(t["quantity"])
                     )
-                    ec_qty = float(ec.get("executedQty", 0))
-                    ec_price = float(ec.get("cummulativeQuoteQty", 0)) / ec_qty if ec_qty > 0 else 0
+                    ec_qty = positive_float(ec.get("executedQty"))
+                    ec_quote = positive_float(ec.get("cummulativeQuoteQty"))
+                    if ec_qty is None or ec_quote is None:
+                        raise ValueError(f"emergency close returned no usable fill: {ec!r}")
+                    ec_price = ec_quote / ec_qty
                     ec_fee = ec_qty * ec_price * getattr(config, "BACKTEST_FEE_RATE", 0.001)
+                    closed_flat = bool(ec.get("_is_flat", True))
                     
                     # Calculate PnL accurately
                     gross_pnl, net_pnl = compute_net_pnl(
@@ -1019,7 +1101,11 @@ def monitor_open_trades():
                     t.get("sl_price"), t.get("tp_price"),
                     oco_id, f"OCO_{status}"
                 )
-                # Remove from remaining regardless — OCO is dead
+                if not closed_flat:
+                    # The OCO is dead and flatness is NOT proven: the old code
+                    # dropped the trade anyway, leaving an unprotected position
+                    # that nothing tracked. Keep it, mark it, and block orders.
+                    _retain_unprotected(t, remaining_trades, f"OCO {oco_id} {status}; emergency close not confirmed")
             else:
                 # Still executing
                 remaining_trades.append(t)
@@ -1027,19 +1113,29 @@ def monitor_open_trades():
         except BinanceAPIException as e:
             if "Order does not exist" in str(e) or "-2013" in str(e):
                 # Check balance to see if we missed a successful exit or if it's orphaned
+                flat_confirmed = False
                 try:
                     asset = t['symbol'].replace("USDT", "")
                     asset_info = client.get_asset_balance(asset=asset)
-                    asset_bal = float(asset_info['free']) + float(asset_info['locked'])
-                    if asset_bal < 0.0001: # Essentially 0
+                    asset_bal = finite_float(asset_info['free'])
+                    locked_bal = finite_float(asset_info['locked'])
+                    if asset_bal is None or locked_bal is None:
+                        raise ValueError(f"unreadable balance {asset_info!r}")
+                    if asset_bal + locked_bal < 0.0001: # Essentially 0
                         sys_logger.warning(f"[MONITOR] OCO {oco_id} missing but balance is 0. Position closed.")
+                        flat_confirmed = True
                     else:
                         sys_logger.critical(f"[MONITOR] OCO {oco_id} missing but balance > 0! Attempting emergency close.")
                         from testnet_engine.protection import emergency_market_close
-                        emergency_market_close(client, t["symbol"], t["side"], float(t["quantity"]))
-                except Exception:
-                    pass
-                
+                        ec = emergency_market_close(client, t["symbol"], t["side"], float(t["quantity"]))
+                        flat_confirmed = bool(ec.get("_is_flat", False))
+                except Exception as bal_err:
+                    sys_logger.critical(f"[MONITOR] Could not verify/close orphaned position {t['symbol']}: {bal_err}")
+
+                if not flat_confirmed:
+                    _retain_unprotected(t, remaining_trades, f"OCO {oco_id} missing on exchange; flatness not confirmed")
+                    continue
+
                 sys_logger.warning(
                     f"[MONITOR] OCO {oco_id} for {t['symbol']} missing from exchange. Purging.",
                     extra={"strategy": t["strategy"], "symbol": t["symbol"]}
@@ -1067,6 +1163,23 @@ def monitor_open_trades():
         _save_active_trades(remaining_trades)
     except Exception as e:
         sys_logger.error(f"[MONITOR] Failed to save active trades: {e}")
+
+def _retain_unprotected(trade, remaining_trades, reason):
+    """Keep tracking a position whose protection is gone and engage the
+    durable order block so no new entries are made until an operator
+    reconciles it."""
+    trade["state"] = OrderState.UNKNOWN.value
+    trade["protection_lost"] = True
+    trade["protection_lost_reason"] = reason
+    remaining_trades.append(trade)
+    sys_logger.critical(f"[MONITOR] 🚨 UNPROTECTED POSITION RETAINED: {trade.get('symbol')} — {reason}")
+    try:
+        from panic_state import engage_order_block
+
+        engage_order_block("execution.monitor_open_trades", f"Unprotected position {trade.get('symbol')}: {reason}")
+    except Exception as block_err:  # the retained record still surfaces it
+        sys_logger.critical(f"[MONITOR] Failed to engage order block: {block_err}")
+
 
 def get_account_balance():
     """Returns the USDT and BTC balance from account."""

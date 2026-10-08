@@ -15,7 +15,7 @@ from paper_engine.portfolio import PaperPortfolio
 from testnet_engine.risk_gate import RiskGate
 
 
-def test_startup_environment_variable_handling():
+def test_startup_environment_variable_handling(pinned_testnet_mode):
     """Verify TestnetService accepts TESTNET_ENABLED without crashing on fresh clones."""
     from testnet_engine.service import TestnetService
     

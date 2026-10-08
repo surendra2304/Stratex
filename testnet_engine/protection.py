@@ -48,10 +48,13 @@ import json
 import math
 import os
 import threading
+from decimal import ROUND_FLOOR, Decimal, InvalidOperation
 
 from binance.client import Client
 
+from atomic_io import atomic_write_json
 from logger import get_logger  # type: ignore[attr-defined]
+from numeric_safety import finite_float, positive_float, require_positive, step_precision
 
 
 logger = get_logger("protection")
@@ -61,11 +64,12 @@ logger = get_logger("protection")
 # ---------------------------------------------------------------------------
 
 def _atomic_write(path: str, data: list):
-    """Write JSON list to path atomically via tmp file."""
-    tmp = path + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(data, f)
-    os.replace(tmp, path)
+    """Write JSON list to path atomically (unique temp file + fsync + rename).
+
+    The previous fixed ``<path>.tmp`` name let two concurrent writers clobber
+    each other's temp file before the rename.
+    """
+    atomic_write_json(path, data)
 
 
 # ---------------------------------------------------------------------------
@@ -81,39 +85,103 @@ def _get_symbol_filters(client: Client, symbol: str) -> dict:
     if not info:
         raise ValueError(f"Symbol {symbol} not found on exchange.")
 
-    result = {"tick_size": 0.01, "price_precision": 2,
-               "step_size": 0.001, "qty_precision": 3, "min_notional": 10.0}
+    return _parse_filters(info.get("filters", []), symbol, default_min_notional=10.0)
 
-    for f in info.get("filters", []):
-        ft = f["filterType"]
+
+_DEFAULT_FILTERS = {"tick_size": 0.01, "price_precision": 2, "step_size": 0.001, "qty_precision": 3}
+
+
+def _parse_filters(filters, symbol: str, *, default_min_notional: float) -> dict:
+    """Parse PRICE_FILTER / LOT_SIZE / (MIN_)NOTIONAL into validated floats.
+
+    A zero, negative, NaN or malformed tick/step size from the exchange used to
+    flow into ``math.floor(price / tick)`` (ZeroDivisionError / ValueError) or
+    disable rounding entirely; such filters are now rejected loudly.
+    """
+    result = dict(_DEFAULT_FILTERS, min_notional=default_min_notional)
+    for f in filters or []:
+        if not isinstance(f, dict):
+            continue
+        ft = f.get("filterType")
         if ft == "PRICE_FILTER":
-            ts = float(f["tickSize"])
+            ts = positive_float(f.get("tickSize"))
+            if ts is None:
+                raise ValueError(f"Invalid PRICE_FILTER tickSize {f.get('tickSize')!r} for {symbol}")
             result["tick_size"] = ts
-            result["price_precision"] = max(0, round(-math.log10(ts))) if ts > 0 else 2
+            result["price_precision"] = step_precision(ts)
         elif ft == "LOT_SIZE":
-            ss = float(f["stepSize"])
+            ss = positive_float(f.get("stepSize"))
+            if ss is None:
+                raise ValueError(f"Invalid LOT_SIZE stepSize {f.get('stepSize')!r} for {symbol}")
             result["step_size"] = ss
-            result["qty_precision"] = max(0, round(-math.log10(ss))) if ss > 0 else 3
+            result["qty_precision"] = step_precision(ss)
         elif ft in ("MIN_NOTIONAL", "NOTIONAL"):
-            result["min_notional"] = float(f.get("minNotional", f.get("notional", 10.0)))
+            mn = finite_float(f.get("minNotional", f.get("notional", default_min_notional)))
+            if mn is None or mn < 0:
+                raise ValueError(f"Invalid notional filter {f!r} for {symbol}")
+            result["min_notional"] = mn
 
     return result
 
 
+def _floor_decimal(value: float, step: float) -> Decimal:
+    try:
+        d_value = Decimal(repr(value))
+        d_step = Decimal(repr(step))
+        return (d_value / d_step).to_integral_value(rounding=ROUND_FLOOR) * d_step
+    except (InvalidOperation, OverflowError) as exc:
+        raise ValueError(f"cannot round {value!r} to step {step!r}") from exc
+
+
 def round_price(price: float, tick_size: float, precision: int) -> str:
-    """Round price DOWN to the nearest tick_size and return as formatted string."""
-    if tick_size <= 0:
-        return f"{price:.{precision}f}"
-    rounded = math.floor(price / tick_size) * tick_size
-    return f"{rounded:.{precision}f}"
+    """Round price DOWN to the nearest tick_size and return as formatted string.
+
+    Raises ValueError for a non-finite/non-positive price or tick size: the old
+    version formatted ``nan`` straight into the order (``"nan"``) when the tick
+    size was 0, and raised OverflowError (not ValueError, so callers' emergency
+    handling missed it) for ``inf``.
+    """
+    p = require_positive("price", price)
+    tick = require_positive("tick_size", tick_size)
+    rounded = _floor_decimal(p, tick)
+    if rounded <= 0:
+        raise ValueError(f"price {price!r} rounds to zero at tick {tick_size!r}")
+    return f"{rounded:.{max(0, int(precision))}f}"
 
 
 def round_qty(qty: float, step_size: float, precision: int) -> float:
-    """Floor quantity to nearest step_size."""
-    if step_size <= 0:
-        return qty
-    floored = math.floor(qty / step_size) * step_size
-    return round(floored, precision)
+    """Floor quantity to nearest step_size (0.0 when it rounds away).
+
+    Raises ValueError for a non-finite quantity or an invalid step size; the old
+    version returned the *unrounded* quantity for a zero step (rejected by the
+    exchange after the entry had filled) and crashed on NaN.
+    """
+    q = finite_float(qty)
+    if q is None:
+        raise ValueError(f"quantity must be a finite number, got {qty!r}")
+    step = require_positive("step_size", step_size)
+    if q <= 0:
+        return 0.0
+    return round(float(_floor_decimal(q, step)), max(0, int(precision)))
+
+
+def _validated_bracket_inputs(executed_qty, actual_fill_price, sl_price, tp_price):
+    """All four bracket numbers must be finite and > 0.
+
+    ``NaN`` compares False against everything, so the old ``sl >= fill`` style
+    checks accepted NaN stops/targets and only failed later (or not at all).
+    """
+    qty = positive_float(executed_qty)
+    if qty is None:
+        raise ValueError(f"executed_qty must be positive, got {executed_qty}")
+    fill = positive_float(actual_fill_price)
+    if fill is None:
+        raise ValueError(f"actual_fill_price must be positive, got {actual_fill_price}")
+    sl = positive_float(sl_price)
+    tp = positive_float(tp_price)
+    if sl is None or tp is None:
+        raise ValueError(f"sl_price/tp_price must be finite and positive, got sl={sl_price!r} tp={tp_price!r}")
+    return qty, fill, sl, tp
 
 
 # ---------------------------------------------------------------------------
@@ -164,10 +232,9 @@ def place_oco_protection(
     # ------------------------------------------------------------------
     # 1. Validate inputs
     # ------------------------------------------------------------------
-    if executed_qty <= 0:
-        raise ValueError(f"executed_qty must be positive, got {executed_qty}")
-    if actual_fill_price <= 0:
-        raise ValueError(f"actual_fill_price must be positive, got {actual_fill_price}")
+    executed_qty, actual_fill_price, sl_price, tp_price = _validated_bracket_inputs(
+        executed_qty, actual_fill_price, sl_price, tp_price
+    )
     if entry_side == "BUY":
         if sl_price >= actual_fill_price:
             raise ValueError(
@@ -280,6 +347,16 @@ def place_oco_protection(
             sl_order_id   = oid
             sl_client_id  = cid
 
+    if order_list_id is None:
+        # Without a list id the protection can never be monitored or
+        # cancelled; the caller treats this like any other protection failure.
+        raise ValueError(f"OCO response for {symbol} carried no orderListId: {oco_response!r}")
+    if tp_order_id is None or sl_order_id is None:
+        logger.warning(
+            f"[PROTECTION] OCO {order_list_id} for {symbol} response lacks leg ids "
+            f"(tp={tp_order_id}, sl={sl_order_id}); monitoring by list id only."
+        )
+
     logger.info(
         f"[PROTECTION] ✅ OCO placed. ListId={order_list_id} "
         f"TP_orderId={tp_order_id} SL_orderId={sl_order_id}"
@@ -383,11 +460,14 @@ def check_oco_status(client: Client, symbol: str, oco_order_list_id: int) -> dic
         if status != "FILLED":
             continue
 
-        exec_qty     = float(details.get("executedQty", 0))
-        cum_quote    = float(details.get("cummulativeQuoteQty", 0))
-        avg_fill     = cum_quote / exec_qty if exec_qty > 0 else 0.0
+        exec_qty  = positive_float(details.get("executedQty"))
+        cum_quote = positive_float(details.get("cummulativeQuoteQty"))
+        if exec_qty is None or cum_quote is None:
+            # A 0/NaN fill used to become close_avg_price=0.0, i.e. a
+            # fabricated 100% loss in the ledger.
+            raise ValueError(f"FILLED OCO leg {order_id} on {symbol} has unreadable fill data: {details!r}")
 
-        result["close_avg_price"] = avg_fill
+        result["close_avg_price"] = cum_quote / exec_qty
         result["close_qty"]       = exec_qty
 
         if otype == "LIMIT_MAKER":
@@ -397,6 +477,11 @@ def check_oco_status(client: Client, symbol: str, oco_order_list_id: int) -> dic
             result["sl_filled"]    = True
             result["sl_order_id"]  = order_id
 
+    if not (result["tp_filled"] or result["sl_filled"]):
+        raise ValueError(
+            f"OCO {oco_order_list_id} on {symbol} is {list_status} but no leg reports FILLED; "
+            "refusing to book a close without a fill"
+        )
     return result
 
 
@@ -413,23 +498,7 @@ def _get_futures_symbol_filters(client: Client, symbol: str) -> dict:
     if not symbol_info:
         return {"tick_size": 0.01, "price_precision": 2, "step_size": 0.001, "qty_precision": 3, "min_notional": 5.0}
 
-    result = {"tick_size": 0.01, "price_precision": 2,
-               "step_size": 0.001, "qty_precision": 3, "min_notional": 5.0}
-
-    for f in symbol_info.get("filters", []):
-        ft = f["filterType"]
-        if ft == "PRICE_FILTER":
-            ts = float(f["tickSize"])
-            result["tick_size"] = ts
-            result["price_precision"] = max(0, round(-math.log10(ts))) if ts > 0 else 2
-        elif ft == "LOT_SIZE":
-            ss = float(f["stepSize"])
-            result["step_size"] = ss
-            result["qty_precision"] = max(0, round(-math.log10(ss))) if ss > 0 else 3
-        elif ft in ("MIN_NOTIONAL", "NOTIONAL"):
-            result["min_notional"] = float(f.get("minNotional", f.get("notional", 5.0)))
-
-    return result
+    return _parse_filters(symbol_info.get("filters", []), symbol, default_min_notional=5.0)
 
 
 def place_futures_bracket_protection(
@@ -456,10 +525,11 @@ def place_futures_bracket_protection(
     Returns:
         dict with keys: tp_order_id, sl_order_id, tp_price_sent, sl_price_sent, close_side
     """
-    if executed_qty <= 0:
-        raise ValueError(f"executed_qty must be positive, got {executed_qty}")
-    if actual_fill_price <= 0:
-        raise ValueError(f"actual_fill_price must be positive, got {actual_fill_price}")
+    executed_qty, actual_fill_price, sl_price, tp_price = _validated_bracket_inputs(
+        executed_qty, actual_fill_price, sl_price, tp_price
+    )
+    if entry_side not in ("BUY", "LONG", "SELL", "SHORT"):
+        raise ValueError(f"entry_side must be BUY/LONG or SELL/SHORT, got {entry_side!r}")
 
     is_buy = entry_side in ("BUY", "LONG")
     close_side = "SELL" if is_buy else "BUY"
@@ -496,16 +566,27 @@ def place_futures_bracket_protection(
         closePosition=True
     )
     sl_order_id = sl_order.get("orderId") or sl_order.get("algoId")
+    if sl_order_id is None:
+        raise ValueError(f"Futures SL response for {symbol} carried no order/algo id: {sl_order!r}")
 
     # 2. Place Take Profit conditional order (TAKE_PROFIT_MARKET with closePosition=True)
-    tp_order = client.futures_create_order(
-        symbol=symbol,
-        side=close_side,
-        type="TAKE_PROFIT_MARKET",
-        stopPrice=tp_str,
-        closePosition=True
-    )
-    tp_order_id = tp_order.get("orderId") or tp_order.get("algoId")
+    try:
+        tp_order = client.futures_create_order(
+            symbol=symbol,
+            side=close_side,
+            type="TAKE_PROFIT_MARKET",
+            stopPrice=tp_str,
+            closePosition=True
+        )
+        tp_order_id = tp_order.get("orderId") or tp_order.get("algoId")
+        if tp_order_id is None:
+            raise ValueError(f"Futures TP response for {symbol} carried no order/algo id: {tp_order!r}")
+    except Exception:
+        # The caller will emergency-close the position. A surviving
+        # closePosition STOP_MARKET would later close an unrelated *new*
+        # position on this symbol, so cancel it before propagating.
+        _cancel_futures_conditional(client, symbol, sl_order_id)
+        raise
 
     return {
         "tp_order_id": tp_order_id,
@@ -514,6 +595,23 @@ def place_futures_bracket_protection(
         "sl_price_sent": sl_str,
         "close_side": close_side,
     }
+
+
+def _cancel_futures_conditional(client: Client, symbol: str, order_id) -> bool:
+    """Best-effort cancel of a conditional (algo or regular) futures order."""
+    for method, kwargs in (("futures_cancel_algo_order", {"algoId": order_id}),
+                           ("futures_cancel_order", {"symbol": symbol, "orderId": order_id})):
+        fn = getattr(client, method, None)
+        if fn is None:
+            continue
+        try:
+            fn(**kwargs)
+            logger.warning(f"[FUTURES_PROTECTION] Cancelled orphan conditional order {order_id} on {symbol}")
+            return True
+        except Exception as exc:  # try the next endpoint
+            logger.error(f"[FUTURES_PROTECTION] {method}({order_id}) failed: {exc}")
+    logger.critical(f"[FUTURES_PROTECTION] 🚨 Could not cancel conditional order {order_id} on {symbol}; cancel it manually")
+    return False
 
 
 def emergency_futures_market_close(
@@ -551,6 +649,26 @@ def emergency_futures_market_close(
     )
 
 
+def _futures_position_is_flat(client: Client, symbol: str) -> bool:
+    """True only when the venue positively reports zero size for ``symbol``."""
+    try:
+        positions = client.futures_position_information(symbol=symbol)
+    except Exception as exc:
+        logger.warning(f"[FUTURES] Position query failed for {symbol}; treating as still open: {exc}")
+        return False
+    if not isinstance(positions, list) or not positions:
+        logger.warning(f"[FUTURES] Empty/invalid position response for {symbol}; treating as still open")
+        return False
+    for position in positions:
+        amount = finite_float(position.get("positionAmt")) if isinstance(position, dict) else None
+        if amount is None:
+            logger.warning(f"[FUTURES] Unreadable positionAmt for {symbol}; treating as still open")
+            return False
+        if amount != 0.0:
+            return False
+    return True
+
+
 def check_futures_bracket_status(client: Client, symbol: str, tp_order_id: int | None, sl_order_id: int | None) -> dict:
     """
     Checks if either the TP or SL conditional order has fired and closed the futures position.
@@ -564,39 +682,28 @@ def check_futures_bracket_status(client: Client, symbol: str, tp_order_id: int |
         "close_qty": 0.0,
     }
 
-    # 1. Check if position is still open on Binance
-    is_open = True
-    try:
-        if hasattr(client, "futures_position_information"):
-            positions = client.futures_position_information(symbol=symbol)
-            for p in positions:
-                if float(p.get("positionAmt", 0.0)) == 0.0:
-                    is_open = False
-                    break
-    except Exception:
-        pass
-
-    # 2. Check open algo orders
-    open_algo_ids = set()
-    try:
-        if hasattr(client, "futures_get_open_algo_orders"):
-            algos = client.futures_get_open_algo_orders(symbol=symbol)
-            for a in algos:
-                open_algo_ids.add(a.get("algoId"))
-    except Exception:
-        pass
-
-    # If position is closed on Binance, or if one of the algo orders fired:
-    algo_fired = (tp_order_id and tp_order_id not in open_algo_ids) or (sl_order_id and sl_order_id not in open_algo_ids)
-    if not is_open or algo_fired:
+    # Only a successful position query showing zero size on every entry proves
+    # the position is closed. The old version treated a *failed* algo-order
+    # query as "an algo order fired" and then booked the most recent account
+    # trade (often the entry fill itself) as the close, marking an open
+    # position closed at its entry price. One flat hedge-mode leg also counted
+    # as "closed" while the other leg was still open.
+    if _futures_position_is_flat(client, symbol):
         try:
             trades = client.futures_account_trades(symbol=symbol) if hasattr(client, "futures_account_trades") else []
             if trades:
                 last_trade = trades[-1]
+                close_price = positive_float(last_trade.get("price"))
+                close_qty = positive_float(last_trade.get("qty"))
+                pnl = finite_float(last_trade.get("realizedPnl", 0.0))
+                if close_price is None or close_qty is None or pnl is None:
+                    # Booking a 0/NaN close price would fabricate a huge loss
+                    # (or gain); leave the trade open for reconciliation.
+                    logger.error(f"[FUTURES] Unreadable closing trade for {symbol}: {last_trade!r}")
+                    return result
                 result["position_closed"] = True
-                result["close_avg_price"] = float(last_trade.get("price", 0.0))
-                result["close_qty"] = float(last_trade.get("qty", 0.0))
-                pnl = float(last_trade.get("realizedPnl", 0.0))
+                result["close_avg_price"] = close_price
+                result["close_qty"] = close_qty
                 if pnl > 0:
                     result["tp_filled"] = True
                 else:
@@ -631,6 +738,16 @@ def compute_net_pnl(
     gross_pnl excludes all fees.
     net_pnl   subtracts entry_fee + close_fee.
     """
+    for name, value in (("entry_qty", entry_qty), ("entry_price", entry_price),
+                        ("close_qty", close_qty), ("close_price", close_price)):
+        if positive_float(value) is None:
+            raise ValueError(f"compute_net_pnl: {name}={value!r} must be a finite number > 0")
+    for name, value in (("entry_fee", entry_fee), ("close_fee", close_fee)):
+        fee = finite_float(value)
+        if fee is None or fee < 0:
+            raise ValueError(f"compute_net_pnl: {name}={value!r} must be a finite number >= 0")
+    if entry_side not in ("BUY", "SELL"):
+        raise ValueError(f"compute_net_pnl: entry_side must be BUY or SELL, got {entry_side!r}")
     match_qty = min(entry_qty, close_qty)
     if entry_side == "BUY":
         gross = (close_price - entry_price) * match_qty

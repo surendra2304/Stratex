@@ -11,6 +11,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 import pandas as pd
 
+from numeric_safety import positive_float, safe_quantity
 from .models import (
     OrderSide,
     OrderType,
@@ -84,27 +85,7 @@ class Strategy:
         order_type: OrderType = OrderType.MARKET,
     ) -> BacktestOrder:
         """Submits a BUY order to the broker."""
-        sym = (symbol or self.symbol).upper()
-        current_close = self._get_current_price(sym)
-
-        if size is None and self.sizer is not None:
-            size = self.sizer.get_size(self.broker, sym, current_close)
-        val_size = size or 1.0
-
-        order = BacktestOrder(
-            order_id=f"ord_{uuid.uuid4().hex[:8]}",
-            symbol=sym,
-            side=OrderSide.BUY,
-            order_type=order_type,
-            size=val_size,
-            price=price or current_close,
-            status=OrderStatus.SUBMITTED,
-            created_idx=self._current_idx,
-        )
-        self.broker.submit_order(order)
-        self._pending_orders.append(order)
-        self.notify_order(order)
-        return order
+        return self._submit(OrderSide.BUY, symbol, size, price, order_type)
 
     def sell(
         self,
@@ -114,23 +95,51 @@ class Strategy:
         order_type: OrderType = OrderType.MARKET,
     ) -> BacktestOrder:
         """Submits a SELL order to the broker."""
+        return self._submit(OrderSide.SELL, symbol, size, price, order_type)
+
+    def _submit(
+        self,
+        side: OrderSide,
+        symbol: str | None,
+        size: float | None,
+        price: float | None,
+        order_type: OrderType,
+    ) -> BacktestOrder:
+        """Build and submit an order.
+
+        A sizer returning 0 means "do not trade"; the old ``size or 1.0``
+        turned that into a 1-unit order. Explicit sizes/prices must be finite
+        and > 0. Zero-size orders are recorded as REJECTED, never submitted.
+        """
         sym = (symbol or self.symbol).upper()
         current_close = self._get_current_price(sym)
 
-        if size is None and self.sizer is not None:
-            size = self.sizer.get_size(self.broker, sym, current_close)
-        val_size = size or 1.0
+        if size is None:
+            val_size = 1.0 if self.sizer is None else safe_quantity(self.sizer.get_size(self.broker, sym, current_close))
+        else:
+            val_size = positive_float(size)
+            if val_size is None:
+                raise ValueError(f"order size must be a finite number > 0, got {size!r}")
+        if price is None:
+            val_price = current_close
+        else:
+            val_price = positive_float(price)
+            if val_price is None:
+                raise ValueError(f"order price must be a finite number > 0, got {price!r}")
 
         order = BacktestOrder(
             order_id=f"ord_{uuid.uuid4().hex[:8]}",
             symbol=sym,
-            side=OrderSide.SELL,
+            side=side,
             order_type=order_type,
             size=val_size,
-            price=price or current_close,
-            status=OrderStatus.SUBMITTED,
+            price=val_price,
+            status=OrderStatus.SUBMITTED if val_size > 0 else OrderStatus.REJECTED,
             created_idx=self._current_idx,
         )
+        if order.status == OrderStatus.REJECTED:
+            self.notify_order(order)
+            return order
         self.broker.submit_order(order)
         self._pending_orders.append(order)
         self.notify_order(order)
@@ -151,8 +160,12 @@ class Strategy:
     def _get_current_price(self, symbol: str) -> float:
         df = self.data_feeds.get(symbol)
         if df is not None and not df.empty and self._current_idx < len(df):
-            return float(df["close"].iloc[self._current_idx])
-        return 1.0
+            close = positive_float(df["close"].iloc[self._current_idx])
+            if close is None:
+                raise ValueError(f"bar {self._current_idx} of {symbol} has no valid close price")
+            return close
+        # Used to return a fabricated price of 1.0.
+        raise ValueError(f"no price data for {symbol!r} at bar {self._current_idx}")
 
 
 # ------------------------------------------------------------------------------

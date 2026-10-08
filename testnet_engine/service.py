@@ -1446,7 +1446,7 @@ class TestnetService:
                         # Sizing
                         filters = self.symbol_filters.get(symbol, {})
 
-                        qty = self.risk_gate.calculate_position_size(self.current_equity, current_price, sl, filters)
+                        qty = self.risk_gate.calculate_position_size(self.current_equity, current_price, sl, filters, side=side)
                         
                         if qty < 0.00000001:
                             self.stats["RISK_REJECTED"] += 1

@@ -33,6 +33,7 @@ import time
 import datetime
 
 import config
+from numeric_safety import finite_float, positive_float
 from logger import get_logger
 from testnet_engine.signal_quality import compute_atr_from_df
 
@@ -41,7 +42,12 @@ logger = get_logger("trailing")
 
 def _cfg(name, default):
     import config
-    return getattr(config, name, default)
+    value = getattr(config, name, default)
+    number = finite_float(value)
+    if number is None or number < 0:
+        logger.error(f"[TRAIL] Invalid config {name}={value!r}; using {default}")
+        return default
+    return number
 
 
 # ---------------------------------------------------------------------------
@@ -54,9 +60,29 @@ def compute_trail_target(side, entry_price, current_price, current_sl, tp_price,
 
     Returns (new_sl: float | None, stage_reached: str | None).
     Pure function — no I/O, no exchange calls.
+
+    Any unreadable input means "do not move the stop": an unknown side used
+    to fall into the SELL branch (trailing a long as if it were a short), and
+    a NaN current stop disabled the monotonic-improvement check so the stop
+    could be moved backwards.
     """
-    if initial_risk is None or initial_risk <= 0 or entry_price <= 0 or current_price <= 0:
+    side = {"LONG": "BUY", "SHORT": "SELL"}.get(str(side).upper(), str(side).upper())
+    if side not in ("BUY", "SELL"):
         return None, None
+    initial_risk = positive_float(initial_risk)
+    entry_price = positive_float(entry_price)
+    current_price = positive_float(current_price)
+    if initial_risk is None or entry_price is None or current_price is None:
+        return None, None
+    if current_sl is not None and current_sl != 0:
+        current_sl = positive_float(current_sl)
+        if current_sl is None:
+            return None, None
+    if tp_price is not None and tp_price != 0:
+        tp_price = positive_float(tp_price)
+        if tp_price is None:
+            return None, None
+    atr_value = positive_float(atr_value) if atr_value is not None else None
 
     if side == "BUY":
         r_multiple = (current_price - entry_price) / initial_risk
@@ -253,7 +279,10 @@ def _get_live_price(client, symbol, is_futures=False):
             ticker = client.futures_symbol_ticker(symbol=symbol)
         else:
             ticker = client.get_symbol_ticker(symbol=symbol)
-        return float(ticker["price"])
+        price = positive_float(ticker["price"])
+        if price is None:
+            logger.error(f"[TRAIL] Unreadable live price for {symbol}: {ticker!r}")
+        return price
     except Exception as e:
         logger.error(f"[TRAIL] Failed to get live price for {symbol}: {e}")
         return None

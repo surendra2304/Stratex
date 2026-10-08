@@ -28,6 +28,13 @@ def _finite_positive(value) -> float | None:
     return number if math.isfinite(number) and number > 0 else None
 
 
+def _require_amount(what: str, value) -> float:
+    number = _finite_positive(value)
+    if number is None:
+        raise ValueError(f"{what} amount must be a finite number > 0, got {value!r}")
+    return number
+
+
 class PaperPortfolio:
     """
     Central Portfolio for Capital Accounting.
@@ -102,7 +109,10 @@ class PaperPortfolio:
     def allocate_margin(self, amount: float, event_id: str):
         if event_id in self.processed_event_ids:
             return
-        
+
+        # A NaN amount passed ``cash - nan < 0`` and turned cash into NaN; a
+        # negative amount *credited* cash.
+        amount = _require_amount("margin allocation", amount)
         if self.cash - amount < 0:
             raise ValueError("Insufficient cash for margin allocation.")
             
@@ -114,7 +124,10 @@ class PaperPortfolio:
     def release_margin(self, amount: float, event_id: str):
         if event_id in self.processed_event_ids:
             return
-            
+
+        amount = _require_amount("margin release", amount)
+        if amount > self.used_margin + 1e-9:
+            raise ValueError(f"Cannot release {amount} margin; only {self.used_margin} is allocated.")
         self.used_margin -= amount
         self.cash += amount
         self.processed_event_ids.add(event_id)
@@ -132,7 +145,9 @@ class PaperPortfolio:
     def add_realized_pnl(self, pnl: float, event_id: str):
         if event_id in self.processed_event_ids:
             return
-            
+
+        if isinstance(pnl, bool) or not isinstance(pnl, (int, float)) or not math.isfinite(pnl):
+            raise ValueError(f"Realized PnL must be a finite number, got {pnl!r}")
         self._check_daily_rollover()
             
         self.cash += pnl
@@ -302,8 +317,16 @@ class PaperPortfolio:
     def check_risk_limits(self, current_equity: float, new_notional_exposure: float):
         """
         Throws exception if a risk limit is violated.
+
+        Non-finite inputs are violations: a NaN equity made the drawdown NaN
+        (``NaN >= limit`` is False) and a NaN/negative notional slipped under
+        the exposure cap.
         """
-        if self.daily_loss >= MAX_DAILY_LOSS:
+        if _finite_positive(current_equity) is None:
+            raise ValueError(f"Risk Block: current equity {current_equity!r} is not a finite positive number")
+        if _finite_positive(new_notional_exposure) is None:
+            raise ValueError(f"Risk Block: new exposure {new_notional_exposure!r} is not a finite positive number")
+        if not math.isfinite(self.daily_loss) or self.daily_loss >= MAX_DAILY_LOSS:
             raise ValueError(f"Risk Block: Max daily loss exceeded ({self.daily_loss})")
             
         if current_equity > self.peak_equity:

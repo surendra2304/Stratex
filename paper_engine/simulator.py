@@ -3,6 +3,7 @@ import uuid
 
 from paper_engine.config import LATENCY_MODEL, LIMIT_FILL_MODEL
 from paper_engine.market_data import DataException, MarketDataFeed
+from numeric_safety import positive_float
 from paper_engine.portfolio import PaperPortfolio
 from research_phase9.cost_engine import CostEngine
 
@@ -12,6 +13,15 @@ LATENCY_MAP = {
     "BASE": 0.5,
     "HIGH": 2.0
 }
+
+def _validate_order(direction: str, quantity: float) -> None:
+    """A negative quantity produced a negative fee that *credited* PnL; an
+    unknown direction silently became a SELL."""
+    if direction not in ("BUY", "SELL"):
+        raise ValueError(f"direction must be 'BUY' or 'SELL', got {direction!r}")
+    if positive_float(quantity) is None:
+        raise ValueError(f"quantity must be a finite number > 0, got {quantity!r}")
+
 
 class PaperSimulator:
     """
@@ -33,6 +43,7 @@ class PaperSimulator:
         Submits a market order.
         Fill is processed synchronously here for simplicity, but respects latency time.
         """
+        _validate_order(direction, quantity)
         # Calculate latency
         latency = LATENCY_MAP.get(LATENCY_MODEL, 0.5)
         order_time = time.time()
@@ -44,7 +55,9 @@ class PaperSimulator:
             bid, ask, bbo_source = self.market_data.get_bbo(symbol)
         except DataException as e:
             raise ValueError(f"Order failed due to data issue: {e}")
-            
+        if positive_float(bid) is None or positive_float(ask) is None or float(bid) > float(ask):
+            raise ValueError(f"Order failed: invalid quote bid={bid!r} ask={ask!r} for {symbol}")
+
         order_id = str(uuid.uuid4())
         
         # In a real engine, spread is dynamic. CostEngine has entry_slip.
@@ -93,6 +106,9 @@ class PaperSimulator:
         """
         Submits a limit order. Requires a heartbeat/reconciler to tick it against market data to fill.
         """
+        _validate_order(direction, quantity)
+        if positive_float(limit_price) is None:
+            raise ValueError(f"limit_price must be a finite number > 0, got {limit_price!r}")
         order_id = str(uuid.uuid4())
         
         self.orders[order_id] = {
@@ -123,6 +139,8 @@ class PaperSimulator:
                 bid, ask, bbo_source = self.market_data.get_bbo(order['symbol'])
             except DataException:
                 continue
+            if positive_float(bid) is None or positive_float(ask) is None:
+                continue  # never fill against an unreadable quote
                 
             # Check Limit Logic
             fill = False

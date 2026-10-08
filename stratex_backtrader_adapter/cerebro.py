@@ -8,7 +8,7 @@ Cerebro engine orchestrator inspired by Backtrader:
 
 from __future__ import annotations
 
-from typing import Type
+from typing import Any, Type
 import pandas as pd
 
 from .models import BacktestResult, TradeRecord
@@ -32,10 +32,10 @@ class Cerebro:
     def __init__(self) -> None:
         self.datas: dict[str, pd.DataFrame] = {}
         self.strategy_cls: Type[Strategy] | None = None
-        self.strategy_params: dict[str, any] = {}
+        self.strategy_params: dict[str, Any] = {}
         self.sizer_cls: Type[BaseSizer] = FixedSize
-        self.sizer_params: dict[str, any] = {}
-        self.analyzers: list[tuple[Type[BaseAnalyzer], str, dict[str, any]]] = []
+        self.sizer_params: dict[str, Any] = {}
+        self.analyzers: list[tuple[Type[BaseAnalyzer], str, dict[str, Any]]] = []
         self.broker = BacktraderBroker()
 
         # Add standard default institutional analyzers
@@ -172,7 +172,7 @@ class Cerebro:
         strategy.stop()
 
         # 6. Compile Analyzer Results
-        analyzer_results: dict[str, any] = {}
+        analyzer_results: dict[str, Any] = {}
         for analyzer, aname in instantiated_analyzers:
             try:
                 analyzer_results[aname] = analyzer.get_analysis()

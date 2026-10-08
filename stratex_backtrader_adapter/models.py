@@ -8,6 +8,8 @@ Domain models, enums, and dataclasses inspired by Backtrader:
 
 from __future__ import annotations
 
+from typing import Any
+
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -92,5 +94,5 @@ class BacktestResult:
     total_pnl: float
     total_return_pct: float
     trades: list[TradeRecord]
-    analyzers: dict[str, any] = field(default_factory=dict)
+    analyzers: dict[str, Any] = field(default_factory=dict)
     equity_curve: list[float] = field(default_factory=list)

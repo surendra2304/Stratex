@@ -5755,39 +5755,48 @@ def api_risk_orchestration():
     """Returns real-time portfolio heat, VaR/CVaR, correlation matrix, and strategy allocations."""
     try:
         from risk.circuit_breakers import CircuitBreakerEngine
-        from risk.risk_orchestrator import RiskOrchestrator
+        from risk.risk_orchestrator import build_measured_snapshot
         from risk.strategy_coordinator import StrategyCoordinator
 
-        orchestrator = RiskOrchestrator()
         coordinator = StrategyCoordinator()
         breakers = CircuitBreakerEngine()
 
         allocations = coordinator.rebalance_allocations()
         cb_summary = breakers.get_status_summary()
+        # Measured from recorded state. This endpoint used to return constant
+        # heat (34.5), VaR (1.85), CVaR (2.45), a hard-coded correlation matrix
+        # and the drawdown of a freshly constructed (always NOMINAL) controller.
+        snapshot = build_measured_snapshot(
+            os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl"),
+            os.getenv("ACTIVE_TRADES_FILE", "active_trades.json"),
+        )
 
         return jsonify({
             "status": "OK",
-            "portfolio_heat_pct": 34.5,
+            "portfolio_heat_pct": snapshot["portfolio_heat_pct"],
             "max_heat_budget_pct": 100.0,
-            "var_95_pct": 1.85,
-            "cvar_95_pct": 2.45,
-            "drawdown_metrics": {
-                "current_drawdown_pct": orchestrator.drawdown_ctrl.status.drawdown_pct,
-                "peak_equity": orchestrator.drawdown_ctrl.status.peak_equity,
-                "level": orchestrator.drawdown_ctrl.status.level,
-                "position_size_multiplier": orchestrator.drawdown_ctrl.status.position_size_multiplier
-            },
+            "var_95_pct": snapshot["var_95_pct"],
+            "cvar_95_pct": snapshot["cvar_95_pct"],
+            "drawdown_metrics": snapshot["drawdown_metrics"],
             "strategy_allocations": allocations,
-            "correlation_matrix": {
-                "BTC/USDT": {"BTC/USDT": 1.0, "ETH/USDT": 0.82, "SOL/USDT": 0.74},
-                "ETH/USDT": {"BTC/USDT": 0.82, "ETH/USDT": 1.0, "SOL/USDT": 0.79},
-                "SOL/USDT": {"BTC/USDT": 0.74, "ETH/USDT": 0.79, "SOL/USDT": 1.0}
+            # The coordinator's Sharpe ratios are configured priors, not
+            # measured strategy performance.
+            "strategy_allocation_basis": StrategyCoordinator.SHARPE_SOURCE,
+            "correlation_matrix": snapshot["correlation_matrix"],
+            "measurement": {
+                "equity_points": snapshot["equity_points"],
+                "equity_history_skipped_lines": snapshot["equity_history_skipped_lines"],
+                "open_positions_measured": snapshot["open_positions_measured"],
+                "correlation_assumption": snapshot.get("correlation_assumption"),
+                "unmeasured_reasons": snapshot["unmeasured_reasons"],
             },
             "circuit_breakers": cb_summary,
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
         })
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+    except Exception:
+        logger.exception("risk orchestration snapshot failed")
+        return jsonify({"status": "ERROR", "error": "RISK_SNAPSHOT_FAILED",
+                        "message": "Risk snapshot could not be computed; details were logged."}), 500
 
 # ==============================================================================
 # MULTI-EXCHANGE EXPANSION & UNIFIED PORTFOLIO ENDPOINTS

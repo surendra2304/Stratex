@@ -28,6 +28,10 @@ os.environ["TESTNET_ONLY"] = "TRUE"
 os.environ["PANIC_STATE_FILE"] = os.path.join(test_dir, "panic_state.json")
 os.environ["KILL_SWITCH_LOCK_FILE"] = os.path.join(test_dir, "KILL_SWITCH_ACTIVE.lock")
 os.environ["TRADING_PAUSE_STATE_FILE"] = os.path.join(test_dir, "trading_pause_state.json")
+# Order idempotency records used to persist in the repo's audit/ directory, so a
+# key recorded by one test run (e.g. TEST_OCO_FAIL_001) made the same test see
+# an "in-flight duplicate" on the next run within 60 seconds.
+os.environ["IDEMPOTENCY_STORE_FILE"] = os.path.join(test_dir, "idempotency_store.json")
 
 # Clear any secret keys for unauthenticated local test client assertions
 for k in ["BOT_API_KEY", "API_KEY_CONTROL", "API_KEY_READONLY", "API_KEY_FRIDAY"]:
@@ -112,3 +116,44 @@ def _reset_emergency_control_state():
     for path in paths:
         if path and os.path.exists(path):
             os.remove(path)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_idempotency_store(tmp_path):
+    """Each test gets an empty order-idempotency store (it is a process-global
+    singleton backed by a file)."""
+    try:
+        from audit import audit_manager
+    except Exception:  # pragma: no cover - module unavailable
+        yield
+        return
+    previous = audit_manager._idempotency_store
+    audit_manager._idempotency_store = audit_manager.IdempotencyStore(str(tmp_path / "idempotency_store.json"))
+    try:
+        yield
+    finally:
+        audit_manager._idempotency_store = previous
+
+
+@pytest.fixture
+def pinned_testnet_mode(monkeypatch):
+    """Pin every flag the execution policy and TestnetService read to TESTNET.
+
+    ``config`` deliberately falls back to PAPER when no exchange credentials
+    are configured, and several modules copy ``TRADING_MODE`` at import time.
+    Tests that exercise the TESTNET path used to pass only when an earlier test
+    had reloaded config with credentials; they now pin the mode explicitly.
+    """
+    import importlib
+
+    monkeypatch.delenv("RESEARCH_MODE", raising=False)
+    for module_name in ("config", "execution", "testnet_engine.service"):
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:
+            continue
+        monkeypatch.setattr(module, "TRADING_MODE", "TESTNET", raising=False)
+        if hasattr(module, "TESTNET_ENABLED") or module_name != "testnet_engine.service":
+            monkeypatch.setattr(module, "TESTNET_ENABLED", True, raising=False)
+        if hasattr(module, "PAPER_SAFE_MODE") or module_name != "testnet_engine.service":
+            monkeypatch.setattr(module, "PAPER_SAFE_MODE", False, raising=False)
