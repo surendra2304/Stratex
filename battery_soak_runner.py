@@ -1,5 +1,6 @@
 import datetime
 import io
+import os
 import random
 import sys
 import time
@@ -46,8 +47,12 @@ def generate_synthetic_candles(length=250, start_price=50000.0, volatility=0.002
     })
 
 def run_continuous_verification_battery(total_iterations=1000):
+    seed = int(os.getenv("STRATEX_STRESS_SEED", "20261007"))
+    random.seed(seed)
+    np.random.seed(seed)
     print("=" * 70)
     print(f"🚀 LAUNCHING CONTINUOUS SOAK & RELIABILITY BATTERY ({total_iterations} CYCLES)")
+    print(f"Synthetic-input RNG seed: {seed}")
     print("=" * 70)
     
     tracemalloc.start()
