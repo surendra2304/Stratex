@@ -3,7 +3,7 @@ api/master_control_api.py — Master Ecosystem Control & Operational Autonomy RE
 
 Endpoints:
 - GET  /api/ecosystem/status : Complete bot and ecosystem status.
-- GET  /api/ecosystem/health : Status of all subsystems and dependencies.
+- GET  /api/ecosystem/health : Process-local autonomy status plus explicitly unverified subsystems.
 - GET  /api/ecosystem/decisions : Autonomous decision log with multi-frequency breakdown.
 - POST /api/ecosystem/mode : Updates operations autonomy level (Level 1, 2, 3; requires auth + confirmation).
 - GET  /api/ecosystem/report : Full operational and compliance report.
@@ -33,16 +33,56 @@ def get_ecosystem_status():
 
 @master_control_bp.route("/health", methods=["GET"])
 def get_subsystems_health():
-    """Checks all subsystems including self-healing, data feeds, and execution engines."""
+    """Reports initialized in-process autonomy objects without claiming system-wide health."""
+    director = _director
+    self_healing = getattr(director, "self_healing", None) if director is not None else None
+    state_machine = getattr(director, "state_machine", None) if director is not None else None
+    degradation = getattr(director, "degradation", None) if director is not None else None
+
+    local_components = {
+        "operations_director": "INITIALIZED" if director is not None else "UNAVAILABLE",
+        "self_healing": "INITIALIZED" if self_healing is not None else "UNAVAILABLE",
+        "state_machine": "INITIALIZED" if state_machine is not None else "UNAVAILABLE",
+        "degradation_policy": "INITIALIZED" if degradation is not None else "UNAVAILABLE",
+    }
+    unverified_subsystems = [
+        "ai_advisory_peer",
+        "exchange_connectivity",
+        "market_data_freshness",
+        "storage_durability",
+        "risk_engine",
+        "dashboard_listener",
+    ]
+    all_local_initialized = all(status == "INITIALIZED" for status in local_components.values())
+    overall_status = "PARTIAL" if all_local_initialized else "DEGRADED"
+
+    state_summary = None
+    if state_machine is not None:
+        try:
+            state_summary = state_machine.get_state_summary()
+        except Exception:
+            state_summary = None
+            local_components["state_machine"] = "UNAVAILABLE"
+            overall_status = "DEGRADED"
+
     health = {
-        "overall_status": "HEALTHY",
-        "operations_director": "ACTIVE",
-        "self_healing": {
-            "healed_incidents": _director.self_healing.healed_incidents_count,
-            "status": "OPERATIONAL"
+        "overall_status": overall_status,
+        "health_scope": "PROCESS_LOCAL_AUTONOMY_OBJECTS_ONLY",
+        "local_components": local_components,
+        "unverified_subsystems": unverified_subsystems,
+        "operations_director": {
+            "status": local_components["operations_director"],
+            "autonomy_level": getattr(director, "autonomy_level", None) if director is not None else None,
+            "decisions_count": len(getattr(director, "decision_log", []) or []) if director is not None else None,
         },
-        "state_machine": _director.state_machine.current_state,
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        "self_healing": {
+            "status": local_components["self_healing"],
+            "healed_incidents": getattr(self_healing, "healed_incidents_count", None),
+            "strategy_crash_restarts": getattr(self_healing, "strategy_crash_restarts", None),
+        },
+        "state_machine": state_summary,
+        "state_machine_scope": "IN_PROCESS_CONTROL_POSTURE_ONLY_NOT_EXTERNAL_HEALTH_VERIFICATION",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
     return jsonify(format_api_response(health))
 

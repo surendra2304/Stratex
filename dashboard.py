@@ -5485,36 +5485,6 @@ def api_intelligence_impact():
 # MASTER ECOSYSTEM ORCHESTRATION ENDPOINTS
 # ==============================================================================
 
-@app.route('/api/ecosystem/status')
-def api_ecosystem_status():
-    """Returns global ecosystem operational state, active autonomy level, and recent transitions."""
-    try:
-        from autonomy.operations_director import AutonomousOperationsDirector
-        director = AutonomousOperationsDirector()
-        return jsonify({
-            "status": "OK",
-            "autonomy_level": director.autonomy_level,
-            "ecosystem_state": director.state_machine.get_state_summary(),
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-        })
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
-
-@app.route('/api/ecosystem/decisions')
-def api_ecosystem_decisions():
-    """Returns recent autonomous multi-frequency decision records."""
-    try:
-        from autonomy.operations_director import AutonomousOperationsDirector
-        director = AutonomousOperationsDirector()
-        from dataclasses import asdict
-        return jsonify({
-            "status": "OK",
-            "decisions": [asdict(d) for d in director.decision_log[-20:]],
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-        })
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
-
 @app.route('/api/ecosystem/maintenance', methods=['POST'])
 @require_bot_api_key
 def api_ecosystem_maintenance():
@@ -5530,37 +5500,10 @@ def api_ecosystem_maintenance():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
-@app.route('/api/ecosystem/health')
-def api_ecosystem_health():
-    """Returns multi-pillar health matrix of all subsystems (AI, Exchange, Storage, Risk, Dashboard)."""
-    try:
-        from autonomy.degradation_matrix import DegradationPolicyMatrix
-        matrix = DegradationPolicyMatrix()
-        return jsonify({
-            "status": "OK",
-            "matrix": matrix.get_matrix_status(),
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-        })
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
-
-@app.route('/api/ecosystem/mode', methods=['POST'])
-@require_bot_api_key
-def api_ecosystem_mode():
-    """Configures autonomy level (LEVEL 1, 2, or 3)."""
-    try:
-        from autonomy.operations_director import AutonomousOperationsDirector
-        data = request.get_json() or {}
-        level = int(data.get("level", 2))
-        director = AutonomousOperationsDirector()
-        new_lvl = director.set_autonomy_level(level)
-        return jsonify({
-            "status": "SUCCESS",
-            "autonomy_level": new_lvl,
-            "message": f"Autonomy level set to LEVEL_{new_lvl}"
-        })
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+# NOTE: status, decisions, health, mode, and report are served by
+# api.master_control_api. Keep the blueprint as the sole source of these routes;
+# duplicate dashboard handlers previously reset state per request and bypassed
+# the mode-confirmation contract.
 
 # NOTE: /api/ecosystem/report is served by api.master_control_api
 # (registered blueprint wins for this URL). The previous duplicate here read a
