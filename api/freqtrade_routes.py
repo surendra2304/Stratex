@@ -15,6 +15,7 @@ from flask import Blueprint, jsonify, request
 import pandas as pd
 
 from stratex_freqtrade_adapter import ft
+from stratex_freqtrade_adapter.data.downloader import OHLCVUnavailable
 from stratex_freqtrade_adapter.strategy.adapter import FreqtradeStrategyAdapter
 
 freqtrade_bp = Blueprint("freqtrade_bp", __name__, url_prefix="/api/v1/freqtrade")
@@ -77,11 +78,21 @@ def get_protections_status():
 @freqtrade_bp.route("/backtest", methods=["POST"])
 def run_backtest():
     """Executes an on-demand backtest of a Freqtrade strategy on historical/synthetic data."""
-    body = request.get_json(silent=True) or {}
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        body = {}
     strat_name = body.get("strategy", "sample_strategy")
     symbol = body.get("symbol", "BTCUSDT")
     timeframe = body.get("timeframe", "5m")
-    limit = int(body.get("candles", 200))
+    candles = body.get("candles", 200)
+    if not isinstance(strat_name, str) or not isinstance(symbol, str) or not isinstance(timeframe, str):
+        return jsonify({"status": "ERROR", "error": "INVALID_PARAMETERS",
+                        "message": "'strategy', 'symbol' and 'timeframe' must be strings."}), 400
+    if isinstance(candles, bool) or not isinstance(candles, int) or not 21 <= candles <= 1000:
+        # The signal loop below is O(n^2); unbounded candle counts were a cheap DoS.
+        return jsonify({"status": "ERROR", "error": "INVALID_CANDLES",
+                        "message": "'candles' must be an integer between 21 and 1000."}), 400
+    limit = candles
 
     strategy_inst = ft.strategies.create(strat_name)
     if not strategy_inst:
@@ -90,8 +101,14 @@ def run_backtest():
             "message": f"Strategy '{strat_name}' not found in registry.",
         }), 404
 
-    # Fetch data via free downloader
-    df = ft.data.fetch_ohlcv(symbol=symbol, timeframe=timeframe, limit=limit)
+    # Fetch real data via the free downloader; never backtest on invented candles.
+    try:
+        df = ft.data.fetch_ohlcv(symbol=symbol, timeframe=timeframe, limit=limit)
+    except ValueError as e:
+        return jsonify({"status": "ERROR", "error": "INVALID_PARAMETERS", "message": str(e)[:200]}), 400
+    except OHLCVUnavailable:
+        return jsonify({"status": "ERROR", "error": "DATA_UNAVAILABLE",
+                        "message": "Real OHLCV data is unavailable; no synthetic backtest is produced."}), 503
     adapter = ft.strategies.wrap(strategy_inst)
 
     # Simulate basic signal generation and ROI / SL check
@@ -116,6 +133,7 @@ def run_backtest():
         "symbol": symbol,
         "timeframe": timeframe,
         "candles_analyzed": len(df),
+        "data_source": getattr(ft.data, "last_fetch_status", "UNKNOWN"),
         "signals_generated_count": len(signals),
         "sample_signals": signals[:10],
         "roi_table": strategy_inst.minimal_roi,

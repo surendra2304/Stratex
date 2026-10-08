@@ -11,6 +11,7 @@ import logging
 import threading
 import time
 from typing import Any, Dict, List, Optional
+from .errors import MarketDataUnavailable
 from .models import ArbitrageOpportunity, NormalizedTicker
 
 logger = logging.getLogger("stratex.ccxt.arbitrage")
@@ -48,20 +49,20 @@ class ArbitrageScanner:
                     valid_tickers[ex_id] = t
 
         if len(valid_tickers) < 2:
-            # Synthetic realistic baseline if fewer than 2 exchange tickers provided
-            best_buy_ex = "binance"
-            best_sell_ex = "okx"
-            base_p = 65000.0 if "BTC" in sym else 3500.0
-            buy_price = base_p
-            sell_price = base_p * 1.0008  # +0.08% spread
-        else:
-            # Lowest ask = cheapest venue to buy
-            best_buy_ex = min(valid_tickers.keys(), key=lambda k: valid_tickers[k].ask)
-            buy_price = float(valid_tickers[best_buy_ex].ask)
+            # An arbitrage spread needs two real quotes. Inventing a baseline
+            # (previously 65000 vs +0.08%) reported spreads that never existed.
+            raise MarketDataUnavailable(
+                f"Arbitrage scan for {sym} needs valid bid/ask quotes from at least two "
+                f"exchanges; got {len(valid_tickers)}"
+            )
 
-            # Highest bid = best venue to sell
-            best_sell_ex = max(valid_tickers.keys(), key=lambda k: valid_tickers[k].bid)
-            sell_price = float(valid_tickers[best_sell_ex].bid)
+        # Lowest ask = cheapest venue to buy
+        best_buy_ex = min(valid_tickers.keys(), key=lambda k: float(valid_tickers[k].ask or 0.0))
+        buy_price = float(valid_tickers[best_buy_ex].ask)
+
+        # Highest bid = best venue to sell
+        best_sell_ex = max(valid_tickers.keys(), key=lambda k: float(valid_tickers[k].bid or 0.0))
+        sell_price = float(valid_tickers[best_sell_ex].bid)
 
         spread = round(sell_price - buy_price, 4)
         spread_pct = round((spread / buy_price) * 100.0, 4) if buy_price > 0 else 0.0

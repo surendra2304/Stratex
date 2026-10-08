@@ -31,13 +31,28 @@ from stratex_openbb.technical.overlays import (
 )
 
 
+OFFLINE_FALLBACK_SOURCE = "Offline Fallback"
+_OBSERVED: Dict[str, str] = {}
+
+
+def _observe(provider: str, source: Optional[str]) -> None:
+    """Remember whether the provider's last answer was live data or a placeholder."""
+    _OBSERVED[provider] = "SERVING_FALLBACK" if source in (None, OFFLINE_FALLBACK_SOURCE) else "LIVE_DATA_OBSERVED"
+
+
+def observed_provider_states() -> Dict[str, str]:
+    return dict(_OBSERVED)
+
+
 class _CryptoPriceNamespace:
     def __init__(self, binance_provider: BinanceFreeProvider):
         self._binance = binance_provider
 
     def historical(self, symbol: str = "BTCUSDT", timeframe: str = "1h", limit: int = 100) -> pd.DataFrame:
         """Fetches historical OHLCV data using public Binance endpoints."""
-        return self._binance.get_historical_klines(symbol=symbol, timeframe=timeframe, limit=limit)
+        result = self._binance.get_historical_klines(symbol=symbol, timeframe=timeframe, limit=limit)
+        _observe("binance_public", "live" if result is not None and not result.empty else OFFLINE_FALLBACK_SOURCE)
+        return result
 
 
 class _CryptoNamespace:
@@ -56,11 +71,15 @@ class _CryptoNamespace:
 
     def overview(self, force_refresh: bool = False) -> CryptoGlobalOverview:
         """Global crypto market aggregates (total market cap, volume, BTC/ETH dominance)."""
-        return self._coingecko.get_global_overview(force_refresh=force_refresh)
+        result = self._coingecko.get_global_overview(force_refresh=force_refresh)
+        _observe("coingecko", getattr(result, "source", None))
+        return result
 
     def sentiment(self, force_refresh: bool = False) -> SentimentReading:
         """Crypto Fear & Greed index reading (score 0-100 and classification)."""
-        return self._sentiment.get_fear_and_greed(force_refresh=force_refresh)
+        result = self._sentiment.get_fear_and_greed(force_refresh=force_refresh)
+        _observe("sentiment", getattr(result, "source", None))
+        return result
 
     def trending(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
         """Top trending cryptocurrencies."""
@@ -84,7 +103,10 @@ class _EconomyNamespace:
 
     def indicators(self, force_refresh: bool = False) -> Dict[str, MacroIndicatorSnapshot]:
         """All canonical cross-asset indicators (DXY, 10Y Yield, VIX, S&P 500, Gold, Oil)."""
-        return self._macro.get_all_macro_indicators(force_refresh=force_refresh)
+        result = self._macro.get_all_macro_indicators(force_refresh=force_refresh)
+        sources = {getattr(v, "source", None) for v in result.values()} if result else {None}
+        _observe("macro_yahoo_free", OFFLINE_FALLBACK_SOURCE if OFFLINE_FALLBACK_SOURCE in sources or None in sources else "live")
+        return result
 
     def indicator(self, key: str, force_refresh: bool = False) -> MacroIndicatorSnapshot:
         """Single macroeconomic indicator snapshot by key (e.g. DXY, VIX, US10Y)."""
@@ -183,11 +205,21 @@ class OpenBBNativeEngine:
 
     def health_check(self) -> Dict[str, Any]:
         """Verifies health and accessibility of all free public providers."""
+        # No probe is made here: report what the last real requests observed.
+        # (This used to be a hardcoded ONLINE/HEALTHY block, even when every
+        # upstream call was failing and placeholders were being served.)
+        providers = ("coingecko", "sentiment", "macro_yahoo_free", "binance_public")
+        states = {name: _OBSERVED.get(name, "UNVERIFIED") for name in providers}
+        values = set(states.values())
+        if values == {"LIVE_DATA_OBSERVED"}:
+            overall = "HEALTHY"
+        elif "SERVING_FALLBACK" in values:
+            overall = "DEGRADED"
+        else:
+            overall = "UNVERIFIED"
         return {
-            "coingecko": "ONLINE",
-            "sentiment": "ONLINE",
-            "macro_yahoo_free": "ONLINE",
-            "binance_public": "ONLINE",
+            **states,
             "mode": "100% Free Public / Unauthenticated",
-            "status": "HEALTHY"
+            "status": overall,
+            "basis": "last observed provider responses; no live probe performed by this check",
         }

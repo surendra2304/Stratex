@@ -37,7 +37,9 @@ class CCXTExchangeAdapter:
     ):
         if ccxt is None:
             raise RuntimeError("CCXT is required. Install with: pip install ccxt")
-        if not hasattr(ccxt, exchange_id):
+        # Only real exchange classes: hasattr() alone accepted any module attribute
+        # ("Exchange", "NetworkError", "__init__", ...) and then instantiated it.
+        if not isinstance(exchange_id, str) or exchange_id not in getattr(ccxt, "exchanges", ()):
             raise ValueError(f"Unsupported CCXT exchange id: {exchange_id}")
 
         self.exchange_id = exchange_id
@@ -347,7 +349,12 @@ class CCXTExchangeAdapter:
             "last_latency_ms": self.last_latency_ms,
             "total_requests": self.total_requests,
             "last_error": self.last_error,
-            "status": "HEALTHY" if not self.last_error else "DEGRADED",
+            # HEALTHY requires at least one successful exchange round trip.
+            "status": (
+                "DEGRADED" if self.last_error
+                else "HEALTHY" if self.last_update_time
+                else "UNVERIFIED"
+            ),
         }
 
     def close(self):

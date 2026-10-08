@@ -1,7 +1,7 @@
 """stratex_ccxt_adapter/funding.py
 
 Cross-exchange perpetual futures funding rate comparator.
-100% free unauthenticated queries with TTL caching and fallback resilience.
+100% free unauthenticated queries with TTL caching; no synthetic fallback rates.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import logging
 import threading
 import time
 from typing import Any, Dict, List, Optional
+from .errors import MarketDataUnavailable
 from .models import FundingRateComparison
 
 logger = logging.getLogger("stratex.ccxt.funding")
@@ -40,7 +41,9 @@ class FundingRateComparator:
         rates: Dict[str, float] = {}
 
         if exchanges:
-            for ex_id, adapter in exchanges.items():
+            # Snapshot: the hub may register new adapters from other request
+            # threads while we iterate ("dictionary changed size" -> HTTP 500).
+            for ex_id, adapter in list(exchanges.items()):
                 try:
                     # Check if adapter has fetch_funding_rate
                     ex = getattr(adapter, "exchange", adapter)
@@ -54,13 +57,10 @@ class FundingRateComparator:
                     logger.debug(f"Funding rate fetch skipped for {ex_id}: {e}")
                     continue
 
-        # Baseline reasonable fallbacks if exchanges uninitialized or offline
         if not rates:
-            rates = {
-                "binance": 0.0001,   # 0.01%
-                "bybit": 0.000105,  # 0.0105%
-                "okx": 0.000095,    # 0.0095%
-            }
+            # Previously hardcoded "baseline" rates were returned here and served
+            # as live data. No real rate means no answer.
+            raise MarketDataUnavailable(f"No exchange returned a funding rate for {sym}")
 
         max_rate = max(rates.values())
         min_rate = min(rates.values())

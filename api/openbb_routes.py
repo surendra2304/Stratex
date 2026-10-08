@@ -15,6 +15,7 @@ from flask import Blueprint, jsonify, request
 
 from api.data_shapes import format_api_response
 from stratex_openbb import obb
+from stratex_openbb.client import OFFLINE_FALLBACK_SOURCE
 
 openbb_bp = Blueprint("openbb_api", __name__, url_prefix="/api/v1/openbb")
 
@@ -52,10 +53,28 @@ def get_crypto_trending():
 
 @openbb_bp.route("/economy/macro", methods=["GET"])
 def get_macro_regime():
-    """Cross-asset macroeconomic regime determination."""
+    """Cross-asset macroeconomic regime determination.
+
+    When its inputs are offline placeholders the regime is labeled as such
+    (``data_quality``/``fallback_inputs``) and its confidence is reported as 0.
+    """
     refresh = request.args.get("refresh", "false").lower() == "true"
     regime = obb.economy.regime(force_refresh=refresh)
-    return jsonify(format_api_response(asdict(regime)))
+    data = asdict(regime)
+    fallback_inputs = []
+    try:
+        for key, snap in obb.economy.indicators().items():
+            if getattr(snap, "source", None) == OFFLINE_FALLBACK_SOURCE:
+                fallback_inputs.append(key)
+        if getattr(obb.crypto.sentiment(), "source", None) == OFFLINE_FALLBACK_SOURCE:
+            fallback_inputs.append("fear_greed")
+    except Exception:
+        fallback_inputs.append("UNKNOWN")
+    data["data_quality"] = "FALLBACK_PLACEHOLDER" if fallback_inputs else "LIVE"
+    data["fallback_inputs"] = fallback_inputs
+    if fallback_inputs:
+        data["confidence"] = 0.0
+    return jsonify(format_api_response(data))
 
 
 @openbb_bp.route("/economy/indicators", methods=["GET"])
@@ -70,30 +89,26 @@ def get_macro_indicators():
 @openbb_bp.route("/quantitative/metrics", methods=["GET"])
 def get_quantitative_metrics():
     """Computes quantitative risk and volatility metrics for a given symbol."""
-    symbol = request.args.get("symbol", "BTCUSDT").upper()
-    timeframe = request.args.get("timeframe", "1h")
-    limit = min(int(request.args.get("limit", 100)), 500)
+    symbol = request.args.get("symbol", "BTCUSDT").upper().strip()
+    timeframe = request.args.get("timeframe", "1h").strip()
+    if not symbol.isalnum() or len(symbol) > 20:
+        return jsonify({"status": "ERROR", "error": "INVALID_SYMBOL", "message": "symbol must be alphanumeric, e.g. BTCUSDT"}), 400
+    try:
+        limit = int(request.args.get("limit", 100))
+    except (TypeError, ValueError):
+        return jsonify({"status": "ERROR", "error": "INVALID_LIMIT", "message": "'limit' must be an integer"}), 400
+    limit = min(max(limit, 5), 500)
 
     # Fetch public klines
     df = obb.crypto.price.historical(symbol=symbol, timeframe=timeframe, limit=limit)
     if df is None or df.empty or len(df) < 5:
-        # Generate baseline report if live exchange is unreachable
-        mock_prices = [100.0 * (1.0 + 0.01 * (i % 5 - 2)) for i in range(30)]
-        risk = obb.quantitative.risk_metrics(mock_prices, symbol=symbol)
-        return jsonify(format_api_response({
-            "risk_metrics": asdict(risk),
-            "volatility": {
-                "symbol": symbol,
-                "timeframe": timeframe,
-                "sample_bars": len(mock_prices),
-                "close_to_close_vol": 0.35,
-                "parkinson_vol": 0.32,
-                "garman_klass_vol": 0.33,
-                "yang_zhang_vol": 0.34
-            },
-            "note": "Computed using baseline series (insufficient live klines)"
-        }))
-
+        # Previously a hardcoded "baseline" price series and constant volatility
+        # numbers were returned here with HTTP 200. No live klines -> no metrics.
+        return jsonify({
+            "status": "ERROR",
+            "error": "DATA_UNAVAILABLE",
+            "message": f"Fewer than 5 live klines available for {symbol} ({timeframe}); metrics not computed.",
+        }), 503
     risk = obb.quantitative.risk_metrics(df["close"].to_numpy(), symbol=symbol)
     vols = obb.quantitative.volatility_estimators(df, symbol=symbol, timeframe=timeframe)
 

@@ -11,11 +11,12 @@ REST API Blueprint exposing CCXT Multi-Exchange Endpoints:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from dataclasses import asdict
 from flask import Blueprint, jsonify, request
 
-from stratex_ccxt_adapter import ccxt_hub
+from stratex_ccxt_adapter import MarketDataUnavailable, ccxt_hub
 
 ccxt_bp = Blueprint("ccxt_bp", __name__, url_prefix="/api/v1/ccxt")
 
@@ -26,6 +27,22 @@ except Exception:  # pragma: no cover - ccxt is a declared dependency; guard any
     _CCXT_NETWORK_ERRORS = ()
 
 
+_SYMBOL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9/:._-]{0,39}$")
+_MAX_DEPTH_LEVELS = 100
+
+
+def _symbol_arg():
+    """Return (symbol, None) or (None, 400-response) for the ``symbol`` query arg."""
+    symbol = request.args.get("symbol", "BTCUSDT").strip()
+    if not _SYMBOL_RE.match(symbol):
+        return None, (jsonify({
+            "status": "ERROR",
+            "error": "INVALID_SYMBOL",
+            "message": "'symbol' must be 1-40 characters of letters, digits and / : . _ -",
+        }), 400)
+    return symbol, None
+
+
 def _upstream_error_response(e: Exception):
     """Maps exchange-adapter failures to honest, non-leaking responses.
 
@@ -33,6 +50,12 @@ def _upstream_error_response(e: Exception):
     internal server errors; raw ccxt messages can contain internal URLs and
     request details, so they are never forwarded to the client.
     """
+    if isinstance(e, MarketDataUnavailable):
+        return jsonify({
+            "status": "ERROR",
+            "error": "DATA_UNAVAILABLE",
+            "message": "Real exchange data is currently unavailable; no synthetic substitute is served.",
+        }), 503
     if _CCXT_NETWORK_ERRORS and isinstance(e, _CCXT_NETWORK_ERRORS):
         return jsonify({
             "status": "ERROR",
@@ -71,7 +94,9 @@ def list_exchanges():
 @ccxt_bp.route("/ticker", methods=["GET"])
 def get_ticker():
     """Fetches normalized ticker for a symbol from a specified exchange."""
-    symbol = request.args.get("symbol", "BTCUSDT")
+    symbol, error = _symbol_arg()
+    if error is not None:
+        return error
     exchange = request.args.get("exchange", "binance").lower()
     try:
         adapter = ccxt_hub.get_exchange(exchange)
@@ -90,7 +115,9 @@ def get_ticker():
 @ccxt_bp.route("/arbitrage", methods=["GET"])
 def get_arbitrage():
     """Scans and compares prices across multiple exchanges to detect arbitrage spreads."""
-    symbol = request.args.get("symbol", "BTCUSDT")
+    symbol, error = _symbol_arg()
+    if error is not None:
+        return error
     try:
         opp = ccxt_hub.scan_arbitrage(symbol)
         return jsonify({
@@ -105,12 +132,20 @@ def get_arbitrage():
 @ccxt_bp.route("/depth", methods=["GET"])
 def get_depth():
     """Analyzes orderbook depth, liquidity, and volume-weighted micro-price."""
-    symbol = request.args.get("symbol", "BTCUSDT")
+    symbol, error = _symbol_arg()
+    if error is not None:
+        return error
     exchange = request.args.get("exchange", "binance").lower()
     try:
         levels = int(request.args.get("levels", 15))
     except (TypeError, ValueError):
         return jsonify({"status": "ERROR", "error": "INVALID_LEVELS", "message": "'levels' must be an integer."}), 400
+    if not 1 <= levels <= _MAX_DEPTH_LEVELS:
+        return jsonify({
+            "status": "ERROR",
+            "error": "INVALID_LEVELS",
+            "message": f"'levels' must be between 1 and {_MAX_DEPTH_LEVELS}.",
+        }), 400
     try:
         analysis = ccxt_hub.analyze_depth(symbol, exchange_id=exchange, depth_levels=levels)
         return jsonify({
@@ -127,7 +162,9 @@ def get_depth():
 @ccxt_bp.route("/funding", methods=["GET"])
 def get_funding():
     """Compares perpetual futures funding rates across exchanges."""
-    symbol = request.args.get("symbol", "BTCUSDT")
+    symbol, error = _symbol_arg()
+    if error is not None:
+        return error
     try:
         funding = ccxt_hub.compare_funding_rates(symbol)
         return jsonify({

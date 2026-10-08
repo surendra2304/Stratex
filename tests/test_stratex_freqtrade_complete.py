@@ -287,9 +287,15 @@ def test_canonical_strategies_registered(sample_ohlcv):
 # ------------------------------------------------------------------------------
 # 7. Unified Facade Tests
 # ------------------------------------------------------------------------------
-def test_ft_facade_interface():
+def test_ft_facade_interface(monkeypatch):
     status = ft.status()
-    assert status["status"] == "HEALTHY"
+    # No real market data fetched yet in this process -> not provably healthy.
+    monkeypatch.setattr(ft.data, "last_fetch_status", "UNVERIFIED")
+    assert ft.status()["status"] == "UNVERIFIED"
+    monkeypatch.setattr(ft.data, "last_fetch_status", "UNAVAILABLE")
+    assert ft.status()["status"] == "DEGRADED"
+    monkeypatch.setattr(ft.data, "last_fetch_status", "LIVE")
+    assert ft.status()["status"] == "HEALTHY"
     assert status["registered_strategies"] >= 3
     assert "100% Free Public Sources" in status["mode"]
 
@@ -303,13 +309,17 @@ def test_ft_facade_interface():
 # ------------------------------------------------------------------------------
 # 8. Flask REST API Endpoints Tests
 # ------------------------------------------------------------------------------
-def test_flask_freqtrade_routes(flask_client):
-    # GET /status
+def test_flask_freqtrade_routes(flask_client, sample_ohlcv, monkeypatch):
+    from api import freqtrade_routes
+    from stratex_freqtrade_adapter.data.downloader import OHLCVUnavailable
+
+    # GET /status — HEALTHY only once real market data was actually fetched.
     res = flask_client.get("/api/v1/freqtrade/status")
     assert res.status_code == 200
     data = res.get_json()
     assert data["status"] == "OK"
-    assert data["data"]["status"] == "HEALTHY"
+    assert data["data"]["status"] in {"UNVERIFIED", "DEGRADED", "HEALTHY"}
+    assert data["data"]["status"] != "HEALTHY" or data["data"]["market_data"] in {"LIVE", "CACHE"}
 
     # GET /strategies
     res = flask_client.get("/api/v1/freqtrade/strategies")
@@ -329,15 +339,56 @@ def test_flask_freqtrade_routes(flask_client):
     data = res.get_json()
     assert len(data["data"]) > 0
 
-    # POST /backtest
-    res = flask_client.post("/api/v1/freqtrade/backtest", json={
-        "strategy": "sample_strategy",
-        "symbol": "BTCUSDT",
-        "timeframe": "5m",
-        "candles": 100
-    })
+    request_body = {"strategy": "sample_strategy", "symbol": "BTCUSDT", "timeframe": "5m", "candles": 100}
+
+    # POST /backtest without real data -> honest 503, never a synthetic backtest
+    def _offline(**_kwargs):
+        raise OHLCVUnavailable("offline")
+
+    monkeypatch.setattr(freqtrade_routes.ft.data, "fetch_ohlcv", _offline)
+    res = flask_client.post("/api/v1/freqtrade/backtest", json=request_body)
+    assert res.status_code == 503
+    assert res.get_json()["error"] == "DATA_UNAVAILABLE"
+
+    # POST /backtest with real candles
+    monkeypatch.setattr(freqtrade_routes.ft.data, "fetch_ohlcv", lambda **_kwargs: sample_ohlcv)
+    res = flask_client.post("/api/v1/freqtrade/backtest", json=request_body)
     assert res.status_code == 200
     data = res.get_json()
     assert data["strategy"] == "sample_strategy"
-    assert "candles_analyzed" in data
+    assert data["candles_analyzed"] == len(sample_ohlcv)
     assert "roi_table" in data
+
+    # Hostile parameters are client errors, not 500s / unbounded work
+    for bad in ({"symbol": {"$ne": 1}}, {"candles": "abc"}, {"candles": 10**7}, {"candles": True},
+                {"strategy": ["x"]}, {"timeframe": 5}):
+        res = flask_client.post("/api/v1/freqtrade/backtest", json={**request_body, **bad})
+        assert res.status_code == 400, bad
+
+
+def test_downloader_never_silently_fabricates_candles(tmp_path, monkeypatch):
+    from stratex_freqtrade_adapter.data import downloader as dl
+
+    class _Down:
+        status_code = 503
+
+        def json(self):
+            return {}
+
+    monkeypatch.setattr(dl.requests, "get", lambda *a, **k: _Down())
+    d = dl.FreqtradeDataDownloader(cache_dir=str(tmp_path))
+    with pytest.raises(dl.OHLCVUnavailable):
+        d.fetch_ohlcv("BTCUSDT", "5m", 50, use_cache=False)
+    assert d.last_fetch_status == "UNAVAILABLE"
+
+    state = np.random.get_state()[1][:5].copy()
+    df = d.fetch_ohlcv("BTCUSDT", "5m", 50, use_cache=False, allow_synthetic=True)
+    assert df.attrs.get("synthetic") is True and len(df) == 50
+    assert d.last_fetch_status == "SYNTHETIC"
+    assert (np.random.get_state()[1][:5] == state).all(), "global numpy RNG must not be reseeded"
+
+    for bad_symbol in ("../../etc/passwd", "BTC/USDT", "", "x" * 30):
+        with pytest.raises(ValueError):
+            d.fetch_ohlcv(bad_symbol, "5m", 50)
+    with pytest.raises(ValueError):
+        d.fetch_ohlcv("BTCUSDT", "5parsecs", 50)

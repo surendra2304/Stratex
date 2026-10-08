@@ -308,8 +308,13 @@ def test_obb_facade_namespaces():
     assert hasattr(obb, "technical")
 
     health = obb.health_check()
-    assert health["status"] == "HEALTHY"
+    # Health is derived from observed provider responses, never hardcoded.
+    assert health["status"] in {"UNVERIFIED", "DEGRADED", "HEALTHY"}
     assert health["mode"] == "100% Free Public / Unauthenticated"
+    providers = ("coingecko", "sentiment", "macro_yahoo_free", "binance_public")
+    assert set(health[p] for p in providers) <= {"UNVERIFIED", "SERVING_FALLBACK", "LIVE_DATA_OBSERVED"}
+    if health["status"] == "HEALTHY":
+        assert all(health[p] == "LIVE_DATA_OBSERVED" for p in providers)
 
     # Test obb.crypto
     overview = obb.crypto.overview()
@@ -348,7 +353,6 @@ def test_flask_openbb_api_endpoints():
         "/api/v1/openbb/crypto/trending",
         "/api/v1/openbb/economy/macro",
         "/api/v1/openbb/economy/indicators",
-        "/api/v1/openbb/quantitative/metrics?symbol=BTCUSDT",
     ]
 
     for ep in endpoints:
@@ -357,3 +361,36 @@ def test_flask_openbb_api_endpoints():
         data = res.get_json()
         assert data is not None, f"Endpoint {ep} returned empty or non-JSON body"
         assert "status" in data or "data" in data
+
+    # Quantitative metrics need real klines: either computed from them (200) or
+    # an honest 503 — never metrics from an invented "baseline" series.
+    res = client.get("/api/v1/openbb/quantitative/metrics?symbol=BTCUSDT")
+    assert res.status_code in (200, 503)
+    if res.status_code == 503:
+        assert res.get_json()["error"] == "DATA_UNAVAILABLE"
+    assert "baseline series" not in res.get_data(as_text=True)
+    assert client.get("/api/v1/openbb/quantitative/metrics?limit=abc").status_code == 400
+    assert client.get("/api/v1/openbb/quantitative/metrics?symbol=../../x").status_code == 400
+
+    # A regime computed from offline placeholders is labeled as such.
+    macro = client.get("/api/v1/openbb/economy/macro").get_json()
+    payload = macro.get("data", macro)
+    if payload.get("fallback_inputs"):
+        assert payload["data_quality"] == "FALLBACK_PLACEHOLDER"
+        assert payload["confidence"] == 0.0
+
+
+def test_openbb_quant_metrics_from_real_klines(monkeypatch):
+    import numpy as np
+    import pandas as pd
+    from dashboard import app
+
+    closes = 100 * np.exp(np.cumsum(np.random.default_rng(7).normal(0, 0.01, 60)))
+    df = pd.DataFrame({"open": closes, "high": closes * 1.01, "low": closes * 0.99, "close": closes,
+                       "volume": np.full(60, 10.0)})
+    monkeypatch.setattr(obb.crypto.price, "historical", lambda **kw: df)
+    res = app.test_client().get("/api/v1/openbb/quantitative/metrics?symbol=BTCUSDT&limit=60")
+    assert res.status_code == 200
+    body = res.get_json()
+    payload = body.get("data", body)
+    assert "risk_metrics" in payload and "volatility" in payload

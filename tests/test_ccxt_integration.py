@@ -209,7 +209,12 @@ def test_ccxt_health_telemetry():
     assert health["exchange_id"] == "binance"
     assert health["sandbox"] is True
     assert health["rate_limit_enabled"] is True
-    assert health["status"] == "HEALTHY"
+    # Never contacted the exchange yet: no evidence of health.
+    assert health["status"] == "UNVERIFIED"
+    adapter.last_update_time = "2026-10-08T00:00:00+00:00"
+    assert adapter.get_health_status()["status"] == "HEALTHY"
+    adapter.last_error = "NETWORK_ERROR: timeout"
+    assert adapter.get_health_status()["status"] == "DEGRADED"
     # Ensure no secrets leak
     assert "apiKey" not in health
     assert "secret" not in health
