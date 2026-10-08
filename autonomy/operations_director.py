@@ -14,6 +14,7 @@ Capabilities:
 """
 
 import datetime
+import math
 import os
 import time
 from dataclasses import asdict, dataclass
@@ -71,24 +72,66 @@ class AutonomousOperationsDirector:
         logger.info(f"[AUTONOMY_DIR] 🧠 [{freq_tier}] {action} on {component}: {rationale}")
         return rec
 
-    def run_high_frequency_cycle(self, current_drawdown_pct: float, active_positions_count: int) -> dict[str, Any]:
-        """Runs 5-minute health and risk check."""
-        if current_drawdown_pct >= 12.0:
-            self.state_machine.transition_to("DEFENSIVE", f"Drawdown ceiling {current_drawdown_pct:.1f}% >= 12%")
-            self.log_decision("HIGH_5M", "FLATTEN_ALL", "risk_orchestrator", f"Critical drawdown {current_drawdown_pct:.1f}%")
+    _RISK_STATES = frozenset({"DEGRADED", "PROTECTED", "DEFENSIVE"})
+
+    def _hold_without_all_clear(self, reason: str) -> None:
+        """Keep a known risk posture; otherwise drop any stale all-clear to UNKNOWN."""
+        if self.state_machine.current_state not in self._RISK_STATES:
+            self.state_machine.transition_to("UNKNOWN", reason)
+
+    def run_high_frequency_cycle(
+        self,
+        current_drawdown_pct: float,
+        active_positions_count: int,
+        *,
+        health_verified: bool = False,
+    ) -> dict[str, Any]:
+        """Runs a risk check; requires explicit health evidence before all-clear.
+
+        Fail-closed rules:
+        * HALTED is latched — nothing in this cycle can clear it (operator only).
+        * A drawdown that is not a finite, non-negative number is unusable risk
+          evidence: entries are held and no all-clear is issued.
+        * ``health_verified`` must be the literal ``True``; truthy strings such as
+          ``"false"`` coming from loosely-typed callers do not count as attestation.
+        """
+        if self.state_machine.current_state == "HALTED":
+            return {"status": "HALTED", "action": "AWAIT_OPERATOR"}
+
+        try:
+            drawdown = float(current_drawdown_pct)
+        except (TypeError, ValueError):
+            drawdown = math.nan
+        if not math.isfinite(drawdown) or drawdown < 0.0:
+            self._hold_without_all_clear(f"Unusable drawdown input {current_drawdown_pct!r}")
+            self.log_decision(
+                "HIGH_5M", "HOLD_NEW_ENTRIES", "risk_orchestrator",
+                f"Rejected non-finite/negative drawdown input {current_drawdown_pct!r}",
+            )
+            return {"status": "INVALID_RISK_INPUT", "action": "HOLD_NEW_ENTRIES"}
+
+        if drawdown >= 12.0:
+            self.state_machine.transition_to("DEFENSIVE", f"Drawdown ceiling {drawdown:.1f}% >= 12%")
+            self.log_decision("HIGH_5M", "FLATTEN_ALL", "risk_orchestrator", f"Critical drawdown {drawdown:.1f}%")
             return {"status": "CRITICAL_DRAWDOWN", "action": "FLATTEN_AND_HALT"}
-        elif current_drawdown_pct >= 8.0:
-            self.state_machine.transition_to("PROTECTED", f"Drawdown {current_drawdown_pct:.1f}% in action corridor")
-            self.log_decision("HIGH_5M", "HALT_NEW_ENTRIES", "risk_orchestrator", f"Drawdown {current_drawdown_pct:.1f}%")
+        if drawdown >= 8.0:
+            self.state_machine.transition_to("PROTECTED", f"Drawdown {drawdown:.1f}% in action corridor")
+            self.log_decision("HIGH_5M", "HALT_NEW_ENTRIES", "risk_orchestrator", f"Drawdown {drawdown:.1f}%")
             return {"status": "ACTION_CORRIDOR", "action": "HALT_NEW_ENTRIES"}
-        elif current_drawdown_pct >= 5.0:
-            self.state_machine.transition_to("PROTECTED", f"Drawdown {current_drawdown_pct:.1f}% in warning corridor")
-            self.log_decision("HIGH_5M", "THROTTLE_SIZING_30PCT", "risk_orchestrator", f"Drawdown {current_drawdown_pct:.1f}%")
+        if drawdown >= 5.0:
+            self.state_machine.transition_to("PROTECTED", f"Drawdown {drawdown:.1f}% in warning corridor")
+            self.log_decision("HIGH_5M", "THROTTLE_SIZING_30PCT", "risk_orchestrator", f"Drawdown {drawdown:.1f}%")
             return {"status": "WARNING_CORRIDOR", "action": "THROTTLE_SIZING_30PCT"}
-        else:
-            if self.state_machine.current_state != "FULL_AUTONOMY":
-                self.state_machine.transition_to("FULL_AUTONOMY", "Drawdown recovered to nominal bounds")
-            return {"status": "NOMINAL", "action": "CONTINUE_TRADING"}
+
+        if health_verified is not True:
+            # Never infer an all-clear from drawdown alone.
+            self._hold_without_all_clear("Independent subsystem health was not verified by this cycle")
+            return {"status": "HEALTH_UNVERIFIED", "action": "HOLD_NEW_ENTRIES"}
+        if self.state_machine.current_state != "FULL_AUTONOMY":
+            self.state_machine.transition_to(
+                "FULL_AUTONOMY", "Drawdown nominal and subsystem health explicitly verified"
+            )
+        return {"status": "NOMINAL", "action": "CONTINUE_TRADING"}
 
     def run_medium_frequency_cycle(self, strategy_sharpes: dict[str, float]) -> dict[str, float]:
         """Runs hourly strategy weighting adjustments within ±20% bounds."""
