@@ -26,9 +26,10 @@ Work happens only on branch `arena/bb27a2eb-stratex`; every commit must pass the
 6. [x] Re-run live HTTP endpoint census (all GET + POST routes) on current code; fix any 5xx.
        (commits ab4ec73 data honesty, 5b7186a http hardening; census now in-repo:
        `scripts/http_route_census.py`.)
-7. [ ] Stress pass — execution/risk numeric edge cases (NaN/inf/zero/negative price, size,
+7. [x] Stress pass — execution/risk numeric edge cases (NaN/inf/zero/negative price, size,
        balance, stop distance) through real sizing/protection code; fix fail-open paths + tests.
-8. [ ] Stress pass — persistence robustness (corrupt/truncated/concurrent JSON + JSONL state
+       (commit 8701a13; 228 regression cases in tests/test_numeric_edge_cases.py.)
+8. [~] Stress pass — persistence robustness (corrupt/truncated/concurrent JSON + JSONL state
        stores: trades, ledger, baseline, advisory params); convert every shared-`.tmp` writer to
        `atomic_io`; fix crashes/data loss + tests.
 9. [ ] Stress pass — malformed market data (NaN, duplicates, out-of-order, high<low, zero
@@ -57,11 +58,11 @@ Work happens only on branch `arena/bb27a2eb-stratex`; every commit must pass the
         pushed, this file at 100%, ≥30,000 changed lines since 5c66171 (user requirement).
 
 ## Current step
-Item 7 — execution/risk numeric edge cases.
+Item 8 — persistence robustness (atomic_io conversion of shared-`.tmp` writers, corrupt-state handling).
 
 Line counter (user requirement, 2026-10-09: "only stop after genuinely modifying 30,000 lines"):
 `git diff --shortstat 5c66171 HEAD` insertions+deletions, minus the 1,376 lines that were already
-uncommitted when the requirement was given. After item 6: 4,614 − 1,376 = 3,238.
+uncommitted when the requirement was given.
 
 ## Assumptions log
 - 2026-10-08: Local HEAD was at base `edabb3c` after a workspace restore while the remote branch
@@ -87,7 +88,21 @@ uncommitted when the requirement was given. After item 6: 4,614 − 1,376 = 3,23
   BacktestEngine pass); agent-gateway jobs are reported as NOT_SCHEDULED because no worker
   consumes them.
 
+- 2026-10-09: Profitability gate no longer invents a 0.5 win probability for invalid model
+  confidence or unknown strategy types (consistent with the existing RULE_BASED rule); the
+  test that pinned the old fallback was rewritten to pin the rejection.
+- 2026-10-09: A trade result with non-finite PnL latches `RiskGate.accounting_fault` (entries
+  refused until a named operator clears it) rather than being dropped.
+- 2026-10-09: Spot entries require both SL and TP (`UNPROTECTED_ENTRY_REFUSED`); the only
+  caller (testnet service) always passes both.
+- 2026-10-09: `risk/live_enforcer.py` was a byte-for-byte copy of `risk/circuit_breakers.py`;
+  `LiveRiskEnforcer` now lives only in live_enforcer.py and `CircuitBreakerEngine` only in
+  circuit_breakers.py (re-export kept for compatibility).
+
 ## Notes
+- Item 7 (8701a13): 1,606 passed / 6 skipped on a clean worktree; ruff + mypy clean. Every test
+  file also passes when run standalone (isolation sweep over 160 files found 7 order-dependent
+  files; fixed via the `pinned_testnet_mode` fixture and a per-test idempotency store).
 - Item 6 census (5b7186a, in-repo harness, field-level fuzz from handler source): 201 rules
   (167 GET / 40 POST), 3,075 probes, 0 failures. admin GET 156×200/2×404/8×503; admin POST
   917×200, 15×201, 138×202, 1,232×400, 48×404, 33×405, 3×409, 117×503 (freqtrade data unavailable,
