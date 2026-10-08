@@ -23,19 +23,45 @@ Work happens only on branch `arena/bb27a2eb-stratex`; every commit must pass the
        kill-switch flatten leaks margin; A/B engine reuses one event id for margin+PnL (fees/PnL
        never booked, drawdown guard blind) and counts CLOSED positions toward the open cap;
        close_position not idempotent; longsim harness skips PnL booking + writes into repo root.
-6. [~] Re-run live HTTP endpoint census (all GET + POST routes) on current code; fix any 5xx.
+6. [x] Re-run live HTTP endpoint census (all GET + POST routes) on current code; fix any 5xx.
+       (commits ab4ec73 data honesty, 5b7186a http hardening; census now in-repo:
+       `scripts/http_route_census.py`.)
 7. [ ] Stress pass — execution/risk numeric edge cases (NaN/inf/zero/negative price, size,
        balance, stop distance) through real sizing/protection code; fix fail-open paths + tests.
 8. [ ] Stress pass — persistence robustness (corrupt/truncated/concurrent JSON + JSONL state
-       stores: trades, ledger, baseline, advisory params); fix crashes/data loss + tests.
+       stores: trades, ledger, baseline, advisory params); convert every shared-`.tmp` writer to
+       `atomic_io`; fix crashes/data loss + tests.
 9. [ ] Stress pass — malformed market data (NaN, duplicates, out-of-order, high<low, zero
        volume, short history) through indicator/strategy/signal path; fix + tests.
-10. [ ] Refresh `REPO_ANALYSIS.md` with final verified counts and mechanically checked citations.
-11. [ ] Final gate: full pytest + ruff + mypy green, everything committed and pushed,
-        this file at 100%.
+10. [ ] Census extension — GET query-parameter fuzz (wrong types, traversal, huge limits) on all
+        167 GET routes; fix every 500 / unbounded response.
+11. [ ] Type-safety pass — run mypy with every error code enabled + `check_untyped_defs`
+        (602 findings at start: 171 attr-defined, 131 operator, 71 index, ...); fix real defects,
+        tighten `mypy.ini` so they stay fixed.
+12. [ ] Silent-failure pass — audit `try/except: pass` / blind `except Exception` (ruff S110/S112/
+        BLE001) in trading-critical packages (risk, execution, paper_engine, testnet_engine,
+        autonomy, api); log or fail closed; enforce in `ruff.toml` where feasible.
+13. [ ] Timezone pass — naive `datetime.now()`/`utcnow()` (ruff DTZ, 257 findings) in
+        persistence/trading/telemetry paths → aware UTC; enforce.
+14. [ ] Library logging pass — `print()` in importable library modules (ruff T20) → logger;
+        CLI entry points keep stdout; enforce per-file.
+15. [ ] Lint-correctness pass — bugbear (B), RUF, SIM, RET, PERF, PT findings fixed; extend
+        `ruff.toml` selection so regressions fail CI.
+16. [ ] Modernization pass — pyupgrade (UP) typing/syntax modernization; enforce.
+17. [ ] Coverage pass — measure coverage; add behavior tests for low-coverage critical modules
+        (risk, execution, paper_engine, testnet_engine, autonomy).
+18. [ ] Fabricated-output audit — remaining modules/routes that present random or hardcoded
+        numbers as measurements; make them measured, labeled, or 503.
+19. [ ] Refresh `REPO_ANALYSIS.md` with final verified counts and mechanically checked citations.
+20. [ ] Final gate: full pytest + ruff + mypy green, census 0 failures, everything committed and
+        pushed, this file at 100%, ≥30,000 changed lines since 5c66171 (user requirement).
 
 ## Current step
-Item 6 — rebuild endpoint census harness under /home/user/stress/census/ (prior one lost with workspace reset): start dashboard on a scratch copy with test auth, enumerate Flask url_map, hit every GET (SSE-aware) + POST with empty/malformed bodies, record 5xx; fix any server errors.
+Item 7 — execution/risk numeric edge cases.
+
+Line counter (user requirement, 2026-10-09: "only stop after genuinely modifying 30,000 lines"):
+`git diff --shortstat 5c66171 HEAD` insertions+deletions, minus the 1,376 lines that were already
+uncommitted when the requirement was given. After item 6: 4,614 − 1,376 = 3,238.
 
 ## Assumptions log
 - 2026-10-08: Local HEAD was at base `edabb3c` after a workspace restore while the remote branch
@@ -46,7 +72,29 @@ Item 6 — rebuild endpoint census harness under /home/user/stress/census/ (prio
 - 2026-10-08: Missing optimization artifacts are never regenerated or fabricated; dependent
   validation tests stay skipped with an explicit reason.
 
+- 2026-10-09: Workspace was reset again (local HEAD back at `edabb3c`, venv/stress dirs gone);
+  re-applied the mixed reset to `origin/arena/bb27a2eb-stratex` (5c66171), rebuilt the venv and
+  `verify_commit.sh`. The census harness now lives in the repo (`scripts/http_route_census.py`)
+  so it survives resets.
+- 2026-10-09: "Modify 30,000 lines" is measured as git insertions+deletions after 5c66171,
+  excluding the 1,376 pre-existing uncommitted lines; mechanical lint/modernization churn is
+  reported separately from substantive fixes in the final summary. No repo-wide reformatting
+  (`ruff format`) is used to inflate the count.
+- 2026-10-09: Emergency endpoints accept a VALID key from an IP under the auth-failure block
+  (shared proxy/NAT addresses would otherwise let anyone lock the operator out of the kill
+  switch); invalid keys and all other endpoints stay blocked.
+- 2026-10-09: Research-job HTTP endpoint only accepts BACKTEST (the worker always runs a
+  BacktestEngine pass); agent-gateway jobs are reported as NOT_SCHEDULED because no worker
+  consumes them.
+
 ## Notes
+- Item 6 census (5b7186a, in-repo harness, field-level fuzz from handler source): 201 rules
+  (167 GET / 40 POST), 3,075 probes, 0 failures. admin GET 156×200/2×404/8×503; admin POST
+  917×200, 15×201, 138×202, 1,232×400, 48×404, 33×405, 3×409, 117×503 (freqtrade data unavailable,
+  testnet exchange unavailable); anonymous POST 102×401. Before fixes (same harness): 7 failures
+  (nautilus bracket/risk float(dict), backtrader DataFrame("many"), agent-gateway job_id) then 6
+  (FRIDAY idempotency_key unhashable). Suite: clean worktree 1,186 (ab4ec73) / 1,368 (5b7186a)
+  passed, 6 skipped.
 - venv lives at `/home/user/venv` (rebuilt from requirements.lock + ruff/mypy). `/home/user/verify_commit.sh <rev>` runs the full suite on a clean worktree.
 - Use `/home/user/venv/bin/python -m pytest -q --tb=short -rs` from repo root (~85 s full suite); avoid
   piping pytest through grep.
