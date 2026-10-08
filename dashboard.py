@@ -3,9 +3,11 @@ import datetime
 import io
 import json
 import os
+import re
 import sys
 import threading
 import time
+import uuid
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, send_from_directory
@@ -59,6 +61,9 @@ for bp_mod, bp_name in core_blueprints + adapter_blueprints:
         logger.error(f"[DASHBOARD_WARN] Failed to register blueprint {bp_name} from {bp_mod}: {e}")
 
 
+from api.request_guard import install_request_guards
+
+install_request_guards(app)
 
 LOG_FILE = "trade_log.csv"
 
@@ -342,10 +347,62 @@ def promote_strategy_version():
         return jsonify({"status": "ERROR", "error": str(e)}), 400
 
 
+_RESEARCH_JOB_TYPES = frozenset({"BACKTEST"})
+_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+_STRATEGY_ID_RE = re.compile(r"^[a-z0-9_]{1,64}$")
+_SYMBOL_RE = re.compile(r"^[A-Z0-9]{2,20}$")
+_RESEARCH_TIMEFRAMES = frozenset({"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"})
+
+
+def _parse_research_job_request(data):
+    """Validate a research-job submission; returns ``(parsed, problem)``.
+
+    Only BACKTEST jobs are executed by this endpoint (the worker always runs a
+    BacktestEngine pass), so other job types are refused rather than recorded
+    under a label that misdescribes what was computed.
+    """
+    if not isinstance(data, dict):
+        return None, "Request body must be a JSON object."
+    job_type = data.get("job_type", "BACKTEST")
+    if not isinstance(job_type, str) or job_type.strip().upper() not in _RESEARCH_JOB_TYPES:
+        return None, f"job_type must be one of {sorted(_RESEARCH_JOB_TYPES)}."
+    job_type = job_type.strip().upper()
+    strategy_id = data.get("strategy_id", "adx_ema")
+    if not isinstance(strategy_id, str) or not _STRATEGY_ID_RE.match(strategy_id):
+        return None, "strategy_id must match ^[a-z0-9_]{1,64}$."
+    job_id = data.get("job_id")
+    if job_id is None or job_id == "":
+        job_id = f"job_{job_type.lower()}_{uuid.uuid4().hex[:16]}"
+    elif not isinstance(job_id, str) or not _SAFE_ID_RE.match(job_id):
+        return None, "job_id must be 1-128 characters of [A-Za-z0-9_.:-] starting alphanumeric."
+    raw_meta = data.get("metadata", {})
+    if raw_meta is None:
+        raw_meta = {}
+    if not isinstance(raw_meta, dict):
+        return None, "metadata must be a JSON object."
+    metadata = dict(raw_meta)
+    symbol = metadata.get("symbol", config.SYMBOL)
+    if not isinstance(symbol, str) or not _SYMBOL_RE.match(symbol.strip().upper()):
+        return None, "metadata.symbol must be an exchange symbol such as BTCUSDT."
+    timeframe = metadata.get("timeframe", config.TIMEFRAME)
+    if not isinstance(timeframe, str) or timeframe not in _RESEARCH_TIMEFRAMES:
+        return None, f"metadata.timeframe must be one of {sorted(_RESEARCH_TIMEFRAMES)}."
+    candles = metadata.get("candles", 500)
+    if isinstance(candles, bool) or not isinstance(candles, int) or not 50 <= candles <= 5000:
+        return None, "metadata.candles must be an integer between 50 and 5000."
+    metadata.update({
+        "strategy_id": strategy_id,
+        "symbol": symbol.strip().upper(),
+        "timeframe": timeframe,
+        "candles": candles,
+    })
+    return {"job_type": job_type, "strategy_id": strategy_id, "job_id": job_id, "metadata": metadata}, None
+
+
 @app.route('/api/research-jobs', methods=['GET', 'POST'])
 def handle_research_jobs():
     """Lists research jobs or submits a new durable research job."""
-    from stratex_quantdinger.jobs import JobStore, ResearchJobRunner
+    from stratex_quantdinger.jobs import JobAlreadyExistsError, JobStore, ResearchJobRunner
     store = JobStore()
 
     if request.method == 'POST':
@@ -353,11 +410,13 @@ def handle_research_jobs():
         if denial:
             return denial
         data = request.get_json(force=True, silent=True) or {}
-        job_type = data.get("job_type", "BACKTEST").upper()
-        strategy_id = data.get("strategy_id", "adx_ema")
-        job_id = data.get("job_id") or f"job_{job_type.lower()}_{int(time.time())}"
-        metadata = data.get("metadata", {})
-        metadata["strategy_id"] = strategy_id
+        parsed, problem = _parse_research_job_request(data)
+        if problem:
+            return jsonify({"status": "ERROR", "error": "INVALID_REQUEST", "message": problem}), 400
+        job_type = parsed["job_type"]
+        strategy_id = parsed["strategy_id"]
+        job_id = parsed["job_id"]
+        metadata = parsed["metadata"]
 
         runner = ResearchJobRunner(store=store)
 
@@ -379,9 +438,9 @@ def handle_research_jobs():
             from data import add_indicators, get_candles
             from metrics import calculate_metrics
 
-            symbol = str(metadata.get("symbol", config.SYMBOL)).upper()
-            timeframe = str(metadata.get("timeframe", config.TIMEFRAME))
-            candles = int(metadata.get("candles", 500))
+            symbol = metadata["symbol"]
+            timeframe = metadata["timeframe"]
+            candles = metadata["candles"]
 
             try:
                 strat_mod = importlib.import_module(f"strategy_{strategy_id}")
@@ -428,7 +487,14 @@ def handle_research_jobs():
             }
             s.update(j_id, status="COMPLETED", progress=1.0, result=result)
 
-        job = runner.submit_and_execute_async(job_id, job_type, real_backtest_runner, metadata=metadata)
+        try:
+            job = runner.submit_and_execute_async(job_id, job_type, real_backtest_runner, metadata=metadata)
+        except JobAlreadyExistsError:
+            return jsonify({
+                "status": "ERROR",
+                "error": "JOB_ALREADY_EXISTS",
+                "message": f"Research job '{job_id}' already exists; a job id runs at most once.",
+            }), 409
         return jsonify({"status": "OK", "job": job.__dict__}), 202
 
     # GET
@@ -495,21 +561,40 @@ def agent_gateway_jobs():
         denial = control_scope_denial()
         if denial:
             return denial
-        data = request.get_json(force=True, silent=True) or {}
-        action = data.get("action", "BACKTEST").upper()
-        strategy_id = data.get("strategy_id", "adx_ema")
-        job_id = data.get("job_id") or f"agent_job_{int(time.time())}"
+        from api.validation import get_dict, get_int, get_str, json_body
+        from stratex_quantdinger.jobs import JobAlreadyExistsError
 
-        if action == "BACKTEST":
-            job = gateway.submit_backtest(job_id, strategy_id, parameters=data.get("parameters"))
-        elif action == "OPTIMIZATION":
-            job = gateway.submit_optimization(job_id, strategy_id, n_trials=data.get("n_trials", 35))
-        elif action == "WALK_FORWARD":
-            job = gateway.submit_walk_forward(job_id, strategy_id, windows=data.get("windows", 4))
-        else:
-            return jsonify({"status": "ERROR", "error": f"Unsupported agent action: {action}"}), 400
+        data = json_body()
+        action = get_str(data, "action", "BACKTEST", upper=True,
+                         choices=("BACKTEST", "OPTIMIZATION", "WALK_FORWARD"))
+        strategy_id = get_str(data, "strategy_id", "adx_ema", pattern=_STRATEGY_ID_RE)
+        job_id = get_str(data, "job_id", "", pattern=None, max_len=128)
+        if not job_id:
+            job_id = f"agent_job_{uuid.uuid4().hex[:16]}"
+        elif not _SAFE_ID_RE.match(job_id):
+            return jsonify({"status": "ERROR", "error": "INVALID_REQUEST", "field": "job_id",
+                            "message": "job_id must be 1-128 characters of [A-Za-z0-9_.:-]"}), 400
+        try:
+            if action == "BACKTEST":
+                job = gateway.submit_backtest(job_id, strategy_id, parameters=get_dict(data, "parameters", {}),
+                                              exist_ok=False)
+            elif action == "OPTIMIZATION":
+                job = gateway.submit_optimization(job_id, strategy_id, n_trials=get_int(data, "n_trials", 35, min=1, max=1000),
+                                                  exist_ok=False)
+            else:
+                job = gateway.submit_walk_forward(job_id, strategy_id, windows=get_int(data, "windows", 4, min=2, max=52),
+                                                  exist_ok=False)
+        except JobAlreadyExistsError:
+            return jsonify({"status": "ERROR", "error": "JOB_ALREADY_EXISTS",
+                            "message": f"Job '{job_id}' already exists."}), 409
 
-        return jsonify({"status": "OK", "job": job}), 202
+        return jsonify({
+            "status": "OK",
+            "job": job,
+            "execution": "NOT_SCHEDULED",
+            "note": "Agent-gateway submissions are recorded (QUEUED) for operator review; "
+                    "no in-process worker executes them and no result will be produced automatically.",
+        }), 202
 
     # GET
     jobs = gateway.list_jobs()
@@ -2859,7 +2944,8 @@ def api_testnet_positions_close_all():
     
     client = get_exchange_client()
     if client is None:
-        return jsonify({"status": "ERROR", "error": "Binance client unavailable"}), 500
+        return jsonify({"status": "ERROR", "error": "EXCHANGE_CLIENT_UNAVAILABLE",
+                        "message": "Binance client unavailable; no position was closed."}), 503
 
     closed = []
     errors = []
@@ -2923,10 +3009,15 @@ def api_testnet_positions_close():
     symbol = payload.get("symbol")
     if not symbol:
         return jsonify({"status": "ERROR", "error": "symbol is required"}), 400
+    if not isinstance(symbol, str) or not symbol.isalnum() or len(symbol) > 20:
+        return jsonify({"status": "ERROR", "error": "INVALID_SYMBOL",
+                        "message": "symbol must be an alphanumeric exchange symbol such as BTCUSDT"}), 400
+    symbol = symbol.upper()
 
     client = get_exchange_client()
     if client is None:
-        return jsonify({"status": "ERROR", "error": "Binance client unavailable"}), 500
+        return jsonify({"status": "ERROR", "error": "EXCHANGE_CLIENT_UNAVAILABLE",
+                        "message": "Binance client unavailable; no position was closed."}), 503
 
     try:
         fut_acc = client.futures_account()
@@ -4557,20 +4648,20 @@ def api_panic():
     Never touches live-trading locks; testnet-only operational control.
     """
     import uuid as _uuid
-    panic_file = os.getenv("PANIC_STATE_FILE", "panic_state.json")
+
+    from panic_state import write_panic_state
     try:
-        payload = request.get_json(silent=True) or {}
-        release = bool(payload.get("release"))
-        # Flip the engine-side flag file
-        state = {
-            "active": not release,
-            "activated_at": None if release else datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "actor": "api:/api/panic",
-        }
-        tmp = panic_file + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2)
-        os.replace(tmp, panic_file)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            # An emergency stop must never fail on body shape: anything that is
+            # not an explicit release request activates the switch.
+            payload = {}
+        # Literal JSON true only — bool("false") is True and used to RELEASE.
+        release = payload.get("release") is True
+        # Unified schema (active + panic_active) read by both the testnet
+        # engine gate and execution._check_panic_and_kill_switch().
+        write_panic_state(not release, actor="api:/api/panic",
+                          reason=str(payload.get("reason", "manual /api/panic")))
 
         cancelled, kept = [], []
         if not release:
@@ -4605,7 +4696,9 @@ def api_panic():
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }), 200
     except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+        app.logger.error(f"[PANIC] /api/panic failed: {e}")
+        return jsonify({"status": "ERROR", "error": "PANIC_STATE_NOT_PERSISTED",
+                        "message": "The panic flag could not be written; order submission state is unchanged."}), 500
 
 
 @app.route('/api/config', methods=['GET', 'POST'])
@@ -4752,7 +4845,9 @@ def api_ai_signal_analysis():
     """Generates structured natural-language rationale for a scanner signal."""
     try:
         from gemini_service import get_gemini_service
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         service = get_gemini_service()
         analysis = service.analyze_signal(data)
         return jsonify({"status": "SUCCESS", "analysis": analysis})
@@ -4765,7 +4860,9 @@ def api_ai_trade_analysis():
     """Generates post-trade review & execution audit for closed trades."""
     try:
         from gemini_service import get_gemini_service
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         service = get_gemini_service()
         analysis = service.analyze_trade(data)
         return jsonify({"status": "SUCCESS", "analysis": analysis})
@@ -4778,7 +4875,9 @@ def api_ai_performance_analysis():
     """Provides quantitative portfolio observations and strategy notes."""
     try:
         from gemini_service import get_gemini_service
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         service = get_gemini_service()
         analysis = service.analyze_performance(data)
         return jsonify({"status": "SUCCESS", "analysis": analysis})
@@ -4791,7 +4890,9 @@ def api_ai_system_analysis():
     """Provides high-level system diagnostics based on recent events."""
     try:
         from gemini_service import get_gemini_service
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         service = get_gemini_service()
         analysis = service.analyze_system_diagnostics(data)
         return jsonify({"status": "SUCCESS", "analysis": analysis})
@@ -5050,12 +5151,19 @@ def api_testnet_advisory_toggle():
     try:
         from testnet_advisory_scheduler import get_testnet_advisory_scheduler
         scheduler = get_testnet_advisory_scheduler()
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         shadow_mode = data.get("shadow_mode", True)
-        if isinstance(shadow_mode, str):
-            shadow_mode = shadow_mode.lower() == "true"
+        if isinstance(shadow_mode, str) and shadow_mode.strip().lower() in ("true", "false"):
+            shadow_mode = shadow_mode.strip().lower() == "true"
+        if not isinstance(shadow_mode, bool):
+            # Leaving SHADOW (letting AI advice modify parameters) needs an
+            # explicit false; "yes"/0/null used to silently select APPLY mode.
+            return jsonify({"status": "ERROR", "error": "INVALID_SHADOW_MODE",
+                            "message": "'shadow_mode' must be true or false."}), 400
 
-        success = scheduler.toggle_mode(bool(shadow_mode))
+        success = scheduler.toggle_mode(shadow_mode)
         if success:
             return jsonify({
                 "status": "SUCCESS",
@@ -5236,7 +5344,9 @@ def api_alerts_manager():
         denial = control_scope_denial()
         if denial:
             return denial
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         alert_id = data.get("alert_id")
         if alert_id and mon.acknowledge_alert(alert_id):
             return jsonify({"status": "SUCCESS", "message": f"Alert {alert_id} acknowledged."})
@@ -5327,21 +5437,33 @@ def api_live_positions():
 @app.route('/api/live/emergency-flatten', methods=['POST'])
 @require_bot_api_key
 def api_live_emergency_rollback_flatten():
-    """Commands immediate liquidation of all live positions and halts live trading."""
+    """Live rollback lock-down: blocks new orders, removes the live authorization
+    token and records an incident. No closing orders are placed by this endpoint
+    (LIVE trading is disabled in this build), so it never claims a flatten."""
+    from panic_state import engage_order_block, orders_blocked
+
+    steps = engage_order_block("api:/api/live/emergency-flatten", "OPERATOR_MANUAL_EMERGENCY_FLATTEN",
+                               panic=True, pause=True)
+    incident = None
     try:
         from deployment.live_rollback import LiveRollbackManager
-        manager = LiveRollbackManager()
-        incident = manager.execute_live_rollback(
+        incident = LiveRollbackManager().execute_live_rollback(
             reason="OPERATOR_MANUAL_EMERGENCY_FLATTEN",
             triggered_by="API_COMMAND"
         )
-        return jsonify({
-            "status": "SUCCESS",
-            "message": "All live positions flattened. Live trading locked.",
-            "incident": incident
-        })
+        steps["live_rollback_lockdown"] = "COMPLETED"
     except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+        app.logger.error(f"[LIVE_ROLLBACK] lock-down failed: {e}")
+        steps["live_rollback_lockdown"] = "FAILED"
+    ok = orders_blocked(steps)
+    return jsonify({
+        "status": "SUCCESS" if ok else "ERROR",
+        "message": ("New order submission blocked and live trading locked down; no positions were "
+                    "flattened by this endpoint." if ok else
+                    "Lock-down NOT applied: no blocking mechanism could be persisted."),
+        "steps": steps,
+        "incident": incident,
+    }), (200 if ok else 500)
 
 @app.route('/api/live/daily-report')
 def api_live_daily_report():
@@ -5605,7 +5727,9 @@ def api_evolution_approve(proposal_id):
     """Executes human approval for strategy promotion with cryptographic audit signature."""
     try:
         from evolution.approval_gates import HumanApprovalGate
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         approver = data.get("approver", "HUMAN_OPERATOR")
         rationale = data.get("rationale", "Approved after successful incubation period.")
 
@@ -5804,37 +5928,47 @@ def api_multiexchange_health():
 @app.route('/api/live/emergency/flatten', methods=['POST'])
 @require_bot_api_key
 def api_live_emergency_flatten():
-    """Emergency endpoint: Flattens all live positions and halts live trading immediately."""
-    try:
-        from risk.live_enforcer import LiveRiskEnforcer
-        enforcer = LiveRiskEnforcer()
-        res = enforcer.trigger_kill_switch(source="DASHBOARD_UI_OPERATOR", rationale="Manual emergency kill switch activated")
-        return jsonify({
-            "status": "OK",
-            "message": "Emergency flatten initiated. Kill switch engaged.",
-            "enforcer_action": res,
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-        })
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+    """Emergency kill switch: blocks all new order submission, durably.
+
+    Previously this flipped flags on a throw-away ``LiveRiskEnforcer()`` that no
+    engine ever read and answered "Kill switch engaged". It now writes the
+    unified panic flag, the KILL_SWITCH_ACTIVE.lock checked before every order,
+    and the trading-pause flag, and reports exactly which of them took effect.
+    It does not place closing orders: LIVE trading is disabled in this build.
+    """
+    from panic_state import engage_order_block, orders_blocked
+
+    steps = engage_order_block("api:/api/live/emergency/flatten", "Manual emergency kill switch activated",
+                               panic=True, pause=True, kill_switch_lock=True)
+    body = {
+        "status": "OK" if orders_blocked(steps) else "ERROR",
+        "message": ("Kill switch engaged: new order submission blocked. No closing orders were placed "
+                    f"(LIVE_TRADING_ENABLED={bool(getattr(config, 'LIVE_TRADING_ENABLED', False))})."
+                    if orders_blocked(steps) else
+                    "Kill switch NOT engaged: no blocking mechanism could be persisted."),
+        "steps": steps,
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+    return jsonify(body), (200 if orders_blocked(steps) else 500)
 
 @app.route('/api/live/emergency/halt', methods=['POST'])
 @require_bot_api_key
 def api_live_emergency_halt():
-    """Emergency endpoint: Halts new entries without liquidating existing bracket-protected positions."""
-    try:
-        from risk.live_enforcer import LiveRiskEnforcer
-        enforcer = LiveRiskEnforcer()
-        enforcer.status.is_halted = True
-        enforcer.status.halt_reason = "Manual trading halt requested via API"
-        return jsonify({
-            "status": "OK",
-            "message": "Live order entries halted.",
-            "halt_reason": enforcer.status.halt_reason,
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-        })
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+    """Emergency halt: blocks new entries via the durable pause flag; open
+    bracket-protected positions are left untouched."""
+    from panic_state import engage_order_block, orders_blocked
+
+    steps = engage_order_block("api:/api/live/emergency/halt", "Manual trading halt requested via API",
+                               panic=False, pause=True)
+    ok = orders_blocked(steps)
+    return jsonify({
+        "status": "OK" if ok else "ERROR",
+        "message": ("New order entries halted (durable pause flag written)." if ok else
+                    "Halt NOT applied: the durable pause flag could not be written."),
+        "halt_reason": "Manual trading halt requested via API",
+        "steps": steps,
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }), (200 if ok else 500)
 
 # ==============================================================================
 # PROMETHEUS METRICS & OPERATIONAL DASHBOARD EXTENSION

@@ -118,3 +118,8 @@ FINAL_24_7_TESTNET_VERIFICATION.md
 FINAL_TRADING_SYSTEM_AUDIT.md
 FINAL_VERIFICATION_COMPLETE.md
 PRODUCTION_STRATEGIES.md
+
+# atomic_io.locked_path sidecar lock files
+*.json.lock
+*.jsonl.lock
+*.corrupt-*

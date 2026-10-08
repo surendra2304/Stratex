@@ -99,7 +99,9 @@ def get_decisions_log():
 @require_permission("control")
 def set_autonomy_mode():
     """Sets autonomy level (1, 2, 3) — requires confirmation and CONTROL permission."""
-    data = request.get_json() or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        data = {}
     level = data.get("level")
     confirmed = data.get("confirm", False)
 

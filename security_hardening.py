@@ -389,6 +389,29 @@ def verify_webhook_signature(payload_bytes: bytes, signature_header: str, secret
     return hmac.compare_digest(expected, clean_sig)
 
 
+# Flask endpoint names of risk-reducing emergency controls (kill switch, pause,
+# flatten, halt). They must stay reachable in a degraded process: the request
+# guard lets any body through to them and an IP abuse block does not lock out a
+# caller presenting a valid key.
+EMERGENCY_ENDPOINTS = frozenset({
+    "api_panic",
+    "control_api.emergency_panic",
+    "control_api.pause_trading",
+    "friday_supervision.execute_supervision_panic",
+    "api_live_emergency_flatten",
+    "api_live_emergency_halt",
+    "api_live_emergency_rollback_flatten",
+})
+
+
+def is_emergency_request() -> bool:
+    """True when the active request targets an emergency control endpoint."""
+    try:
+        return request.endpoint in EMERGENCY_ENDPOINTS
+    except RuntimeError:  # outside a request context
+        return False
+
+
 def authenticate_request(required_scope: str = SCOPE_READ) -> tuple[bool, str | None, dict[str, Any] | None]:
     """
     Validates X-API-KEY / X-BOT-API-KEY header and checks required scope.
@@ -422,7 +445,15 @@ def authenticate_request(required_scope: str = SCOPE_READ) -> tuple[bool, str | 
 
     ip = request.remote_addr or "127.0.0.1"
 
-    if _security_monitor.is_ip_blocked(ip):
+    # The abuse block is keyed on the socket peer address. Without a trusted
+    # proxy configuration every client behind a reverse proxy / NAT shares one
+    # address, so ten bad guesses from anyone would also lock the operator out
+    # of the kill switch for five minutes. Emergency (risk-reducing) endpoints
+    # therefore still accept a VALID key from a blocked address; every other
+    # endpoint, and every invalid key, stays blocked.
+    ip_blocked = _security_monitor.is_ip_blocked(ip)
+    emergency = is_emergency_request()
+    if ip_blocked and not emergency:
         return False, "IP_TEMPORARILY_BLOCKED", None
 
     if not incoming_key:
@@ -438,6 +469,10 @@ def authenticate_request(required_scope: str = SCOPE_READ) -> tuple[bool, str | 
         _security_monitor.record_auth_failure(ip, request.path, incoming_key)
         return False, f"INSUFFICIENT_SCOPE: required '{required_scope}'", key_info
 
+    if ip_blocked:
+        logger.warning(
+            f"[SECURITY] Emergency endpoint {request.path} accepted a valid key from blocked IP {ip}"
+        )
     return True, None, key_info
 
 

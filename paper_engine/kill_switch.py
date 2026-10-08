@@ -21,7 +21,7 @@ from research_phase9.cost_engine import CostEngine
 logger = get_logger("kill_switch")
 
 # Lock file written atomically when kill switch is triggered.
-KILL_SWITCH_LOCK_FILE = "KILL_SWITCH_ACTIVE.lock"
+KILL_SWITCH_LOCK_FILE = os.getenv("KILL_SWITCH_LOCK_FILE", "KILL_SWITCH_ACTIVE.lock")
 
 
 def trigger_kill_switch(

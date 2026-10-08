@@ -2149,14 +2149,14 @@ class TestnetService:
     PANIC_STATE_FILE = os.getenv("PANIC_STATE_FILE", "panic_state.json")
 
     def panic_active(self):
-        """True if the manual kill-switch flag file is active."""
-        try:
-            if not os.path.exists(self.PANIC_STATE_FILE):
-                return False
-            with open(self.PANIC_STATE_FILE, "r", encoding="utf-8") as f:
-                return bool(json.load(f).get("active", False))
-        except Exception:
-            return False
+        """True if the manual kill-switch flag is active (either schema key).
+
+        An existing but unreadable flag file fails CLOSED: a half-written or
+        corrupted panic request must block orders, not be ignored.
+        """
+        from panic_state import is_panic_active
+
+        return is_panic_active(self.PANIC_STATE_FILE)
 
     def position_monitor_loop(self):
         """Continuously reconciles active positions against Binance."""

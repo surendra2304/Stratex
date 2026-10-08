@@ -35,19 +35,17 @@ ACTIVE_TRADES_FILE = os.getenv("ACTIVE_TRADES_FILE", "active_trades.json")
 
 
 def _check_panic_and_kill_switch():
-    """Verifies that neither panic nor emergency kill-switch lock is active."""
-    panic_file = os.getenv("PANIC_STATE_FILE", "panic_state.json")
-    if os.path.exists(panic_file):
-        try:
-            with open(panic_file, "r", encoding="utf-8") as pf:
-                pdata = json.load(pf)
-                if pdata.get("panic_active", False):
-                    raise RuntimeError("CRITICAL ERROR: Emergency Panic Kill-Switch is active. All order submission is blocked.")
-        except RuntimeError:
-            raise
-        except Exception:
-            pass
-    if os.path.exists("KILL_SWITCH_ACTIVE.lock"):
+    """Verifies that neither panic nor emergency kill-switch lock is active.
+
+    Uses the unified panic reader: both schema keys (``active`` written by
+    /api/panic, ``panic_active`` written by FRIDAY) block, and an unreadable flag
+    file fails CLOSED instead of being silently ignored.
+    """
+    from panic_state import is_kill_switch_locked, is_panic_active
+
+    if is_panic_active():
+        raise RuntimeError("CRITICAL ERROR: Emergency Panic Kill-Switch is active. All order submission is blocked.")
+    if is_kill_switch_locked():
         raise RuntimeError("CRITICAL ERROR: Emergency Kill Switch lock file is active. All order submission is blocked.")
 
 

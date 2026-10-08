@@ -9,14 +9,18 @@
 # Semantics:
 #   - paused=True  -> the engine must REJECT all NEW entries (open positions
 #                     and their protective SL/TP orders remain managed).
-#   - missing or corrupt flag file -> treated as NOT paused (fail-open for
-#     liveness) but a corrupt file is logged loudly: a pause request must
-#     never be silently lost.
+#   - missing flag file -> NOT paused (nobody ever requested a pause).
+#   - existing but unreadable/corrupt flag file -> PAUSED (fail-closed): the
+#     file only exists because someone wrote a pause state, and a pause request
+#     must never be silently lost. Logged loudly; clear it via the resume API.
+#   - writes use unique temp files + fsync (atomic_io), so concurrent
+#     pause/resume requests can no longer collide on a shared ".tmp" name.
 # ==============================================================================
 import datetime
 import json
 import os
 
+from atomic_io import atomic_write_json
 from logger import get_logger
 
 logger = get_logger("trading_pause")
@@ -36,11 +40,8 @@ def set_trading_paused(paused: bool, actor: str = "unknown") -> dict:
         "actor": str(actor)[:200],
     }
     path = _pause_file()
-    tmp = path + ".tmp"
     try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2)
-        os.replace(tmp, path)
+        atomic_write_json(path, state)
         logger.info(f"[TRADING_PAUSE] paused={state['paused']} actor={state['actor']}")
     except Exception as e:
         logger.error(f"[TRADING_PAUSE] Failed to persist pause state: {e}")
@@ -49,8 +50,8 @@ def set_trading_paused(paused: bool, actor: str = "unknown") -> dict:
 
 
 def get_pause_state() -> dict:
-    """Read the pause state. Missing file -> not paused. Corrupt -> not paused
-    but logged as an error (never fail silently)."""
+    """Read the pause state. Missing file -> not paused. Corrupt -> PAUSED
+    (fail-closed) and logged as an error (never fail silently)."""
     path = _pause_file()
     if not os.path.exists(path):
         return {"paused": False, "reason": "NO_PAUSE_FILE"}
@@ -66,8 +67,8 @@ def get_pause_state() -> dict:
             "reason": "OK",
         }
     except Exception as e:
-        logger.error(f"[TRADING_PAUSE] Corrupt pause state file ignored ({e}); treating as NOT paused.")
-        return {"paused": False, "reason": f"CORRUPT_FILE:{e}"}
+        logger.error(f"[TRADING_PAUSE] Corrupt pause state file ({e}); failing CLOSED — new entries blocked.")
+        return {"paused": True, "reason": f"CORRUPT_FILE:{type(e).__name__}"}
 
 
 def is_trading_paused() -> bool:

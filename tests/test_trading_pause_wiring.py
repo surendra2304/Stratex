@@ -38,11 +38,39 @@ class TestPauseFlagModule:
         trading_pause.set_trading_paused(False, actor="unit-test")
         assert trading_pause.is_trading_paused() is False
 
-    def test_corrupt_flag_file_fails_open_but_loudly(self, pause_file):
-        pause_file.write_text("{not json", encoding="utf-8")
-        state = trading_pause.get_pause_state()
-        assert state["paused"] is False
-        assert state["reason"].startswith("CORRUPT_FILE:")
+    def test_corrupt_flag_file_fails_closed_and_loudly(self, pause_file):
+        # The flag file only exists because a pause state was written; if it is
+        # unreadable we cannot prove nobody paused trading -> block new entries.
+        for corrupt in ("{not json", "", "[1, 2]", "null"):
+            pause_file.write_text(corrupt, encoding="utf-8")
+            state = trading_pause.get_pause_state()
+            assert state["paused"] is True, corrupt
+            assert state["reason"].startswith("CORRUPT_FILE:")
+            assert trading_pause.is_trading_paused() is True
+        # The resume API path (set_trading_paused(False)) repairs it.
+        trading_pause.set_trading_paused(False, actor="unit-test")
+        assert trading_pause.is_trading_paused() is False
+
+    def test_concurrent_pause_resume_writes_never_collide(self, pause_file):
+        import threading
+
+        errors = []
+
+        def flip(i):
+            try:
+                trading_pause.set_trading_paused(i % 2 == 0, actor=f"t{i}")
+            except Exception as exc:  # pragma: no cover - the regression
+                errors.append(exc)
+
+        threads = [threading.Thread(target=flip, args=(i,)) for i in range(64)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert errors == []
+        assert trading_pause.get_pause_state()["reason"] == "OK"
+        leftovers = [p.name for p in pause_file.parent.iterdir() if p.name.endswith(".tmp")]
+        assert leftovers == []
 
 
 class TestControlApiPersistsPause:

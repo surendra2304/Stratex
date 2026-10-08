@@ -73,7 +73,8 @@ def pause_trading():
         set_trading_paused(True, actor=f"api:/api/v1/control/pause:{getattr(request, 'api_key_role', 'UNKNOWN')}@{caller_ip}")
     except Exception as e:
         logger.error(f"[CONTROL] Failed to persist trading pause: {e}")
-        return jsonify({"status": "ERROR", "error": "PAUSE_PERSISTENCE_FAILED", "message": str(e)}), 500
+        return jsonify({"status": "ERROR", "error": "PAUSE_PERSISTENCE_FAILED",
+                        "message": "The durable pause flag could not be written; see server logs."}), 500
     audit = log_control_action("PAUSE_TRADING", "engine", {}, caller_ip, getattr(request, "api_key_role", "UNKNOWN"))
     return jsonify(format_api_response({"message": "New entries paused (durable flag written). Open positions maintained.", "audit": audit}))
 
@@ -89,7 +90,8 @@ def resume_trading():
         set_trading_paused(False, actor=f"api:/api/v1/control/resume:{getattr(request, 'api_key_role', 'UNKNOWN')}@{caller_ip}")
     except Exception as e:
         logger.error(f"[CONTROL] Failed to persist trading resume: {e}")
-        return jsonify({"status": "ERROR", "error": "RESUME_PERSISTENCE_FAILED", "message": str(e)}), 500
+        return jsonify({"status": "ERROR", "error": "RESUME_PERSISTENCE_FAILED",
+                        "message": "The durable pause flag could not be cleared; trading remains paused."}), 500
     audit = log_control_action("RESUME_TRADING", "engine", {}, caller_ip, getattr(request, "api_key_role", "UNKNOWN"))
     return jsonify(format_api_response({"message": "Trading resumed (pause flag cleared).", "audit": audit}))
 
@@ -97,30 +99,63 @@ def resume_trading():
 @control_bp.route("/panic", methods=["POST"])
 @require_permission("control")
 def emergency_panic():
-    """Emergency Panic Stop — requires {"confirm": true}."""
-    data = request.get_json() or {}
-    if not data.get("confirm", False):
+    """Emergency Panic Stop — requires the literal payload {"confirm": true}.
+
+    Blocks all new order submission through two independent durable flags (the
+    unified panic flag checked at the execution boundary and the trading-pause
+    flag checked by the engine loop), then runs the live-rollback lock-down
+    (removes the live authorization token, writes an incident record). The
+    response lists exactly which steps succeeded; it never claims that positions
+    were flattened, because this endpoint does not place closing orders.
+    """
+    global _GLOBAL_TRADING_PAUSED
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        data = {}
+    if data.get("confirm") is not True:
         return jsonify({
             "status": "ERROR",
             "error": "CONFIRMATION_REQUIRED",
             "message": "Emergency panic requires explicit payload: {\"confirm\": true}"
         }), 400
 
-    caller_ip = request.remote_addr or "127.0.0.1"
-    audit = log_control_action("EMERGENCY_PANIC_FLATTEN", "all_positions", data, caller_ip, getattr(request, "api_key_role", "UNKNOWN"))
+    from panic_state import engage_order_block, orders_blocked
 
-    # Execute rollback / liquidation
+    caller_ip = request.remote_addr or "127.0.0.1"
+    role = getattr(request, "api_key_role", "UNKNOWN")
+    actor = f"api:/api/v1/control/panic:{role}@{caller_ip}"
+    reason = str(data.get("reason", "ECOSYSTEM_API_PANIC_COMMAND"))[:500]
+    steps = engage_order_block(actor, reason, panic=True, pause=True)
+    if steps.get("trading_pause") == "WRITTEN":
+        _GLOBAL_TRADING_PAUSED = True
+
+    incident = None
     try:
         from deployment.live_rollback import LiveRollbackManager
-        r_mgr = LiveRollbackManager()
-        incident = r_mgr.execute_live_rollback(reason="ECOSYSTEM_API_PANIC_COMMAND", triggered_by="CONTROL_API")
-        return jsonify(format_api_response({
-            "message": "EMERGENCY PANIC EXECUTED: All positions flattened, trading locked.",
-            "incident": incident,
-            "audit": audit
-        }))
-    except Exception:
-        return jsonify(format_api_response({"message": "Panic executed.", "audit": audit}))
+        incident = LiveRollbackManager().execute_live_rollback(reason="ECOSYSTEM_API_PANIC_COMMAND", triggered_by="CONTROL_API")
+        steps["live_rollback_lockdown"] = "COMPLETED"
+    except Exception as e:
+        logger.error(f"[CONTROL] Live rollback lock-down failed: {e}")
+        steps["live_rollback_lockdown"] = "FAILED"
+
+    audit = log_control_action("EMERGENCY_PANIC", "order_submission", {"steps": steps, "reason": reason}, caller_ip, role)
+    if not orders_blocked(steps):
+        return jsonify({
+            "status": "ERROR",
+            "error": "PANIC_NOT_PERSISTED",
+            "message": "Neither the panic flag nor the pause flag could be written; new orders are NOT blocked.",
+            "steps": steps,
+            "audit": audit,
+        }), 500
+
+    return jsonify(format_api_response({
+        "message": ("EMERGENCY PANIC: new order submission blocked. Open positions were NOT flattened "
+                    "by this endpoint (use the testnet close-all control to flatten)."),
+        "complete": all(v in ("WRITTEN", "COMPLETED") for v in steps.values()),
+        "steps": steps,
+        "incident": incident,
+        "audit": audit,
+    }))
 
 
 @control_bp.route("/strategy/<name>/toggle", methods=["POST"])
@@ -128,7 +163,12 @@ def emergency_panic():
 def toggle_strategy(name: str):
     """Enables or disables a specific quantitative strategy."""
     global _STRATEGY_STATES
-    data = request.get_json() or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        data = {}
+    if "enabled" in data and not isinstance(data["enabled"], bool):
+        return jsonify({"status": "ERROR", "error": "INVALID_ENABLED",
+                        "message": "'enabled' must be a JSON boolean."}), 400
     enabled = data.get("enabled", not _STRATEGY_STATES.get(name, True))
     _STRATEGY_STATES[name] = enabled
 

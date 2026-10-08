@@ -193,7 +193,7 @@ def test_inference_advisory_cannot_execute_orders():
         assert len(data["parameter_changes"]) == 1
 
 
-def test_universal_task_endpoint_rejects_external_order_execution(client):
+def test_universal_task_endpoint_rejects_external_order_execution(client, friday_auth):
     """Verify that /v1/task/execute rejects external agent attempts to execute orders with HTTP 403."""
     payload = {
         "task_id": "task_external_order",
@@ -202,14 +202,14 @@ def test_universal_task_endpoint_rejects_external_order_execution(client):
         "action": "execute_order",
         "payload": {"symbol": "BTCUSDT", "side": "BUY"}
     }
-    res = client.post("/v1/task/execute", json=payload)
+    res = client.post("/v1/task/execute", json=payload, headers=friday_auth)
     assert res.status_code == 403
     data = res.get_json()
     assert data["status"] == "FORBIDDEN"
     assert "DETERMINISTIC_EXECUTION_AUTHORITY_VIOLATION" in data["error"]
 
 
-def test_safety_gates_cannot_be_bypassed_by_friday_or_inference(client):
+def test_safety_gates_cannot_be_bypassed_by_friday_or_inference(client, friday_auth):
     """Verify external agents cannot bypass safety gates."""
     payload = {
         "task_id": "task_bypass",
@@ -218,7 +218,7 @@ def test_safety_gates_cannot_be_bypassed_by_friday_or_inference(client):
         "action": "bypass_gates",
         "payload": {"force": True}
     }
-    res = client.post("/v1/task/execute", json=payload)
+    res = client.post("/v1/task/execute", json=payload, headers=friday_auth)
     assert res.status_code == 403
 
 
@@ -395,7 +395,7 @@ def test_advisory_application_separate_from_generation_and_authorization(tmp_pat
 # 9. FRIDAY SUPERVISION ENDPOINTS & PANIC BEHAVIOR
 # ==============================================================================
 
-def test_friday_supervision_endpoints_and_panic(client):
+def test_friday_supervision_endpoints_and_panic(client, friday_auth):
     """Verify FRIDAY supervision status inspection and panic halt behavior."""
     # 1. GET /v1/friday/supervision/status
     res = client.get("/v1/friday/supervision/status")
@@ -406,7 +406,11 @@ def test_friday_supervision_endpoints_and_panic(client):
     assert data["live_money_permanently_blocked"] is True
 
     # 2. POST /v1/friday/supervision/panic without confirmation -> 400 Bad Request
-    res_bad = client.post("/v1/friday/supervision/panic", json={})
+    # Anonymous callers can neither trigger nor release the kill switch.
+    assert client.post("/v1/friday/supervision/panic", json={"confirm": True, "release": True}).status_code in (401, 503)
+    assert client.post("/v1/task/execute", json={"action": "panic", "payload": {"confirm": True}}).status_code in (401, 503)
+
+    res_bad = client.post("/v1/friday/supervision/panic", json={}, headers=friday_auth)
     assert res_bad.status_code == 400
 
     # 3. POST /v1/friday/supervision/panic with confirmation -> 200 OK & Panic Active
@@ -414,7 +418,7 @@ def test_friday_supervision_endpoints_and_panic(client):
         "confirm": True,
         "reason": "Test panic",
         "source": "FRIDAY"
-    })
+    }, headers=friday_auth)
     assert res_panic.status_code == 200
     assert res_panic.get_json()["panic_active"] is True
 
@@ -427,7 +431,7 @@ def test_friday_supervision_endpoints_and_panic(client):
         "confirm": True,
         "release": True,
         "reason": "Clear test panic"
-    })
+    }, headers=friday_auth)
     assert res_release.status_code == 200
     assert res_release.get_json()["panic_active"] is False
 
