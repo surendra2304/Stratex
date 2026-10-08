@@ -271,7 +271,9 @@ class TestnetService:
             self.runtime_heartbeat = self.runtime_lease.acquire()
             self.runtime_supervisor.record_heartbeat(self.runtime_heartbeat)
 
-            # Auto-register active strategies into StrategyRegistry (status=ACTIVE)
+            # Auto-register configured candidates only as RESEARCH. The
+            # QuantDinger lifecycle requires reproducible OOS evidence before
+            # OOS_VALIDATED/ACTIVE; config admission alone is not that evidence.
             self._register_active_strategies_in_registry()
 
             # Start background runtime lease heartbeat renewal thread (every 20 seconds)
@@ -443,7 +445,7 @@ class TestnetService:
                 logger.error(f"[SERVICE] Failed to restore persistent stats: {e}")
 
     def _register_active_strategies_in_registry(self):
-        """Auto-registers active strategies with source hashing and parameter snapshots into StrategyRegistry."""
+        """Records config-admitted strategies as RESEARCH without claiming validation."""
         if not getattr(self, "registry", None):
             return
         import inspect
@@ -466,7 +468,7 @@ class TestnetService:
                             version="v1.0.0",
                             source=src,
                             parameters=params,
-                            status="ACTIVE",
+                            status="RESEARCH",
                         )
                 except Exception as ex:
                     logger.debug(f"[REGISTRY_AUTO] {strat_name}: {ex}")

@@ -38,6 +38,7 @@ bot.pid
 *.pid
 
 # ── Runtime state (local only, regenerated at runtime) ─────────────────────────
+strategy_registry.json.lock
 active_trades.json
 advisory_quality_report.json
 binance_state.json

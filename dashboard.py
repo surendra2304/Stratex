@@ -274,33 +274,43 @@ def get_exchange_status():
 @app.route('/api/strategy-registry', methods=['GET', 'POST'])
 def handle_strategy_registry():
     """Lists registered strategy versions or registers a new immutable version."""
-    from stratex_quantdinger.registry import StrategyRegistry
+    from stratex_quantdinger.registry import RegistryIntegrityError, StrategyRegistry
     registry = StrategyRegistry()
 
     if request.method == 'POST':
         denial = control_scope_denial()
         if denial:
             return denial
-        data = request.get_json(force=True, silent=True) or {}
+        data = request.get_json(force=True, silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"status": "ERROR", "error": "JSON_OBJECT_REQUIRED"}), 400
         strategy_id = data.get("strategy_id")
         version = data.get("version")
         source = data.get("source", "")
         parameters = data.get("parameters", {})
         status = data.get("status", "RESEARCH")
+        evidence = data.get("evidence")
 
         if not strategy_id or not version:
             return jsonify({"status": "ERROR", "error": "strategy_id and version required"}), 400
 
         try:
-            ver_obj = registry.register(strategy_id, version, source, parameters, status=status)
+            ver_obj = registry.register(
+                strategy_id, version, source, parameters, status=status, evidence=evidence
+            )
             return jsonify({"status": "OK", "strategy_version": ver_obj.__dict__}), 201
+        except RegistryIntegrityError:
+            return jsonify({"status": "ERROR", "error": "REGISTRY_UNAVAILABLE"}), 503
         except Exception as e:
             return jsonify({"status": "ERROR", "error": str(e)}), 400
 
     # GET
     s_id = request.args.get("strategy_id")
     status = request.args.get("status")
-    versions = [v.__dict__ for v in registry.list_versions(strategy_id=s_id, status=status)]
+    try:
+        versions = [v.__dict__ for v in registry.list_versions(strategy_id=s_id, status=status)]
+    except RegistryIntegrityError:
+        return jsonify({"status": "ERROR", "error": "REGISTRY_UNAVAILABLE"}), 503
     return jsonify({"status": "OK", "versions": versions, "count": len(versions)})
 
 
@@ -308,10 +318,12 @@ def handle_strategy_registry():
 @require_bot_api_key
 def promote_strategy_version():
     """Promotes a strategy version through explicit lifecycle state transitions."""
-    from stratex_quantdinger.registry import StrategyRegistry
+    from stratex_quantdinger.registry import RegistryIntegrityError, StrategyRegistry
     registry = StrategyRegistry()
 
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"status": "ERROR", "error": "JSON_OBJECT_REQUIRED"}), 400
     strategy_id = data.get("strategy_id")
     version = data.get("version")
     new_status = data.get("new_status")
@@ -324,6 +336,8 @@ def promote_strategy_version():
     try:
         promoted = registry.promote(strategy_id, version, new_status, actor=actor, reason=reason)
         return jsonify({"status": "OK", "strategy_version": promoted.__dict__})
+    except RegistryIntegrityError:
+        return jsonify({"status": "ERROR", "error": "REGISTRY_UNAVAILABLE"}), 503
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 400
 

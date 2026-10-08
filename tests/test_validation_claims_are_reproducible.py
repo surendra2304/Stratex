@@ -11,15 +11,21 @@ from pathlib import Path
 
 import pytest
 
+from stratex_quantdinger.promotion_policy import (
+    MAX_FAILED_WALK_FORWARD_WINDOWS,
+    MIN_OUT_OF_SAMPLE_PROFIT_FACTOR,
+    MIN_OUT_OF_SAMPLE_TRADES,
+)
+
 
 ROOT = Path(__file__).resolve().parent.parent
 REGISTRY_PATH = ROOT / "strategy_registry.json"
 OPTIMIZATION_ARTIFACT = ROOT / "optimization_results" / "adx_ema_optimization.json"
 
 PROMOTION_POLICY = {
-    "min_out_of_sample_trades": 30,
-    "min_out_of_sample_profit_factor": 1.0,
-    "max_failed_walk_forward_windows": 0,
+    "min_out_of_sample_trades": MIN_OUT_OF_SAMPLE_TRADES,
+    "min_out_of_sample_profit_factor": MIN_OUT_OF_SAMPLE_PROFIT_FACTOR,
+    "max_failed_walk_forward_windows": MAX_FAILED_WALK_FORWARD_WINDOWS,
 }
 
 
