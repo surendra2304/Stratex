@@ -455,6 +455,12 @@ def paper_execute(
                 "strategy_version": FROZEN_STRATEGY_VERSION,
                 "signal_id": signal_id,
                 "evidence_status": evidence_status,
+                # Persist exit levels and the allocated margin with the position
+                # itself: after a restart the in-memory SL/TP map is gone, and
+                # close_position() releases exactly this margin back to cash.
+                "sl": sl,
+                "tp": tp,
+                "margin": margin,
             },
         )
 
@@ -812,6 +818,15 @@ def run():
 
     cfg = load_or_create_experiment()
     portfolio = PaperPortfolio(filename="paper_portfolio.json")
+    margin_check = portfolio.reconcile_margin(apply=True)
+    if margin_check["repaired"]:
+        logger.warning(
+            "Released orphaned paper margin left by closed positions: "
+            f"{margin_check['orphaned_margin']:.4f} (used_margin "
+            f"{margin_check['used_margin']:.4f} -> {margin_check['expected_margin']:.4f}); equity unchanged"
+        )
+    elif margin_check["under_allocated_margin"]:
+        logger.warning(f"Paper margin under-allocated vs open positions: {margin_check}")
     portfolio.ledger_file = LEDGER_FILE
     portfolio.equity_file = EQUITY_CURVE_FILE
 
