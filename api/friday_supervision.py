@@ -18,6 +18,7 @@ Provides:
 import datetime
 import json
 import os
+import re
 import time
 from typing import Any
 
@@ -25,8 +26,12 @@ from flask import Blueprint, jsonify, request
 
 import config
 from advisory_params import get_advisory_overlay
-from audit.audit_manager import get_audit_manager, get_idempotency_store
+from api.validation import RequestValidationError, get_str, json_body
+from audit.audit_manager import get_audit_manager, get_idempotency_store, persisted_hash
+from atomic_io import atomic_write_json
 from logger import get_logger
+from security_hardening import SCOPE_FRIDAY, require_api_scope
+from panic_state import is_kill_switch_locked, is_panic_active, kill_switch_lock_file, write_panic_state
 from telemetry.health_guard import (
     MAX_TELEMETRY_STALENESS_SECONDS,
     StaleTelemetryError,
@@ -39,19 +44,12 @@ friday_supervision_bp = Blueprint("friday_supervision", __name__)
 
 
 def _is_panic_active() -> bool:
-    panic_file = os.getenv("PANIC_STATE_FILE", "panic_state.json")
-    if os.path.exists(panic_file):
-        try:
-            with open(panic_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return bool(data.get("panic_active", False))
-        except Exception:
-            pass
-    return os.path.exists("KILL_SWITCH_ACTIVE.lock")
+    # Unified reader: either schema key counts and a corrupt flag fails closed.
+    return is_panic_active() or is_kill_switch_locked()
 
 
 def _is_kill_switch_locked() -> bool:
-    return os.path.exists("KILL_SWITCH_ACTIVE.lock")
+    return is_kill_switch_locked()
 
 
 def _get_engine_status_summary() -> dict[str, Any]:
@@ -125,103 +123,131 @@ def get_supervision_status():
 
 @friday_supervision_bp.route("/v1/friday/supervision/panic", methods=["POST"])
 @friday_supervision_bp.route("/api/v1/friday/panic", methods=["POST"])
+@require_api_scope(scope=SCOPE_FRIDAY, is_control=True)
 def execute_supervision_panic():
     """
     Emergency Panic Kill-Switch — blocks all order placement and halts engine.
     Requires: {"confirm": true, "reason": "...", "source": "FRIDAY"}
     To release: {"confirm": true, "release": true}
     """
-    body = request.get_json(silent=True) or {}
-    confirm = bool(body.get("confirm", False))
-    release = bool(body.get("release", False))
-    reason = str(body.get("reason", "Emergency panic requested via FRIDAY Supervision"))
-    source = str(body.get("source", "FRIDAY"))
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        body = {}
+    # Literal JSON true only: bool("false") is True, which used to let a
+    # {"release": "false"} request RELEASE the kill switch.
+    confirm = body.get("confirm") is True
+    release = body.get("release") is True
+    reason = str(body.get("reason", "Emergency panic requested via FRIDAY Supervision"))[:500]
+    source = str(body.get("source", "FRIDAY"))[:100]
 
+    result, code = apply_supervision_panic(confirm=confirm, release=release, reason=reason, source=source)
+    return jsonify(result), code
+
+
+def apply_supervision_panic(*, confirm: bool, release: bool, reason: str, source: str) -> tuple[dict[str, Any], int]:
+    """Activate/release the panic; returns ``(response_body, http_status)``.
+
+    Shared by the HTTP route and the FRIDAY task dispatcher so that a task can
+    never report success for a panic that was not actually applied.
+    """
+    confirm = confirm is True
+    release = release is True
+    reason = str(reason)[:500]
+    source = str(source)[:100]
     if not confirm:
-        return jsonify({
+        return ({
             "status": "ERROR",
             "error": "CONFIRMATION_REQUIRED",
             "message": "Emergency panic operation requires explicit confirmation: {'confirm': true}."
-        }), 400
+        }, 400)
 
-    panic_file = os.getenv("PANIC_STATE_FILE", "panic_state.json")
     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     if release:
-        # Release panic
+        errors = []
         try:
-            tmp = panic_file + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({
-                    "panic_active": False,
-                    "released_at": now_iso,
-                    "actor": source,
-                    "reason": reason
-                }, f, indent=2)
-            os.replace(tmp, panic_file)
+            write_panic_state(False, actor=source, reason=reason)
         except Exception as e:
             logger.error(f"Failed to update panic state file on release: {e}")
+            errors.append("PANIC_FLAG_NOT_CLEARED")
 
-        if os.path.exists("KILL_SWITCH_ACTIVE.lock"):
+        if is_kill_switch_locked():
             try:
-                os.remove("KILL_SWITCH_ACTIVE.lock")
-            except Exception:
-                pass
+                os.remove(kill_switch_lock_file())
+            except Exception as e:
+                logger.error(f"Failed to remove kill switch lock file: {e}")
+                errors.append("KILL_SWITCH_LOCK_NOT_REMOVED")
 
         audit = get_audit_manager().record_event(
             event_type="PANIC_RELEASED",
             actor=source,
-            details={"released_at": now_iso},
+            details={"released_at": now_iso, "errors": errors},
             rationale=reason,
-            status="PANIC_RELEASED"
+            status="PANIC_RELEASED" if not errors else "PANIC_RELEASE_INCOMPLETE"
         )
-        return jsonify({
+        still_active = _is_panic_active()
+        if errors or still_active:
+            return ({
+                "status": "ERROR",
+                "error": "PANIC_RELEASE_INCOMPLETE",
+                "panic_active": still_active,
+                "failed_steps": errors,
+                "message": "Panic could not be fully released; order submission remains blocked.",
+                "audit_hash": persisted_hash(audit)
+            }, 500)
+        return ({
             "status": "SUCCESS",
             "panic_active": False,
             "message": "PANIC RELEASED: Trading engine unblocked.",
-            "audit_hash": audit.get("hash")
-        }), 200
+            "audit_hash": persisted_hash(audit)
+        }, 200)
 
-    # Activate Panic
+    # Activate Panic — two independent blocking mechanisms; report what stuck.
+    blocked_by = []
     try:
-        tmp = panic_file + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({
-                "panic_active": True,
-                "triggered_at": now_iso,
-                "actor": source,
-                "reason": reason
-            }, f, indent=2)
-        os.replace(tmp, panic_file)
+        write_panic_state(True, actor=source, reason=reason)
+        blocked_by.append("PANIC_FLAG")
     except Exception as e:
         logger.error(f"Failed to update panic state file on trigger: {e}")
 
     try:
-        with open("KILL_SWITCH_ACTIVE.lock", "w", encoding="utf-8") as f:
-            json.dump({
-                "kill_switch_active": True,
-                "triggered_at": now_iso,
-                "actor": source,
-                "reason": reason
-            }, f, indent=2)
+        atomic_write_json(kill_switch_lock_file(), {
+            "kill_switch_active": True,
+            "triggered_at": now_iso,
+            "actor": source,
+            "reason": reason
+        })
+        blocked_by.append("KILL_SWITCH_LOCK")
     except Exception as e:
         logger.error(f"Failed to create kill switch lock file: {e}")
 
     audit = get_audit_manager().record_event(
         event_type="PANIC_TRIGGERED",
         actor=source,
-        details={"triggered_at": now_iso, "panic_file": panic_file},
+        details={"triggered_at": now_iso, "panic_file": os.getenv("PANIC_STATE_FILE", "panic_state.json"),
+                 "blocked_by": blocked_by},
         rationale=reason,
-        status="PANIC_ACTIVATED"
+        status="PANIC_ACTIVATED" if blocked_by else "PANIC_NOT_PERSISTED"
     )
 
-    return jsonify({
+    if not blocked_by:
+        return ({
+            "status": "ERROR",
+            "error": "PANIC_NOT_PERSISTED",
+            "panic_active": False,
+            "message": "Neither the panic flag nor the kill-switch lock could be written; orders are NOT blocked.",
+            "audit_hash": persisted_hash(audit)
+        }, 500)
+
+    return ({
         "status": "SUCCESS",
         "panic_active": True,
-        "kill_switch_active": True,
-        "message": "EMERGENCY PANIC ACTIVATED: All new orders blocked. Open orders cancelled.",
-        "audit_hash": audit.get("hash")
-    }), 200
+        "kill_switch_active": "KILL_SWITCH_LOCK" in blocked_by,
+        "blocked_by": blocked_by,
+        "message": ("EMERGENCY PANIC ACTIVATED: all new order submission blocked. "
+                    "Existing open/protective orders were not cancelled by this endpoint."),
+        "audit_hash": persisted_hash(audit)
+    }, 200)
 
 
 # ==============================================================================
@@ -243,17 +269,18 @@ def get_supervision_advisories():
 
 @friday_supervision_bp.route("/v1/friday/supervision/advisory/authorize", methods=["POST"])
 @friday_supervision_bp.route("/api/v1/friday/advisory/authorize", methods=["POST"])
+@require_api_scope(scope=SCOPE_FRIDAY, is_control=True)
 def authorize_advisory_recommendation():
     """
     Separation of Advisory Generation and Application:
     Explicitly authorizes and applies a staged bounded parameter change.
     Requires: {"recommendation_id": "...", "authorization_token": "...", "authorized_by": "FRIDAY"}
     """
-    body = request.get_json(silent=True) or {}
-    rec_id = body.get("recommendation_id")
-    token = body.get("authorization_token")
-    authorizer = body.get("authorized_by", "FRIDAY")
-    idempotency_key = request.headers.get("Idempotency-Key") or body.get("idempotency_key")
+    body = json_body()
+    rec_id = get_str(body, "recommendation_id", "", max_len=128)
+    token = get_str(body, "authorization_token", "", max_len=512)
+    authorizer = get_str(body, "authorized_by", "FRIDAY", max_len=64) or "FRIDAY"
+    idempotency_key = _idempotency_key(body)
 
     if not rec_id:
         return jsonify({
@@ -291,12 +318,33 @@ def authorize_advisory_recommendation():
     }), 200
 
 
+_IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
+
+
+def _idempotency_key(body: dict) -> str | None:
+    """Idempotency key from the header or body; must be a short safe string.
+
+    A list/object key used to reach the idempotency store's dict lookup and
+    crash the request with ``TypeError: unhashable type`` (HTTP 500).
+    """
+    raw = request.headers.get("Idempotency-Key")
+    if raw is None:
+        raw = get_str(body, "idempotency_key", None, max_len=128)
+    if raw is None or raw == "":
+        return None
+    raw = raw.strip()
+    if not _IDEMPOTENCY_KEY_RE.match(raw):
+        raise RequestValidationError("idempotency_key", "must be 1-128 characters of [A-Za-z0-9_.:-]")
+    return raw
+
+
 # ==============================================================================
 # UNIVERSAL TASK PROTOCOL ENDPOINT (WITH DETERMINISTIC EXECUTION ENFORCEMENT)
 # ==============================================================================
 
 @friday_supervision_bp.route("/v1/friday/task", methods=["POST"])
 @friday_supervision_bp.route("/v1/task/execute", methods=["POST"])
+@require_api_scope(scope=SCOPE_FRIDAY, is_control=True)
 def execute_friday_task():
     """
     Universal Task Protocol entry point for FRIDAY and Cortex.
@@ -305,12 +353,12 @@ def execute_friday_task():
     FRIDAY or Inference cannot directly order executions or bypass Stratex safety gates.
     """
     t0 = time.time()
-    body = request.get_json(silent=True) or {}
-    task_id = body.get("task_id", f"stx_task_{int(time.time_ns())}")
-    action = str(body.get("action", "status")).lower()
-    source_agent = str(body.get("source_agent", "unknown"))
+    body = json_body()
+    task_id = get_str(body, "task_id", "", max_len=128) or f"stx_task_{int(time.time_ns())}"
+    action = get_str(body, "action", "status", lower=True, max_len=64) or "status"
+    source_agent = get_str(body, "source_agent", "unknown", max_len=64) or "unknown"
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else body
-    idempotency_key = request.headers.get("Idempotency-Key") or body.get("idempotency_key")
+    idempotency_key = _idempotency_key(body)
 
     # Invariant Check: Reject order placement or gate bypass attempts fail-closed
     if action in ["order", "place_order", "execute", "execute_order", "bypass_gates", "force_trade", "trade"]:
@@ -349,7 +397,7 @@ def execute_friday_task():
             "execution_time_ms": int((time.time() - t0) * 1000)
         }
     elif action in ["panic", "emergency_stop", "kill_switch"]:
-        confirm = bool(payload.get("confirm", False))
+        confirm = isinstance(payload, dict) and payload.get("confirm") is True
         if not confirm:
             return jsonify({
                 "task_id": task_id,
@@ -358,16 +406,28 @@ def execute_friday_task():
                 "error": "CONFIRMATION_REQUIRED",
                 "message": "Panic action requires explicit payload {'confirm': true}."
             }), 400
-        # Trigger panic
-        res = execute_supervision_panic()
+        # Trigger panic with the TASK's own payload (the HTTP route reads the
+        # top-level body, where a task's {"payload": {"confirm": true}} is absent).
+        result, code = apply_supervision_panic(
+            confirm=True,
+            release=payload.get("release") is True,
+            reason=str(payload.get("reason", f"Emergency panic requested by {source_agent} task")),
+            source=str(payload.get("source", source_agent)),
+        )
         response_payload = {
             "task_id": task_id,
             "target_agent": "stratex",
-            "status": "SUCCESS",
-            "result": res[0].get_json() if hasattr(res[0], "get_json") else {},
-            "summary": f"Emergency panic triggered by {source_agent}.",
+            "status": "SUCCESS" if code == 200 else "FAILED",
+            "result": result,
+            "summary": (f"Emergency panic {'released' if payload.get('release') is True else 'triggered'} by {source_agent}."
+                        if code == 200 else f"Emergency panic request from {source_agent} FAILED: {result.get('error')}"),
             "execution_time_ms": int((time.time() - t0) * 1000)
         }
+        if code != 200:
+            if idempotency_key:
+                # A failed panic must stay retryable, not be parked as PENDING.
+                get_idempotency_store().remove(idempotency_key)
+            return jsonify(response_payload), code
     elif action in ["advisories", "list_advisories"]:
         overlay = get_advisory_overlay()
         pending = overlay.get_pending_recommendations()

@@ -5,6 +5,8 @@ import pytest
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from concurrent.futures import ProcessPoolExecutor
+import multiprocessing
 
 from stratex_quantdinger.models import (
     StrategyVersion,
@@ -21,9 +23,69 @@ from stratex_quantdinger.agent_contract import ResearchAgentGateway
 from execution import ExecutionPolicy
 
 
+def _register_validation_candidate(registry, root, strategy_id, version, source, parameters):
+    """Writes explicitly synthetic evidence to a temp path for gate tests only."""
+    from stratex_quantdinger.promotion_policy import PROMOTION_ELIGIBLE
+
+    artifact_name = f"{strategy_id}_{version}_synthetic_test_evidence.json"
+    artifact = {
+        "strategy": strategy_id,
+        "strategy_source_hash": StrategyRegistry.compute_source_hash(source),
+        "git_sha": "a" * 40,
+        "promotion_status": PROMOTION_ELIGIBLE,
+        "optimized_oos": {
+            "trade_count": 40,
+            "total_trades": 40,
+            "profit_factor": 1.2,
+            "expectancy": 0.5,
+        },
+        "walk_forward_windows": [{"status": "PASS"}, {"status": "PASS"}],
+    }
+    (Path(root) / artifact_name).write_text(json.dumps(artifact), encoding="utf-8")
+    return registry.register(
+        strategy_id,
+        version,
+        source,
+        parameters,
+        evidence={
+            "artifact": artifact_name,
+            "git_sha": "a" * 40,
+            "promotion_status": PROMOTION_ELIGIBLE,
+            "walk_forward_failures": 0,
+        },
+    )
+
+
+def _parallel_registry_register(args):
+    registry_path, index = args
+    StrategyRegistry(path=registry_path, audit_log_path=registry_path + ".audit").register(
+        f"parallel_{index}", "v1", f"source-{index}", {"index": index}
+    )
+    return index
+
+
+def _parallel_registry_promote(args):
+    registry_path, version = args
+    return StrategyRegistry(path=registry_path, audit_log_path=registry_path + ".audit").promote(
+        "race_strategy", version, "ACTIVE", actor="operator", reason="concurrency regression test"
+    ).status
+
+
 # ==============================================================================
 # 1. STRATEGY REGISTRY & IMMUTABLE VERSIONING
 # ==============================================================================
+
+def test_factory_winner_5_registry_hash_matches_committed_source():
+    root = Path(__file__).resolve().parent.parent
+    registry_data = json.loads((root / "strategy_registry.json").read_text(encoding="utf-8"))
+    source = (root / "strategy_factory_winner_5.py").read_text(encoding="utf-8")
+    expected = StrategyRegistry.compute_source_hash(source)
+    record = registry_data["strategies"]["factory_winner_5"]["v1.0.0"]
+
+    assert len(record["source_hash"]) == 64
+    assert record["source_hash"] == expected
+    assert record["status"] == "RESEARCH"  # Hash correction is not validation.
+
 
 def test_strategy_registry_registration_and_hash(tmp_path):
     reg_file = str(tmp_path / "registry.json")
@@ -82,13 +144,13 @@ def test_strategy_lifecycle_promotion_stages(tmp_path):
     audit_file = str(tmp_path / "audit.jsonl")
     registry = StrategyRegistry(path=reg_file, audit_log_path=audit_file)
 
-    registry.register("trend", "v1.0.0", "source", {"sl": 2.0}, status="RESEARCH")
+    _register_validation_candidate(registry, tmp_path, "trend", "v1.0.0", "source", {"sl": 2.0})
 
     # Cannot jump directly from RESEARCH to ACTIVE
     with pytest.raises(ValueError, match="Illegal lifecycle transition"):
         registry.promote("trend", "v1.0.0", "ACTIVE")
 
-    # Step 1: RESEARCH -> OOS_VALIDATED
+    # Step 1: RESEARCH -> OOS_VALIDATED (synthetic artifact is test-only)
     v1 = registry.promote("trend", "v1.0.0", "OOS_VALIDATED", actor="researcher", reason="Passed 4 walk-forward splits")
     assert v1.status == "OOS_VALIDATED"
 
@@ -110,11 +172,232 @@ def test_strategy_lifecycle_promotion_stages(tmp_path):
     assert len(lines) >= 5  # 1 register + 4 transitions
 
 
+def test_corrupt_registry_is_not_silently_reset_or_overwritten(tmp_path):
+    from stratex_quantdinger.registry import RegistryIntegrityError
+
+    registry_path = tmp_path / "registry.json"
+    original = '{"strategies": {broken'
+    registry_path.write_text(original, encoding="utf-8")
+    registry = StrategyRegistry(path=str(registry_path))
+
+    with pytest.raises(RegistryIntegrityError, match="refusing to reset"):
+        registry.register("new", "v1", "source", {})
+
+    assert registry_path.read_text(encoding="utf-8") == original
+
+
+def test_corrupt_registry_endpoint_returns_503_without_overwriting(tmp_path, monkeypatch):
+    from dashboard import app
+
+    registry_path = tmp_path / "strategy_registry.json"
+    original = "not-json"
+    registry_path.write_text(original, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    for key in ("BOT_API_KEY", "API_KEY_READONLY", "API_KEY_FRIDAY"):
+        monkeypatch.setenv(key, "")
+    monkeypatch.setenv("API_KEY_CONTROL", "registry-control-test-key-123456")
+
+    with app.test_client() as client:
+        response = client.get("/api/strategy-registry")
+
+    assert response.status_code == 503
+    assert response.get_json()["error"] == "REGISTRY_UNAVAILABLE"
+    assert registry_path.read_text(encoding="utf-8") == original
+
+
+def test_parallel_registry_writes_are_serialized_across_processes(tmp_path):
+    if "fork" not in multiprocessing.get_all_start_methods():
+        pytest.skip("cross-process flock stress test requires the POSIX fork start method")
+
+    registry_path = str(tmp_path / "registry.json")
+    context = multiprocessing.get_context("fork")
+    with ProcessPoolExecutor(max_workers=8, mp_context=context) as pool:
+        list(pool.map(_parallel_registry_register, [(registry_path, index) for index in range(48)]))
+
+    registry = StrategyRegistry(path=registry_path, audit_log_path=registry_path + ".audit")
+    assert len(registry.list_versions()) == 48
+    assert len(Path(registry_path + ".audit").read_text(encoding="utf-8").splitlines()) == 48
+
+
+def test_concurrent_active_promotions_leave_exactly_one_active_version(tmp_path):
+    if "fork" not in multiprocessing.get_all_start_methods():
+        pytest.skip("cross-process flock stress test requires the POSIX fork start method")
+
+    registry_path = str(tmp_path / "registry.json")
+    registry = StrategyRegistry(path=registry_path, audit_log_path=registry_path + ".audit")
+    for version in ("v1", "v2"):
+        _register_validation_candidate(registry, tmp_path, "race_strategy", version, f"source-{version}", {})
+        registry.promote("race_strategy", version, "OOS_VALIDATED")
+        registry.promote("race_strategy", version, "APPROVED")
+
+    context = multiprocessing.get_context("fork")
+    with ProcessPoolExecutor(max_workers=2, mp_context=context) as pool:
+        list(pool.map(_parallel_registry_promote, [(registry_path, "v1"), (registry_path, "v2")]))
+
+    versions = registry.list_versions(strategy_id="race_strategy")
+    assert sum(item.status == "ACTIVE" for item in versions) == 1
+    assert sum(item.status == "RETIRED" for item in versions) == 1
+
+
+def test_legacy_short_hash_is_readable_only_while_unpromoted(tmp_path):
+    from stratex_quantdinger.registry import RegistryIntegrityError
+
+    registry_path = tmp_path / "registry.json"
+    record = {
+        "strategy_id": "legacy",
+        "version": "v1",
+        "source_hash": "a" * 61,
+        "created_at": "2026-09-01T00:00:00+00:00",
+        "parameters": {},
+        "status": "RESEARCH",
+    }
+    registry_path.write_text(json.dumps({"strategies": {"legacy": {"v1": record}}}), encoding="utf-8")
+    registry = StrategyRegistry(path=str(registry_path))
+    assert registry.get("legacy", "v1").status == "RESEARCH"
+
+    record["status"] = "OOS_VALIDATED"
+    registry_path.write_text(json.dumps({"strategies": {"legacy": {"v1": record}}}), encoding="utf-8")
+    with pytest.raises(RegistryIntegrityError, match="full SHA-256"):
+        registry.list_versions()
+
+
+def test_registry_mutation_endpoints_reject_non_object_json(tmp_path, monkeypatch):
+    from dashboard import app
+
+    monkeypatch.chdir(tmp_path)
+    for key in ("BOT_API_KEY", "API_KEY_READONLY", "API_KEY_FRIDAY"):
+        monkeypatch.setenv(key, "")
+    api_key = "registry-json-shape-test-key-123456"
+    monkeypatch.setenv("API_KEY_CONTROL", api_key)
+
+    with app.test_client() as client:
+        registration = client.post("/api/strategy-registry", json=["not", "an", "object"], headers={"X-API-Key": api_key})
+        promotion = client.post("/api/strategy-registry/promote", json=["not", "an", "object"], headers={"X-API-Key": api_key})
+
+    assert registration.status_code == 400
+    assert registration.get_json()["error"] == "JSON_OBJECT_REQUIRED"
+    assert promotion.status_code == 400
+    assert promotion.get_json()["error"] == "JSON_OBJECT_REQUIRED"
+
+
+def test_registry_rejects_direct_elevated_registration(tmp_path):
+    registry = StrategyRegistry(path=str(tmp_path / "registry.json"))
+    with pytest.raises(ValueError, match="must be registered as RESEARCH"):
+        registry.register("strat", "v1.0.0", "source", {}, status="ACTIVE")
+
+
+def test_oos_promotion_rejects_missing_artifact(tmp_path):
+    registry = StrategyRegistry(path=str(tmp_path / "registry.json"))
+    registry.register("strat", "v1.0.0", "source", {})
+    with pytest.raises(ValueError, match="requires evidence.artifact"):
+        registry.promote("strat", "v1.0.0", "OOS_VALIDATED")
+
+
+def test_oos_promotion_rejects_research_only_and_underpowered_artifact(tmp_path):
+    registry = StrategyRegistry(path=str(tmp_path / "registry.json"))
+    artifact_name = "weak.json"
+    artifact = {
+        "strategy": "strat",
+        "strategy_source_hash": StrategyRegistry.compute_source_hash("source"),
+        "promotion_status": "RESEARCH ONLY",
+        "optimized_oos": {"trade_count": 2, "profit_factor": 0.8236},
+        "walk_forward_windows": [{"status": "FAIL"}],
+    }
+    (tmp_path / artifact_name).write_text(json.dumps(artifact), encoding="utf-8")
+    registry.register(
+        "strat", "v1.0.0", "source", {},
+        evidence={"artifact": artifact_name, "promotion_status": "RESEARCH ONLY"},
+    )
+    with pytest.raises(ValueError, match="evidence is insufficient"):
+        registry.promote("strat", "v1.0.0", "OOS_VALIDATED")
+
+
+def test_oos_promotion_rejects_artifact_path_escape(tmp_path):
+    registry = StrategyRegistry(path=str(tmp_path / "registry.json"))
+    registry.register("strat", "v1.0.0", "source", {}, evidence={"artifact": "../outside.json"})
+    with pytest.raises(ValueError, match="relative path inside"):
+        registry.promote("strat", "v1.0.0", "OOS_VALIDATED")
+
+
+def test_oos_promotion_rejects_symlink_escape(tmp_path):
+    outside = tmp_path.parent / f"{tmp_path.name}_outside.json"
+    outside.write_text("{}", encoding="utf-8")
+    link = tmp_path / "outside_link.json"
+    try:
+        link.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+
+    registry = StrategyRegistry(path=str(tmp_path / "registry.json"))
+    registry.register("strat", "v1.0.0", "source", {}, evidence={"artifact": link.name})
+    with pytest.raises(ValueError, match="missing or outside"):
+        registry.promote("strat", "v1.0.0", "OOS_VALIDATED")
+
+
+def test_oos_evidence_is_pinned_and_cannot_be_changed_before_approval(tmp_path):
+    registry = StrategyRegistry(path=str(tmp_path / "registry.json"))
+    _register_validation_candidate(registry, tmp_path, "strat", "v1.0.0", "source", {})
+    registry.promote("strat", "v1.0.0", "OOS_VALIDATED")
+
+    artifact_path = tmp_path / "strat_v1.0.0_synthetic_test_evidence.json"
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    artifact["optimized_oos"]["expectancy"] = 0.6
+    artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="changed after its evidence hash"):
+        registry.promote("strat", "v1.0.0", "APPROVED")
+
+
+def test_oos_promotion_rejects_artifact_for_different_source_version(tmp_path):
+    from stratex_quantdinger.promotion_policy import PROMOTION_ELIGIBLE
+
+    registry = StrategyRegistry(path=str(tmp_path / "registry.json"))
+    artifact_name = "other_source.json"
+    artifact = {
+        "strategy": "strat",
+        "strategy_source_hash": StrategyRegistry.compute_source_hash("different source"),
+        "promotion_status": PROMOTION_ELIGIBLE,
+        "optimized_oos": {"trade_count": 40, "profit_factor": 1.2},
+        "walk_forward_windows": [{"status": "PASS"}],
+    }
+    (tmp_path / artifact_name).write_text(json.dumps(artifact), encoding="utf-8")
+    registry.register("strat", "v1.0.0", "actual source", {}, evidence={"artifact": artifact_name})
+
+    with pytest.raises(ValueError, match="source hash does not match"):
+        registry.promote("strat", "v1.0.0", "OOS_VALIDATED")
+
+
+def test_oos_promotion_rejects_registry_metrics_that_disagree_with_artifact(tmp_path):
+    registry = StrategyRegistry(path=str(tmp_path / "registry.json"))
+    artifact_name = "valid_metrics.json"
+    artifact = {
+        "strategy": "strat",
+        "strategy_source_hash": StrategyRegistry.compute_source_hash("source"),
+        "git_sha": "a" * 40,
+        "promotion_status": "PROMOTION_ELIGIBLE",
+        "optimized_oos": {"trade_count": 40, "profit_factor": 1.2, "expectancy": 0.5},
+        "walk_forward_windows": [{"status": "PASS"}],
+    }
+    (tmp_path / artifact_name).write_text(json.dumps(artifact), encoding="utf-8")
+    registry.register(
+        "strat", "v1.0.0", "source",
+        {"OOS_TRADE_COUNT": 2, "OOS_PROFIT_FACTOR": 0.8236},
+        evidence={
+            "artifact": artifact_name,
+            "git_sha": "a" * 40,
+            "promotion_status": "PROMOTION_ELIGIBLE",
+            "walk_forward_failures": 0,
+        },
+    )
+    with pytest.raises(ValueError, match="does not match the cited artifact"):
+        registry.promote("strat", "v1.0.0", "OOS_VALIDATED")
+
+
 def test_strategy_single_active_version_rule(tmp_path):
     reg_file = str(tmp_path / "registry.json")
     registry = StrategyRegistry(path=reg_file)
 
-    registry.register("strat", "v1.0.0", "source 1", {}, status="RESEARCH")
+    _register_validation_candidate(registry, tmp_path, "strat", "v1.0.0", "source 1", {})
     registry.promote("strat", "v1.0.0", "OOS_VALIDATED")
     registry.promote("strat", "v1.0.0", "APPROVED")
     registry.promote("strat", "v1.0.0", "ACTIVE")
@@ -122,7 +405,7 @@ def test_strategy_single_active_version_rule(tmp_path):
     assert registry.get_active("strat").version == "v1.0.0"
 
     # Register and activate v2.0.0
-    registry.register("strat", "v2.0.0", "source 2", {}, status="RESEARCH")
+    _register_validation_candidate(registry, tmp_path, "strat", "v2.0.0", "source 2", {})
     registry.promote("strat", "v2.0.0", "OOS_VALIDATED")
     registry.promote("strat", "v2.0.0", "APPROVED")
     registry.promote("strat", "v2.0.0", "ACTIVE")
@@ -340,16 +623,28 @@ def test_research_agent_gateway_isolation(tmp_path):
 # ==============================================================================
 
 def test_safety_invariants_live_and_paper(monkeypatch):
-    # 1. ExecutionPolicy strictly forbids LIVE trading
-    monkeypatch.setattr("execution.TRADING_MODE", "LIVE")
-    monkeypatch.setattr("execution.LIVE_TRADING_ENABLED", True)
+    # Pin config and execution-module bindings: _resolve_execution_flags ORs
+    # both sources, so mutating only one makes this test order-dependent.
+    import config
+    import execution
+
+    monkeypatch.setattr(config, "TRADING_MODE", "LIVE")
+    monkeypatch.setattr(config, "PAPER_SAFE_MODE", False)
+    monkeypatch.setattr(config, "LIVE_TRADING_ENABLED", False)
+    monkeypatch.setattr(execution, "TRADING_MODE", "LIVE")
+    monkeypatch.setattr(execution, "PAPER_SAFE_MODE", False)
+    monkeypatch.setattr(execution, "LIVE_TRADING_ENABLED", True)
     can_place, reason = ExecutionPolicy.can_place_order()
     assert not can_place
     assert "LIVE_FORBIDDEN" in reason
 
     # 2. PAPER mode is blocked from placing external exchange orders
-    monkeypatch.setattr("execution.TRADING_MODE", "PAPER")
-    monkeypatch.setattr("execution.LIVE_TRADING_ENABLED", False)
+    monkeypatch.setattr(config, "TRADING_MODE", "PAPER")
+    monkeypatch.setattr(config, "PAPER_SAFE_MODE", False)
+    monkeypatch.setattr(config, "LIVE_TRADING_ENABLED", False)
+    monkeypatch.setattr(execution, "TRADING_MODE", "PAPER")
+    monkeypatch.setattr(execution, "PAPER_SAFE_MODE", False)
+    monkeypatch.setattr(execution, "LIVE_TRADING_ENABLED", False)
     can_place_paper, paper_reason = ExecutionPolicy.can_place_order()
     assert not can_place_paper
     assert "PAPER_BLOCKED" in paper_reason

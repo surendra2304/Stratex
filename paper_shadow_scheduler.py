@@ -19,6 +19,7 @@ from typing import Any, Callable
 
 import pandas as pd
 
+from market_data_quality import UNUSABLE, sanitize_ohlcv
 from paper_shadow_memora import MemoraShadowStore, ShadowPersistenceError
 from paper_shadow_processor import (
     DEFAULT_SHADOW_STREAMS,
@@ -317,9 +318,12 @@ def _fetch_closed_candles(
     frame["timestamp"] = pd.to_datetime(pd.to_numeric(frame["timestamp"], errors="raise"), unit="ms", utc=True)
     for column in ("open", "high", "low", "close", "volume"):
         frame[column] = pd.to_numeric(frame[column], errors="raise")
-    return frame[["timestamp", "open", "high", "low", "close", "volume"]].sort_values(
-        "timestamp", kind="stable"
-    ).reset_index(drop=True)
+    frame, quality = sanitize_ohlcv(frame[["timestamp", "open", "high", "low", "close", "volume"]], interval=timeframe)
+    if quality.status == UNUSABLE:
+        # The shadow sample must not evaluate an older bar as the newest one,
+        # nor bars with NaN/zero prices or high<low.
+        raise RuntimeError(f"unusable public candles for {symbol} {timeframe}: {quality.summary()}")
+    return frame
 
 
 _singleton: ShadowPaperScheduler | None = None

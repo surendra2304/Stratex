@@ -2,7 +2,6 @@ import datetime
 import json
 import math
 import os
-import shutil
 import time
 from enum import Enum
 
@@ -19,7 +18,15 @@ from config import (
     TRADE_QTY,
     TRADING_MODE,
 )
+from atomic_io import (
+    append_jsonl,
+    atomic_write_bytes,
+    atomic_write_text,
+    load_json_state,
+    locked_path,
+)
 from logger import get_logger, log_trade
+from numeric_safety import finite_float, positive_float
 from paper_engine.exceptions import StateCorruptionError, ZeroFillError
 from testnet_engine.protection import (
     check_futures_bracket_status,
@@ -35,19 +42,17 @@ ACTIVE_TRADES_FILE = os.getenv("ACTIVE_TRADES_FILE", "active_trades.json")
 
 
 def _check_panic_and_kill_switch():
-    """Verifies that neither panic nor emergency kill-switch lock is active."""
-    panic_file = os.getenv("PANIC_STATE_FILE", "panic_state.json")
-    if os.path.exists(panic_file):
-        try:
-            with open(panic_file, "r", encoding="utf-8") as pf:
-                pdata = json.load(pf)
-                if pdata.get("panic_active", False):
-                    raise RuntimeError("CRITICAL ERROR: Emergency Panic Kill-Switch is active. All order submission is blocked.")
-        except RuntimeError:
-            raise
-        except Exception:
-            pass
-    if os.path.exists("KILL_SWITCH_ACTIVE.lock"):
+    """Verifies that neither panic nor emergency kill-switch lock is active.
+
+    Uses the unified panic reader: both schema keys (``active`` written by
+    /api/panic, ``panic_active`` written by FRIDAY) block, and an unreadable flag
+    file fails CLOSED instead of being silently ignored.
+    """
+    from panic_state import is_kill_switch_locked, is_panic_active
+
+    if is_panic_active():
+        raise RuntimeError("CRITICAL ERROR: Emergency Panic Kill-Switch is active. All order submission is blocked.")
+    if is_kill_switch_locked():
         raise RuntimeError("CRITICAL ERROR: Emergency Kill Switch lock file is active. All order submission is blocked.")
 
 
@@ -212,17 +217,59 @@ def _validate_trade_schema(trade: dict):
         if trade.get("tp_price") is not None or trade.get("sl_price") is not None:
             raise StateCorruptionError("oco_id cannot be None if tp_price or sl_price are set.")
 
+class InvalidOrderRequest(ValueError):
+    """An entry request is malformed; refused before anything reaches the venue."""
+
+
+def _validate_entry_request(side, quantity, sl, tp, *, require_protection: bool = True):
+    """Validate an entry *before* the market order is submitted.
+
+    Previously quantity/SL/TP were only checked inside the protection step,
+    i.e. after the entry had already filled: a NaN or wrong-side stop cost a
+    full round trip (entry fill, failed OCO, emergency market close), and
+    ``if sl and tp`` treated ``NaN`` as present while a half-specified bracket
+    (only SL or only TP) silently produced an unprotected, untracked position.
+
+    Returns ``(quantity, sl, tp)`` as floats (sl/tp ``None`` only when
+    protection is not required and neither was supplied).
+    """
+    if side not in ("BUY", "SELL"):
+        raise InvalidOrderRequest(f"side must be 'BUY' or 'SELL', got {side!r}")
+    qty = positive_float(quantity)
+    if qty is None:
+        raise InvalidOrderRequest(f"quantity must be a finite number > 0, got {quantity!r}")
+    if sl is None and tp is None and not require_protection:
+        return qty, None, None
+    if sl is None or tp is None:
+        raise InvalidOrderRequest(
+            f"UNPROTECTED_ENTRY_REFUSED: both stop-loss and take-profit are required (sl={sl!r}, tp={tp!r})"
+        )
+    sl_value = positive_float(sl)
+    tp_value = positive_float(tp)
+    if sl_value is None or tp_value is None:
+        raise InvalidOrderRequest(f"sl/tp must be finite numbers > 0 (sl={sl!r}, tp={tp!r})")
+    if side == "BUY" and not sl_value < tp_value:
+        raise InvalidOrderRequest(f"BUY entry requires sl < tp (sl={sl_value}, tp={tp_value})")
+    if side == "SELL" and not sl_value > tp_value:
+        raise InvalidOrderRequest(f"SELL entry requires sl > tp (sl={sl_value}, tp={tp_value})")
+    return qty, sl_value, tp_value
+
+
 def _load_active_trades():
     if not os.path.exists(ACTIVE_TRADES_FILE):
         return []
-    
-    try:
-        with open(ACTIVE_TRADES_FILE, "r") as f:
-            data = json.load(f)
-    except Exception as e:
-        sys_logger.error(f"Failed to load JSON from {ACTIVE_TRADES_FILE}: {e}")
+
+    # Strict load (NaN/Infinity tokens rejected) without quarantine: the file
+    # stays in place for the operator and the caller fails closed.
+    with locked_path(ACTIVE_TRADES_FILE):
+        result = load_json_state(ACTIVE_TRADES_FILE, expected_type=(list, dict), default_factory=list, quarantine=False)
+    if result.status == "missing":
+        return []
+    if result.status != "ok":
+        sys_logger.error(f"Failed to load JSON from {ACTIVE_TRADES_FILE}: {result.error}")
         raise StateCorruptionError("Active trades JSON is corrupt.")
-        
+    data = result.data
+
     if not isinstance(data, list):
         raise StateCorruptionError("Active trades state must be a list.")
         
@@ -241,16 +288,132 @@ def _load_active_trades():
             
     return data
 
+def _strict_json_copy(value, path="", replaced=None):
+    """Copy ``value`` replacing non-finite floats by None; collect their paths."""
+    if replaced is None:
+        replaced = []
+    if isinstance(value, float) and not math.isfinite(value):
+        replaced.append(path or "<root>")
+        return None, replaced
+    if isinstance(value, dict):
+        return {k: _strict_json_copy(v, f"{path}.{k}" if path else str(k), replaced)[0] for k, v in value.items()}, replaced
+    if isinstance(value, (list, tuple)):
+        return [_strict_json_copy(v, f"{path}[{i}]", replaced)[0] for i, v in enumerate(value)], replaced
+    return value, replaced
+
+
+def _append_ledger_record(path, entry):
+    """Append one trade-ledger record durably: a single complete, fsynced line
+    (a torn tail from an earlier crash is sealed off first).
+
+    Non-finite numbers are written as null and flagged with ``numeric_fault``
+    so a closed trade is never dropped and the ledger stays strict JSON.
+    """
+    clean, replaced = _strict_json_copy(entry)
+    if replaced:
+        clean["numeric_fault"] = True
+        clean["numeric_fault_fields"] = replaced
+        sys_logger.error(f"[LEDGER] Non-finite values {replaced} in ledger record for {entry.get('symbol')}; stored as null")
+    append_jsonl(path, clean, fsync=True)
+
+
 def _save_active_trades(trades):
-    if os.path.exists(ACTIVE_TRADES_FILE):
-        backup_dir = "backup"
-        os.makedirs(backup_dir, exist_ok=True)
-        shutil.copy(ACTIVE_TRADES_FILE, os.path.join(backup_dir, "active_trades.json.bak"))
-        
-    temp_file = ACTIVE_TRADES_FILE + ".tmp"
-    with open(temp_file, "w") as f:
-        json.dump(trades, f)
-    os.replace(temp_file, ACTIVE_TRADES_FILE)
+    # Serialize first: a record with NaN/inf (or an unserializable value) must
+    # fail loudly here instead of becoming a restart state that cannot load.
+    try:
+        payload = json.dumps(trades, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise StateCorruptionError(f"Refusing to persist active trades: {exc}") from exc
+    with locked_path(ACTIVE_TRADES_FILE):
+        if os.path.exists(ACTIVE_TRADES_FILE):
+            backup_dir = "backup"
+            with open(ACTIVE_TRADES_FILE, "rb") as current:
+                previous = current.read()
+            # Atomic backup: a crash mid-copy can no longer leave a torn .bak.
+            atomic_write_bytes(os.path.join(backup_dir, "active_trades.json.bak"), previous)
+        atomic_write_text(ACTIVE_TRADES_FILE, payload)
+
+# ==============================================================================
+# LEDGER DEDUP CACHE
+# The duplicate-signal scan must consult the whole trade ledger, but re-reading
+# an unbounded JSONL file on every order is O(history) per order. We therefore
+# keep an incremental index of every dedup ID seen so far and only parse the
+# bytes appended since the last scan. Identity is (dev, inode): rotation or
+# replacement of the file forces a clean full re-scan, and a shrink (size <
+# offset) is treated as truncation and re-scanned from the start. Semantics are
+# identical to a full scan: a record matches when signal_id, entry_client_id,
+# trade_id or str(entry_order_id) equals the candidate ID. Malformed lines are
+# skipped without aborting the check (strictly safer than the old all-or-nothing
+# try/except).
+# ==============================================================================
+_LEDGER_ID_CACHE = {"identity": None, "offset": 0, "ids": set()}
+_LEDGER_ID_FIELDS = ("signal_id", "entry_client_id", "trade_id")
+
+
+def _ledger_identity_and_size(ledger_file):
+    try:
+        st = os.stat(ledger_file)
+    except OSError:
+        return None, 0
+    return (st.st_dev, st.st_ino), st.st_size
+
+
+def _extract_record_ids(rec):
+    ids = set()
+    for field in _LEDGER_ID_FIELDS:
+        val = rec.get(field)
+        if val is not None and str(val) != "":
+            ids.add(str(val))
+    entry_order_id = rec.get("entry_order_id")
+    if entry_order_id is not None:
+        ids.add(str(entry_order_id))
+    return ids
+
+
+def ledger_contains_id(ledger_file, client_order_id):
+    """O(new-lines) duplicate check against the trade ledger.
+
+    Returns True when any ledger record already carries ``client_order_id``
+    as signal_id / entry_client_id / trade_id / entry_order_id.
+    """
+    identity, size = _ledger_identity_and_size(ledger_file)
+    if identity is None:
+        return False
+
+    cache = _LEDGER_ID_CACHE
+    if cache["identity"] != identity or size < cache["offset"]:
+        # New/rotated/truncated file: rebuild from the beginning.
+        cache["identity"] = identity
+        cache["offset"] = 0
+        cache["ids"] = set()
+
+    if size > cache["offset"]:
+        try:
+            with open(ledger_file, "r", encoding="utf-8") as lf:
+                lf.seek(cache["offset"])
+                for line in lf:
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
+                    try:
+                        rec = json.loads(stripped)
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+                    if isinstance(rec, dict):
+                        cache["ids"].update(_extract_record_ids(rec))
+                cache["offset"] = lf.tell()
+        except OSError:
+            # Unreadable right now: fall through with whatever we have indexed.
+            pass
+
+    return str(client_order_id) in cache["ids"]
+
+
+def reset_ledger_id_cache():
+    """Test hook: drop the incremental ledger index."""
+    _LEDGER_ID_CACHE["identity"] = None
+    _LEDGER_ID_CACHE["offset"] = 0
+    _LEDGER_ID_CACHE["ids"] = set()
 
 def get_open_orders(symbol):
     """Returns the count of locally tracked active trades for a symbol."""
@@ -294,22 +457,22 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                     sys_logger.warning(f"[{strategy_name}] 🚫 Duplicate Client/Signal ID {client_order_id} rejected.")
                     return None
             # Also check recent ledger records for deduplication
+            # (incremental index — O(new lines) instead of O(whole history)).
             ledger_file = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
-            if os.path.exists(ledger_file):
-                try:
-                    with open(ledger_file, "r", encoding="utf-8") as lf:
-                        for line in lf:
-                            if not line.strip(): continue
-                            rec = json.loads(line)
-                            if rec.get("signal_id") == client_order_id or rec.get("entry_client_id") == client_order_id or rec.get("trade_id") == client_order_id or str(rec.get("entry_order_id")) == str(client_order_id):
-                                sys_logger.warning(f"[{strategy_name}] 🚫 Duplicate signal already executed in ledger: {client_order_id}")
-                                return None
-                except Exception:
-                    pass
+            if os.path.exists(ledger_file) and ledger_contains_id(ledger_file, client_order_id):
+                sys_logger.warning(f"[{strategy_name}] 🚫 Duplicate signal already executed in ledger: {client_order_id}")
+                return None
     except StateCorruptionError as e:
         sys_logger.critical(f"State corruption prevents new orders: {e}")
         raise
 
+    try:
+        quantity, sl, tp = _validate_entry_request(side, quantity, sl, tp)
+    except InvalidOrderRequest as e:
+        sys_logger.error(f"[{strategy_name}] 🚫 Entry refused before submission: {e}")
+        if client_order_id:
+            get_idempotency_store().remove(client_order_id)
+        raise
 
     client = get_exchange_client()
     state = OrderState.ENTRY_SUBMITTED
@@ -451,6 +614,16 @@ def place_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None,
                         f"UNPROTECTED POSITION ACTIVE for {symbol}. Error: {ce}",
                         extra={"strategy": strategy_name, "symbol": symbol}
                     )
+                # The entry DID reach the venue. Record a terminal result so a
+                # retry of this client_order_id returns it instead of the PENDING
+                # record going stale after 60s and a duplicate entry being sent.
+                if client_order_id:
+                    get_idempotency_store().complete_request(client_order_id, {
+                        "status": "PROTECTION_FAILED",
+                        "orderId": order_id,
+                        "_final_state": state.value,
+                        "_executed_qty": executed_qty,
+                    })
                 return None
 
 
@@ -544,6 +717,18 @@ def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, 
         if client_order_id:
             get_idempotency_store().remove(client_order_id)
         return None
+
+    try:
+        quantity, sl, tp = _validate_entry_request(side, quantity, sl, tp)
+        lev_value = finite_float(leverage)
+        if lev_value is None or not 1 <= lev_value <= 125 or not float(lev_value).is_integer():
+            raise InvalidOrderRequest(f"leverage must be a whole number between 1 and 125, got {leverage!r}")
+        leverage = int(lev_value)
+    except InvalidOrderRequest as e:
+        sys_logger.error(f"[{strategy_name}] 🚫 Futures entry refused before submission: {e}")
+        if client_order_id:
+            get_idempotency_store().remove(client_order_id)
+        raise
 
     client = get_exchange_client()
     state = OrderState.ENTRY_SUBMITTED
@@ -671,10 +856,19 @@ def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, 
                 )
                 try:
                     emergency_futures_market_close(client, symbol, side, executed_qty)
+                    state = OrderState.EMERGENCY_CLOSE
                 except Exception as ce:
+                    state = OrderState.UNKNOWN
                     sys_logger.critical(f"[FUTURES] 🚨 FATAL: Emergency close failed for {symbol}: {ce}")
+                # The entry reached the venue: removing the key here let an
+                # immediate retry of the same signal open a second position.
                 if client_order_id:
-                    get_idempotency_store().remove(client_order_id)
+                    get_idempotency_store().complete_request(client_order_id, {
+                        "status": "PROTECTION_FAILED",
+                        "orderId": order_id,
+                        "_final_state": state.value,
+                        "_executed_qty": executed_qty,
+                    })
                 return None
 
         log_trade(strategy_name, symbol, side, executed_qty, actual_price, sl, tp, order_id, state)
@@ -776,8 +970,7 @@ def monitor_open_trades():
                         "is_futures":     True
                     }
                     with LEDGER_WRITE_LOCK:
-                        with open(ledger_file, "a") as lf:
-                            lf.write(json.dumps(ledger_entry) + "\n")
+                        _append_ledger_record(ledger_file, ledger_entry)
                     log_trade(
                         t["strategy"], t["symbol"],
                         f"{t['side']}_FUTURES_CLOSE_{outcome}",
@@ -857,16 +1050,16 @@ def monitor_open_trades():
                 }
                 # Atomic append to ledger
                 with LEDGER_WRITE_LOCK:
-                    with open(ledger_file, "a") as lf:
-                        lf.write(json.dumps(ledger_entry) + "\n")
+                    _append_ledger_record(ledger_file, ledger_entry)
                     if t.get("strategy") == "adx_ema":
                         try:
-                            with open("adx_ema_forward_ledger.jsonl", "a") as fwd_f:
-                                fwd_entry = dict(ledger_entry)
-                                fwd_entry["strategy_version"] = "ADX_EMA_4H_V1"
-                                fwd_f.write(json.dumps(fwd_entry) + "\n")
-                        except Exception:
-                            pass
+                            fwd_entry = dict(ledger_entry)
+                            fwd_entry["strategy_version"] = "ADX_EMA_4H_V1"
+                            _append_ledger_record("adx_ema_forward_ledger.jsonl", fwd_entry)
+                        except (OSError, TypeError, ValueError) as fwd_err:
+                            # Secondary research ledger: never blocks the close,
+                            # but a gap in forward evidence must be visible.
+                            sys_logger.warning(f"[MONITOR] adx_ema forward ledger append failed: {fwd_err}")
 
                 log_trade(
                     t["strategy"], t["symbol"],
@@ -883,14 +1076,19 @@ def monitor_open_trades():
                     f"Position may be unprotected. Attempting emergency close.",
                     extra={"strategy": t["strategy"], "symbol": t["symbol"]}
                 )
+                closed_flat = False
                 try:
                     from testnet_engine.protection import emergency_market_close
                     ec = emergency_market_close(
                         client, t["symbol"], t["side"], float(t["quantity"])
                     )
-                    ec_qty = float(ec.get("executedQty", 0))
-                    ec_price = float(ec.get("cummulativeQuoteQty", 0)) / ec_qty if ec_qty > 0 else 0
+                    ec_qty = positive_float(ec.get("executedQty"))
+                    ec_quote = positive_float(ec.get("cummulativeQuoteQty"))
+                    if ec_qty is None or ec_quote is None:
+                        raise ValueError(f"emergency close returned no usable fill: {ec!r}")
+                    ec_price = ec_quote / ec_qty
                     ec_fee = ec_qty * ec_price * getattr(config, "BACKTEST_FEE_RATE", 0.001)
+                    closed_flat = bool(ec.get("_is_flat", True))
                     
                     # Calculate PnL accurately
                     gross_pnl, net_pnl = compute_net_pnl(
@@ -931,9 +1129,8 @@ def monitor_open_trades():
                         "reason":         f"OCO_{status}"
                     }
                     with LEDGER_WRITE_LOCK:
-                        with open(ledger_file, "a") as lf:
-                            lf.write(json.dumps(ledger_entry) + "\n")
-                            
+                        _append_ledger_record(ledger_file, ledger_entry)
+
                 except Exception as ec_err:
                     sys_logger.critical(
                         f"[MONITOR] \U0001f6a8 FATAL: Emergency close failed for {t['symbol']}: {ec_err}",
@@ -946,7 +1143,11 @@ def monitor_open_trades():
                     t.get("sl_price"), t.get("tp_price"),
                     oco_id, f"OCO_{status}"
                 )
-                # Remove from remaining regardless — OCO is dead
+                if not closed_flat:
+                    # The OCO is dead and flatness is NOT proven: the old code
+                    # dropped the trade anyway, leaving an unprotected position
+                    # that nothing tracked. Keep it, mark it, and block orders.
+                    _retain_unprotected(t, remaining_trades, f"OCO {oco_id} {status}; emergency close not confirmed")
             else:
                 # Still executing
                 remaining_trades.append(t)
@@ -954,19 +1155,29 @@ def monitor_open_trades():
         except BinanceAPIException as e:
             if "Order does not exist" in str(e) or "-2013" in str(e):
                 # Check balance to see if we missed a successful exit or if it's orphaned
+                flat_confirmed = False
                 try:
                     asset = t['symbol'].replace("USDT", "")
                     asset_info = client.get_asset_balance(asset=asset)
-                    asset_bal = float(asset_info['free']) + float(asset_info['locked'])
-                    if asset_bal < 0.0001: # Essentially 0
+                    asset_bal = finite_float(asset_info['free'])
+                    locked_bal = finite_float(asset_info['locked'])
+                    if asset_bal is None or locked_bal is None:
+                        raise ValueError(f"unreadable balance {asset_info!r}")
+                    if asset_bal + locked_bal < 0.0001: # Essentially 0
                         sys_logger.warning(f"[MONITOR] OCO {oco_id} missing but balance is 0. Position closed.")
+                        flat_confirmed = True
                     else:
                         sys_logger.critical(f"[MONITOR] OCO {oco_id} missing but balance > 0! Attempting emergency close.")
                         from testnet_engine.protection import emergency_market_close
-                        emergency_market_close(client, t["symbol"], t["side"], float(t["quantity"]))
-                except Exception:
-                    pass
-                
+                        ec = emergency_market_close(client, t["symbol"], t["side"], float(t["quantity"]))
+                        flat_confirmed = bool(ec.get("_is_flat", False))
+                except Exception as bal_err:
+                    sys_logger.critical(f"[MONITOR] Could not verify/close orphaned position {t['symbol']}: {bal_err}")
+
+                if not flat_confirmed:
+                    _retain_unprotected(t, remaining_trades, f"OCO {oco_id} missing on exchange; flatness not confirmed")
+                    continue
+
                 sys_logger.warning(
                     f"[MONITOR] OCO {oco_id} for {t['symbol']} missing from exchange. Purging.",
                     extra={"strategy": t["strategy"], "symbol": t["symbol"]}
@@ -994,6 +1205,23 @@ def monitor_open_trades():
         _save_active_trades(remaining_trades)
     except Exception as e:
         sys_logger.error(f"[MONITOR] Failed to save active trades: {e}")
+
+def _retain_unprotected(trade, remaining_trades, reason):
+    """Keep tracking a position whose protection is gone and engage the
+    durable order block so no new entries are made until an operator
+    reconciles it."""
+    trade["state"] = OrderState.UNKNOWN.value
+    trade["protection_lost"] = True
+    trade["protection_lost_reason"] = reason
+    remaining_trades.append(trade)
+    sys_logger.critical(f"[MONITOR] 🚨 UNPROTECTED POSITION RETAINED: {trade.get('symbol')} — {reason}")
+    try:
+        from panic_state import engage_order_block
+
+        engage_order_block("execution.monitor_open_trades", f"Unprotected position {trade.get('symbol')}: {reason}")
+    except Exception as block_err:  # the retained record still surfaces it
+        sys_logger.critical(f"[MONITOR] Failed to engage order block: {block_err}")
+
 
 def get_account_balance():
     """Returns the USDT and BTC balance from account."""

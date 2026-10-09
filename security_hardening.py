@@ -17,6 +17,7 @@ import hmac
 import json
 import os
 import re
+import secrets
 import threading
 import time
 from collections.abc import Callable
@@ -30,8 +31,35 @@ from logger import get_logger
 logger = get_logger("security_hardening")
 
 CONTROL_AUDIT_LOG_FILE = os.getenv("CONTROL_AUDIT_LOG_FILE", "control_audit.jsonl")
-_SECRET_KEY = os.getenv("SECURITY_SECRET_KEY", "prod_fallback_secret_key_change_me_998124").encode("utf-8")
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "prod_webhook_hmac_secret_998124")
+
+# --- Secret material policy -------------------------------------------------
+# NEVER fall back to a hardcoded secret shipped in source: anyone who can read
+# the repository could then forge audit-chain signatures and webhook payloads.
+# If SECURITY_SECRET_KEY is unset we generate an ephemeral per-process secret
+# (signatures stay internally consistent for this process lifetime but do not
+# survive restarts) and scream about it in the logs. Production MUST set it.
+_env_audit_secret = os.getenv("SECURITY_SECRET_KEY", "").strip()
+if _env_audit_secret:
+    _SECRET_KEY = _env_audit_secret.encode("utf-8")
+else:
+    _SECRET_KEY = secrets.token_bytes(32)
+    logger.critical(
+        "[SECURITY] SECURITY_SECRET_KEY is NOT set. Generated an ephemeral "
+        "per-process audit secret: control-audit signatures cannot be verified "
+        "across restarts or processes. Set SECURITY_SECRET_KEY in the "
+        "deployment environment."
+    )
+
+# Inbound webhook verification FAILS CLOSED when no secret is configured:
+# an unset WEBHOOK_SECRET means no signature can ever validate.
+_env_webhook_secret = os.getenv("WEBHOOK_SECRET", "").strip()
+WEBHOOK_SECRET = _env_webhook_secret or None
+if WEBHOOK_SECRET is None:
+    logger.critical(
+        "[SECURITY] WEBHOOK_SECRET is NOT set. Inbound webhook signature "
+        "verification is DISABLED (all signatures will be rejected). Set "
+        "WEBHOOK_SECRET to accept signed webhooks."
+    )
 
 # Scopes
 SCOPE_READ = "read"
@@ -272,12 +300,18 @@ def log_control_action(action: str, user_or_key: str, details: dict[str, Any], s
 
 
 def verify_audit_chain(records: list[dict[str, Any]]) -> bool:
-    """Verifies that an audit log ledger has not been tampered with or truncated."""
+    """Verifies that an audit log ledger has not been tampered with or truncated.
+
+    Every audit record is signed at write time, so an *unsigned* record inside
+    the ledger is itself evidence of tampering (signature-stripping attack)
+    and must fail verification — it is NOT skipped.
+    """
     prev_hash = ""
     for r in records:
         expected_sig = r.get("signature")
         if not expected_sig:
-            continue
+            logger.error(f"[SECURITY] Audit record missing signature (tampering evidence) — record ID: {r.get('id')}")
+            return False
         data_to_verify = {k: v for k, v in r.items() if k not in ("signature", "prev_signature")}
         computed = sign_audit_record(data_to_verify, prev_hash=prev_hash)
         if computed != expected_sig:
@@ -287,6 +321,55 @@ def verify_audit_chain(records: list[dict[str, Any]]) -> bool:
     return True
 
 
+def _load_audit_records(path: str | None = None) -> tuple[list[dict[str, Any]], int]:
+    """Parse the audit ledger strictly.
+
+    Returns (records, corrupt_line_count). A line that is not a JSON object is
+    counted as corrupt — corruption must be surfaced, never silently skipped.
+    """
+    audit_path = path or CONTROL_AUDIT_LOG_FILE
+    records: list[dict[str, Any]] = []
+    corrupt = 0
+    try:
+        with open(audit_path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    obj = json.loads(stripped)
+                except Exception:
+                    corrupt += 1
+                    continue
+                if isinstance(obj, dict):
+                    records.append(obj)
+                else:
+                    corrupt += 1
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        logger.error(f"[SECURITY] Audit ledger unreadable: {e}")
+        corrupt += 1
+    return records, corrupt
+
+
+def audit_trail_integrity(path: str | None = None) -> str:
+    """Compute the live audit-trail integrity verdict for the security report.
+
+    Never returns a hardcoded VERIFIED: the ledger is actually read and the
+    HMAC chain actually re-verified on every call.
+    """
+    records, corrupt = _load_audit_records(path)
+    if corrupt:
+        logger.error(f"[SECURITY] Audit ledger has {corrupt} corrupt/unparseable line(s)")
+        return f"HMAC_CHAIN_DEGRADED: {corrupt} corrupt line(s) detected"
+    if not records:
+        return "NO_AUDIT_RECORDS"
+    if verify_audit_chain(records):
+        return "HMAC_CHAIN_VERIFIED"
+    return "HMAC_CHAIN_BROKEN: signature mismatch detected"
+
+
 def verify_webhook_signature(payload_bytes: bytes, signature_header: str, secret: str | None = None) -> bool:
     """
     Verifies HMAC-SHA256 signature on incoming webhook payloads.
@@ -294,11 +377,39 @@ def verify_webhook_signature(payload_bytes: bytes, signature_header: str, secret
     """
     if not signature_header or not payload_bytes:
         return False
-    
-    sec = (secret or WEBHOOK_SECRET).encode("utf-8")
+
+    effective_secret = secret or WEBHOOK_SECRET
+    if not effective_secret:
+        # Fail closed: without a configured secret no webhook can be trusted.
+        return False
+
+    sec = effective_secret.encode("utf-8")
     clean_sig = signature_header.split("=")[-1].strip()
     expected = hmac.new(sec, payload_bytes, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, clean_sig)
+
+
+# Flask endpoint names of risk-reducing emergency controls (kill switch, pause,
+# flatten, halt). They must stay reachable in a degraded process: the request
+# guard lets any body through to them and an IP abuse block does not lock out a
+# caller presenting a valid key.
+EMERGENCY_ENDPOINTS = frozenset({
+    "api_panic",
+    "control_api.emergency_panic",
+    "control_api.pause_trading",
+    "friday_supervision.execute_supervision_panic",
+    "api_live_emergency_flatten",
+    "api_live_emergency_halt",
+    "api_live_emergency_rollback_flatten",
+})
+
+
+def is_emergency_request() -> bool:
+    """True when the active request targets an emergency control endpoint."""
+    try:
+        return request.endpoint in EMERGENCY_ENDPOINTS
+    except RuntimeError:  # outside a request context
+        return False
 
 
 def authenticate_request(required_scope: str = SCOPE_READ) -> tuple[bool, str | None, dict[str, Any] | None]:
@@ -334,7 +445,15 @@ def authenticate_request(required_scope: str = SCOPE_READ) -> tuple[bool, str | 
 
     ip = request.remote_addr or "127.0.0.1"
 
-    if _security_monitor.is_ip_blocked(ip):
+    # The abuse block is keyed on the socket peer address. Without a trusted
+    # proxy configuration every client behind a reverse proxy / NAT shares one
+    # address, so ten bad guesses from anyone would also lock the operator out
+    # of the kill switch for five minutes. Emergency (risk-reducing) endpoints
+    # therefore still accept a VALID key from a blocked address; every other
+    # endpoint, and every invalid key, stays blocked.
+    ip_blocked = _security_monitor.is_ip_blocked(ip)
+    emergency = is_emergency_request()
+    if ip_blocked and not emergency:
         return False, "IP_TEMPORARILY_BLOCKED", None
 
     if not incoming_key:
@@ -350,6 +469,10 @@ def authenticate_request(required_scope: str = SCOPE_READ) -> tuple[bool, str | 
         _security_monitor.record_auth_failure(ip, request.path, incoming_key)
         return False, f"INSUFFICIENT_SCOPE: required '{required_scope}'", key_info
 
+    if ip_blocked:
+        logger.warning(
+            f"[SECURITY] Emergency endpoint {request.path} accepted a valid key from blocked IP {ip}"
+        )
     return True, None, key_info
 
 
@@ -478,7 +601,7 @@ def get_security_status_report() -> dict[str, Any]:
         "self_monitoring": _security_monitor.get_status(),
         "audit_trail": {
             "audit_file": CONTROL_AUDIT_LOG_FILE,
-            "integrity": "HMAC_CHAIN_VERIFIED"
+            "integrity": audit_trail_integrity()
         }
     }
 

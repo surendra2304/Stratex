@@ -1,8 +1,10 @@
+import numpy as np
 import pandas as pd
 
 import config
 from data_client import MarketDataClient
 from logger import get_logger
+from market_data_quality import UNUSABLE, sanitize_ohlcv
 
 logger = get_logger("data")
 
@@ -59,45 +61,83 @@ def get_candles(symbol, interval="15m", limit=300):
             "close_time", "quote_volume", "trades", "taker_buy_base",
             "taker_buy_quote", "ignore"
         ])
-        df = df.drop_duplicates(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
+        # Ordering and duplicate handling (latest revision wins, conflicts are
+        # reported) happen in sanitize_ohlcv below.
         df = df[["timestamp", "open", "high", "low", "close", "volume", "taker_buy_base", "close_time"]].copy()
         
         # Safe numeric conversion
         numeric_cols = ["open", "high", "low", "close", "volume", "taker_buy_base"]
         for col in numeric_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce')
-            
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
-        df["close_time"] = pd.to_datetime(df["close_time"], unit="ms", utc=True)
 
-        # Calculate Volume Delta (Buy Volume - Sell Volume)
-        df["buy_vol"] = df["taker_buy_base"]
-        df["sell_vol"] = df["volume"] - df["buy_vol"]
-        df["vol_delta"] = df["buy_vol"] - df["sell_vol"]
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True, errors="coerce")
+        df["close_time"] = pd.to_datetime(df["close_time"], unit="ms", utc=True, errors="coerce")
 
         # Reject active/incomplete candle from closed-candle strategy evaluations
         now = pd.Timestamp.now(tz="UTC")
         df = df[df["close_time"] <= now].copy()
 
+        # Malformed rows (NaN/inf/zero prices, high<low, negative volume,
+        # conflicting duplicates) are dropped — never repaired — and a frame
+        # whose newest closed bar is invalid is refused. Feed staleness is
+        # judged by the decision paths (scanner poll, service freshness gate).
+        df, quality = sanitize_ohlcv(df, interval=interval, min_rows=1)
+        if quality.status == UNUSABLE:
+            logger.warning(f"[DATA] Candles for {symbol} {interval} unusable: {quality.summary()}. DATA_UNAVAILABLE.")
+            return pd.DataFrame()
+        if quality.reasons:
+            logger.warning(f"[DATA] Candles for {symbol} {interval}: {quality.summary()}")
+        df["taker_buy_base"] = df["taker_buy_base"].where(
+            df["taker_buy_base"].between(0, df["volume"]), other=df["volume"] / 2.0
+        )
+
+        # Calculate Volume Delta (Buy Volume - Sell Volume)
+        df["buy_vol"] = df["taker_buy_base"]
+        df["sell_vol"] = df["volume"] - df["buy_vol"]
+        df["vol_delta"] = df["buy_vol"] - df["sell_vol"]
+        df.attrs["data_quality"] = quality.as_dict()
         return df
 
     except Exception as e:
         logger.error(f"[DATA] Error fetching candles for {symbol}: {e}")
         return pd.DataFrame()
 
-def add_indicators(df):
-    """Adds all technical indicators needed by all strategies to the DataFrame."""
+# Newest rows that must have every indicator defined when ``strict_tail`` is set.
+STRICT_TAIL_ROWS = 3
+
+
+def add_indicators(df, strict_tail=False):
+    """Adds all technical indicators needed by all strategies to the DataFrame.
+
+    Rows with undefined indicators (warm-up) are dropped as before. With
+    ``strict_tail=True`` (live decision paths) the frame is refused (empty)
+    when any of the newest ``STRICT_TAIL_ROWS`` rows has an undefined value:
+    dropping them would silently make an *older* bar look like the latest
+    closed candle and the strategy would act on it.
+    """
     if df is None or df.empty or len(df) < 20:
         return df
-        
+
     try:
         from features import add_features
         df = add_features(df)
-        
+
         # Keep old column names for backward compatibility with strategies
         df['rsi'] = df['rsi_14']
         df['atr'] = df['atr_14']
         df['bb_mid'] = df['bb_middle']
+
+        numeric = df.select_dtypes(include="number").columns
+        df[numeric] = df[numeric].replace([np.inf, -np.inf], np.nan)
+        if strict_tail:
+            tail = df.tail(STRICT_TAIL_ROWS)
+            undefined = [col for col in df.columns if tail[col].isna().any()]
+            if undefined:
+                logger.warning(
+                    f"[DATA] Newest {STRICT_TAIL_ROWS} bars have undefined indicators {undefined[:8]}; "
+                    "refusing to evaluate an older bar as the latest."
+                )
+                return pd.DataFrame()
 
         df.dropna(inplace=True)
         df.reset_index(drop=True, inplace=True)

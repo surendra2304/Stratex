@@ -8,6 +8,9 @@ Secrets (API_KEY, SECRET_KEY) MUST remain in .env / environment variables.
 Runtime mode (TRADING_MODE) remains in config.py / environment.
 """
 
+from typing import Any
+
+
 # ==============================================================================
 # ADX + EMA TREND FOLLOWING STRATEGY (OBSERVE ONLY)
 # Historical result files are present, but the source candle dataset is absent
@@ -138,7 +141,7 @@ TESTNET_RISK = {
 # Explicit classification of all candidate strategies
 # ==============================================================================
 
-PRODUCTION_STRATEGY_REGISTRY = {
+PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
     "adx_ema": {
         "status": "OBSERVE_ONLY",
         "version": "V2-spot rev3 (2026-08-22)",

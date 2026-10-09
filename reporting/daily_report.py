@@ -41,6 +41,11 @@ class DailyReportGenerator:
         best_strategy: str = "strategy_supertrend"
     ) -> dict[str, Any]:
         target_date = date_str or datetime.datetime.utcnow().strftime("%Y-%m-%d")
+        # target_date is embedded in the names of the files written below:
+        # accept only a real ISO calendar date (no separators, no markup).
+        if not isinstance(target_date, str) or len(target_date) != 10:
+            raise ValueError(f"report date must be YYYY-MM-DD, got {target_date!r}")
+        datetime.date.fromisoformat(target_date)
         voice_summary = generate_daily_voice_summary(
             net_pnl_pct=net_pnl_pct,
             best_strategy=best_strategy,

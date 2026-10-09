@@ -38,6 +38,14 @@ class TestExecutionHardening:
         monkeypatch.setattr(execution, "TRADING_MODE", "TESTNET")
         monkeypatch.setattr(execution, "TESTNET_ENABLED", True)
         monkeypatch.setattr(execution, "PAPER_SAFE_MODE", False)
+        # The policy is fail-closed: PAPER in *either* execution or config
+        # wins. Pin config too, otherwise these tests only passed when an
+        # earlier test had reloaded config with TRADING_MODE=TESTNET.
+        import config
+        monkeypatch.setattr(config, "TRADING_MODE", "TESTNET")
+        monkeypatch.setattr(config, "TESTNET_ENABLED", True)
+        monkeypatch.setattr(config, "PAPER_SAFE_MODE", False)
+        monkeypatch.delenv("RESEARCH_MODE", raising=False)
 
     def test_api_timeout_and_failure_logging(self, monkeypatch):
         """Failure must record code, message, symbol, side, quantity, price, order type, and client_order_id."""

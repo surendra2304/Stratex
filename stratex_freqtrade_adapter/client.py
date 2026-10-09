@@ -100,8 +100,12 @@ class FreqtradeNativeEngine:
         self.data = FreqtradeDataDownloader()
 
     def status(self) -> Dict[str, Any]:
+        data_status = getattr(self.data, "last_fetch_status", "UNVERIFIED")
+        overall = {"LIVE": "HEALTHY", "CACHE": "HEALTHY", "UNAVAILABLE": "DEGRADED"}.get(data_status, "UNVERIFIED")
         return {
-            "status": "HEALTHY",
+            # Local components are in-process; overall health also needs real data.
+            "status": overall,
+            "market_data": data_status,
             "registered_strategies": len(self.strategies.list()),
             "protections": self.protections.get_status(),
             "pairlist": self.pairlists.manager.get_status(),

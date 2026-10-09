@@ -3,9 +3,11 @@ import datetime
 import io
 import json
 import os
+import re
 import sys
 import threading
 import time
+import uuid
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, send_from_directory
@@ -59,6 +61,10 @@ for bp_mod, bp_name in core_blueprints + adapter_blueprints:
         logger.error(f"[DASHBOARD_WARN] Failed to register blueprint {bp_name} from {bp_mod}: {e}")
 
 
+from api.request_guard import install_request_guards
+from api.validation import query_bool, query_choice, query_symbol, query_text
+
+install_request_guards(app)
 
 LOG_FILE = "trade_log.csv"
 
@@ -88,7 +94,7 @@ def api_v1_futuris_forecast():
     try:
         from intelligence.futuris_client import get_futuris_client
         futuris = get_futuris_client()
-        sym = request.args.get("symbol", "BTCUSDT").upper().strip()
+        sym = query_symbol("symbol", "BTCUSDT")
         forecast = futuris.fetch_forecast(sym)
         return jsonify({
             "status": "OK",
@@ -115,6 +121,28 @@ def require_bot_api_key(f):
     Enforces SCOPE_CONTROL via security_hardening with rate limiting and audit logging.
     """
     return require_api_scope(scope=SCOPE_CONTROL, is_control=True)(f)
+
+# Chart series are downsampled (uniform stride, newest point always kept) to
+# this many points by default instead of returning every snapshot ever taken.
+DEFAULT_SERIES_POINTS = 2000
+MAX_SERIES_POINTS = 10000
+
+
+def downsample_series(points: list, max_points: int) -> tuple[list, bool]:
+    """Uniformly thin ``points`` to at most ``max_points`` (first and last kept).
+
+    Returns ``(points, downsampled)``. Nothing is interpolated or invented:
+    every returned element is one of the input snapshots.
+    """
+    total = len(points)
+    if max_points <= 0 or total <= max_points:
+        return points, False
+    if max_points == 1:
+        return [points[-1]], True
+    step = (total - 1) / (max_points - 1)
+    indices = sorted({round(i * step) for i in range(max_points)} | {0, total - 1})
+    return [points[i] for i in indices], True
+
 
 def safe_int_param(param_name: str, default: int = 100, min_val: int = 1, max_val: int = 1000) -> int:
     """Safely extracts and validates an integer query parameter from Flask request.args.
@@ -274,33 +302,43 @@ def get_exchange_status():
 @app.route('/api/strategy-registry', methods=['GET', 'POST'])
 def handle_strategy_registry():
     """Lists registered strategy versions or registers a new immutable version."""
-    from stratex_quantdinger.registry import StrategyRegistry
+    from stratex_quantdinger.registry import RegistryIntegrityError, StrategyRegistry
     registry = StrategyRegistry()
 
     if request.method == 'POST':
         denial = control_scope_denial()
         if denial:
             return denial
-        data = request.get_json(force=True, silent=True) or {}
+        data = request.get_json(force=True, silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"status": "ERROR", "error": "JSON_OBJECT_REQUIRED"}), 400
         strategy_id = data.get("strategy_id")
         version = data.get("version")
         source = data.get("source", "")
         parameters = data.get("parameters", {})
         status = data.get("status", "RESEARCH")
+        evidence = data.get("evidence")
 
         if not strategy_id or not version:
             return jsonify({"status": "ERROR", "error": "strategy_id and version required"}), 400
 
         try:
-            ver_obj = registry.register(strategy_id, version, source, parameters, status=status)
+            ver_obj = registry.register(
+                strategy_id, version, source, parameters, status=status, evidence=evidence
+            )
             return jsonify({"status": "OK", "strategy_version": ver_obj.__dict__}), 201
+        except RegistryIntegrityError:
+            return jsonify({"status": "ERROR", "error": "REGISTRY_UNAVAILABLE"}), 503
         except Exception as e:
             return jsonify({"status": "ERROR", "error": str(e)}), 400
 
     # GET
-    s_id = request.args.get("strategy_id")
-    status = request.args.get("status")
-    versions = [v.__dict__ for v in registry.list_versions(strategy_id=s_id, status=status)]
+    s_id = query_text("strategy_id")
+    status = query_text("status", max_len=32)
+    try:
+        versions = [v.__dict__ for v in registry.list_versions(strategy_id=s_id, status=status)]
+    except RegistryIntegrityError:
+        return jsonify({"status": "ERROR", "error": "REGISTRY_UNAVAILABLE"}), 503
     return jsonify({"status": "OK", "versions": versions, "count": len(versions)})
 
 
@@ -308,10 +346,12 @@ def handle_strategy_registry():
 @require_bot_api_key
 def promote_strategy_version():
     """Promotes a strategy version through explicit lifecycle state transitions."""
-    from stratex_quantdinger.registry import StrategyRegistry
+    from stratex_quantdinger.registry import RegistryIntegrityError, StrategyRegistry
     registry = StrategyRegistry()
 
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"status": "ERROR", "error": "JSON_OBJECT_REQUIRED"}), 400
     strategy_id = data.get("strategy_id")
     version = data.get("version")
     new_status = data.get("new_status")
@@ -324,14 +364,68 @@ def promote_strategy_version():
     try:
         promoted = registry.promote(strategy_id, version, new_status, actor=actor, reason=reason)
         return jsonify({"status": "OK", "strategy_version": promoted.__dict__})
+    except RegistryIntegrityError:
+        return jsonify({"status": "ERROR", "error": "REGISTRY_UNAVAILABLE"}), 503
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 400
+
+
+_RESEARCH_JOB_TYPES = frozenset({"BACKTEST"})
+_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+_STRATEGY_ID_RE = re.compile(r"^[a-z0-9_]{1,64}$")
+_SYMBOL_RE = re.compile(r"^[A-Z0-9]{2,20}$")
+_RESEARCH_TIMEFRAMES = frozenset({"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"})
+
+
+def _parse_research_job_request(data):
+    """Validate a research-job submission; returns ``(parsed, problem)``.
+
+    Only BACKTEST jobs are executed by this endpoint (the worker always runs a
+    BacktestEngine pass), so other job types are refused rather than recorded
+    under a label that misdescribes what was computed.
+    """
+    if not isinstance(data, dict):
+        return None, "Request body must be a JSON object."
+    job_type = data.get("job_type", "BACKTEST")
+    if not isinstance(job_type, str) or job_type.strip().upper() not in _RESEARCH_JOB_TYPES:
+        return None, f"job_type must be one of {sorted(_RESEARCH_JOB_TYPES)}."
+    job_type = job_type.strip().upper()
+    strategy_id = data.get("strategy_id", "adx_ema")
+    if not isinstance(strategy_id, str) or not _STRATEGY_ID_RE.match(strategy_id):
+        return None, "strategy_id must match ^[a-z0-9_]{1,64}$."
+    job_id = data.get("job_id")
+    if job_id is None or job_id == "":
+        job_id = f"job_{job_type.lower()}_{uuid.uuid4().hex[:16]}"
+    elif not isinstance(job_id, str) or not _SAFE_ID_RE.match(job_id):
+        return None, "job_id must be 1-128 characters of [A-Za-z0-9_.:-] starting alphanumeric."
+    raw_meta = data.get("metadata", {})
+    if raw_meta is None:
+        raw_meta = {}
+    if not isinstance(raw_meta, dict):
+        return None, "metadata must be a JSON object."
+    metadata = dict(raw_meta)
+    symbol = metadata.get("symbol", config.SYMBOL)
+    if not isinstance(symbol, str) or not _SYMBOL_RE.match(symbol.strip().upper()):
+        return None, "metadata.symbol must be an exchange symbol such as BTCUSDT."
+    timeframe = metadata.get("timeframe", config.TIMEFRAME)
+    if not isinstance(timeframe, str) or timeframe not in _RESEARCH_TIMEFRAMES:
+        return None, f"metadata.timeframe must be one of {sorted(_RESEARCH_TIMEFRAMES)}."
+    candles = metadata.get("candles", 500)
+    if isinstance(candles, bool) or not isinstance(candles, int) or not 50 <= candles <= 5000:
+        return None, "metadata.candles must be an integer between 50 and 5000."
+    metadata.update({
+        "strategy_id": strategy_id,
+        "symbol": symbol.strip().upper(),
+        "timeframe": timeframe,
+        "candles": candles,
+    })
+    return {"job_type": job_type, "strategy_id": strategy_id, "job_id": job_id, "metadata": metadata}, None
 
 
 @app.route('/api/research-jobs', methods=['GET', 'POST'])
 def handle_research_jobs():
     """Lists research jobs or submits a new durable research job."""
-    from stratex_quantdinger.jobs import JobStore, ResearchJobRunner
+    from stratex_quantdinger.jobs import JobAlreadyExistsError, JobStore, ResearchJobRunner
     store = JobStore()
 
     if request.method == 'POST':
@@ -339,11 +433,13 @@ def handle_research_jobs():
         if denial:
             return denial
         data = request.get_json(force=True, silent=True) or {}
-        job_type = data.get("job_type", "BACKTEST").upper()
-        strategy_id = data.get("strategy_id", "adx_ema")
-        job_id = data.get("job_id") or f"job_{job_type.lower()}_{int(time.time())}"
-        metadata = data.get("metadata", {})
-        metadata["strategy_id"] = strategy_id
+        parsed, problem = _parse_research_job_request(data)
+        if problem:
+            return jsonify({"status": "ERROR", "error": "INVALID_REQUEST", "message": problem}), 400
+        job_type = parsed["job_type"]
+        strategy_id = parsed["strategy_id"]
+        job_id = parsed["job_id"]
+        metadata = parsed["metadata"]
 
         runner = ResearchJobRunner(store=store)
 
@@ -365,9 +461,9 @@ def handle_research_jobs():
             from data import add_indicators, get_candles
             from metrics import calculate_metrics
 
-            symbol = str(metadata.get("symbol", config.SYMBOL)).upper()
-            timeframe = str(metadata.get("timeframe", config.TIMEFRAME))
-            candles = int(metadata.get("candles", 500))
+            symbol = metadata["symbol"]
+            timeframe = metadata["timeframe"]
+            candles = metadata["candles"]
 
             try:
                 strat_mod = importlib.import_module(f"strategy_{strategy_id}")
@@ -414,12 +510,19 @@ def handle_research_jobs():
             }
             s.update(j_id, status="COMPLETED", progress=1.0, result=result)
 
-        job = runner.submit_and_execute_async(job_id, job_type, real_backtest_runner, metadata=metadata)
+        try:
+            job = runner.submit_and_execute_async(job_id, job_type, real_backtest_runner, metadata=metadata)
+        except JobAlreadyExistsError:
+            return jsonify({
+                "status": "ERROR",
+                "error": "JOB_ALREADY_EXISTS",
+                "message": f"Research job '{job_id}' already exists; a job id runs at most once.",
+            }), 409
         return jsonify({"status": "OK", "job": job.__dict__}), 202
 
     # GET
-    j_type = request.args.get("job_type")
-    j_status = request.args.get("status")
+    j_type = query_text("job_type", max_len=64)
+    j_status = query_text("status", max_len=32)
     jobs = [j.__dict__ for j in store.list_jobs(job_type=j_type, status=j_status)]
     return jsonify({"status": "OK", "jobs": jobs, "count": len(jobs)})
 
@@ -442,7 +545,7 @@ def get_runtime_status():
     from stratex_quantdinger.runtime import RuntimeSupervisor
     sup = RuntimeSupervisor()
 
-    leases_file = Path("runtime_leases.json")
+    leases_file = sup.leases_path
     leases = {}
     if leases_file.exists():
         try:
@@ -481,21 +584,40 @@ def agent_gateway_jobs():
         denial = control_scope_denial()
         if denial:
             return denial
-        data = request.get_json(force=True, silent=True) or {}
-        action = data.get("action", "BACKTEST").upper()
-        strategy_id = data.get("strategy_id", "adx_ema")
-        job_id = data.get("job_id") or f"agent_job_{int(time.time())}"
+        from api.validation import get_dict, get_int, get_str, json_body
+        from stratex_quantdinger.jobs import JobAlreadyExistsError
 
-        if action == "BACKTEST":
-            job = gateway.submit_backtest(job_id, strategy_id, parameters=data.get("parameters"))
-        elif action == "OPTIMIZATION":
-            job = gateway.submit_optimization(job_id, strategy_id, n_trials=data.get("n_trials", 35))
-        elif action == "WALK_FORWARD":
-            job = gateway.submit_walk_forward(job_id, strategy_id, windows=data.get("windows", 4))
-        else:
-            return jsonify({"status": "ERROR", "error": f"Unsupported agent action: {action}"}), 400
+        data = json_body()
+        action = get_str(data, "action", "BACKTEST", upper=True,
+                         choices=("BACKTEST", "OPTIMIZATION", "WALK_FORWARD"))
+        strategy_id = get_str(data, "strategy_id", "adx_ema", pattern=_STRATEGY_ID_RE)
+        job_id = get_str(data, "job_id", "", pattern=None, max_len=128)
+        if not job_id:
+            job_id = f"agent_job_{uuid.uuid4().hex[:16]}"
+        elif not _SAFE_ID_RE.match(job_id):
+            return jsonify({"status": "ERROR", "error": "INVALID_REQUEST", "field": "job_id",
+                            "message": "job_id must be 1-128 characters of [A-Za-z0-9_.:-]"}), 400
+        try:
+            if action == "BACKTEST":
+                job = gateway.submit_backtest(job_id, strategy_id, parameters=get_dict(data, "parameters", {}),
+                                              exist_ok=False)
+            elif action == "OPTIMIZATION":
+                job = gateway.submit_optimization(job_id, strategy_id, n_trials=get_int(data, "n_trials", 35, min=1, max=1000),
+                                                  exist_ok=False)
+            else:
+                job = gateway.submit_walk_forward(job_id, strategy_id, windows=get_int(data, "windows", 4, min=2, max=52),
+                                                  exist_ok=False)
+        except JobAlreadyExistsError:
+            return jsonify({"status": "ERROR", "error": "JOB_ALREADY_EXISTS",
+                            "message": f"Job '{job_id}' already exists."}), 409
 
-        return jsonify({"status": "OK", "job": job}), 202
+        return jsonify({
+            "status": "OK",
+            "job": job,
+            "execution": "NOT_SCHEDULED",
+            "note": "Agent-gateway submissions are recorded (QUEUED) for operator review; "
+                    "no in-process worker executes them and no result will be produced automatically.",
+        }), 202
 
     # GET
     jobs = gateway.list_jobs()
@@ -506,7 +628,7 @@ def agent_gateway_jobs():
 def get_microstructure():
     """Returns Hummingbot-style order-book depth, spread, mid-price, and top-N imbalance."""
     from stratex_hummingbot.orderbook import OrderBookSnapshot, OrderBookImbalance
-    sym = request.args.get('symbol', 'BTCUSDT').upper().strip()
+    sym = query_symbol("symbol", "BTCUSDT")
 
     depth_data = None
     try:
@@ -612,7 +734,7 @@ def get_volatility_forecast():
     import pandas as pd
     import numpy as np
 
-    sym = request.args.get('symbol', 'BTCUSDT').upper().strip()
+    sym = query_symbol("symbol", "BTCUSDT")
     rng = np.random.default_rng(10)
     returns = pd.Series(rng.normal(0.0002, 0.018, 120))
 
@@ -672,9 +794,8 @@ def get_candles():
     Fetches live Binance OHLCV candles for chart.
     Strictly prohibits data fabrication: if Binance is unavailable, returns DATA_UNAVAILABLE.
     """
-    raw_sym = request.args.get('symbol', 'BTCUSDT')
-    symbol = str(raw_sym).upper().strip() if raw_sym else 'BTCUSDT'
-    raw_tf = request.args.get('tf') or request.args.get('timeframe') or '15m'
+    symbol = query_symbol("symbol", "BTCUSDT")
+    raw_tf = query_text("tf", None, max_len=32) or query_text("timeframe", None, max_len=32) or "15m"
     tf = str(raw_tf).lower().strip()
     limit = safe_int_param('limit', default=300, min_val=1, max_val=1000)
 
@@ -1850,7 +1971,7 @@ def api_daily_pnl():
 def api_equity():
     """Returns historical equity & balance curve points with rich snapshot data for chart."""
     from testnet_engine.telemetry_manager import get_telemetry_manager
-    tf_filter = request.args.get("timeframe", "ALL").upper()
+    tf_filter = (query_text("timeframe", "ALL", max_len=8) or "ALL").upper()
     now = datetime.datetime.utcnow()
     cutoff = None
     if tf_filter == "1H":
@@ -1941,7 +2062,14 @@ def api_equity():
             "unrealized_pnl": 0.0
         })
 
-    return jsonify(points)
+    max_points = safe_int_param("max_points", default=DEFAULT_SERIES_POINTS, min_val=2, max_val=MAX_SERIES_POINTS)
+    total_points = len(points)
+    points, downsampled = downsample_series(points, max_points)
+    response = jsonify(points)
+    # The list shape is kept for existing charts; thinning is disclosed in headers.
+    response.headers["X-Series-Total-Points"] = str(total_points)
+    response.headers["X-Series-Downsampled"] = "true" if downsampled else "false"
+    return response
 
 @app.route('/api/scanner')
 def get_scanner():
@@ -2614,16 +2742,21 @@ def api_equity_history():
     '1h', '6h', '24h', '7d', '30d', 'all'.
     """
     from testnet_engine.telemetry_manager import get_telemetry_manager
-    time_range = request.args.get("range", "all").lower()
+    time_range = query_choice("range", "all", ("1h", "6h", "24h", "7d", "30d", "all"))
+    max_points = safe_int_param("max_points", default=DEFAULT_SERIES_POINTS, min_val=2, max_val=MAX_SERIES_POINTS)
     telemetry = get_telemetry_manager()
     timeline = telemetry.get_equity_timeline(time_range)
-    
+    source_count = len(timeline)
+    timeline, downsampled = downsample_series(timeline, max_points)
+
     return jsonify({
         "status": "SUCCESS",
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
         "data_age": 0.0,
         "range": time_range,
         "count": len(timeline),
+        "source_count": source_count,
+        "downsampled": downsampled,
         "snapshots": timeline
     })
 
@@ -2748,8 +2881,8 @@ def api_trade_history():
 def api_trade_events():
     """Returns canonical trade events with complete 40+ field lifecycle telemetry."""
     from testnet_engine.telemetry_manager import get_telemetry_manager
-    symbol = request.args.get("symbol")
-    status = request.args.get("status")
+    symbol = query_symbol("symbol", None)
+    status = query_text("status", max_len=32)
     limit = safe_int_param("limit", default=100, min_val=1, max_val=1000)
     telemetry = get_telemetry_manager()
     events = telemetry.get_trade_events(symbol=symbol, status=status, limit=limit)
@@ -2768,7 +2901,7 @@ def api_positions():
     Supports query parameter ?status=OPEN|CLOSED|ALL.
     """
     from testnet_engine.telemetry_manager import get_telemetry_manager
-    status_filter = request.args.get("status", "OPEN").upper()
+    status_filter = (query_text("status", "OPEN", max_len=32) or "OPEN").upper()
     telemetry = get_telemetry_manager()
     positions = telemetry.get_positions(status=status_filter)
     
@@ -2845,7 +2978,8 @@ def api_testnet_positions_close_all():
     
     client = get_exchange_client()
     if client is None:
-        return jsonify({"status": "ERROR", "error": "Binance client unavailable"}), 500
+        return jsonify({"status": "ERROR", "error": "EXCHANGE_CLIENT_UNAVAILABLE",
+                        "message": "Binance client unavailable; no position was closed."}), 503
 
     closed = []
     errors = []
@@ -2909,10 +3043,15 @@ def api_testnet_positions_close():
     symbol = payload.get("symbol")
     if not symbol:
         return jsonify({"status": "ERROR", "error": "symbol is required"}), 400
+    if not isinstance(symbol, str) or not symbol.isalnum() or len(symbol) > 20:
+        return jsonify({"status": "ERROR", "error": "INVALID_SYMBOL",
+                        "message": "symbol must be an alphanumeric exchange symbol such as BTCUSDT"}), 400
+    symbol = symbol.upper()
 
     client = get_exchange_client()
     if client is None:
-        return jsonify({"status": "ERROR", "error": "Binance client unavailable"}), 500
+        return jsonify({"status": "ERROR", "error": "EXCHANGE_CLIENT_UNAVAILABLE",
+                        "message": "Binance client unavailable; no position was closed."}), 503
 
     try:
         fut_acc = client.futures_account()
@@ -2950,8 +3089,8 @@ def api_signals():
     """Returns strategy signal decision logs for terminal telemetry."""
     from testnet_engine.telemetry_manager import get_telemetry_manager
     limit = safe_int_param("limit", default=100, min_val=1, max_val=1000)
-    symbol = request.args.get("symbol")
-    strategy = request.args.get("strategy")
+    symbol = query_symbol("symbol", None)
+    strategy = query_text("strategy")
     telemetry = get_telemetry_manager()
     signals = telemetry.get_signals_log(limit=limit, symbol=symbol, strategy=strategy)
     
@@ -3403,8 +3542,8 @@ def api_analytics():
     """
     from testnet_engine.telemetry_manager import get_telemetry_manager
     telemetry = get_telemetry_manager()
-    tf_filter = request.args.get("timeframe", "ALL").upper()
-    include_synthetic = request.args.get("include_synthetic", "false").lower() == "true"
+    tf_filter = (query_text("timeframe", "ALL", max_len=8) or "ALL").upper()
+    include_synthetic = query_bool("include_synthetic", False)
 
     all_trades = telemetry.query_trades(limit=1000)
 
@@ -4029,7 +4168,7 @@ def api_risk_events():
     """
     from testnet_engine.telemetry_manager import get_telemetry_manager
     limit = safe_int_param("limit", default=100, min_val=1, max_val=1000)
-    symbol_filter = request.args.get("symbol")
+    symbol_filter = query_symbol("symbol", None)
     telemetry = get_telemetry_manager()
 
     risk_events = []
@@ -4353,10 +4492,10 @@ def api_telemetry_trades():
     merging it back re-invents rows the ledger does not contain.
     """
     try:
-        symbol = request.args.get('symbol')
-        strategy = request.args.get('strategy')
-        timeframe = request.args.get('timeframe')
-        status = request.args.get('status')
+        symbol = query_symbol("symbol", None)
+        strategy = query_text("strategy")
+        timeframe = query_text("timeframe", max_len=8)
+        status = query_text("status", max_len=32)
         limit = safe_int_param('limit', default=100, min_val=1, max_val=1000)
 
         trades = _authoritative_trades()
@@ -4386,7 +4525,7 @@ def api_telemetry_signals():
     per-process canonical index is only consulted when no such log exists at all.
     """
     try:
-        symbol = request.args.get('symbol')
+        symbol = query_symbol("symbol", None)
         limit = safe_int_param('limit', default=100, min_val=1, max_val=1000)
         signals = _authoritative_signals()
         if not signals and not os.path.exists(os.getenv("PAPER_FORWARD_SIGNAL_LOG", "forward_signal_log.jsonl")):
@@ -4410,11 +4549,16 @@ def api_telemetry_positions():
     try:
         from testnet_engine.telemetry import get_telemetry_manager
         tm = get_telemetry_manager()
-        status = request.args.get('status')
+        status = query_text("status", max_len=32)
+        limit = safe_int_param("limit", default=500, min_val=1, max_val=5000)
         positions = tm.query_positions(status=status)
+        total = len(positions)
+        positions = positions[-limit:]  # most recent records; total disclosed
         return jsonify({
             "status": "OK",
             "count": len(positions),
+            "total": total,
+            "truncated": total > len(positions),
             "positions": positions,
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         })
@@ -4543,20 +4687,20 @@ def api_panic():
     Never touches live-trading locks; testnet-only operational control.
     """
     import uuid as _uuid
-    panic_file = os.getenv("PANIC_STATE_FILE", "panic_state.json")
+
+    from panic_state import write_panic_state
     try:
-        payload = request.get_json(silent=True) or {}
-        release = bool(payload.get("release"))
-        # Flip the engine-side flag file
-        state = {
-            "active": not release,
-            "activated_at": None if release else datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "actor": "api:/api/panic",
-        }
-        tmp = panic_file + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2)
-        os.replace(tmp, panic_file)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            # An emergency stop must never fail on body shape: anything that is
+            # not an explicit release request activates the switch.
+            payload = {}
+        # Literal JSON true only — bool("false") is True and used to RELEASE.
+        release = payload.get("release") is True
+        # Unified schema (active + panic_active) read by both the testnet
+        # engine gate and execution._check_panic_and_kill_switch().
+        write_panic_state(not release, actor="api:/api/panic",
+                          reason=str(payload.get("reason", "manual /api/panic")))
 
         cancelled, kept = [], []
         if not release:
@@ -4591,7 +4735,9 @@ def api_panic():
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }), 200
     except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+        app.logger.error(f"[PANIC] /api/panic failed: {e}")
+        return jsonify({"status": "ERROR", "error": "PANIC_STATE_NOT_PERSISTED",
+                        "message": "The panic flag could not be written; order submission state is unchanged."}), 500
 
 
 @app.route('/api/config', methods=['GET', 'POST'])
@@ -4738,7 +4884,9 @@ def api_ai_signal_analysis():
     """Generates structured natural-language rationale for a scanner signal."""
     try:
         from gemini_service import get_gemini_service
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         service = get_gemini_service()
         analysis = service.analyze_signal(data)
         return jsonify({"status": "SUCCESS", "analysis": analysis})
@@ -4751,7 +4899,9 @@ def api_ai_trade_analysis():
     """Generates post-trade review & execution audit for closed trades."""
     try:
         from gemini_service import get_gemini_service
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         service = get_gemini_service()
         analysis = service.analyze_trade(data)
         return jsonify({"status": "SUCCESS", "analysis": analysis})
@@ -4764,7 +4914,9 @@ def api_ai_performance_analysis():
     """Provides quantitative portfolio observations and strategy notes."""
     try:
         from gemini_service import get_gemini_service
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         service = get_gemini_service()
         analysis = service.analyze_performance(data)
         return jsonify({"status": "SUCCESS", "analysis": analysis})
@@ -4777,7 +4929,9 @@ def api_ai_system_analysis():
     """Provides high-level system diagnostics based on recent events."""
     try:
         from gemini_service import get_gemini_service
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         service = get_gemini_service()
         analysis = service.analyze_system_diagnostics(data)
         return jsonify({"status": "SUCCESS", "analysis": analysis})
@@ -5036,12 +5190,19 @@ def api_testnet_advisory_toggle():
     try:
         from testnet_advisory_scheduler import get_testnet_advisory_scheduler
         scheduler = get_testnet_advisory_scheduler()
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         shadow_mode = data.get("shadow_mode", True)
-        if isinstance(shadow_mode, str):
-            shadow_mode = shadow_mode.lower() == "true"
+        if isinstance(shadow_mode, str) and shadow_mode.strip().lower() in ("true", "false"):
+            shadow_mode = shadow_mode.strip().lower() == "true"
+        if not isinstance(shadow_mode, bool):
+            # Leaving SHADOW (letting AI advice modify parameters) needs an
+            # explicit false; "yes"/0/null used to silently select APPLY mode.
+            return jsonify({"status": "ERROR", "error": "INVALID_SHADOW_MODE",
+                            "message": "'shadow_mode' must be true or false."}), 400
 
-        success = scheduler.toggle_mode(bool(shadow_mode))
+        success = scheduler.toggle_mode(shadow_mode)
         if success:
             return jsonify({
                 "status": "SUCCESS",
@@ -5131,7 +5292,7 @@ def api_health_system():
 @app.route('/api/metrics')
 def api_prometheus_metrics():
     """Prometheus / OpenMetrics plain text metrics scraper or JSON metrics endpoint."""
-    fmt = request.args.get("format", "").lower()
+    fmt = query_choice("format", "", ("", "json", "prometheus", "text"))
     accept = request.headers.get("Accept", "").lower()
     if fmt == "json" or "application/json" in accept:
         try:
@@ -5222,7 +5383,9 @@ def api_alerts_manager():
         denial = control_scope_denial()
         if denial:
             return denial
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         alert_id = data.get("alert_id")
         if alert_id and mon.acknowledge_alert(alert_id):
             return jsonify({"status": "SUCCESS", "message": f"Alert {alert_id} acknowledged."})
@@ -5313,21 +5476,33 @@ def api_live_positions():
 @app.route('/api/live/emergency-flatten', methods=['POST'])
 @require_bot_api_key
 def api_live_emergency_rollback_flatten():
-    """Commands immediate liquidation of all live positions and halts live trading."""
+    """Live rollback lock-down: blocks new orders, removes the live authorization
+    token and records an incident. No closing orders are placed by this endpoint
+    (LIVE trading is disabled in this build), so it never claims a flatten."""
+    from panic_state import engage_order_block, orders_blocked
+
+    steps = engage_order_block("api:/api/live/emergency-flatten", "OPERATOR_MANUAL_EMERGENCY_FLATTEN",
+                               panic=True, pause=True)
+    incident = None
     try:
         from deployment.live_rollback import LiveRollbackManager
-        manager = LiveRollbackManager()
-        incident = manager.execute_live_rollback(
+        incident = LiveRollbackManager().execute_live_rollback(
             reason="OPERATOR_MANUAL_EMERGENCY_FLATTEN",
             triggered_by="API_COMMAND"
         )
-        return jsonify({
-            "status": "SUCCESS",
-            "message": "All live positions flattened. Live trading locked.",
-            "incident": incident
-        })
+        steps["live_rollback_lockdown"] = "COMPLETED"
     except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+        app.logger.error(f"[LIVE_ROLLBACK] lock-down failed: {e}")
+        steps["live_rollback_lockdown"] = "FAILED"
+    ok = orders_blocked(steps)
+    return jsonify({
+        "status": "SUCCESS" if ok else "ERROR",
+        "message": ("New order submission blocked and live trading locked down; no positions were "
+                    "flattened by this endpoint." if ok else
+                    "Lock-down NOT applied: no blocking mechanism could be persisted."),
+        "steps": steps,
+        "incident": incident,
+    }), (200 if ok else 500)
 
 @app.route('/api/live/daily-report')
 def api_live_daily_report():
@@ -5471,36 +5646,6 @@ def api_intelligence_impact():
 # MASTER ECOSYSTEM ORCHESTRATION ENDPOINTS
 # ==============================================================================
 
-@app.route('/api/ecosystem/status')
-def api_ecosystem_status():
-    """Returns global ecosystem operational state, active autonomy level, and recent transitions."""
-    try:
-        from autonomy.operations_director import AutonomousOperationsDirector
-        director = AutonomousOperationsDirector()
-        return jsonify({
-            "status": "OK",
-            "autonomy_level": director.autonomy_level,
-            "ecosystem_state": director.state_machine.get_state_summary(),
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-        })
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
-
-@app.route('/api/ecosystem/decisions')
-def api_ecosystem_decisions():
-    """Returns recent autonomous multi-frequency decision records."""
-    try:
-        from autonomy.operations_director import AutonomousOperationsDirector
-        director = AutonomousOperationsDirector()
-        from dataclasses import asdict
-        return jsonify({
-            "status": "OK",
-            "decisions": [asdict(d) for d in director.decision_log[-20:]],
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-        })
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
-
 @app.route('/api/ecosystem/maintenance', methods=['POST'])
 @require_bot_api_key
 def api_ecosystem_maintenance():
@@ -5516,52 +5661,14 @@ def api_ecosystem_maintenance():
     except Exception as e:
         return jsonify({"status": "ERROR", "error": str(e)}), 500
 
-@app.route('/api/ecosystem/health')
-def api_ecosystem_health():
-    """Returns multi-pillar health matrix of all subsystems (AI, Exchange, Storage, Risk, Dashboard)."""
-    try:
-        from autonomy.degradation_matrix import DegradationPolicyMatrix
-        matrix = DegradationPolicyMatrix()
-        return jsonify({
-            "status": "OK",
-            "matrix": matrix.get_matrix_status(),
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-        })
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+# NOTE: status, decisions, health, mode, and report are served by
+# api.master_control_api. Keep the blueprint as the sole source of these routes;
+# duplicate dashboard handlers previously reset state per request and bypassed
+# the mode-confirmation contract.
 
-@app.route('/api/ecosystem/mode', methods=['POST'])
-@require_bot_api_key
-def api_ecosystem_mode():
-    """Configures autonomy level (LEVEL 1, 2, or 3)."""
-    try:
-        from autonomy.operations_director import AutonomousOperationsDirector
-        data = request.get_json() or {}
-        level = int(data.get("level", 2))
-        director = AutonomousOperationsDirector()
-        new_lvl = director.set_autonomy_level(level)
-        return jsonify({
-            "status": "SUCCESS",
-            "autonomy_level": new_lvl,
-            "message": f"Autonomy level set to LEVEL_{new_lvl}"
-        })
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
-
-@app.route('/api/ecosystem/report')
-def api_ecosystem_report():
-    """Returns latest daily performance and ecosystem operations report."""
-    try:
-        import json
-        import os
-        report_path = "reports/daily/report_2026-08-28.json"
-        if os.path.exists(report_path):
-            with open(report_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return jsonify({"status": "OK", "report": data})
-        return jsonify({"status": "OK", "message": "No report found for today"})
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+# NOTE: /api/ecosystem/report is served by api.master_control_api
+# (registered blueprint wins for this URL). The previous duplicate here read a
+# hardcoded 2026-08-28 report file and was removed — do not re-add.
 
 # ==============================================================================
 # STRATEGY EVOLUTION LABORATORY & HUMAN GOVERNANCE ENDPOINTS
@@ -5659,7 +5766,9 @@ def api_evolution_approve(proposal_id):
     """Executes human approval for strategy promotion with cryptographic audit signature."""
     try:
         from evolution.approval_gates import HumanApprovalGate
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         approver = data.get("approver", "HUMAN_OPERATOR")
         rationale = data.get("rationale", "Approved after successful incubation period.")
 
@@ -5685,39 +5794,48 @@ def api_risk_orchestration():
     """Returns real-time portfolio heat, VaR/CVaR, correlation matrix, and strategy allocations."""
     try:
         from risk.circuit_breakers import CircuitBreakerEngine
-        from risk.risk_orchestrator import RiskOrchestrator
+        from risk.risk_orchestrator import build_measured_snapshot
         from risk.strategy_coordinator import StrategyCoordinator
 
-        orchestrator = RiskOrchestrator()
         coordinator = StrategyCoordinator()
         breakers = CircuitBreakerEngine()
 
         allocations = coordinator.rebalance_allocations()
         cb_summary = breakers.get_status_summary()
+        # Measured from recorded state. This endpoint used to return constant
+        # heat (34.5), VaR (1.85), CVaR (2.45), a hard-coded correlation matrix
+        # and the drawdown of a freshly constructed (always NOMINAL) controller.
+        snapshot = build_measured_snapshot(
+            os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl"),
+            os.getenv("ACTIVE_TRADES_FILE", "active_trades.json"),
+        )
 
         return jsonify({
             "status": "OK",
-            "portfolio_heat_pct": 34.5,
+            "portfolio_heat_pct": snapshot["portfolio_heat_pct"],
             "max_heat_budget_pct": 100.0,
-            "var_95_pct": 1.85,
-            "cvar_95_pct": 2.45,
-            "drawdown_metrics": {
-                "current_drawdown_pct": orchestrator.drawdown_ctrl.status.drawdown_pct,
-                "peak_equity": orchestrator.drawdown_ctrl.status.peak_equity,
-                "level": orchestrator.drawdown_ctrl.status.level,
-                "position_size_multiplier": orchestrator.drawdown_ctrl.status.position_size_multiplier
-            },
+            "var_95_pct": snapshot["var_95_pct"],
+            "cvar_95_pct": snapshot["cvar_95_pct"],
+            "drawdown_metrics": snapshot["drawdown_metrics"],
             "strategy_allocations": allocations,
-            "correlation_matrix": {
-                "BTC/USDT": {"BTC/USDT": 1.0, "ETH/USDT": 0.82, "SOL/USDT": 0.74},
-                "ETH/USDT": {"BTC/USDT": 0.82, "ETH/USDT": 1.0, "SOL/USDT": 0.79},
-                "SOL/USDT": {"BTC/USDT": 0.74, "ETH/USDT": 0.79, "SOL/USDT": 1.0}
+            # The coordinator's Sharpe ratios are configured priors, not
+            # measured strategy performance.
+            "strategy_allocation_basis": StrategyCoordinator.SHARPE_SOURCE,
+            "correlation_matrix": snapshot["correlation_matrix"],
+            "measurement": {
+                "equity_points": snapshot["equity_points"],
+                "equity_history_skipped_lines": snapshot["equity_history_skipped_lines"],
+                "open_positions_measured": snapshot["open_positions_measured"],
+                "correlation_assumption": snapshot.get("correlation_assumption"),
+                "unmeasured_reasons": snapshot["unmeasured_reasons"],
             },
             "circuit_breakers": cb_summary,
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
         })
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+    except Exception:
+        logger.exception("risk orchestration snapshot failed")
+        return jsonify({"status": "ERROR", "error": "RISK_SNAPSHOT_FAILED",
+                        "message": "Risk snapshot could not be computed; details were logged."}), 500
 
 # ==============================================================================
 # MULTI-EXCHANGE EXPANSION & UNIFIED PORTFOLIO ENDPOINTS
@@ -5858,37 +5976,47 @@ def api_multiexchange_health():
 @app.route('/api/live/emergency/flatten', methods=['POST'])
 @require_bot_api_key
 def api_live_emergency_flatten():
-    """Emergency endpoint: Flattens all live positions and halts live trading immediately."""
-    try:
-        from risk.live_enforcer import LiveRiskEnforcer
-        enforcer = LiveRiskEnforcer()
-        res = enforcer.trigger_kill_switch(source="DASHBOARD_UI_OPERATOR", rationale="Manual emergency kill switch activated")
-        return jsonify({
-            "status": "OK",
-            "message": "Emergency flatten initiated. Kill switch engaged.",
-            "enforcer_action": res,
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-        })
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+    """Emergency kill switch: blocks all new order submission, durably.
+
+    Previously this flipped flags on a throw-away ``LiveRiskEnforcer()`` that no
+    engine ever read and answered "Kill switch engaged". It now writes the
+    unified panic flag, the KILL_SWITCH_ACTIVE.lock checked before every order,
+    and the trading-pause flag, and reports exactly which of them took effect.
+    It does not place closing orders: LIVE trading is disabled in this build.
+    """
+    from panic_state import engage_order_block, orders_blocked
+
+    steps = engage_order_block("api:/api/live/emergency/flatten", "Manual emergency kill switch activated",
+                               panic=True, pause=True, kill_switch_lock=True)
+    body = {
+        "status": "OK" if orders_blocked(steps) else "ERROR",
+        "message": ("Kill switch engaged: new order submission blocked. No closing orders were placed "
+                    f"(LIVE_TRADING_ENABLED={bool(getattr(config, 'LIVE_TRADING_ENABLED', False))})."
+                    if orders_blocked(steps) else
+                    "Kill switch NOT engaged: no blocking mechanism could be persisted."),
+        "steps": steps,
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+    return jsonify(body), (200 if orders_blocked(steps) else 500)
 
 @app.route('/api/live/emergency/halt', methods=['POST'])
 @require_bot_api_key
 def api_live_emergency_halt():
-    """Emergency endpoint: Halts new entries without liquidating existing bracket-protected positions."""
-    try:
-        from risk.live_enforcer import LiveRiskEnforcer
-        enforcer = LiveRiskEnforcer()
-        enforcer.status.is_halted = True
-        enforcer.status.halt_reason = "Manual trading halt requested via API"
-        return jsonify({
-            "status": "OK",
-            "message": "Live order entries halted.",
-            "halt_reason": enforcer.status.halt_reason,
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-        })
-    except Exception as e:
-        return jsonify({"status": "ERROR", "error": str(e)}), 500
+    """Emergency halt: blocks new entries via the durable pause flag; open
+    bracket-protected positions are left untouched."""
+    from panic_state import engage_order_block, orders_blocked
+
+    steps = engage_order_block("api:/api/live/emergency/halt", "Manual trading halt requested via API",
+                               panic=False, pause=True)
+    ok = orders_blocked(steps)
+    return jsonify({
+        "status": "OK" if ok else "ERROR",
+        "message": ("New order entries halted (durable pause flag written)." if ok else
+                    "Halt NOT applied: the durable pause flag could not be written."),
+        "halt_reason": "Manual trading halt requested via API",
+        "steps": steps,
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }), (200 if ok else 500)
 
 # ==============================================================================
 # PROMETHEUS METRICS & OPERATIONAL DASHBOARD EXTENSION
@@ -6163,25 +6291,39 @@ def serve_static(path):
     return send_from_directory('static', path)
 
 
-# Upgrade 3: supervise the paper forward runner inside the dashboard process
-# (guarded — never in pytest; disable with SUPERVISE_PAPER_RUNNER=0).
-try:
-    from paper_runner_supervisor import start_supervised_runner
-    start_supervised_runner()
-except Exception as _paper_err:
-    print(f"[DASHBOARD] paper runner supervisor unavailable: {_paper_err}")
+# Upgrade 3: supervise the paper forward runner inside the dashboard process.
+# Production daemons must ONLY start when the dashboard is executed as a program
+# (`python dashboard.py` — the Docker/compose/Render entrypoint) or when
+# explicitly forced with STRATEX_AUTOSTART_SERVICES=1. Importing this module
+# (tests, tooling, WSGI inspection) must never spawn background writers: they
+# raced with the test suite and contaminated state files in arbitrary CWDs.
+# Disable individually with SUPERVISE_PAPER_RUNNER=0 / STRATEX_SHADOW_PAPER_ENABLED=0.
+_AUTOSTART_SERVICES = (
+    __name__ == "__main__"
+    or os.getenv("STRATEX_AUTOSTART_SERVICES", "0").strip().lower() in {"1", "true", "yes", "on"}
+)
+if _AUTOSTART_SERVICES:
+    try:
+        from paper_runner_supervisor import start_supervised_runner
+        start_supervised_runner()
+    except Exception as _paper_err:
+        print(f"[DASHBOARD] paper runner supervisor unavailable: {_paper_err}")
 
-# Shadow research has its own scheduler and durable Memora namespace. It never
-# modifies the frozen forward experiment or enables the exchange engine.
-try:
-    from paper_shadow_scheduler import start_shadow_paper_scheduler
-    start_shadow_paper_scheduler()
-except Exception as _shadow_paper_err:
-    print(f"[DASHBOARD] paper shadow scheduler unavailable: {_shadow_paper_err}")
+    # Shadow research has its own scheduler and durable Memora namespace. It
+    # never modifies the frozen forward experiment or enables the exchange engine.
+    try:
+        from paper_shadow_scheduler import start_shadow_paper_scheduler
+        start_shadow_paper_scheduler()
+    except Exception as _shadow_paper_err:
+        print(f"[DASHBOARD] paper shadow scheduler unavailable: {_shadow_paper_err}")
 
 if __name__ == '__main__':
     print("🚀 Starting Unified Live Trading Dashboard...")
     port = int(os.environ.get('PORT', 5000))
     print(f"👉 Open http://127.0.0.1:{port} in your browser")
     is_debug = os.environ.get('FLASK_DEBUG') == '1'
-    app.run(host='0.0.0.0', debug=is_debug, port=port, load_dotenv=False)
+    # threaded=True is REQUIRED: /api/stream is a Server-Sent Events endpoint
+    # whose connection stays open indefinitely. With the default single-threaded
+    # Werkzeug server, ONE connected dashboard tab would block every other
+    # request (including the same page's API calls).
+    app.run(host='0.0.0.0', debug=is_debug, port=port, load_dotenv=False, threaded=True)

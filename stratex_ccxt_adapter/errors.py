@@ -19,3 +19,11 @@ class CCXTErrorMapper:
         if "badrequest" in name:
             return "BAD_REQUEST"
         return "EXCHANGE_ERROR"
+
+
+class MarketDataUnavailable(RuntimeError):
+    """Raised when real exchange data could not be obtained.
+
+    Callers must surface this as "data unavailable" (HTTP 503). The adapter never
+    substitutes synthetic prices, order books or funding rates for real ones.
+    """

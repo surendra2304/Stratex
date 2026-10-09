@@ -15,7 +15,7 @@ from .models import (
     FundingRateComparison,
 )
 from .precision import PrecisionHelper
-from .errors import CCXTErrorMapper
+from .errors import CCXTErrorMapper, MarketDataUnavailable
 from .client import CCXTExchangeAdapter
 from .arbitrage import ArbitrageScanner
 from .funding import FundingRateComparator
@@ -29,6 +29,7 @@ __all__ = [
     "NormalizedTicker",
     "PrecisionHelper",
     "CCXTErrorMapper",
+    "MarketDataUnavailable",
     "CCXTExchangeAdapter",
     # Enhanced Multi-Exchange Hub & Features
     "ArbitrageOpportunity",

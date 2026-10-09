@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import threading
 import time
@@ -11,6 +12,27 @@ from paper_engine.config import (
     MAX_SIMULTANEOUS_POSITIONS,
     STARTING_PAPER_CAPITAL,
 )
+
+
+OPEN_POSITION_STATUSES = ("OPEN", "OPENING", "REDUCING")
+
+
+def _finite_positive(value) -> float | None:
+    """Return ``value`` as a float when it is a finite, strictly positive number."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) and number > 0 else None
+
+
+def _require_amount(what: str, value) -> float:
+    number = _finite_positive(value)
+    if number is None:
+        raise ValueError(f"{what} amount must be a finite number > 0, got {value!r}")
+    return number
 
 
 class PaperPortfolio:
@@ -87,7 +109,10 @@ class PaperPortfolio:
     def allocate_margin(self, amount: float, event_id: str):
         if event_id in self.processed_event_ids:
             return
-        
+
+        # A NaN amount passed ``cash - nan < 0`` and turned cash into NaN; a
+        # negative amount *credited* cash.
+        amount = _require_amount("margin allocation", amount)
         if self.cash - amount < 0:
             raise ValueError("Insufficient cash for margin allocation.")
             
@@ -99,7 +124,10 @@ class PaperPortfolio:
     def release_margin(self, amount: float, event_id: str):
         if event_id in self.processed_event_ids:
             return
-            
+
+        amount = _require_amount("margin release", amount)
+        if amount > self.used_margin + 1e-9:
+            raise ValueError(f"Cannot release {amount} margin; only {self.used_margin} is allocated.")
         self.used_margin -= amount
         self.cash += amount
         self.processed_event_ids.add(event_id)
@@ -117,7 +145,9 @@ class PaperPortfolio:
     def add_realized_pnl(self, pnl: float, event_id: str):
         if event_id in self.processed_event_ids:
             return
-            
+
+        if isinstance(pnl, bool) or not isinstance(pnl, (int, float)) or not math.isfinite(pnl):
+            raise ValueError(f"Realized PnL must be a finite number, got {pnl!r}")
         self._check_daily_rollover()
             
         self.cash += pnl
@@ -150,9 +180,21 @@ class PaperPortfolio:
             self.positions[pos_id].update(metadata)
         self._save()
 
-    def close_position(self, pos_id: str, exit_price: float, exit_fee: float = 0.0, exit_time: float | None = None, funding_pnl: float = 0.0):
-        if pos_id in self.positions:
-            pos = self.positions[pos_id]
+    def close_position(self, pos_id: str, exit_price: float, exit_fee: float = 0.0, exit_time: float | None = None, funding_pnl: float = 0.0) -> bool:
+        """Close a position, append it to the trade ledger and persist the state.
+
+        * Idempotent: closing an unknown or already CLOSED position is a no-op that
+          returns ``False`` (no duplicate ledger row, no double margin release).
+        * Margin recorded on the position at entry (``metadata["margin"]``) is
+          released back to cash in the same persisted update, so callers can no
+          longer forget it. Positions without a recorded margin keep the legacy
+          contract (caller releases margin explicitly).
+        * Realized PnL is still booked by the caller via ``add_realized_pnl``.
+        """
+        with self._lock:
+            pos = self.positions.get(pos_id)
+            if pos is None or pos.get('status') == "CLOSED":
+                return False
             pos['status'] = "CLOSED"
             pos['close_time'] = exit_time or time.time()
             pos['last_update_time'] = time.time()
@@ -174,7 +216,7 @@ class PaperPortfolio:
                 "trade_id": pos_id,
                 "symbol": pos['symbol'],
                 "direction": direction,
-                "entry_time": pos['open_time'],
+                "entry_time": pos.get('open_time', pos.get('entry_time')),
                 "exit_time": pos['close_time'],
                 "entry_price": entry_price,
                 "exit_price": exit_price,
@@ -188,10 +230,62 @@ class PaperPortfolio:
             for key in ("strategy", "strategy_version", "signal_id", "evidence_status"):
                 if key in pos:
                     trade_record[key] = pos[key]
-            
+
+            margin = _finite_positive(pos.get("margin"))
+            if margin is not None and not pos.get("margin_released"):
+                release = min(margin, max(self.used_margin, 0.0))
+                self.used_margin -= release
+                self.cash += release
+                pos["margin_released"] = True
+                trade_record["margin_released"] = release
+
             self.record_completed_trade(trade_record)
             self._save()
-            
+            return True
+
+    @staticmethod
+    def _margin_basis(pos: dict) -> float:
+        """Best estimate of the margin a still-open position should be holding."""
+        for key in ("margin", "notional"):
+            value = _finite_positive(pos.get(key))
+            if value is not None:
+                return value
+        try:
+            basis = abs(float(pos.get("entry_price", 0.0)) * float(pos.get("quantity", 0.0)))
+        except (TypeError, ValueError):
+            return 0.0
+        return basis if math.isfinite(basis) else 0.0
+
+    def reconcile_margin(self, apply: bool = False, tolerance: float = 1e-6) -> dict:
+        """Compare ``used_margin`` with the margin justified by open positions.
+
+        Margin that no open position accounts for is orphaned (e.g. left behind by
+        a close path that never released it) and permanently starves new entries of
+        cash. With ``apply=True`` the orphaned amount is moved back to cash. Equity
+        (cash + used_margin + unrealized) is unchanged by construction; an
+        under-allocation is only reported, never "fixed" by inventing capital.
+        """
+        with self._lock:
+            expected = sum(
+                self._margin_basis(pos)
+                for pos in self.positions.values()
+                if pos.get("status") in OPEN_POSITION_STATUSES
+            )
+            difference = self.used_margin - expected
+            result = {
+                "used_margin": self.used_margin,
+                "expected_margin": expected,
+                "orphaned_margin": difference if difference > tolerance else 0.0,
+                "under_allocated_margin": -difference if difference < -tolerance else 0.0,
+                "repaired": False,
+            }
+            if apply and math.isfinite(difference) and difference > tolerance:
+                self.cash += difference
+                self.used_margin = expected
+                result["repaired"] = True
+                self._save()
+            return result
+
     def record_completed_trade(self, trade_record: dict):
         """Append a closed trade to the durable JSONL ledger"""
         import json
@@ -223,8 +317,16 @@ class PaperPortfolio:
     def check_risk_limits(self, current_equity: float, new_notional_exposure: float):
         """
         Throws exception if a risk limit is violated.
+
+        Non-finite inputs are violations: a NaN equity made the drawdown NaN
+        (``NaN >= limit`` is False) and a NaN/negative notional slipped under
+        the exposure cap.
         """
-        if self.daily_loss >= MAX_DAILY_LOSS:
+        if _finite_positive(current_equity) is None:
+            raise ValueError(f"Risk Block: current equity {current_equity!r} is not a finite positive number")
+        if _finite_positive(new_notional_exposure) is None:
+            raise ValueError(f"Risk Block: new exposure {new_notional_exposure!r} is not a finite positive number")
+        if not math.isfinite(self.daily_loss) or self.daily_loss >= MAX_DAILY_LOSS:
             raise ValueError(f"Risk Block: Max daily loss exceeded ({self.daily_loss})")
             
         if current_equity > self.peak_equity:

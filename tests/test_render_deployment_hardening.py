@@ -1,8 +1,11 @@
 import json
 import os
+from pathlib import Path
 
 import pytest
 import yaml
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 import config
 from dashboard import app, get_engine_health_data
@@ -27,7 +30,7 @@ class TestRenderDeploymentHardening:
 
     def test_render_yaml_specification(self):
         """render.yaml must match Stratex's Singapore Docker service and /health endpoint."""
-        render_file = "render.yaml"
+        render_file = _REPO_ROOT / "render.yaml"
         assert os.path.exists(render_file)
         with open(render_file, "r") as f:
             spec = yaml.safe_load(f)
@@ -41,7 +44,7 @@ class TestRenderDeploymentHardening:
 
     def test_dockerfile_specification(self):
         """Dockerfile must specify Python 3.11-slim, expose port 5000, and run supervisor."""
-        df_path = "Dockerfile"
+        df_path = _REPO_ROOT / "Dockerfile"
         assert os.path.exists(df_path)
         with open(df_path, "r") as f:
             content = f.read()

@@ -20,8 +20,11 @@ class BinanceFreeProvider:
     def _get_client(self):
         if self._client is None:
             try:
-                from data_client import get_data_client
-                self._client = get_data_client()
+                # data_client exposes MarketDataClient; the previously imported
+                # get_data_client() never existed, so this provider could never
+                # return a single kline.
+                from data_client import MarketDataClient
+                self._client = MarketDataClient()
             except Exception as e:
                 logger.warning(f"[OPENBB_BINANCE] Could not get data_client: {e}")
                 self._client = None

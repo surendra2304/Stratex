@@ -7,7 +7,7 @@ Unified Facade for Backtrader integration in Stratex:
 
 from __future__ import annotations
 
-from typing import Type
+from typing import Any, Type
 import pandas as pd
 
 from .models import BacktestResult, BacktestOrder
@@ -80,7 +80,7 @@ class BacktraderNativeEngine:
         cerebro.set_sizer(sizer_cls)
         return cerebro.run()
 
-    def get_status(self) -> dict[str, any]:
+    def get_status(self) -> dict[str, Any]:
         """Returns overall engine status and catalog of supported modules."""
         return {
             "status": "HEALTHY",

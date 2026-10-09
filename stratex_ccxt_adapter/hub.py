@@ -11,6 +11,7 @@ import threading
 from typing import Any, Dict, List, Optional
 
 from .client import CCXTExchangeAdapter
+from .errors import MarketDataUnavailable
 from .models import ArbitrageOpportunity, FundingRateComparison, NormalizedTicker, OrderBookDepthAnalysis
 from .arbitrage import ArbitrageScanner
 from .funding import FundingRateComparator
@@ -20,6 +21,14 @@ logger = logging.getLogger("stratex.ccxt.hub")
 
 # Supported free unauthenticated exchanges in Stratex
 DEFAULT_EXCHANGE_IDS = ["binance", "okx", "bybit", "kraken", "gate"]
+
+
+def _is_known_exchange(exchange_id: str) -> bool:
+    try:
+        import ccxt
+    except Exception:  # pragma: no cover - ccxt is a declared dependency
+        return False
+    return exchange_id in getattr(ccxt, "exchanges", ())
 
 
 class CCXTHub:
@@ -40,7 +49,9 @@ class CCXTHub:
 
     def get_exchange(self, exchange_id: str = "binance", **kwargs) -> CCXTExchangeAdapter:
         """Retrieves or creates a cached exchange adapter instance."""
-        ex_id = exchange_id.lower().strip()
+        ex_id = str(exchange_id).lower().strip()
+        if not _is_known_exchange(ex_id):
+            raise KeyError(f"Unsupported exchange: {ex_id!r}")
         with self._lock:
             if ex_id not in self._exchanges:
                 adapter = CCXTExchangeAdapter(
@@ -73,28 +84,7 @@ class CCXTHub:
                 logger.debug(f"Failed to fetch ticker for {symbol} on {ex_id}: {e}")
                 continue
 
-        # If all public calls fail (offline), supply resilient mock tickers
-        if not tickers:
-            base_p = 65000.0 if "BTC" in symbol.upper() else 3500.0
-            tickers["binance"] = NormalizedTicker(
-                symbol=symbol,
-                last=base_p,
-                bid=base_p * 0.9999,
-                ask=base_p * 1.0001,
-                base_volume=1500.0,
-                quote_volume=base_p * 1500.0,
-                timestamp_ms=None,
-            )
-            tickers["okx"] = NormalizedTicker(
-                symbol=symbol,
-                last=base_p * 1.0004,
-                bid=base_p * 1.0003,
-                ask=base_p * 1.0005,
-                base_volume=1200.0,
-                quote_volume=base_p * 1200.0,
-                timestamp_ms=None,
-            )
-
+        # Only real quotes are returned; callers decide what an empty result means.
         return tickers
 
     def scan_arbitrage(
@@ -121,12 +111,12 @@ class CCXTHub:
         try:
             raw_ob = adapter.fetch_order_book(symbol, limit=depth_levels * 2)
         except Exception as e:
-            logger.debug(f"Order book fetch failed on {exchange_id}: {e}, using synthetic fallback")
-            base_p = 65000.0 if "BTC" in symbol.upper() else 3500.0
-            raw_ob = {
-                "bids": [[base_p * (1.0 - 0.0001 * i), 1.5 + 0.2 * i] for i in range(depth_levels)],
-                "asks": [[base_p * (1.0 + 0.0001 * i), 1.4 + 0.2 * i] for i in range(depth_levels)],
-            }
+            logger.debug(f"Order book fetch failed on {exchange_id}: {e}")
+            raise MarketDataUnavailable(
+                f"Order book for {symbol} on {exchange_id} is unavailable"
+            ) from e
+        if not isinstance(raw_ob, dict) or not raw_ob.get("bids") or not raw_ob.get("asks"):
+            raise MarketDataUnavailable(f"Order book for {symbol} on {exchange_id} is empty")
 
         return self.depth_analyzer.analyze(
             order_book=raw_ob,
@@ -137,13 +127,22 @@ class CCXTHub:
 
     def get_status(self) -> Dict[str, Any]:
         """Returns overall telemetry and health for all initialized adapters."""
-        initialized = {}
-        for ex_id, adapter in self._exchanges.items():
-            initialized[ex_id] = adapter.get_health_status()
+        with self._lock:
+            adapters = list(self._exchanges.items())
+        initialized = {ex_id: adapter.get_health_status() for ex_id, adapter in adapters}
+        states = {info.get("status") for info in initialized.values()}
+        if not initialized:
+            overall = "NO_ACTIVE_ADAPTERS"
+        elif "DEGRADED" in states:
+            overall = "DEGRADED"
+        elif states == {"HEALTHY"}:
+            overall = "HEALTHY"
+        else:
+            overall = "UNVERIFIED"
 
         return {
-            "status": "HEALTHY",
-            "active_exchanges_count": len(self._exchanges),
+            "status": overall,
+            "active_exchanges_count": len(adapters),
             "supported_exchanges": self.list_exchanges(),
             "initialized_adapters": initialized,
             "mode": "100% Free Public / Unauthenticated Multi-Exchange",

@@ -12,11 +12,11 @@ CRITICAL INVARIANTS:
 4. Automatic safety termination if either arm breaches max drawdown (default 10%).
 """
 
-import json
 import os
 import time
 from dataclasses import asdict, dataclass, field
 
+from atomic_io import atomic_write_json, dataclass_from_mapping, load_json_document, locked_path
 from logger import get_logger
 
 logger = get_logger("config_ab")
@@ -102,17 +102,14 @@ class ABExperimentConfig:
         d = directory or AB_EXPERIMENT_DIR
         os.makedirs(d, exist_ok=True)
         path = os.path.join(d, f"{self.experiment_id}.json")
-        tmp_path = path + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(asdict(self), f, indent=2)
-        os.replace(tmp_path, path)
+        with locked_path(path):
+            atomic_write_json(path, asdict(self), indent=2, allow_nan=False)
         return path
 
     @classmethod
     def load(cls, filepath: str) -> "ABExperimentConfig":
-        with open(filepath, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return cls(**data)
+        data = load_json_document(filepath, what="A/B experiment config")
+        return dataclass_from_mapping(cls, data, source=filepath)
 
 
 def get_default_ab_config() -> ABExperimentConfig:

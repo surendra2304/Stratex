@@ -11,15 +11,21 @@ from pathlib import Path
 
 import pytest
 
+from stratex_quantdinger.promotion_policy import (
+    MAX_FAILED_WALK_FORWARD_WINDOWS,
+    MIN_OUT_OF_SAMPLE_PROFIT_FACTOR,
+    MIN_OUT_OF_SAMPLE_TRADES,
+)
+
 
 ROOT = Path(__file__).resolve().parent.parent
 REGISTRY_PATH = ROOT / "strategy_registry.json"
 OPTIMIZATION_ARTIFACT = ROOT / "optimization_results" / "adx_ema_optimization.json"
 
 PROMOTION_POLICY = {
-    "min_out_of_sample_trades": 30,
-    "min_out_of_sample_profit_factor": 1.0,
-    "max_failed_walk_forward_windows": 0,
+    "min_out_of_sample_trades": MIN_OUT_OF_SAMPLE_TRADES,
+    "min_out_of_sample_profit_factor": MIN_OUT_OF_SAMPLE_PROFIT_FACTOR,
+    "max_failed_walk_forward_windows": MAX_FAILED_WALK_FORWARD_WINDOWS,
 }
 
 
@@ -30,6 +36,21 @@ def research_registry():
 
 @pytest.fixture(scope="module")
 def optimization():
+    # The artifact this fixture loads is the ONLY admissible evidence for the
+    # adx_ema metrics recorded in the registry. If it is absent from the
+    # checkout, those metrics are UNVERIFIABLE — the tests that compare against
+    # them must then skip loudly rather than error (FileNotFoundError) or, far
+    # worse, be weakened into passing. Claim-level governance does NOT depend
+    # on this fixture: test_no_strategy_claims_validated_without_an_evidence_artifact
+    # fails independently if any entry re-claims VALIDATED/ACTIVE while the
+    # artifact is missing.
+    if not OPTIMIZATION_ARTIFACT.exists():
+        pytest.skip(
+            f"UNVERIFIABLE IN THIS CHECKOUT: evidence artifact {OPTIMIZATION_ARTIFACT} "
+            "is absent. The adx_ema OOS metrics in strategy_registry.json cannot be "
+            "re-verified until the real optimization run's artifact is committed. "
+            "Do NOT fabricate this file."
+        )
     return json.loads(OPTIMIZATION_ARTIFACT.read_text(encoding="utf-8"))
 
 

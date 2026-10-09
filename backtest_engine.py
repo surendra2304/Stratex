@@ -3,6 +3,8 @@ import uuid
 import numpy as np
 import pandas as pd
 
+from numeric_safety import positive_float
+
 
 class DataValidator:
     """Validates the chronological integrity of backtest data."""
@@ -52,22 +54,30 @@ class BacktestEngine:
         self.rejected_trades = []
         
     def _calculate_qty(self, entry_price, sl_price):
-        """Risk-based position sizing."""
-        risk_amount = self.equity * self.risk_per_trade
-        sl_distance = abs(entry_price - sl_price)
-        
+        """Risk-based position sizing.
+
+        Returns 0.0 (no trade) for any non-finite/non-positive input. A NaN
+        stop used to yield a NaN quantity (``min(nan, cap)`` is NaN and
+        ``nan * price < 10`` is False), which poisoned PnL and every metric
+        derived from the run; a negative entry price yielded a negative size.
+        """
+        equity = positive_float(self.equity)
+        risk = positive_float(self.risk_per_trade)
+        entry = positive_float(entry_price)
+        stop = positive_float(sl_price)
+        if equity is None or risk is None or entry is None or stop is None:
+            return 0.0
+        sl_distance = abs(entry - stop)
         if sl_distance == 0:
             return 0.0
-            
-        raw_qty = risk_amount / sl_distance
-        qty = np.floor(raw_qty * 10000) / 10000.0
-        
-        max_spot_qty = self.equity / entry_price
-        qty = min(qty, max_spot_qty)
-        
-        if qty * entry_price < 10.0:
+
+        raw_qty = (equity * risk) / sl_distance
+        qty = float(np.floor(raw_qty * 10000) / 10000.0)
+        qty = min(qty, equity / entry)
+
+        if not qty > 0 or qty * entry < 10.0:
             return 0.0
-            
+
         return qty
 
     def run(self):

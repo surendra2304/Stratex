@@ -59,9 +59,37 @@ def test_ccxt_hub_exchange_caching():
 
 def test_ccxt_hub_status():
     status = ccxt_hub.get_status()
-    assert status["status"] == "HEALTHY"
+    # HEALTHY requires a successful exchange round trip; offline test runs can
+    # only ever see an unverified/degraded/empty hub.
+    assert status["status"] in {"NO_ACTIVE_ADAPTERS", "UNVERIFIED", "DEGRADED"}
     assert "100% Free Public" in status["mode"]
     assert "supported_exchanges" in status
+
+
+def test_ccxt_hub_status_reflects_adapter_evidence(monkeypatch):
+    hub = CCXTHub()
+
+    class _Adapter:
+        def __init__(self, status):
+            self._status = status
+
+        def get_health_status(self):
+            return {"status": self._status}
+
+    monkeypatch.setattr(hub, "_exchanges", {})
+    assert hub.get_status()["status"] == "NO_ACTIVE_ADAPTERS"
+    monkeypatch.setattr(hub, "_exchanges", {"a": _Adapter("UNVERIFIED")})
+    assert hub.get_status()["status"] == "UNVERIFIED"
+    monkeypatch.setattr(hub, "_exchanges", {"a": _Adapter("HEALTHY"), "b": _Adapter("DEGRADED")})
+    assert hub.get_status()["status"] == "DEGRADED"
+    monkeypatch.setattr(hub, "_exchanges", {"a": _Adapter("HEALTHY"), "b": _Adapter("HEALTHY")})
+    assert hub.get_status()["status"] == "HEALTHY"
+
+
+def test_hub_rejects_non_exchange_ids():
+    for bogus in ("nope", "__init__", "Exchange", "NetworkError"):
+        with pytest.raises(KeyError):
+            ccxt_hub.get_exchange(bogus)
 
 
 # ------------------------------------------------------------------------------
@@ -102,14 +130,64 @@ def test_arbitrage_scanner_non_viable():
 # ------------------------------------------------------------------------------
 # 3. FundingRateComparator Tests
 # ------------------------------------------------------------------------------
+class _FundingExchange:
+    def __init__(self, rate=None, error=None):
+        self.rate, self.error = rate, error
+
+    def fetch_funding_rate(self, _symbol):
+        if self.error:
+            raise self.error
+        return {"fundingRate": self.rate}
+
+
 def test_funding_rate_comparator_spread():
     comparator = FundingRateComparator(cache_ttl_seconds=60)
-    comparison = comparator.compare("BTCUSDT")
+    comparison = comparator.compare("BTCUSDT", {
+        "binance": _FundingExchange(0.0001),
+        "bybit": _FundingExchange(0.0003),
+        "okx": _FundingExchange(error=RuntimeError("venue down")),
+    })
 
     assert comparison.symbol == "BTCUSDT"
-    assert len(comparison.rates) >= 2
-    assert comparison.max_rate >= comparison.min_rate
-    assert comparison.spread_bps >= 0.0
+    assert comparison.rates == {"binance": 0.0001, "bybit": 0.0003}
+    assert comparison.max_rate == 0.0003 and comparison.min_rate == 0.0001
+    assert comparison.spread_bps == pytest.approx(2.0)
+
+
+def test_funding_rate_comparator_never_fabricates_rates():
+    from stratex_ccxt_adapter import MarketDataUnavailable
+
+    comparator = FundingRateComparator(cache_ttl_seconds=60)
+    with pytest.raises(MarketDataUnavailable):
+        comparator.compare("BTCUSDT")
+    with pytest.raises(MarketDataUnavailable):
+        comparator.compare("BTCUSDT", {"okx": _FundingExchange(error=RuntimeError("down"))})
+    # Failures are not cached: a later real answer is served.
+    assert comparator.compare("BTCUSDT", {"okx": _FundingExchange(0.0002)}).rates == {"okx": 0.0002}
+
+
+def test_funding_comparator_tolerates_concurrent_adapter_registration():
+    comparator = FundingRateComparator(cache_ttl_seconds=0)
+    exchanges = {}
+
+    class _Growing:
+        def fetch_funding_rate(self, _symbol):
+            exchanges[f"late{len(exchanges)}"] = _FundingExchange(0.0001)  # another thread registers
+            return {"fundingRate": 0.0002}
+
+    exchanges["first"] = _Growing()
+    result = comparator.compare("ETHUSDT", exchanges)
+    assert result.rates == {"first": 0.0002}
+
+
+def test_arbitrage_scanner_requires_two_real_quotes():
+    from stratex_ccxt_adapter import MarketDataUnavailable
+
+    scanner = ArbitrageScanner(min_spread_pct=0.10)
+    one = {"binance": NormalizedTicker("BTC/USDT", last=1.0, bid=1.0, ask=1.1, base_volume=1.0, quote_volume=1.0, timestamp_ms=None)}
+    for tickers in (None, {}, one):
+        with pytest.raises(MarketDataUnavailable):
+            scanner.scan("BTCUSDT", tickers)
 
 
 # ------------------------------------------------------------------------------
@@ -158,7 +236,7 @@ def test_flask_ccxt_routes(flask_client):
     assert res.status_code == 200
     data = res.get_json()
     assert data["status"] == "OK"
-    assert data["data"]["status"] == "HEALTHY"
+    assert data["data"]["status"] in {"NO_ACTIVE_ADAPTERS", "UNVERIFIED", "DEGRADED"}
 
     # GET /exchanges
     res = flask_client.get("/api/v1/ccxt/exchanges")
@@ -166,27 +244,60 @@ def test_flask_ccxt_routes(flask_client):
     data = res.get_json()
     assert "binance" in data["data"]
 
-    # GET /arbitrage
+    # Offline: no real quotes -> honest 503, never a synthetic opportunity/book.
+    for url in ("/api/v1/ccxt/arbitrage?symbol=BTCUSDT",
+                "/api/v1/ccxt/depth?symbol=BTCUSDT&exchange=binance",
+                "/api/v1/ccxt/funding?symbol=BTCUSDT"):
+        res = flask_client.get(url)
+        assert res.status_code == 503, url
+        assert res.get_json()["error"] in {"DATA_UNAVAILABLE", "UPSTREAM_UNAVAILABLE"}
+        assert "65000" not in res.get_data(as_text=True)
+
+    # Invalid input is a client error, not a 500.
+    for url in ("/api/v1/ccxt/ticker?exchange=__init__",
+                "/api/v1/ccxt/depth?exchange=nope",
+                "/api/v1/ccxt/depth?levels=0",
+                "/api/v1/ccxt/depth?levels=100000",
+                "/api/v1/ccxt/ticker?symbol=%00bad",
+                "/api/v1/ccxt/funding?symbol=" + "A" * 200):
+        assert flask_client.get(url).status_code == 400, url
+
+
+def test_flask_ccxt_arbitrage_with_real_quotes(flask_client, monkeypatch):
+    from api import ccxt_routes
+
+    quotes = {
+        "binance": NormalizedTicker("BTC/USDT", last=100.0, bid=99.9, ask=100.0, base_volume=1.0, quote_volume=100.0, timestamp_ms=1),
+        "okx": NormalizedTicker("BTC/USDT", last=100.5, bid=100.4, ask=100.6, base_volume=1.0, quote_volume=100.0, timestamp_ms=1),
+    }
+    monkeypatch.setattr(ccxt_routes.ccxt_hub, "fetch_multi_ticker", lambda symbol, exchange_ids=None: quotes)
+    monkeypatch.setattr(ccxt_routes.ccxt_hub.arbitrage_scanner, "_cache", {})
     res = flask_client.get("/api/v1/ccxt/arbitrage?symbol=BTCUSDT")
     assert res.status_code == 200
+    data = res.get_json()["data"]
+    assert (data["buy_exchange"], data["sell_exchange"]) == ("binance", "okx")
+    assert data["spread"] == pytest.approx(0.4)
+
+
+def test_flask_ccxt_depth_with_real_book(flask_client, monkeypatch):
+    from api import ccxt_routes
+
+    class _Adapter:
+        def fetch_order_book(self, symbol, limit=30):
+            return {"bids": [[99.0, 2.0], [98.0, 1.0]], "asks": [[101.0, 1.0], [102.0, 3.0]]}
+
+    monkeypatch.setattr(ccxt_routes.ccxt_hub, "get_exchange", lambda exchange_id="binance", **kw: _Adapter())
+    res = flask_client.get("/api/v1/ccxt/depth?symbol=BTCUSDT&exchange=binance&levels=2")
+    assert res.status_code == 200
     data = res.get_json()
     assert data["status"] == "OK"
-    assert "buy_exchange" in data["data"]
-    assert "sell_exchange" in data["data"]
-    assert "spread_pct" in data["data"]
+    assert data["data"]["mid_price"] == pytest.approx(100.0)
+    assert "imbalance_ratio" in data["data"] and "micro_price" in data["data"]
 
-    # GET /depth
+    class _EmptyAdapter:
+        def fetch_order_book(self, symbol, limit=30):
+            return {"bids": [], "asks": []}
+
+    monkeypatch.setattr(ccxt_routes.ccxt_hub, "get_exchange", lambda exchange_id="binance", **kw: _EmptyAdapter())
     res = flask_client.get("/api/v1/ccxt/depth?symbol=BTCUSDT&exchange=binance")
-    assert res.status_code == 200
-    data = res.get_json()
-    assert data["status"] == "OK"
-    assert "imbalance_ratio" in data["data"]
-    assert "micro_price" in data["data"]
-
-    # GET /funding
-    res = flask_client.get("/api/v1/ccxt/funding?symbol=BTCUSDT")
-    assert res.status_code == 200
-    data = res.get_json()
-    assert data["status"] == "OK"
-    assert "rates" in data["data"]
-    assert "spread_bps" in data["data"]
+    assert res.status_code == 503 and res.get_json()["error"] == "DATA_UNAVAILABLE"

@@ -41,10 +41,8 @@ class QuantumService:
 
     def get_advisory(self, symbol: str = "BTCUSDT", tf: str = "15m"):
         start_time = time.time()
-        # Load recent market data (same as /api/candles but limited)
-        try:
-            df = get_candles(symbol, tf, limit=300)
-        except Exception as e:
+
+        def _fail_advisory(error_message: str) -> dict:
             return QuantumResultSchema(
                 quantum_status="FAIL",
                 backend=self.backend,
@@ -61,9 +59,21 @@ class QuantumService:
                 latency_ms=(time.time() - start_time) * 1000,
                 simulation=False,
                 hardware_used=None,
-                error=str(e),
+                error=error_message,
                 timestamp=""
             ).to_dict()
+
+        # Load recent market data (same as /api/candles but limited)
+        try:
+            df = get_candles(symbol, tf, limit=300)
+        except Exception as e:
+            return _fail_advisory(str(e))
+
+        # DATA_UNAVAILABLE guard: get_candles signals an unreachable exchange by
+        # returning an empty DataFrame rather than raising. Never fabricate
+        # features from nothing — report FAIL with an explicit reason.
+        if df is None or df.empty or "close" not in getattr(df, "columns", []):
+            return _fail_advisory("DATA_UNAVAILABLE")
 
         # Extract feature vector
         feature_vec = extract_feature_vector(df)

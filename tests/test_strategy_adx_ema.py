@@ -1,3 +1,4 @@
+import pytest
 """
 tests/test_strategy_adx_ema.py
 
@@ -344,12 +345,33 @@ class TestProfitabilityGateIntegration:
         assert abs(metrics["prob_win"] - ml_confidence) < 1e-9
         assert metrics["strategy_type"] == "PROBABILISTIC"
 
-    def test_unknown_signal_uses_neutral_fallback(self):
-        """Unrecognised signal gets 0.5 neutral, never 1.0."""
+    def test_unknown_signal_is_rejected_without_inventing_a_probability(self):
+        """An unrecognised signal used to get a 0.5 "neutral" probability, which
+        made any 1.5:1 setup look positive-EV and executable. Like the
+        RULE_BASED path, missing evidence is now a rejection."""
         gate = self._gate()
-        _, metrics = gate.evaluate_signal("BTCUSDT", "BUY", 50_000, 49_000, 51_500, None)
-        assert metrics["prob_win"] == 0.5
-        assert metrics["prob_win"] != 1.0
+        accepted, metrics = gate.evaluate_signal("BTCUSDT", "BUY", 50_000, 49_000, 51_500, None)
+        assert accepted is False
+        assert metrics["reason"] == "UNKNOWN_STRATEGY_TYPE"
+        assert metrics["prob_win"] is None
+
+    @pytest.mark.parametrize("confidence", [float("nan"), 1.5, -0.1, float("inf")])
+    def test_invalid_model_confidence_is_rejected(self, confidence):
+        gate = self._gate()
+        accepted, metrics = gate.evaluate_signal("BTCUSDT", "BUY", 50_000, 49_000, 51_500, confidence)
+        assert accepted is False
+        assert metrics["reason"] == "INVALID_MODEL_CONFIDENCE"
+
+    @pytest.mark.parametrize("entry, sl, tp", [
+        (50_000, 49_000, float("inf")), (float("nan"), 49_000, 51_500),
+        (50_000, float("nan"), 51_500), (50_000, -1, 51_500), ("abc", 49_000, 51_500),
+    ])
+    def test_non_finite_price_levels_are_rejected(self, entry, sl, tp):
+        """An infinite TP used to yield an infinite expected return → ACCEPTED."""
+        gate = self._gate()
+        accepted, metrics = gate.evaluate_signal("BTCUSDT", "BUY", entry, sl, tp, 0.62)
+        assert accepted is False
+        assert metrics["reason"] == "INVALID_PRICE_NUMERICS"
 
     # --- Expected value calculation consistency ---
 

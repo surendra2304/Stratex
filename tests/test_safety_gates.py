@@ -26,8 +26,14 @@ def test_safety_matrix():
     ]
     
     for mode, safe_mode, res_mode, testnet_en, live_en, exp_allow, exp_reason in cases:
+        # Patch BOTH the execution-module bindings and the config attributes:
+        # _resolve_execution_flags consults each of them, and config's values
+        # depend on import-time credential state (PAPER fallback), which makes
+        # this file order-dependent unless both layers are pinned explicitly.
         with patch("execution.TRADING_MODE", mode), \
              patch("execution.PAPER_SAFE_MODE", safe_mode), \
+             patch("config.TRADING_MODE", mode), \
+             patch("config.PAPER_SAFE_MODE", safe_mode), \
              patch.dict(os.environ, {"RESEARCH_MODE": res_mode}), \
              patch("execution.TESTNET_ENABLED", testnet_en), \
              patch("execution.LIVE_TRADING_ENABLED", live_en):
@@ -49,7 +55,8 @@ def test_paper_mode_execution_block():
 def test_live_is_permanently_forbidden():
     with patch("execution.TRADING_MODE", "LIVE"), \
          patch("execution.LIVE_TRADING_ENABLED", True), \
-         patch("execution.PAPER_SAFE_MODE", False):
+         patch("execution.PAPER_SAFE_MODE", False), \
+         patch("config.PAPER_SAFE_MODE", False):
         if "RESEARCH_MODE" in os.environ:
             del os.environ["RESEARCH_MODE"]
             
@@ -71,8 +78,12 @@ def test_client_constructor_calls(mock_client):
     
     for mode, safe_mode, res_mode, testnet_en, live_en, expected_calls in cases:
         mock_client.reset_mock()
+        # Pin config-layer flags too (see test_safety_matrix) so the matrix is
+        # independent of ambient credential/import state.
         with patch("execution.TRADING_MODE", mode), \
              patch("execution.PAPER_SAFE_MODE", safe_mode), \
+             patch("config.TRADING_MODE", mode), \
+             patch("config.PAPER_SAFE_MODE", safe_mode), \
              patch.dict(os.environ, {"RESEARCH_MODE": res_mode}), \
              patch("execution.TESTNET_ENABLED", testnet_en), \
              patch("execution.LIVE_TRADING_ENABLED", live_en):

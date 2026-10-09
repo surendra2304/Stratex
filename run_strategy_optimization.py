@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import datetime
+import inspect
 from pathlib import Path
 import pandas as pd
 
@@ -22,6 +23,12 @@ from stratex_freqtrade_adapter.optimizer import StrategyOptimizer, OptimizationC
 from stratex_freqtrade_adapter.walkforward import WalkForwardValidator
 from stratex_freqtrade_adapter.stratex_bridge import StratexStrategyBridge
 from stratex_freqtrade_adapter.strategy_parameterizer import ParameterizedADXEMA
+from stratex_quantdinger.promotion_policy import (
+    PROMOTION_ELIGIBLE,
+    RESEARCH_ONLY,
+    evaluate_oos_metrics,
+)
+from stratex_quantdinger.registry import StrategyRegistry
 
 
 def load_dataset(csv_path: str = "data_cache/factory_data/BTCUSDT_1h.csv", max_bars: int = 5000) -> pd.DataFrame:
@@ -155,16 +162,20 @@ def run_adx_ema_optimization():
         })
         print(f"Window {idx+1}: Train={w.train_start}..{w.train_end}, Test={w.test_start}..{w.test_end} | IS PF={is_m['profit_factor']:.2f} -> OOS PF={oos_m['profit_factor']:.2f} ({status})")
 
-    # Save comprehensive audit record
+    # Save comprehensive audit record. Bind the metrics to the exact strategy
+    # implementation so a valid artifact cannot be attached to another version.
+    strategy_source_hash = StrategyRegistry.compute_source_hash(
+        inspect.getsource(ParameterizedADXEMA)
+    )
     audit_payload = {
         "strategy": "adx_ema",
+        "strategy_source_hash": strategy_source_hash,
         "git_sha": get_git_commit_sha(),
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "data_range": f"{df['timestamp'].iloc[0]} to {df['timestamp'].iloc[-1]}",
         "total_bars": len(df),
         "timeframe": "1h",
         "symbols": ["BTCUSDT"],
-        "promotion_status": "RESEARCH ONLY",
         "best_params": best["params"],
         "optimizer_score": best["score"],
         "friction": {"fee_rate": 0.001, "slippage_rate": 0.0005},
@@ -173,6 +184,15 @@ def run_adx_ema_optimization():
         "optimized_is": {k: v for k, v in best["result"].items() if isinstance(v, (int, float, str))},
         "optimized_oos": {k: v for k, v in opt_oos.items() if isinstance(v, (int, float, str))},
         "walk_forward_windows": wf_results,
+    }
+    readiness = evaluate_oos_metrics(audit_payload)
+    audit_payload["promotion_status"] = PROMOTION_ELIGIBLE if readiness["eligible"] else RESEARCH_ONLY
+    audit_payload["promotion_readiness"] = {
+        "eligible": readiness["eligible"],
+        "reasons": readiness["reasons"],
+        "trade_count": readiness.get("trade_count"),
+        "profit_factor": readiness.get("profit_factor"),
+        "failed_windows": readiness.get("failed_windows"),
     }
 
     out_file = Path("optimization_results/adx_ema_optimization.json")
@@ -189,7 +209,8 @@ def run_adx_ema_optimization():
 **Git Commit SHA**: `{get_git_commit_sha()}`  
 **Optimization Method**: Optuna TPE Sampler ({cfg.n_trials} trials, seed={cfg.seed})  
 **Friction Assumptions**: Taker fee = 10 bps (0.001), Slippage = 5 bps (0.0005)  
-**Promotion Status**: `RESEARCH ONLY` (Strict Human Review Required)
+**Promotion Readiness**: `{audit_payload['promotion_status']}`<br>
+**Readiness reasons**: {('; '.join(readiness['reasons']) if readiness['reasons'] else 'All configured OOS and walk-forward checks pass; operator lifecycle review is still required.')}
 
 ---
 
@@ -227,15 +248,16 @@ def run_adx_ema_optimization():
     for r in wf_results:
         report_content += f"| Window {r['window_idx']} | {r['train_range']} | {r['test_range']} | {r['is_pf']} | {r['oos_pf']} | {r['oos_trades']} | ${r['oos_net_pnl']:.2f} | {r['status']} |\n"
 
-    report_content += """
+    report_content += f"""
 ---
 
 ## 4. Governance & Deployment Recommendation
 
 > [!IMPORTANT]
 > - **Zero Silent Overwrites**: The production parameters in `config_strategy.py` remain frozen and unmodified.
-> - **Status**: This configuration is stamped as **`RESEARCH ONLY`**.
-> - **Out-of-Sample Proof**: To promote this parameter set to `OOS VALIDATED` or `ACTIVE`, it must pass live forward soak validation under the Stratex `paper_engine` or Binance Spot Testnet with $\ge 30$ live trades.
+> - **Quantitative readiness**: **`{audit_payload['promotion_status']}`**. This means only that the saved out-of-sample artifact meets the configured minimum of 30 OOS trades, profit factor at least 1.0, and zero failed walk-forward windows. It is not approval or deployment authorization.
+> - **Lifecycle approvals**: OOS_VALIDATED requires the cited, reproducible artifact; APPROVED requires a separate risk-officer decision; ACTIVE is a separate testnet-runtime step. LIVE order routing remains disabled by policy.
+> - **Readiness details**: {('; '.join(readiness['reasons']) if readiness['reasons'] else 'All objective quantitative checks pass; continue through the explicit review stages.')}
 """
 
     report_path = Path("optimization_results/BASELINE_VS_OPTIMIZED_REPORT.md")

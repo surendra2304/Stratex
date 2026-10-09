@@ -7,6 +7,10 @@ import pytest
 from execution import _load_active_trades, _save_active_trades, monitor_open_trades
 from testnet_engine.service import TestnetService
 
+# These tests drive the TESTNET execution path; pin the mode instead of relying
+# on an earlier test having reloaded config with exchange credentials.
+pytestmark = pytest.mark.usefixtures("pinned_testnet_mode")
+
 
 @pytest.fixture
 def clean_env():
@@ -189,7 +193,7 @@ def test_cancelled_protection(clean_env, mock_client):
         mock_status.return_value = {
             "list_status": "CANCELED"
         }
-        mock_ec.return_value = {"executedQty": "0.5"}
+        mock_ec.return_value = {"executedQty": "0.5", "cummulativeQuoteQty": "24750.0", "_is_flat": True}
         
         monitor_open_trades()
         
@@ -200,3 +204,30 @@ def test_cancelled_protection(clean_env, mock_client):
             ledger = json.loads(f.readlines()[0])
             assert ledger["action"] == "EMERGENCY_CLOSE"
             assert ledger["quantity"] == 0.5
+            assert ledger["exit_price"] == 49500.0
+        assert _load_active_trades() == []
+
+
+def test_cancelled_protection_without_confirmed_close_keeps_tracking(clean_env, mock_client, tmp_path, monkeypatch):
+    """A dead OCO whose emergency close cannot be confirmed used to be dropped
+    from tracking anyway (unprotected AND untracked). It must be retained,
+    flagged, and the durable order block engaged."""
+    monkeypatch.setenv("PANIC_STATE_FILE", str(tmp_path / "panic.json"))
+    monkeypatch.setenv("TRADING_PAUSE_STATE_FILE", str(tmp_path / "pause.json"))
+    t = {
+        "strategy": "TEST", "symbol": "BTCUSDT", "side": "BUY", "quantity": 0.5,
+        "entry_price": 50000.0, "sl_price": 49000.0, "tp_price": 52000.0, "oco_id": 999,
+        "state": 1, "signal_id": "test_mock_456", "entry_timestamp": "2026-08-15T12:00:00Z",
+    }
+    _save_active_trades([t])
+    with patch("execution.get_exchange_client", return_value=mock_client), \
+         patch("testnet_engine.protection.check_oco_status", return_value={"list_status": "CANCELED"}), \
+         patch("testnet_engine.protection.emergency_market_close", side_effect=RuntimeError("venue down")):
+        monitor_open_trades()
+
+    active = _load_active_trades()
+    assert len(active) == 1
+    assert active[0]["protection_lost"] is True
+    assert active[0]["state"] == "UNKNOWN"
+    from panic_state import is_panic_active
+    assert is_panic_active()

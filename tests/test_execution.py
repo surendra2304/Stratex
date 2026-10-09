@@ -89,9 +89,7 @@ def test_validate_trade_schema_invalid():
     with pytest.raises(StateCorruptionError, match="oco_id cannot be None"):
         execution._validate_trade_schema(trade)
 
-@patch("execution.TRADING_MODE", "TESTNET")
-@patch("execution.TESTNET_ENABLED", True)
-@patch("execution.PAPER_SAFE_MODE", False)
+@pytest.mark.usefixtures("pinned_testnet_mode")
 @patch("execution._save_active_trades")
 @patch("execution._load_active_trades", return_value=[])
 @patch("execution.log_trade")
@@ -112,8 +110,17 @@ def test_place_market_order_success(mock_get_client, mock_log, mock_load, mock_s
     
     # Mock OCO Order
     mock_client.create_oco_order.return_value = {
-        "orderListId": 456
+        "orderListId": 456,
+        "orderReports": [
+            {"type": "LIMIT_MAKER", "orderId": 1, "clientOrderId": "tp"},
+            {"type": "STOP_LOSS_LIMIT", "orderId": 2, "clientOrderId": "sl"},
+        ],
     }
+    mock_client.get_symbol_info.return_value = {"filters": [
+        {"filterType": "PRICE_FILTER", "tickSize": "0.01"},
+        {"filterType": "LOT_SIZE", "stepSize": "0.00001"},
+        {"filterType": "NOTIONAL", "minNotional": "5"},
+    ]}
     
     order = execution.place_market_order("scalper", "BUY", "BTCUSDT", 1.0, sl=49000, tp=51000)
     

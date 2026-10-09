@@ -12,6 +12,7 @@ ARCHITECTURE:
   - Filters: None (Pure multi-timeframe price action)
 """
 
+import math
 from collections import namedtuple
 
 import pandas as pd
@@ -67,19 +68,30 @@ def get_signal(df: pd.DataFrame, **kwargs) -> SignalResult:
     except Exception:
         sl_pct = _SL_PCT
         tp_pct = _TP_PCT
+    # An overlay value outside (0, 1) would put the stop on the wrong side of
+    # (or at) the entry: no signal rather than an unprotected order.
+    if not (0.0 < sl_pct < 1.0 and 0.0 < tp_pct < 1.0):
+        return _NO_SIGNAL
 
     last = df.iloc[-1]
-    close_p = float(last['close'])
-    open_p = float(last['open'])
+    try:
+        close_p = float(last['close'])
+        open_p = float(last['open'])
+    except (KeyError, TypeError, ValueError):
+        return _NO_SIGNAL
+    if not (math.isfinite(close_p) and math.isfinite(open_p) and close_p > 0 and open_p > 0):
+        return _NO_SIGNAL
 
+    # No rounding here: round(x, 4) collapsed SL/TP of sub-0.0001 assets to 0
+    # (or onto the entry). Tick-size rounding belongs to the execution layer.
     if close_p > open_p:
-        sl = round(close_p * (1.0 - sl_pct), 4)
-        tp = round(close_p * (1.0 + tp_pct), 4)
+        sl = close_p * (1.0 - sl_pct)
+        tp = close_p * (1.0 + tp_pct)
         return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     if close_p < open_p:
-        sl = round(close_p * (1.0 + sl_pct), 4)
-        tp = round(close_p * (1.0 - tp_pct), 4)
+        sl = close_p * (1.0 + sl_pct)
+        tp = close_p * (1.0 - tp_pct)
         return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     return _NO_SIGNAL

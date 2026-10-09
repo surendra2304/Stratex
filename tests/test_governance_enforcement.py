@@ -10,8 +10,11 @@ enforcement so it cannot silently regress.
 """
 
 import config
+import config_strategy
 from config_strategy import PRODUCTION_STRATEGY_REGISTRY
+from stratex_quantdinger.registry import StrategyRegistry
 from testnet_engine.service import (
+    TestnetService,
     governance_filter_strategies,
     governance_validated_assets,
 )
@@ -24,6 +27,19 @@ class TestStrategyGovernance:
             entry = PRODUCTION_STRATEGY_REGISTRY.get(strat_name)
             assert entry is not None, f"{strat_name} passed gate but is unregistered"
             assert entry["status"] == "VALIDATED", f"{strat_name} passed gate but status={entry['status']}"
+
+    def test_service_autoregistration_never_claims_unverified_active_status(self, monkeypatch, tmp_path):
+        """Config admission is not evidence for QuantDinger ACTIVE status."""
+        monkeypatch.setattr(config_strategy, "CENSUS_CANDIDATE_STRATEGY", {"p": 1}, raising=False)
+        service = TestnetService.__new__(TestnetService)
+        service.strategies = {"1h": [("census_candidate", object())]}
+        service.registry = StrategyRegistry(path=str(tmp_path / "registry.json"))
+
+        service._register_active_strategies_in_registry()
+
+        version = service.registry.get("census_candidate", "v1.0.0")
+        assert version.status == "RESEARCH"
+        assert service.registry.get_active("census_candidate") is None
 
     def test_known_friction_losers_are_blocked(self):
         """aggressor/scalper cannot overcome taker friction — must never trade."""

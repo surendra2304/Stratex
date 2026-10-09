@@ -17,12 +17,12 @@ If strategy_type is unknown or missing, the gate uses prob_win = 0.5
 (neutral assumption) and logs a warning — it does NOT silently use 1.0.
 """
 
+from numeric_safety import finite_float
 from logger import get_logger
 from research_phase9.cost_engine import CostEngine
 
 logger = get_logger("profitability_gate")
 
-_UNKNOWN_WIN_RATE_FALLBACK = 0.5   # conservative neutral; never optimistic
 
 
 class ProfitabilityGate:
@@ -101,25 +101,30 @@ class ProfitabilityGate:
             else:
                 raw_conf = getattr(signal_result, "confidence", None)
 
-            if raw_conf is None or not (0.0 <= raw_conf <= 1.0):
+            conf = finite_float(raw_conf)
+            if conf is None or not (0.0 <= conf <= 1.0):
+                # Same rule as RULE_BASED: missing evidence must never become an
+                # executable estimate. The old neutral 0.5 fallback accepted
+                # any signal whose reward:risk exceeded ~1:1 plus friction.
                 logger.warning(
                     f"[PROFIT GATE] PROBABILISTIC signal for {symbol} has invalid "
-                    f"confidence={raw_conf}. Using neutral fallback {_UNKNOWN_WIN_RATE_FALLBACK}."
+                    f"confidence={raw_conf}. Rejecting."
                 )
-                prob_win = _UNKNOWN_WIN_RATE_FALLBACK
-            else:
-                prob_win = raw_conf
+                return False, _rejection("INVALID_MODEL_CONFIDENCE",
+                                         f"confidence={raw_conf!r} is not a probability in [0, 1]",
+                                         strategy_type, "PROBABILISTIC/INVALID")
+            prob_win = conf
             prob_source = f"PROBABILISTIC/ML_CONF={prob_win:.4f}"
 
         else:
             # Unknown/missing strategy_type — refuse to invent a probability.
             logger.warning(
                 f"[PROFIT GATE] Unknown strategy_type='{strategy_type}' for {symbol} {side}. "
-                f"Using neutral fallback {_UNKNOWN_WIN_RATE_FALLBACK}. "
-                "This should NOT happen in production — fix the strategy module."
+                "Rejecting: no probability source. Fix the strategy module."
             )
-            prob_win = _UNKNOWN_WIN_RATE_FALLBACK
-            prob_source = f"UNKNOWN/FALLBACK={prob_win:.4f}"
+            return False, _rejection("UNKNOWN_STRATEGY_TYPE",
+                                     f"strategy_type={strategy_type!r} carries no win-probability evidence",
+                                     strategy_type, "UNKNOWN/NO_PROBABILITY")
 
         prob_loss = 1.0 - prob_win
 
@@ -136,11 +141,12 @@ class ProfitabilityGate:
                 "confidence": prob_win,
             }
 
-        try:
-            entry_price = float(entry_price)
-            tp_price = float(tp_price)
-            sl_price = float(sl_price)
-        except (ValueError, TypeError):
+        entry_v, tp_v, sl_v = (finite_float(entry_price), finite_float(tp_price), finite_float(sl_price))
+        if entry_v is not None and tp_v is not None and sl_v is not None and tp_v > 0 and sl_v > 0:
+            entry_price, tp_price, sl_price = entry_v, tp_v, sl_v
+        else:
+            # NaN levels used to fall through to a NaN "NEGATIVE_EXPECTED_NET_RETURN"
+            # and an infinite TP produced an infinite expected return → ACCEPTED.
             return False, {
                 "decision": "REJECTED",
                 "reason": "INVALID_PRICE_NUMERICS",
@@ -160,6 +166,8 @@ class ProfitabilityGate:
                 "confidence": prob_win,
             }
 
+        if side not in ("BUY", "LONG", "SELL", "SHORT"):
+            return False, _rejection("INVALID_SIDE", f"side={side!r}", strategy_type, prob_source, prob_win)
         if side in ("BUY", "LONG"):
             reward_pct = (tp_price - entry_price) / entry_price
             risk_pct   = (entry_price - sl_price) / entry_price
@@ -267,6 +275,20 @@ class ProfitabilityGate:
 # ------------------------------------------------------------------
 # Internal helpers
 # ------------------------------------------------------------------
+
+def _rejection(reason, details, strategy_type, prob_source, prob_win=None):
+    return {
+        "decision": "REJECTED",
+        "reason": reason,
+        "details": details,
+        "strategy_type": strategy_type,
+        "prob_source": prob_source,
+        "prob_win": prob_win,
+        "confidence": prob_win,
+        "expected_gross_return": None,
+        "expected_net_return": None,
+    }
+
 
 def _resolve_strategy_type(signal_result):
     """

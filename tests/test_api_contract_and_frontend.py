@@ -10,8 +10,11 @@ Validates:
 """
 import os
 import re
+from pathlib import Path
 
 import pytest
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 os.environ["TRADING_MODE"] = "TESTNET"
 os.environ["TESTNET_ONLY"] = "TRUE"
@@ -28,7 +31,7 @@ def client():
 
 def test_redesigned_terminal_structure_in_html():
     """Verifies that static/index.html implements the high-density real-time terminal UI."""
-    with open("static/index.html", "r", encoding="utf-8") as f:
+    with open(_REPO_ROOT / "static/index.html", "r", encoding="utf-8") as f:
         html = f.read()
 
     # Brand and Header controls
@@ -59,9 +62,9 @@ def test_redesigned_terminal_structure_in_html():
 
 def test_frontend_js_zero_duplicate_functions_and_zero_dead_ids():
     """Verifies static/app.js has zero duplicate function definitions and zero queries to non-existent HTML IDs."""
-    with open("static/index.html", "r", encoding="utf-8") as f:
+    with open(_REPO_ROOT / "static/index.html", "r", encoding="utf-8") as f:
         html = f.read()
-    with open("static/app.js", "r", encoding="utf-8") as f:
+    with open(_REPO_ROOT / "static/app.js", "r", encoding="utf-8") as f:
         js = f.read()
 
     html_ids = set(re.findall(r'id=["\']([^"\']+)["\']', html))
@@ -87,7 +90,7 @@ def test_frontend_js_zero_duplicate_functions_and_zero_dead_ids():
     # Check JS syntax with Node if available
     import subprocess
     try:
-        node_res = subprocess.run(["node", "-c", "static/app.js"], capture_output=True, text=True)
+        node_res = subprocess.run(["node", "-c", str(_REPO_ROOT / "static/app.js")], capture_output=True, text=True)
         assert node_res.returncode == 0, f"static/app.js has syntax error: {node_res.stderr}"
     except FileNotFoundError:
         pass

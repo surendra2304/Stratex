@@ -11,12 +11,19 @@ CRITICAL CONTRACT:
 - The configuration is persisted to disk atomically at experiment start.
 - The Git SHA is captured at start time for exact reproducibility.
 """
-import json
 import os
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
 
+from atomic_io import (
+    StateFileError,
+    atomic_write_json,
+    dataclass_from_mapping,
+    load_json_document,
+    load_json_state,
+    locked_path,
+)
 from logger import get_logger
 
 logger = get_logger("experiment_config")
@@ -87,19 +94,18 @@ class FrozenExperimentConfig:
         """Atomically write the frozen config to disk."""
         os.makedirs(directory, exist_ok=True)
         path = os.path.join(directory, f"{self.experiment_id}.json")
-        tmp_path = path + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(self.to_dict(), f, indent=4)
-        os.replace(tmp_path, path)
+        with locked_path(path):
+            atomic_write_json(path, self.to_dict(), indent=4, allow_nan=False)
         logger.info(f"Experiment config saved: {path}")
         return path
 
     @classmethod
     def load(cls, experiment_id: str, directory: str = "experiments") -> "FrozenExperimentConfig":
         path = os.path.join(directory, f"{experiment_id}.json")
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return cls(**data)
+        # A frozen config that cannot be read exactly must stop the caller:
+        # silently substituting defaults would break pre-registration.
+        data = load_json_document(path, what="frozen experiment config")
+        return dataclass_from_mapping(cls, data, source=path)
 
     def mark_started(self):
         """Call exactly once when the forward experiment begins collecting live data."""
@@ -122,19 +128,28 @@ class FrozenExperimentConfig:
 
 def register_experiment(config: FrozenExperimentConfig, registry_path: str = "experiments/registry.json"):
     """Register an experiment in the immutable registry."""
-    try:
-        with open(registry_path, "r") as f:
-            registry = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        registry = {"experiments": []}
+    with locked_path(registry_path):
+        _register_locked(config, registry_path)
+
+
+def _register_locked(config: FrozenExperimentConfig, registry_path: str) -> None:
+    # The registry is append-only evidence: a corrupt file is NOT replaced
+    # (that would erase every earlier registration); the caller must stop.
+    result = load_json_state(registry_path, expected_type=dict, quarantine=False)
+    if result.status == "corrupt":
+        raise StateFileError(f"experiment registry {registry_path} is corrupt: {result.error}")
+    registry = result.data if result.status == "ok" else {"experiments": []}
+    experiments = registry.setdefault("experiments", [])
+    if not isinstance(experiments, list) or not all(isinstance(e, dict) for e in experiments):
+        raise StateFileError(f"experiment registry {registry_path} has a malformed 'experiments' list")
 
     # Prevent duplicate registration
-    existing_ids = [e["experiment_id"] for e in registry["experiments"]]
+    existing_ids = [e.get("experiment_id") for e in experiments]
     if config.experiment_id in existing_ids:
         logger.warning(f"Experiment {config.experiment_id} already in registry — not re-registering.")
         return
 
-    registry["experiments"].append({
+    experiments.append({
         "experiment_id": config.experiment_id,
         "experiment_name": config.experiment_name,
         "strategy_name": config.strategy_name,
@@ -143,10 +158,8 @@ def register_experiment(config: FrozenExperimentConfig, registry_path: str = "ex
         "status": config.status,
     })
 
-    tmp = registry_path + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(registry, f, indent=4)
-    os.replace(tmp, registry_path)
+    os.makedirs(os.path.dirname(registry_path) or ".", exist_ok=True)
+    atomic_write_json(registry_path, registry, indent=4, allow_nan=False)
     logger.info(f"Experiment {config.experiment_id} registered in {registry_path}")
 
 

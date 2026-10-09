@@ -9,10 +9,10 @@ Implements:
 """
 
 import os
-import shutil
 import time
 from typing import Any
 
+from atomic_io import atomic_write_bytes, locked_path
 from logger import get_logger
 
 logger = get_logger("production_hardening")
@@ -42,14 +42,17 @@ class ReliabilityHardener:
         filename = os.path.basename(source_filepath)
         ts = int(time.time())
         backup_path = os.path.join(self.backup_dir, f"{filename}.{ts}.bak")
-        tmp_path = backup_path + ".tmp"
 
         try:
-            shutil.copy2(source_filepath, tmp_path)
-            os.replace(tmp_path, backup_path)
+            # Snapshot under the source's lock so a concurrent atomic writer is
+            # never half-copied; the backup itself is written via a unique temp
+            # file (two backups in the same second no longer share one .tmp).
+            with locked_path(source_filepath), open(source_filepath, "rb") as handle:
+                payload = handle.read()
+            atomic_write_bytes(backup_path, payload)
             logger.info(f"[HARDENING] Created atomic backup: {backup_path}")
             return backup_path
-        except Exception as e:
+        except OSError as e:
             logger.error(f"[HARDENING] Backup creation failed for {source_filepath}: {e}")
             return None
 

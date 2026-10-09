@@ -1,12 +1,16 @@
 """
-autonomy/compliance_reporting.py — Automated Multi-Horizon Regulatory & Compliance Reporter.
+autonomy/compliance_reporting.py — Automated Regulatory & Compliance Reporter.
 
-Generates:
-1. Daily Audit Report (Trades, Autonomous Decisions, Risk Breaches) generated at 00:05 UTC.
-2. Weekly Operational & Strategy Performance Report with Attribution Analysis.
-3. Monthly Comprehensive Audit Review.
-4. Quarterly Formal Audit-Ready Dossier with Cryptographic Signatures.
-5. All reports generated in JSON, Markdown, and HTML formats with a voice_summary field and 90-day retention.
+Implemented report types:
+1. Daily compliance dossier (trades, PnL, drawdown, autonomous decisions) with
+   computed — never hardcoded — regulatory invariants, written as JSON,
+   Markdown, and HTML alongside a voice_summary field.
+2. Quarterly audit package stub (generated + signed; independently audited
+   status is NOT claimed).
+
+Note: earlier documentation described weekly/monthly reports and a 90-day
+retention sweeper; those are not implemented in this module. The
+`retention_days` value is only reported inside the quarterly package metadata.
 """
 
 import datetime
@@ -33,16 +37,31 @@ class ComplianceReporter:
         trades_count: int,
         daily_pnl: float,
         max_drawdown_reached: float,
-        decisions_count: int
+        decisions_count: int,
+        live_order_evidence: bool = False,
+        best_strategy: str | None = None
     ) -> dict[str, Any]:
-        """Produces signed daily compliance certificate in JSON, Markdown, and HTML."""
+        """Produces signed daily compliance certificate in JSON, Markdown, and HTML.
+
+        Invariants are COMPUTED, never hardcoded:
+        - zero_live_order_policy_honored: False if the caller supplies evidence
+          that a live order was placed/attempted. The execution layer forbids
+          live orders by design, but the report must not assume it — callers
+          with contrary evidence must flip this flag.
+        - max_drawdown_limit_within_bounds: derived from the measured drawdown.
+        - cryptographic_signatures_verified: the dossier's own signature is
+          recomputed and compared after signing.
+        """
         now_str = datetime.datetime.utcnow().isoformat() + "Z"
         voice_summary = generate_daily_voice_summary(
             net_pnl_pct=round(daily_pnl / 50.0, 2),
-            best_strategy="strategy_supertrend",
+            best_strategy=best_strategy,
             trades_count=trades_count,
             risk_headroom_pct=max(0.0, 15.0 - max_drawdown_reached)
         )
+
+        live_policy_ok = not live_order_evidence
+        drawdown_ok = bool(max_drawdown_reached <= 15.0)
 
         dossier = {
             "report_type": "DAILY_COMPLIANCE_DOSSIER",
@@ -52,16 +71,29 @@ class ComplianceReporter:
                 "total_trades": trades_count,
                 "net_pnl_dollars": round(daily_pnl, 2),
                 "peak_drawdown_pct": round(max_drawdown_reached, 2),
-                "autonomous_decisions_executed": decisions_count
+                "autonomous_decisions_executed": decisions_count,
+                "best_strategy": best_strategy or "NONE_DETERMINED"
             },
             "regulatory_invariants": {
-                "zero_live_order_policy_honored": True,
-                "max_drawdown_limit_within_bounds": (max_drawdown_reached <= 15.0),
-                "cryptographic_signatures_verified": True
+                "zero_live_order_policy_honored": live_policy_ok,
+                "max_drawdown_limit_within_bounds": drawdown_ok,
+                "cryptographic_signatures_verified": False
             }
         }
         sig = sign_audit_record(dossier)
         dossier["signature"] = sig
+
+        # Actually verify the signature we just produced instead of asserting it.
+        unsigned: dict[str, Any] = {k: v for k, v in dossier.items() if k != "signature"}
+        unsigned_invariants = dict(unsigned["regulatory_invariants"])
+        unsigned_invariants["cryptographic_signatures_verified"] = False
+        unsigned["regulatory_invariants"] = unsigned_invariants
+        sig_ok = sign_audit_record(unsigned) == sig
+        dossier_invariants: dict[str, Any] = dossier["regulatory_invariants"]
+        dossier_invariants["cryptographic_signatures_verified"] = sig_ok
+
+        def _verdict(ok: bool) -> str:
+            return "PASS" if ok else "FAIL"
 
         date_tag = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
@@ -83,8 +115,9 @@ class ComplianceReporter:
 - **Decisions Executed:** {decisions_count}
 
 ## Invariant Verification
-- Live Order Invariant: PASS
-- Drawdown Corridor: PASS
+- Live Order Invariant: {_verdict(live_policy_ok)}
+- Drawdown Corridor: {_verdict(drawdown_ok)}
+- Signature Self-Verification: {_verdict(sig_ok)}
 - Signature: `{sig[:16]}...`
 """
         with open(os.path.join(self.reports_dir, f"compliance_daily_{date_tag}.md"), "w", encoding="utf-8") as f:
@@ -103,7 +136,9 @@ class ComplianceReporter:
             "package_id": f"AUDIT_PACKAGE_{quarter}",
             "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
             "retention_policy_days": self.retention_days,
-            "status": "AUDIT_VERIFIED"
+            # Honest label: the package has been generated and signed here,
+            # but nothing has been independently audited yet.
+            "status": "GENERATED_SIGNED"
         }
         pkg["signature"] = sign_audit_record(pkg)
         return pkg

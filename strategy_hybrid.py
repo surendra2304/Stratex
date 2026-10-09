@@ -1,7 +1,10 @@
 # strategy_hybrid.py - Hybrid EMA + ADX strategy
 # Placeholder implementation following similar pattern to existing strategies.
 
+import math
 from collections import namedtuple
+
+from numeric_safety import signal_levels_valid
 
 
 class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_type", "win_rate_prior", "rr_ratio"])):
@@ -41,12 +44,17 @@ def get_signal(df):
     adx = float(last.get("adx", last.get("adx_14", 25.0)))
     close = float(last["close"])
     atr = float(last.get("atr", last.get("atr_14", close * 0.01)))
+    no_signal = SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+    if not all(math.isfinite(v) for v in (ema20, ema50, ema200, adx, close, atr)) or close <= 0 or atr <= 0:
+        return no_signal  # undefined indicators or zero volatility: no protective levels exist
     if ema20 > ema50 and adx > 25 and close > ema200:
         sl = close - atr * 1.5
         tp = close + atr * 3.0
-        return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+        if signal_levels_valid("BUY", close, sl, tp):
+            return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
     if ema20 < ema50 and adx > 25 and close < ema200:
         sl = close + atr * 1.5
         tp = close - atr * 3.0
-        return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
-    return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+        if signal_levels_valid("SELL", close, sl, tp):
+            return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+    return no_signal

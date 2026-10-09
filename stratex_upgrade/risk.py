@@ -6,6 +6,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal
 
+from numeric_safety import decimal_or_none, finite_float
+
 from .models import InstrumentRules, Position, RiskCheck, RiskDecision, Side
 
 
@@ -76,6 +78,14 @@ class RiskManager:
 
     def update_equity(self, equity: Decimal) -> None:
         with self._lock:
+            value = decimal_or_none(equity)
+            if value is None:
+                # Decimal NaN raised InvalidOperation on comparison and an
+                # infinite equity made the drawdown inf/inf; both now halt.
+                self.state.trading_halted = True
+                self.state.halt_reason = "NON_FINITE_EQUITY"
+                return
+            equity = value
             if equity <= 0:
                 self.state.trading_halted = True
                 self.state.halt_reason = "NON_POSITIVE_EQUITY"
@@ -88,6 +98,12 @@ class RiskManager:
 
     def record_realized(self, pnl: Decimal) -> None:
         with self._lock:
+            value = decimal_or_none(pnl)
+            if value is None:
+                self.state.trading_halted = True
+                self.state.halt_reason = "NON_FINITE_PNL"
+                return
+            pnl = value
             self.state.daily_realized_pnl += pnl
             if pnl < 0:
                 self.state.consecutive_losses += 1
@@ -114,8 +130,10 @@ class RiskManager:
 
     def reserve_notional(self, notional: Decimal) -> bool:
         with self._lock:
-            if notional <= 0:
+            value = decimal_or_none(notional)
+            if value is None or value <= 0:
                 return False
+            notional = value
             limit = self.state.equity * self.limits.max_total_exposure
             if self._reserved_notional + notional > limit:
                 return False
@@ -124,7 +142,10 @@ class RiskManager:
 
     def release_notional(self, notional: Decimal) -> None:
         with self._lock:
-            self._reserved_notional = max(Decimal(0), self._reserved_notional - max(notional, Decimal(0)))
+            value = decimal_or_none(notional)
+            if value is None:
+                return  # never release an unreadable amount
+            self._reserved_notional = max(Decimal(0), self._reserved_notional - max(value, Decimal(0)))
 
     def reserved_notional(self) -> Decimal:
         with self._lock:
@@ -138,12 +159,19 @@ class RiskManager:
         confidence: float | None = None,
     ) -> Decimal:
         with self._lock:
-            if entry_price <= 0 or stop_price <= 0 or entry_price == stop_price:
+            entry = decimal_or_none(entry_price)
+            stop = decimal_or_none(stop_price)
+            if entry is None or stop is None or entry <= 0 or stop <= 0 or entry == stop:
                 return Decimal(0)
+            entry_price, stop_price = entry, stop
             risk_fraction = self.limits.max_risk_per_trade
             if confidence is not None:
-                confidence = max(0.0, min(1.0, confidence))
-                risk_fraction *= Decimal(str(0.5 + 0.5 * confidence))
+                # min(1.0, nan) is 1.0, so a NaN confidence used to select the
+                # *largest* risk fraction; unreadable confidence now scales to
+                # the most conservative 0.5x.
+                conf = finite_float(confidence)
+                conf = 0.0 if conf is None else max(0.0, min(1.0, conf))
+                risk_fraction *= Decimal(str(0.5 + 0.5 * conf))
             risk_amount = self.state.equity * risk_fraction
             per_unit = abs(entry_price - stop_price)
             qty = risk_amount / per_unit

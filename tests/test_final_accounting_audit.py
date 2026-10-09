@@ -7,6 +7,10 @@ import pytest
 from dashboard import app
 from testnet_engine.service import TestnetService
 
+# Constructs TestnetService, which refuses to start outside TESTNET/FUTURES;
+# pin the mode instead of relying on test order.
+pytestmark = pytest.mark.usefixtures("pinned_testnet_mode")
+
 
 @pytest.fixture
 def client():

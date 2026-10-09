@@ -18,6 +18,7 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
+from atomic_io import publish_new_file
 from research_phase9.cost_engine import CostEngine
 
 
@@ -316,11 +317,13 @@ def run_lab(csv_path: Path, manifest_path: Path, output_dir: Path, strategies: l
         "results": [evaluate_candidate(candles, strategy) for strategy in strategies],
     }
     target = output_dir / "paper_lab_report.json"
-    if target.exists():
-        raise FileExistsError(f"refusing to overwrite existing paper lab report: {target}")
-    temporary = target.with_name(target.name + ".tmp")
-    temporary.write_text(json.dumps(report, indent=2, allow_nan=False), encoding="utf-8")
-    temporary.replace(target)
+    payload = json.dumps(report, indent=2, allow_nan=False)
+    try:
+        # Exclusive publish: two concurrent runs can no longer both pass an
+        # exists() check and overwrite each other's report.
+        publish_new_file(target, payload)
+    except FileExistsError:
+        raise FileExistsError(f"refusing to overwrite existing paper lab report: {target}") from None
     return target
 
 

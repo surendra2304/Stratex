@@ -4,6 +4,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# These tests drive the TESTNET execution path; pin the mode instead of relying
+# on an earlier test having reloaded config with exchange credentials.
+pytestmark = pytest.mark.usefixtures("pinned_testnet_mode")
+
 
 @pytest.fixture
 def clean_reconciliation_env():

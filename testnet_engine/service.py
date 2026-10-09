@@ -11,15 +11,18 @@ import uuid
 import pandas as pd
 from binance.exceptions import BinanceAPIException
 
+from atomic_io import append_jsonl, atomic_write_json, finite_or_none, load_json_state, locked_path, read_jsonl
 import config
 from config import ACTIVE_STRATEGIES, TRADING_MODE
 from config_strategy import ADX_EMA_STRATEGY_V2, PRODUCTION_STRATEGY_REGISTRY
 from data import add_indicators
 from execution import _load_active_trades, get_exchange_client, place_market_order
 from logger import get_logger
+from numeric_safety import signal_levels_valid
 from paper_engine.exceptions import ZeroFillError
 from research_phase9.cost_engine import CostEngine
 from testnet_engine.discovery import SymbolDiscoveryService
+from trading_pause import is_trading_paused
 from testnet_engine.market_scanner import MarketScanner
 from testnet_engine.profitability_gate import ProfitabilityGate
 from testnet_engine.risk_gate import RiskGate
@@ -169,36 +172,67 @@ class TestnetService:
             
             # Calculate total reconstructable PnL from the Ledger
             total_reconstructable_pnl = 0.0
-            if os.path.exists(TESTNET_LEDGER_FILE):
-                try:
-                    with open(TESTNET_LEDGER_FILE, "r") as f:
-                        for line in f:
-                            if not line.strip(): continue
-                            try:
-                                record = json.loads(line)
-                                total_reconstructable_pnl += float(record.get("net_pnl", 0.0))
-                            except:
-                                pass
-                except:
-                    pass
+            ledger_read = read_jsonl(TESTNET_LEDGER_FILE)
+            non_finite_pnl = 0
+            for record in ledger_read.records:
+                pnl_value = finite_or_none(record.get("net_pnl", 0.0))
+                if pnl_value is None:
+                    non_finite_pnl += 1
+                    continue
+                total_reconstructable_pnl += pnl_value
+            if ledger_read.skipped or non_finite_pnl:
+                logger.error(
+                    f"[SERVICE] Ledger {TESTNET_LEDGER_FILE}: {ledger_read.skipped} unreadable line(s), "
+                    f"{non_finite_pnl} record(s) with non-finite net_pnl excluded from reconstructable PnL"
+                )
 
             # Load or initialize our authoritative initial deposit
             self.initial_deposit = actual_binance_balance
-            if os.path.exists(TESTNET_PORTFOLIO_FILE):
-                try:
-                    with open(TESTNET_PORTFOLIO_FILE, "r") as f:
-                        state = json.load(f)
-                        if "initial_deposit" in state:
-                            self.initial_deposit = state["initial_deposit"]
-                except:
-                    pass
+            state_read = load_json_state(TESTNET_PORTFOLIO_FILE, expected_type=dict)
+            if state_read.status == "corrupt":
+                logger.critical(
+                    f"[SERVICE] Portfolio state {TESTNET_PORTFOLIO_FILE} is corrupt ({state_read.error}); "
+                    f"quarantined to {state_read.quarantined_to}. Using the exchange balance as initial deposit."
+                )
+            elif state_read.ok and "initial_deposit" in state_read.data:
+                saved_deposit = finite_or_none(state_read.data.get("initial_deposit"))
+                if saved_deposit is not None and saved_deposit > 0:
+                    self.initial_deposit = saved_deposit
+                else:
+                    logger.error(
+                        f"[SERVICE] Ignoring invalid persisted initial_deposit "
+                        f"{state_read.data.get('initial_deposit')!r}; using the exchange balance"
+                    )
                     
             self.service_start_time = datetime.datetime.utcnow().isoformat() + "Z"
             self.starting_equity = actual_binance_balance
             self.last_equity_snapshot = 0.0
             logger.info(f"[SERVICE] Actual Binance Balance: {actual_binance_balance} | Local Initial Deposit: {self.initial_deposit}")
         except Exception as e:
-            raise RuntimeError(f"CRITICAL ERROR: Failed to fetch Testnet account balance. Valid Testnet credentials are REQUIRED. Reason: {e}")
+            # Classify the failure so operators don't chase credential problems
+            # that are actually network problems (and vice versa). Fail-fast is
+            # intentional: the engine must never run without a verifiable
+            # account state.
+            try:
+                from requests.exceptions import RequestException as _RequestException
+            except Exception:  # requests is a declared dependency; guard anyway
+                _RequestException = ()
+            _is_auth_err = (
+                isinstance(e, BinanceAPIException)
+                and (getattr(e, "status_code", None) in (401, 403) or "2015" in str(e))
+            )
+            if _is_auth_err:
+                raise RuntimeError(
+                    "CRITICAL ERROR: Testnet AUTHENTICATION failed — verify API_KEY/SECRET_KEY "
+                    f"are the TESTNET keys issued by testnet.binance.vision. Reason: {e}"
+                )
+            if isinstance(e, (_RequestException, ConnectionError, TimeoutError, OSError)) and not _is_auth_err:
+                raise RuntimeError(
+                    "CRITICAL ERROR: Testnet exchange is UNREACHABLE (network/DNS/TLS) — the "
+                    "account could not be verified, so the engine refuses to start. This is a "
+                    f"connectivity problem, not (necessarily) a credential problem. Reason: {e}"
+                )
+            raise RuntimeError(f"CRITICAL ERROR: Failed to fetch Testnet account balance. Reason: {e}")
 
         # Initialize core components
         if TRADING_MODE == "FUTURES":
@@ -247,7 +281,9 @@ class TestnetService:
             self.runtime_heartbeat = self.runtime_lease.acquire()
             self.runtime_supervisor.record_heartbeat(self.runtime_heartbeat)
 
-            # Auto-register active strategies into StrategyRegistry (status=ACTIVE)
+            # Auto-register configured candidates only as RESEARCH. The
+            # QuantDinger lifecycle requires reproducible OOS evidence before
+            # OOS_VALIDATED/ACTIVE; config admission alone is not that evidence.
             self._register_active_strategies_in_registry()
 
             # Start background runtime lease heartbeat renewal thread (every 20 seconds)
@@ -406,20 +442,20 @@ class TestnetService:
             "HOLD_SIGNALS": 0
         })
 
-        if os.path.exists(TESTNET_PORTFOLIO_FILE):
-            try:
-                with open(TESTNET_PORTFOLIO_FILE, "r") as f:
-                    state = json.load(f)
-                    if "scanner_stats" in state:
-                        saved_stats = state["scanner_stats"]
-                        for k in self.stats:
-                            if k in saved_stats and isinstance(saved_stats[k], (int, float)):
-                                self.stats[k] = saved_stats[k]
-            except Exception as e:
-                logger.error(f"[SERVICE] Failed to restore persistent stats: {e}")
+        stats_read = load_json_state(TESTNET_PORTFOLIO_FILE, expected_type=dict)
+        if stats_read.status == "corrupt":
+            logger.error(f"[SERVICE] Failed to restore persistent stats: {stats_read.error} "
+                         f"(quarantined to {stats_read.quarantined_to})")
+        elif stats_read.ok:
+            saved_stats = stats_read.data.get("scanner_stats")
+            if isinstance(saved_stats, dict):
+                for k in self.stats:
+                    value = saved_stats.get(k)
+                    if not isinstance(value, bool) and finite_or_none(value) is not None and value >= 0:
+                        self.stats[k] = value
 
     def _register_active_strategies_in_registry(self):
-        """Auto-registers active strategies with source hashing and parameter snapshots into StrategyRegistry."""
+        """Records config-admitted strategies as RESEARCH without claiming validation."""
         if not getattr(self, "registry", None):
             return
         import inspect
@@ -442,7 +478,7 @@ class TestnetService:
                             version="v1.0.0",
                             source=src,
                             parameters=params,
-                            status="ACTIVE",
+                            status="RESEARCH",
                         )
                 except Exception as ex:
                     logger.debug(f"[REGISTRY_AUTO] {strat_name}: {ex}")
@@ -830,32 +866,40 @@ class TestnetService:
             },
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         }
+        def convert_keys(obj):
+            if isinstance(obj, dict):
+                return {str(k) if isinstance(k, tuple) else k: convert_keys(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_keys(i) for i in obj]
+            return obj
+
         try:
-            tmp_file = TESTNET_PORTFOLIO_FILE + ".tmp"
-            with open(tmp_file, "w", encoding="utf-8") as f:
-                def convert_keys(obj):
-                    if isinstance(obj, dict):
-                        return {str(k) if isinstance(k, tuple) else k: convert_keys(v) for k, v in obj.items()}
-                    elif isinstance(obj, list):
-                        return [convert_keys(i) for i in obj]
-                    return obj
-                json.dump(convert_keys(state), f, indent=2)
-            os.replace(tmp_file, TESTNET_PORTFOLIO_FILE)
-            
-            # Record periodic equity history snapshot (at most once every 60s)
-            now_ts = time.time()
-            if now_ts - getattr(self, 'last_equity_snapshot', 0) >= 60:
-                self.last_equity_snapshot = now_ts
-                hist_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
+            # Unique temp file + cross-process lock; NaN/inf are refused so a
+            # numeric fault can never be persisted as the restart state (the
+            # last good state stays on disk instead).
+            with locked_path(TESTNET_PORTFOLIO_FILE):
+                atomic_write_json(TESTNET_PORTFOLIO_FILE, convert_keys(state), indent=2, allow_nan=False, default=str)
+        except (OSError, TypeError, ValueError) as e:
+            logger.error(f"[SERVICE] Failed to save state atomically: {e}")
+
+        # Record periodic equity history snapshot (at most once every 60s)
+        now_ts = time.time()
+        if now_ts - getattr(self, 'last_equity_snapshot', 0) >= 60:
+            self.last_equity_snapshot = now_ts
+            hist_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
+            equity = finite_or_none(self.current_equity)
+            if equity is None:
+                logger.error(f"[SERVICE] Equity snapshot skipped: current equity {self.current_equity!r} is not finite")
+            else:
                 snap = {
                     "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-                    "equity": self.current_equity,
-                    "balance": self.current_equity
+                    "equity": equity,
+                    "balance": equity
                 }
-                with open(hist_file, "a") as hf:
-                    hf.write(json.dumps(snap) + "\n")
-        except Exception as e:
-            logger.error(f"[SERVICE] Failed to save state atomically: {e}")
+                try:
+                    append_jsonl(hist_file, snap)
+                except (OSError, TypeError, ValueError) as e:
+                    logger.error(f"[SERVICE] Failed to append equity history: {e}")
 
     def on_candle_closed(self, symbol, tf, df, data_health_status="OK"):
         """Callback invoked by MarketScanner when a new candle closes."""
@@ -873,22 +917,29 @@ class TestnetService:
                 logger.warning(f"[STRATEGY_SKIPPED] reason=INSUFFICIENT_MARKET_DATA symbol={symbol} tf={tf} rows={len(df) if df is not None else 0}")
                 return
 
-            # Check candle age freshness against timeframe
+            # Check candle age freshness against timeframe. Fail closed: the old
+            # check compared naive utcnow() with tz-aware stamps, raised, and the
+            # bare except silently skipped the gate; future stamps passed too.
+            tf_seconds = _TF_SECONDS.get(tf, 3600)
             try:
-                last_ts = df["timestamp"].iloc[-1]
-                if isinstance(last_ts, pd.Timestamp):
-                    age_sec = (datetime.datetime.utcnow() - last_ts.to_pydatetime()).total_seconds()
-                else:
-                    age_sec = 0
-                max_allowed_age = _TF_SECONDS.get(tf, 3600) * 3
-                if age_sec > max_allowed_age and age_sec > 0:
-                    logger.warning(f"[STRATEGY_SKIPPED] reason=STALE_MARKET_DATA symbol={symbol} tf={tf} age={age_sec:.1f}s")
-                    return
-            except Exception:
-                pass
+                last_ts = pd.Timestamp(df["timestamp"].iloc[-1])
+                if pd.isna(last_ts):
+                    raise ValueError("NaT")
+                last_ts = last_ts.tz_localize("UTC") if last_ts.tzinfo is None else last_ts.tz_convert("UTC")
+            except (KeyError, TypeError, ValueError) as ts_err:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=BAD_CANDLE_TIMESTAMP symbol={symbol} tf={tf} error={ts_err}")
+                return
+            age_sec = (pd.Timestamp.now(tz="UTC") - last_ts).total_seconds()
+            if age_sec > tf_seconds * 3:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=STALE_MARKET_DATA symbol={symbol} tf={tf} age={age_sec:.1f}s")
+                return
+            if age_sec < -tf_seconds:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=FUTURE_CANDLE_TIMESTAMP symbol={symbol} tf={tf} age={age_sec:.1f}s")
+                return
 
-            df = add_indicators(df)
-            if df.empty:
+            df = add_indicators(df, strict_tail=True)
+            if df is None or df.empty:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=INDICATORS_UNAVAILABLE symbol={symbol} tf={tf}")
                 return
 
             current_price = df['close'].iloc[-1]
@@ -921,6 +972,16 @@ class TestnetService:
                         side = getattr(signal_result, 'side', signal_result[0] if signal_result else None)
                         sl   = getattr(signal_result, 'sl',   signal_result[1] if signal_result else None)
                         tp   = getattr(signal_result, 'tp',   signal_result[2] if signal_result else None)
+                        if side and not signal_levels_valid(side, current_price, sl, tp):
+                            # Degenerate candles (zero ATR, inf highs, sub-tick
+                            # prices) can yield NaN/zero/inverted levels; such a
+                            # signal must never reach the gates or the venue.
+                            logger.warning(
+                                f"[STRATEGY_SIGNAL_REJECTED] reason=INVALID_SIGNAL_LEVELS strategy={strat_name} "
+                                f"symbol={symbol} tf={tf} side={side} sl={sl!r} tp={tp!r} close={current_price}"
+                            )
+                            self.stats["INVALID_SIGNAL_LEVELS"] = self.stats.get("INVALID_SIGNAL_LEVELS", 0) + 1
+                            side, sl, tp = None, None, None
 
                         last_row = df.iloc[-1]
                         prev_row = df.iloc[-2] if len(df) >= 2 else last_row
@@ -1204,6 +1265,29 @@ class TestnetService:
         except Exception as outer_err:
             logger.error(f"[ON_CANDLE_CLOSED_ERROR] Uncaught error in on_candle_closed for {symbol} ({tf}): {outer_err}", exc_info=True)
 
+    def _reject_paused_candidates(self, candidates):
+        """Reject a batch of candidates when the durable trading-pause flag is
+        active (trading_pause.is_trading_paused). Returns True when paused and
+        every candidate was rejected; False when trading may proceed.
+
+        This is the engine-side enforcement of POST /api/v1/control/pause: the
+        control API writes a durable file flag because the dashboard and the
+        engine run in separate processes.
+        """
+        if not is_trading_paused():
+            return False
+        for c in candidates:
+            self.stats["TRADING_PAUSED_SKIPPED"] = self.stats.get("TRADING_PAUSED_SKIPPED", 0) + 1
+            self.log_opportunity(
+                c.get("signal_id"), c.get("symbol"), c.get("side"),
+                {"reason": "TRADING_PAUSED"}, "REJECTED", "TRADING_PAUSED",
+            )
+        logger.warning(
+            f"[TRADING_PAUSE] Durable pause flag active — blocked {len(candidates)} new entr"
+            f"{'y' if len(candidates) == 1 else 'ies'} (open positions keep SL/TP protection)"
+        )
+        return True
+
     def execution_loop(self):
         """Stage 6: Multi-Asset Opportunity Ranking and Execution"""
         while True:
@@ -1222,7 +1306,13 @@ class TestnetService:
                     
             if not candidates:
                 continue
-                
+
+            # Durable cross-process pause (POST /api/v1/control/pause).
+            # Blocks NEW entries before ranking; open positions keep SL/TP
+            # protection and the panic switch stays independent.
+            if self._reject_paused_candidates(candidates):
+                continue
+
             try:
                 # Opportunity Ranking:
                 # Deterministic Score Formula: score = round((expected_net_return * confidence) / max(0.001, risk_pct), 6)
@@ -1391,7 +1481,7 @@ class TestnetService:
                         # Sizing
                         filters = self.symbol_filters.get(symbol, {})
 
-                        qty = self.risk_gate.calculate_position_size(self.current_equity, current_price, sl, filters)
+                        qty = self.risk_gate.calculate_position_size(self.current_equity, current_price, sl, filters, side=side)
                         
                         if qty < 0.00000001:
                             self.stats["RISK_REJECTED"] += 1
@@ -1483,6 +1573,14 @@ class TestnetService:
                             self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
                             self.log_opportunity(signal_id, symbol, side, {"reason": "MANUAL_PANIC_SWITCH"}, "REJECTED", "MANUAL_PANIC_SWITCH")
                             logger.warning("[PANIC] Manual kill-switch active — order submission blocked (OCO protection unaffected)")
+                            continue
+
+                        # Belt-and-braces: re-check the durable pause flag at the
+                        # submission boundary (it can flip mid-batch).
+                        if is_trading_paused():
+                            self.stats["TRADING_PAUSED_SKIPPED"] = self.stats.get("TRADING_PAUSED_SKIPPED", 0) + 1
+                            self.log_opportunity(signal_id, symbol, side, {"reason": "TRADING_PAUSED"}, "REJECTED", "TRADING_PAUSED")
+                            logger.warning("[TRADING_PAUSE] Durable pause flag active — new entry blocked (open positions still protected)")
                             continue
 
                         # Pre-Trade Margin Check in Service Loop
@@ -1963,10 +2061,9 @@ class TestnetService:
             "futuris_mult": futuris_mult
         }
         try:
-            with open(TESTNET_OPPORTUNITY_LOG, "a", encoding="utf-8") as f:
-                f.write(json.dumps(log_entry) + "\n")
-        except:
-            pass
+            append_jsonl(TESTNET_OPPORTUNITY_LOG, log_entry)
+        except (OSError, TypeError, ValueError) as e:
+            logger.warning(f"[SERVICE] Opportunity log append failed: {e}")
 
         try:
             if hasattr(self, "telemetry") and self.telemetry:
@@ -1993,24 +2090,12 @@ class TestnetService:
         Appends to slippage_log.json (capped). Pure observability.
         """
         try:
-            logged = []
-            done_ids = set()
-            if os.path.exists(self.SLIPPAGE_LOG_FILE):
-                try:
-                    with open(self.SLIPPAGE_LOG_FILE, "r", encoding="utf-8") as f:
-                        logged = json.load(f)
-                    done_ids = {r.get("trade_id") for r in logged}
-                except Exception:
-                    logged = []
-            recent = []
-            if os.path.exists(TESTNET_LEDGER_FILE):
-                with open(TESTNET_LEDGER_FILE, "r", encoding="utf-8") as f:
-                    for line in f:
-                        if line.strip():
-                            try:
-                                recent.append(json.loads(line))
-                            except Exception:
-                                pass
+            # A corrupt slippage dataset is quarantined (kept), never silently
+            # overwritten with a fresh list.
+            loaded = load_json_state(self.SLIPPAGE_LOG_FILE, expected_type=list, default_factory=list)
+            logged = [r for r in loaded.data if isinstance(r, dict)]
+            done_ids = {r.get("trade_id") for r in logged}
+            recent = read_jsonl(TESTNET_LEDGER_FILE).records
             todo = [r for r in recent[-50:] if r.get("trade_id") not in done_ids][-max_records:]
             if not todo:
                 return logged
@@ -2068,10 +2153,8 @@ class TestnetService:
                     f"{signal_close} -> {slippage_bps} bps (data-gathering only)"
                 )
             logged = logged[-self.SLIPPAGE_LOG_MAX:]
-            tmp = self.SLIPPAGE_LOG_FILE + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(logged, f, indent=2)
-            os.replace(tmp, self.SLIPPAGE_LOG_FILE)
+            with locked_path(self.SLIPPAGE_LOG_FILE):
+                atomic_write_json(self.SLIPPAGE_LOG_FILE, logged, indent=2, default=str)
             return logged
         except Exception as e:
             logger.error(f"[SLIPPAGE] tracking failed: {e}")
@@ -2086,14 +2169,14 @@ class TestnetService:
     PANIC_STATE_FILE = os.getenv("PANIC_STATE_FILE", "panic_state.json")
 
     def panic_active(self):
-        """True if the manual kill-switch flag file is active."""
-        try:
-            if not os.path.exists(self.PANIC_STATE_FILE):
-                return False
-            with open(self.PANIC_STATE_FILE, "r", encoding="utf-8") as f:
-                return bool(json.load(f).get("active", False))
-        except Exception:
-            return False
+        """True if the manual kill-switch flag is active (either schema key).
+
+        An existing but unreadable flag file fails CLOSED: a half-written or
+        corrupted panic request must block orders, not be ignored.
+        """
+        from panic_state import is_panic_active
+
+        return is_panic_active(self.PANIC_STATE_FILE)
 
     def position_monitor_loop(self):
         """Continuously reconciles active positions against Binance."""
@@ -2377,27 +2460,22 @@ class TestnetService:
 
             # 1. Append missing trades to the ledger (do not overwrite)
             ledger_file = os.getenv("TESTNET_LEDGER_FILE", TESTNET_LEDGER_FILE)
-            existing_exit_ids = set()
-            if os.path.exists(ledger_file):
-                with open(ledger_file, "r") as f:
-                    for line in f:
-                        if not line.strip(): continue
-                        try:
-                            record = json.loads(line)
-                            if record.get("exit_order_id"):
-                                existing_exit_ids.add(str(record["exit_order_id"]))
-                            elif record.get("exit_client_id"):
-                                existing_exit_ids.add(str(record["exit_client_id"]))
-                        except:
-                            pass
-            
-            # Atomic append
+
+            # Dedupe read and append happen under one thread + inter-process
+            # lock, so two writers can no longer both miss an exit id and
+            # append the same closed trade twice.
             from testnet_engine.protection import LEDGER_WRITE_LOCK
             with LEDGER_WRITE_LOCK:
-                with open(ledger_file, "a") as f:
+                with locked_path(ledger_file):
+                    existing_exit_ids = set()
+                    for record in read_jsonl(ledger_file).records:
+                        if record.get("exit_order_id"):
+                            existing_exit_ids.add(str(record["exit_order_id"]))
+                        elif record.get("exit_client_id"):
+                            existing_exit_ids.add(str(record["exit_client_id"]))
                     for ct in completed_trades:
                         if str(ct["exit_order_id"]) not in existing_exit_ids:
-                            f.write(json.dumps(ct) + "\n")
+                            append_jsonl(ledger_file, ct, fsync=True)
                             existing_exit_ids.add(str(ct["exit_order_id"]))
                             if hasattr(self, "protection_manager") and self.protection_manager:
                                 try:
@@ -2788,22 +2866,15 @@ class TestnetService:
                 "current_equity": getattr(self, 'current_equity', 0.0),
                 "open_positions": len(getattr(self, 'active_positions', {}))
             }
-            tmp = TESTNET_HEARTBEAT_FILE + ".tmp"
-            hb_dir = os.path.dirname(TESTNET_HEARTBEAT_FILE)
-            if hb_dir:
-                os.makedirs(hb_dir, exist_ok=True)
-            with open(tmp, "w") as f:
-                json.dump(hb, f, indent=2)
-            os.replace(tmp, TESTNET_HEARTBEAT_FILE)
-            
+            # Unique temp files: the testnet service and the paper runner both
+            # write heartbeat.json and used to share one "heartbeat.json.tmp".
+            atomic_write_json(TESTNET_HEARTBEAT_FILE, hb, indent=2, default=str, fsync=False)
+
             # Also update legacy heartbeat.json for backwards compatibility
             try:
-                tmp_legacy = "heartbeat.json.tmp"
-                with open(tmp_legacy, "w") as lf:
-                    json.dump(hb, lf, indent=2)
-                os.replace(tmp_legacy, "heartbeat.json")
-            except:
-                pass
+                atomic_write_json("heartbeat.json", hb, indent=2, default=str, fsync=False)
+            except (OSError, TypeError, ValueError) as e:
+                logger.debug(f"[SERVICE] Legacy heartbeat.json not updated: {e}")
         except Exception as e:
             logger.error(f"[SERVICE] Error writing heartbeat: {e}")
 
@@ -2842,9 +2913,8 @@ class TestnetService:
                     "strategy_metrics": self.stats.get("strategy_metrics", {}),
                     "timeframe_metrics": self.stats.get("timeframe_metrics", {}),
                 }
-                # Direct append (no atomic replace needed for append-only JSONL)
-                with open(progress_file, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(report) + "\n")
+                # Append-only JSONL: one complete line per report, torn tails sealed.
+                append_jsonl(progress_file, report)
                 logger.info(f"[PROGRESS] Total:{report['total_signals']} BUY:{report['buy_signals']} SELL:{report['sell_signals']} Equity:{report['current_equity']:.2f}")
             except Exception as e:
                 logger.error(f"[SERVICE] Progress report loop error: {e}")

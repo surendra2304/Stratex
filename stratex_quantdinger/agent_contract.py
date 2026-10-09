@@ -18,30 +18,36 @@ class ResearchAgentGateway:
         self.registry = registry or StrategyRegistry()
         self.runner = runner or ResearchJobRunner(store=self.store, registry=self.registry)
 
-    def submit_backtest(self, job_id: str, strategy_id: str, parameters: dict[str, Any] | None = None) -> dict[str, Any]:
+    def submit_backtest(self, job_id: str, strategy_id: str, parameters: dict[str, Any] | None = None,
+                        *, exist_ok: bool = True) -> dict[str, Any]:
         """Submits a durable backtest job."""
         job = self.store.create(
             job_id=job_id,
             job_type="BACKTEST",
-            metadata={"strategy_id": strategy_id, "parameters": parameters or {}}
+            metadata={"strategy_id": strategy_id, "parameters": parameters or {}},
+            exist_ok=exist_ok,
         )
         return job.__dict__
 
-    def submit_optimization(self, job_id: str, strategy_id: str, n_trials: int = 35) -> dict[str, Any]:
+    def submit_optimization(self, job_id: str, strategy_id: str, n_trials: int = 35,
+                            *, exist_ok: bool = True) -> dict[str, Any]:
         """Submits a durable hyperparameter optimization job."""
         job = self.store.create(
             job_id=job_id,
             job_type="OPTIMIZATION",
-            metadata={"strategy_id": strategy_id, "n_trials": n_trials}
+            metadata={"strategy_id": strategy_id, "n_trials": n_trials},
+            exist_ok=exist_ok,
         )
         return job.__dict__
 
-    def submit_walk_forward(self, job_id: str, strategy_id: str, windows: int = 4) -> dict[str, Any]:
+    def submit_walk_forward(self, job_id: str, strategy_id: str, windows: int = 4,
+                            *, exist_ok: bool = True) -> dict[str, Any]:
         """Submits a durable walk-forward validation job."""
         job = self.store.create(
             job_id=job_id,
             job_type="WALK_FORWARD",
-            metadata={"strategy_id": strategy_id, "windows": windows}
+            metadata={"strategy_id": strategy_id, "windows": windows},
+            exist_ok=exist_ok,
         )
         return job.__dict__
 

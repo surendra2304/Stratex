@@ -15,6 +15,7 @@ from typing import Any
 
 from deployment.capital_levels import CapitalLevelSpec, get_level_spec
 from logger import get_logger
+from numeric_safety import finite_float, non_negative_float, positive_float
 
 logger = get_logger("live_risk_enforcer")
 
@@ -26,11 +27,14 @@ class LiveRiskEnforcer:
     """
 
     def __init__(self, level: int = 1, current_equity: float = 1000.0):
+        equity = positive_float(current_equity)
+        if equity is None:
+            raise ValueError(f"current_equity must be a finite number > 0, got {current_equity!r}")
         self.level = level
         self.spec: CapitalLevelSpec = get_level_spec(level)
-        self.current_equity = current_equity
-        self.peak_equity = current_equity
-        self.daily_starting_equity = current_equity
+        self.current_equity = equity
+        self.peak_equity = equity
+        self.daily_starting_equity = equity
         self.daily_realized_loss = 0.0
 
         self.daily_halt_active = False
@@ -40,6 +44,14 @@ class LiveRiskEnforcer:
 
     def update_live_equity(self, equity: float) -> None:
         with self._lock:
+            value = finite_float(equity)
+            if value is None:
+                # NaN used to compute a NaN drawdown that never breached; inf
+                # pinned the peak at infinity. Unreadable equity trips the breaker.
+                self.circuit_breaker_active = True
+                logger.critical(f"[LIVE_RISK] 🚨 Unreadable live equity {equity!r}: circuit breaker engaged")
+                return
+            equity = value
             self.current_equity = equity
             self.peak_equity = max(self.peak_equity, equity)
 
@@ -56,6 +68,14 @@ class LiveRiskEnforcer:
 
     def record_realized_trade_pnl(self, net_pnl: float) -> None:
         with self._lock:
+            pnl = finite_float(net_pnl)
+            if pnl is None:
+                # An unbookable loss means the daily-loss limit is unknowable.
+                self.daily_halt_active = True
+                self.daily_halt_expiry = time.time() + 86400.0
+                logger.critical(f"[LIVE_RISK] 🚨 Unreadable trade PnL {net_pnl!r}: halting live trading for 24 hours")
+                return
+            net_pnl = pnl
             if net_pnl < 0:
                 self.daily_realized_loss += abs(net_pnl)
                 daily_loss_pct = (self.daily_realized_loss / self.daily_starting_equity) * 100.0 if self.daily_starting_equity > 0 else 0.0
@@ -89,6 +109,17 @@ class LiveRiskEnforcer:
                     return False, "REJECTED: 24-hour daily loss lockout active."
                 else:
                     self.daily_halt_active = False
+
+            order_notional = positive_float(notional)
+            if order_notional is None:
+                return False, f"REJECTED: Order notional {notional!r} must be a finite number > 0."
+            if not isinstance(current_open_positions, list) or not all(isinstance(p, dict) for p in current_open_positions):
+                return False, "REJECTED: Open positions state is malformed."
+            vol = non_negative_float(realized_vol_24h)
+            if vol is None:
+                return False, f"REJECTED: 24h realized volatility is unreadable ({realized_vol_24h!r})."
+            notional = order_notional
+            realized_vol_24h = vol
 
             # 2. Maximum Position Size Limit for Level
             max_allowed_notional = self.current_equity * self.spec.max_position_size_pct

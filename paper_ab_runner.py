@@ -236,7 +236,10 @@ class PaperABEngine:
             if notional < 10.0 or portfolio.cash < notional:
                 return None
 
-            if len(portfolio.positions) >= self.cfg.max_simultaneous_positions:
+            # Only OPEN positions count toward the concurrency cap; closed trades
+            # stay in the dict for audit and must not starve the arm forever.
+            open_count = sum(1 for p in portfolio.positions.values() if p.get("status") == "OPEN")
+            if open_count >= self.cfg.max_simultaneous_positions:
                 return None
 
             slip = price * self.cost_model.entry_slip
@@ -265,7 +268,10 @@ class PaperABEngine:
                 "spread_cost": spread_cost
             }
             portfolio.positions[pos_id] = pos_data
-            portfolio.add_realized_pnl(-entry_fee - spread_cost, ev_id)
+            # Distinct event id: reusing the margin event id made the idempotency
+            # guard silently drop the entry-cost booking (fees never hit equity).
+            # add_realized_pnl() also persists the new position.
+            portfolio.add_realized_pnl(-entry_fee - spread_cost, f"{ev_id}:entry_cost")
             return pos_id
         except Exception as e:
             logger.warning(f"[AB_RUNNER] Order processing error: {e}")
@@ -333,10 +339,9 @@ class PaperABEngine:
                 exit_fee = (eff_exit * qty) * self.cost_model.exit_fee
                 net_pnl = gross_pnl - exit_fee
 
-                # Settle in portfolio
-                ev_close = str(uuid.uuid4())
-                portfolio.release_margin(pos["notional"], ev_close)
-                portfolio.add_realized_pnl(net_pnl, ev_close)
+                # Mark the position closed *before* settlement so every persisted
+                # snapshot that shows margin released also shows the trade closed
+                # (a restart can then never close — and release — it twice).
                 pos["status"] = "CLOSED"
                 pos["exit_price"] = eff_exit
                 pos["exit_time"] = now
@@ -344,6 +349,13 @@ class PaperABEngine:
                 pos["gross_pnl"] = gross_pnl
                 pos["exit_fee"] = exit_fee
                 pos["net_pnl"] = net_pnl
+
+                # Settle in portfolio with distinct idempotency keys: one shared id
+                # made add_realized_pnl() a no-op, so exit PnL never reached equity
+                # and the per-arm drawdown guard could never trip.
+                ev_close = str(uuid.uuid4())
+                portfolio.release_margin(pos["notional"], f"{ev_close}:margin")
+                portfolio.add_realized_pnl(net_pnl, f"{ev_close}:pnl")
 
                 # Append to trade ledger
                 ledger_entry = {

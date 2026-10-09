@@ -118,14 +118,26 @@ def test_live_dashboard_endpoints(control_auth):
     assert 'voice_summary' in data
 
     # Emergency endpoints are control-scope protected. An authenticated caller
-    # reaches the enforcer and gets FLATTEN_ALL; an anonymous caller must be
-    # refused rather than silently allowed to flatten a real portfolio.
+    # must get a DURABLE effect (these used to flip flags on a throw-away
+    # LiveRiskEnforcer that no engine read); an anonymous caller is refused.
+    import execution
+    import trading_pause
+    from panic_state import is_kill_switch_locked, is_panic_active
+
     post_halt = client.post('/api/live/emergency/halt', headers=control_auth)
     assert post_halt.status_code == 200
+    assert post_halt.get_json()['steps'] == {'trading_pause': 'WRITTEN'}
+    assert trading_pause.is_trading_paused() is True
 
     post_flat = client.post('/api/live/emergency/flatten', headers=control_auth)
     assert post_flat.status_code == 200
-    assert post_flat.get_json()['enforcer_action']['action'] == 'FLATTEN_ALL'
+    assert post_flat.get_json()['steps'] == {
+        'panic_flag': 'WRITTEN', 'trading_pause': 'WRITTEN', 'kill_switch_lock': 'WRITTEN'}
+    assert 'flattened' not in post_flat.get_json()['message'].lower().replace('no closing orders', '')
+    assert is_panic_active() and is_kill_switch_locked()
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError, match="Kill-Switch is active"):
+        execution._check_panic_and_kill_switch()
 
     anon_halt = client.post('/api/live/emergency/halt')
     assert anon_halt.status_code in (401, 403, 503), (

@@ -11,6 +11,7 @@ except ImportError:
     RealThreadedWebsocketManager = None
 
 from logger import get_logger
+from market_data_quality import UNUSABLE, interval_to_timedelta, sanitize_ohlcv, validate_kline_values
 
 logger = get_logger("market_scanner")
 
@@ -74,6 +75,10 @@ class MarketScanner:
         self.last_market_update = {} # track by (symbol, timeframe)
         self.last_candle_close = {} # track actual candle closes
         self.data_health_status = {sym: "UNKNOWN" for sym in symbols}
+        # Last CandleQualityReport (as dict) per (symbol, timeframe), and
+        # counters of rejected stream/poll payloads, for observability.
+        self.data_quality = {}
+        self.rejected_payloads = {}
         self.callbacks = []
         
         self._cache_lock = threading.Lock()
@@ -149,18 +154,27 @@ class MarketScanner:
                 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
             ])
             # Deduplicate in case pages overlap, oldest -> newest
-            df = df.drop_duplicates(subset=['timestamp']).sort_values('timestamp').reset_index(drop=True)
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            df['close_time'] = pd.to_datetime(df['close_time'], unit='ms')
+            df['timestamp'] = pd.to_datetime(pd.to_numeric(df['timestamp'], errors='coerce'), unit='ms')
+            df['close_time'] = pd.to_datetime(pd.to_numeric(df['close_time'], errors='coerce'), unit='ms')
             for col in ['open', 'high', 'low', 'close', 'volume', 'taker_buy_base_asset_volume']:
-                df[col] = df[col].astype(float)
-            if df is not None and not df.empty:
-                # Drop unclosed candle (Binance always returns the active incomplete candle at the end)
-                # A candle is only closed if its close_time is in the past.
-                now_utc = datetime.datetime.utcnow()
-                if 'close_time' in df.columns:
-                    df = df[df['close_time'] <= now_utc]
-                
+                df[col] = pd.to_numeric(df[col], errors='coerce').astype(float)
+            # Drop unclosed candle (Binance always returns the active incomplete candle at the end)
+            # A candle is only closed if its close_time is in the past.
+            now_utc = datetime.datetime.utcnow()
+            df = df[df['close_time'] <= now_utc]
+            # Pages overlap and production warm-seed bars are mixed in: dedupe,
+            # order, and drop malformed rows (never repair them).
+            df, quality = sanitize_ohlcv(df, interval=tf)
+            self.data_quality[(symbol, tf)] = quality.as_dict()
+            if quality.status == UNUSABLE:
+                logger.error(f"[SCANNER] Historical candles for {symbol} ({tf}) unusable: {quality.summary()}")
+                return
+            if quality.reasons:
+                logger.warning(f"[SCANNER] Historical candles for {symbol} ({tf}): {quality.summary()}")
+            df['taker_buy_base_asset_volume'] = df['taker_buy_base_asset_volume'].where(
+                df['taker_buy_base_asset_volume'].between(0, df['volume']), other=df['volume'] / 2.0
+            )
+
             df['buy_vol'] = df['taker_buy_base_asset_volume']
             df['sell_vol'] = df['volume'] - df['buy_vol']
             df['vol_delta'] = df['buy_vol'] - df['sell_vol']
@@ -226,16 +240,32 @@ class MarketScanner:
                 'close_time', 'quote_asset_volume', 'number_of_trades',
                 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
             ])
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            df['close_time'] = pd.to_datetime(df['close_time'], unit='ms')
+            df['timestamp'] = pd.to_datetime(pd.to_numeric(df['timestamp'], errors='coerce'), unit='ms')
+            df['close_time'] = pd.to_datetime(pd.to_numeric(df['close_time'], errors='coerce'), unit='ms')
             for col in ['open', 'high', 'low', 'close', 'volume', 'taker_buy_base_asset_volume']:
-                df[col] = df[col].astype(float)
+                df[col] = pd.to_numeric(df[col], errors='coerce').astype(float)
 
             # Drop unclosed candle
             now_utc = datetime.datetime.utcnow()
             closed_df = df[df['close_time'] <= now_utc].copy()
             if closed_df.empty:
                 return
+
+            # Validate before anything is cached or evaluated: malformed rows
+            # are dropped, and a poll whose newest closed bar is invalid or
+            # whose feed is stale must not trigger strategies.
+            closed_df, quality = sanitize_ohlcv(closed_df, interval=tf, now=pd.Timestamp(now_utc))
+            self.data_quality[(symbol, tf)] = quality.as_dict()
+            if quality.status == UNUSABLE:
+                self.data_health_status[symbol] = "DATA_INVALID"
+                self.rejected_payloads[(symbol, tf)] = self.rejected_payloads.get((symbol, tf), 0) + 1
+                logger.warning(f"[SCANNER] Rejected poll for {symbol} ({tf}): {quality.summary()}")
+                return
+            if quality.reasons:
+                logger.warning(f"[SCANNER] Poll for {symbol} ({tf}): {quality.summary()}")
+            closed_df['taker_buy_base_asset_volume'] = closed_df['taker_buy_base_asset_volume'].where(
+                closed_df['taker_buy_base_asset_volume'].between(0, closed_df['volume']), other=closed_df['volume'] / 2.0
+            )
 
             closed_df['buy_vol'] = closed_df['taker_buy_base_asset_volume']
             closed_df['sell_vol'] = closed_df['volume'] - closed_df['buy_vol']
@@ -258,6 +288,16 @@ class MarketScanner:
                     prev_ts = prev_df['timestamp'].iloc[-1]
                     if latest_ts > prev_ts:
                         is_new_candle = True
+                    elif latest_ts < prev_ts:
+                        # A lagging source (replica, production fallback) returned
+                        # an older window. Replacing the cache would regress the
+                        # watermark and replay an already-evaluated candle as
+                        # "new" on the next poll.
+                        self.rejected_payloads[(symbol, tf)] = self.rejected_payloads.get((symbol, tf), 0) + 1
+                        logger.warning(
+                            f"[SCANNER] Ignoring stale poll for {symbol} ({tf}): newest {latest_ts} < cached {prev_ts}"
+                        )
+                        return
 
                 self.candle_cache[(symbol, tf)] = clean_df
                 self.last_market_update[(symbol, tf)] = now_utc
@@ -273,6 +313,7 @@ class MarketScanner:
 
             if is_new_candle and cached_copy is not None:
                 logger.info(f"[REST_CANDLE_CLOSED] {symbol} {tf} | Closed: {latest_candle['close']} | Vol: {latest_candle['volume']:.2f} | TS: {latest_ts}")
+                cached_copy.attrs["data_quality"] = quality.as_dict()
                 for cb in self.callbacks:
                     try:
                         cb(symbol, tf, cached_copy, "OK")
@@ -344,49 +385,77 @@ class MarketScanner:
                 
             tf = kline.get('i', self.timeframes[0] if self.timeframes else "1m")
             is_closed = kline.get('x', True)
-            
+
+            # Missing or malformed fields used to default to 0.0 / "now",
+            # fabricating a zero-priced candle stamped with the current time.
+            invalid = validate_kline_values(kline.get('o'), kline.get('h'), kline.get('l'), kline.get('c'), kline.get('v'))
+            open_ms, close_ms = kline.get('t'), kline.get('T')
+            step = interval_to_timedelta(tf)
+            if close_ms is None and isinstance(open_ms, int) and not isinstance(open_ms, bool) and step is not None:
+                # Binance defines T = t + interval - 1 ms; derive it rather than stamping "now".
+                close_ms = open_ms + int(step.total_seconds() * 1000) - 1
+            if invalid is None and (not isinstance(open_ms, (int, float)) or isinstance(open_ms, bool) or open_ms <= 0
+                                    or not isinstance(close_ms, (int, float)) or isinstance(close_ms, bool) or close_ms < open_ms):
+                invalid = "missing or inconsistent kline open/close time"
+            if invalid is not None:
+                self.rejected_payloads[(symbol, tf)] = self.rejected_payloads.get((symbol, tf), 0) + 1
+                logger.warning(f"[SCANNER] Rejected kline for {symbol} ({tf}): {invalid}")
+                return
+
             now_utc = datetime.datetime.utcnow()
             self.last_market_update[(symbol, tf)] = now_utc
             self.data_health_status[symbol] = "OK"
             if not hasattr(self, 'tick_counts'):
                 self.tick_counts = {}
             self.tick_counts[(symbol, tf)] = self.tick_counts.get((symbol, tf), 0) + 1
-            
+
             if not is_closed:
                 return
-                
-            self.last_candle_close[(symbol, tf)] = now_utc
-                
-            vol = float(kline.get('v', 0))
-            taker_vol = float(kline.get('V', vol / 2.0))
+
+            vol = float(kline['v'])
+            taker_raw = kline.get('V')
+            try:
+                taker_vol = float(taker_raw) if taker_raw is not None else vol / 2.0
+            except (TypeError, ValueError):
+                taker_vol = vol / 2.0
+            if not (0.0 <= taker_vol <= vol):  # also catches NaN
+                taker_vol = vol / 2.0
             buy_vol = taker_vol
             sell_vol = max(0.0, vol - buy_vol)
             vol_delta = buy_vol - sell_vol
 
-            candle_ts = pd.to_datetime(kline.get('t', int(time.time() * 1000)), unit='ms')
+            candle_ts = pd.to_datetime(int(open_ms), unit='ms')
             new_row = {
                 'timestamp': candle_ts,
-                'close_time': pd.to_datetime(kline.get('T', int(time.time() * 1000)), unit='ms'),
-                'open': float(kline.get('o', 0.0)),
-                'high': float(kline.get('h', 0.0)),
-                'low': float(kline.get('l', 0.0)),
-                'close': float(kline.get('c', 0.0)),
+                'close_time': pd.to_datetime(int(close_ms), unit='ms'),
+                'open': float(kline['o']),
+                'high': float(kline['h']),
+                'low': float(kline['l']),
+                'close': float(kline['c']),
                 'volume': vol,
                 'vol_delta': vol_delta,
                 'buy_vol': buy_vol,
                 'sell_vol': sell_vol
             }
-            
+
             cached_copy = None
             with self._cache_lock:
                 if (symbol, tf) in self.candle_cache:
                     df = self.candle_cache[(symbol, tf)]
-                    
+
                     if 'timestamp' in df.columns and len(df) > 0:
                         existing_ts = df['timestamp'].iloc[-1]
                         if existing_ts == candle_ts:
                             return
-                    
+                        if candle_ts < existing_ts:
+                            # Late/out-of-order close: inserting it would rewrite
+                            # history and re-fire strategies on an old bar.
+                            self.rejected_payloads[(symbol, tf)] = self.rejected_payloads.get((symbol, tf), 0) + 1
+                            logger.warning(
+                                f"[SCANNER] Ignoring out-of-order kline for {symbol} ({tf}): {candle_ts} < {existing_ts}"
+                            )
+                            return
+
                     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                     df = df.sort_values('timestamp', ascending=True).reset_index(drop=True)
                     if len(df) > 250:
@@ -401,6 +470,7 @@ class MarketScanner:
                 else:
                     self.candle_cache[(symbol, tf)] = pd.DataFrame([new_row])
                 
+                self.last_candle_close[(symbol, tf)] = now_utc
                 cached_copy = self.candle_cache.get((symbol, tf), self.candle_cache.get(symbol))
                 if cached_copy is not None:
                     cached_copy = cached_copy.copy()

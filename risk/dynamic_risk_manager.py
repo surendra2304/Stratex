@@ -8,9 +8,18 @@ Features:
 4. Risk Metrics & Stress Testing: Historical/Parametric VaR (95%/99%), CVaR (Expected Shortfall), and simulated market shock scenarios.
 """
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
+
+from numeric_safety import finite_float, finite_values, positive_float
+
+# Every sizing model returns 0.0 (no trade) for invalid input. Previously NaN
+# inputs passed the ``<= 0`` guards (NaN compares False) and propagated:
+# fixed-fractional/volatility sizes came back NaN, an infinite equity produced
+# an infinite size, a NaN win rate was clamped by ``min(0.99, nan)`` to 0.99 —
+# the *largest* Kelly bet — and a NaN drawdown kept 100% sizing.
 
 
 @dataclass
@@ -23,6 +32,14 @@ class RiskBudget:
     max_asset_concentration_pct: float = 0.25   # Max 25% notional in single asset
     max_sector_concentration_pct: float = 0.50  # Max 50% notional in single sector
     max_leverage: float = 1.0
+
+    def __post_init__(self) -> None:
+        for name, value in vars(self).items():
+            number = finite_float(value)
+            if number is None or number < 0:
+                raise ValueError(f"RiskBudget.{name}={value!r} must be a finite number >= 0")
+            if name.endswith("_pct") and number > 1.0:
+                raise ValueError(f"RiskBudget.{name}={value!r} is a fraction and must be <= 1.0")
 
 
 class DynamicRiskManager:
@@ -45,19 +62,25 @@ class DynamicRiskManager:
         Fixed fractional sizing: Risk = Equity * fraction_pct.
         Position Qty = Risk / abs(entry_price - stop_loss_price).
         """
-        if equity <= 0 or entry_price <= 0 or stop_loss_price <= 0:
+        equity_v = positive_float(equity)
+        entry = positive_float(entry_price)
+        stop = positive_float(stop_loss_price)
+        if equity_v is None or entry is None or stop is None:
             return 0.0
-        risk_pct = min(fraction_pct or self.budget.max_risk_per_trade_pct, self.budget.max_risk_per_trade_pct)
-        risk_capital = equity * risk_pct
-        risk_per_unit = abs(entry_price - stop_loss_price)
+        if fraction_pct is None:
+            risk_pct = self.budget.max_risk_per_trade_pct
+        else:
+            requested = finite_float(fraction_pct)
+            if requested is None or requested <= 0:
+                return 0.0  # an explicit 0%/invalid risk request means no trade
+            risk_pct = min(requested, self.budget.max_risk_per_trade_pct)
+        risk_per_unit = abs(entry - stop)
         if risk_per_unit <= 0:
             return 0.0
-        qty = risk_capital / risk_per_unit
+        qty = (equity_v * risk_pct) / risk_per_unit
         # Cap notional by asset concentration
-        max_notional = equity * self.budget.max_asset_concentration_pct
-        if qty * entry_price > max_notional:
-            qty = max_notional / entry_price
-        return float(round(qty, 6))
+        qty = min(qty, (equity_v * self.budget.max_asset_concentration_pct) / entry)
+        return _finite_size(qty)
 
     def calculate_volatility_size(
         self,
@@ -70,15 +93,16 @@ class DynamicRiskManager:
         """
         Volatility-based sizing targeting specific portfolio volatility contribution.
         """
-        if equity <= 0 or entry_price <= 0 or atr <= 0:
+        equity_v = positive_float(equity)
+        entry = positive_float(entry_price)
+        atr_v = positive_float(atr)
+        multiplier = positive_float(atr_multiplier)
+        target = positive_float(target_vol_pct)
+        if equity_v is None or entry is None or atr_v is None or multiplier is None or target is None:
             return 0.0
-        dollar_risk = equity * target_vol_pct
-        unit_risk = atr * atr_multiplier
-        qty = dollar_risk / unit_risk
-        max_notional = equity * self.budget.max_asset_concentration_pct
-        if qty * entry_price > max_notional:
-            qty = max_notional / entry_price
-        return float(round(qty, 6))
+        qty = (equity_v * target) / (atr_v * multiplier)
+        qty = min(qty, (equity_v * self.budget.max_asset_concentration_pct) / entry)
+        return _finite_size(qty)
 
     def calculate_kelly_size(
         self,
@@ -92,19 +116,26 @@ class DynamicRiskManager:
         Kelly Criterion Sizing: f* = (p * (b + 1) - 1) / b
         where p = win rate (0..1), b = win/loss payoff ratio (approximated from profit factor).
         """
-        if equity <= 0 or entry_price <= 0 or win_rate <= 0 or profit_factor <= 0:
+        equity_v = positive_float(equity)
+        entry = positive_float(entry_price)
+        p_raw = positive_float(win_rate)
+        b_raw = positive_float(profit_factor)
+        scale = positive_float(fraction)
+        if equity_v is None or entry is None or p_raw is None or b_raw is None or scale is None:
             return 0.0
-        p = max(0.01, min(0.99, win_rate))
-        b = max(0.1, profit_factor)
+        if p_raw > 1.0:
+            # e.g. 58 (percent) passed where a fraction was expected: refusing
+            # beats clamping to the maximum-confidence bet.
+            return 0.0
+        p = max(0.01, min(0.99, p_raw))
+        b = max(0.1, b_raw)
         kelly_fraction = (p * (b + 1.0) - 1.0) / b
-        if kelly_fraction <= 0:
+        if not kelly_fraction > 0:
             return 0.0  # Negative edge -> No trade
-        
-        # Scale by conservative factor (Half Kelly) and budget ceiling
-        scaled_fraction = min(kelly_fraction * fraction, self.budget.max_risk_per_trade_pct)
-        notional = equity * scaled_fraction
-        qty = notional / entry_price
-        return float(round(qty, 6))
+
+        # Scale by conservative factor (Half Kelly, never above full Kelly) and budget ceiling
+        scaled_fraction = min(kelly_fraction * min(scale, 1.0), self.budget.max_risk_per_trade_pct)
+        return _finite_size((equity_v * scaled_fraction) / entry)
 
     def calculate_risk_parity_weights(self, volatilities: dict[str, float]) -> dict[str, float]:
         """
@@ -113,11 +144,13 @@ class DynamicRiskManager:
         """
         if not volatilities:
             return {}
-        inv_vols = {k: 1.0 / max(v, 1e-6) for k, v in volatilities.items()}
+        invalid = sorted(str(k) for k, v in volatilities.items() if positive_float(v) is None)
+        if invalid:
+            # A zero/negative/NaN volatility is a data error; clamping it to
+            # 1e-6 handed that asset ~100% of the weight.
+            raise ValueError(f"volatilities must be finite and > 0; invalid for {invalid}")
+        inv_vols = {k: 1.0 / float(v) for k, v in volatilities.items()}
         total_inv_vol = sum(inv_vols.values())
-        if total_inv_vol <= 0:
-            equal_w = 1.0 / len(volatilities)
-            return {k: equal_w for k in volatilities}
         return {k: round(v / total_inv_vol, 4) for k, v in inv_vols.items()}
 
     def compute_var_cvar(
@@ -130,11 +163,18 @@ class DynamicRiskManager:
         Computes Historical Value at Risk (VaR) and Conditional VaR (Expected Shortfall).
         Returns: (var_pct, var_dollar, cvar_pct, cvar_dollar)
         """
-        if not returns or len(returns) < 10:
-            return 0.0, 0.0, 0.0, 0.0
-        
-        arr = np.array(returns)
-        alpha = (1.0 - confidence_level) * 100.0
+        confidence = finite_float(confidence_level)
+        if confidence is None or not 0.5 <= confidence < 1.0:
+            raise ValueError(f"confidence_level must be within [0.5, 1.0), got {confidence_level!r}")
+        if positive_float(portfolio_value) is None:
+            raise ValueError(f"portfolio_value must be finite and > 0, got {portfolio_value!r}")
+        clean = finite_values(returns or [])
+        if len(clean) < 10:
+            # Not enough measured returns: report "unknown", not "zero risk".
+            return math.nan, math.nan, math.nan, math.nan
+
+        arr = np.array(clean)
+        alpha = (1.0 - confidence) * 100.0
         var_pct = abs(float(np.percentile(arr, alpha)))
         tail_losses = arr[arr <= -var_pct]
         cvar_pct = abs(float(np.mean(tail_losses))) if len(tail_losses) > 0 else var_pct
@@ -153,8 +193,11 @@ class DynamicRiskManager:
             "HIGH_VOL_SPIKE_5PCT": -0.05,
             "CORRELATION_BREAKDOWN_8PCT": -0.08
         }
+        notional = finite_float(portfolio_notional)
+        if notional is None:
+            raise ValueError(f"portfolio_notional must be a finite number, got {portfolio_notional!r}")
         return {
-            k: round(portfolio_notional * shock, 2) for k, shock in scenarios.items()
+            k: round(notional * shock, 2) for k, shock in scenarios.items()
         }
 
     def adjust_size_for_drawdown(
@@ -169,7 +212,11 @@ class DynamicRiskManager:
         - 10% - 15% DD: 25% sizing
         - >= 15% DD: 0% sizing (Trading halted by circuit breaker)
         """
-        dd = current_drawdown_pct
+        size = finite_float(base_size)
+        dd = finite_float(current_drawdown_pct)
+        if size is None or size <= 0 or dd is None:
+            # Unknown drawdown or size: halt sizing rather than trade at 100%.
+            return 0.0, 0.0
         if dd >= 15.0:
             multiplier = 0.0
         elif dd >= 10.0:
@@ -181,3 +228,10 @@ class DynamicRiskManager:
         
         adjusted_size = base_size * multiplier
         return round(adjusted_size, 6), round(multiplier, 2)
+
+
+def _finite_size(qty: float) -> float:
+    """Round a computed size; anything non-finite or negative becomes 0.0."""
+    if not math.isfinite(qty) or qty <= 0:
+        return 0.0
+    return float(round(qty, 6))

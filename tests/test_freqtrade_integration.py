@@ -212,17 +212,32 @@ def test_bridge_delegates_to_backtest_engine(monkeypatch):
 # 6. SECURITY & SAFETY INVARIANT TESTS
 # ==============================================================================
 
-def test_research_mode_blocks_execution_policy():
+def test_research_mode_blocks_execution_policy(monkeypatch):
+    import config
+    import execution
     from execution import ExecutionPolicy
-    os.environ["RESEARCH_MODE"] = "1"
+    # The pinned truth table (tests/test_safety_gates.py) evaluates the
+    # PAPER_SAFE_MODE gate before RESEARCH_MODE; clear both bindings so the
+    # RESEARCH-specific rejection reason is observable. monkeypatch.setenv
+    # guarantees RESEARCH_MODE is restored for later tests.
+    monkeypatch.setenv("RESEARCH_MODE", "1")
+    monkeypatch.setattr(execution, "TRADING_MODE", "TESTNET", raising=False)
+    monkeypatch.setattr(config, "TRADING_MODE", "TESTNET", raising=False)
+    monkeypatch.setattr(execution, "PAPER_SAFE_MODE", False, raising=False)
+    monkeypatch.setattr(config, "PAPER_SAFE_MODE", False, raising=False)
     allowed, reason = ExecutionPolicy.can_place_order()
     assert allowed is False
     assert reason == "RESEARCH_BLOCKED"
 
 
 def test_live_trading_permanently_forbidden(monkeypatch):
+    import config
     import execution
     monkeypatch.setattr(execution, "TRADING_MODE", "LIVE")
+    # See test_research_mode_blocks_execution_policy: the safety truth table
+    # resolves PAPER_SAFE_MODE before the LIVE branch.
+    monkeypatch.setattr(execution, "PAPER_SAFE_MODE", False, raising=False)
+    monkeypatch.setattr(config, "PAPER_SAFE_MODE", False, raising=False)
     os.environ.pop("RESEARCH_MODE", None)
     allowed, reason = execution.ExecutionPolicy.can_place_order()
     assert allowed is False

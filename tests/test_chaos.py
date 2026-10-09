@@ -1,5 +1,6 @@
 import datetime
 import importlib
+import json
 import os
 from unittest.mock import MagicMock, patch
 
@@ -120,8 +121,16 @@ def test_atomic_save_state():
         
         service = svc.TestnetService()
         
-        with patch("testnet_engine.service.os.replace") as mock_replace:
+        from testnet_engine.service import TESTNET_PORTFOLIO_FILE
+        with patch("testnet_engine.service.atomic_write_json") as mock_write:
             service._save_state()
-            # Assert os.replace was called with the tmp file
-            from testnet_engine.service import TESTNET_PORTFOLIO_FILE
-            mock_replace.assert_called_once_with(TESTNET_PORTFOLIO_FILE + ".tmp", TESTNET_PORTFOLIO_FILE)
+            # State goes through the atomic writer (unique temp file + replace)
+            mock_write.assert_called_once()
+            assert mock_write.call_args.args[0] == TESTNET_PORTFOLIO_FILE
+            assert mock_write.call_args.kwargs.get("allow_nan") is False
+
+        # Real write: valid strict JSON, no shared ".tmp" sibling left behind
+        service._save_state()
+        with open(TESTNET_PORTFOLIO_FILE, encoding="utf-8") as handle:
+            assert isinstance(json.load(handle), dict)
+        assert not os.path.exists(TESTNET_PORTFOLIO_FILE + ".tmp")

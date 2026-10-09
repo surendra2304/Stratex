@@ -36,8 +36,11 @@ def add_features(df):
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss.replace(0, np.nan)  # NaN where loss=0 (no downward movement)
-    df['rsi_14'] = np.where(loss == 0, 100.0, 100 - (100 / (1 + rs)))
-    df['rsi_14'] = pd.Series(df['rsi_14'], index=df.index)
+    rsi = np.where(loss == 0, 100.0, 100 - (100 / (1 + rs)))
+    # No movement at all (flat or frozen feed) is neutral, not "overbought":
+    # RSI=100 there would hand mean-reversion strategies a fake short signal.
+    rsi = np.where((loss == 0) & (gain == 0), 50.0, rsi)
+    df['rsi_14'] = pd.Series(rsi, index=df.index).where(loss.notna() & gain.notna())
     
     ema_12 = df['close'].ewm(span=12, adjust=False).mean()
     ema_26 = df['close'].ewm(span=26, adjust=False).mean()
@@ -60,8 +63,13 @@ def add_features(df):
     df['bb_lower'] = df['bb_middle'] - (df['bb_std'] * 2)
     df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle']
     
-    # Position inside Bollinger Bands (0 = at lower band, 1 = at upper band)
-    df['bb_pos'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'] + 1e-9)
+    # Position inside Bollinger Bands (0 = at lower band, 1 = at upper band).
+    # Zero-width bands (20 identical closes) collapse onto the price itself:
+    # that is the neutral middle (0.5), not "at the lower band" — the old
+    # epsilon turned a dead/frozen market into a mean-reversion buy signal.
+    band_width = df['bb_upper'] - df['bb_lower']
+    bb_pos = (df['close'] - df['bb_lower']) / band_width.where(band_width > 0)
+    df['bb_pos'] = bb_pos.where(~((band_width == 0) & df['bb_std'].notna()), 0.5).astype(float)
     
     # --- Supertrend Features ---
     # Requires ATR which is already calculated as 'atr_14'
@@ -108,5 +116,9 @@ def add_features(df):
 
     df['delta_sma_20'] = df['vol_delta'].rolling(window=20).mean().fillna(0.0)
     df['rel_vol_delta'] = df['vol_delta'] / (df['vol_sma_20'].fillna(df['volume'].expanding().mean()).add(1e-9))
-        
+
+    # Divisions by a zero open/close/EMA (malformed input) must not leak
+    # +/-inf into strategies; undefined is NaN.
+    numeric = df.select_dtypes(include="number").columns
+    df[numeric] = df[numeric].replace([np.inf, -np.inf], np.nan)
     return df
