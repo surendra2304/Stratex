@@ -34,9 +34,9 @@ Work happens only on branch `arena/bb27a2eb-stratex`; every commit must pass the
        `atomic_io`; fix crashes/data loss + tests.
 9. [x] Stress pass — malformed market data (NaN, duplicates, out-of-order, high<low, zero
        volume, short history) through indicator/strategy/signal path; fix + tests.
-10. [~] Census extension — GET query-parameter fuzz (wrong types, traversal, huge limits) on all
+10. [x] Census extension — GET query-parameter fuzz (wrong types, traversal, huge limits) on all
         167 GET routes; fix every 500 / unbounded response.
-11. [ ] Type-safety pass — run mypy with every error code enabled + `check_untyped_defs`
+11. [~] Type-safety pass — run mypy with every error code enabled + `check_untyped_defs`
         (602 findings at start: 171 attr-defined, 131 operator, 71 index, ...); fix real defects,
         tighten `mypy.ini` so they stay fixed.
 12. [ ] Silent-failure pass — audit `try/except: pass` / blind `except Exception` (ruff S110/S112/
@@ -58,8 +58,8 @@ Work happens only on branch `arena/bb27a2eb-stratex`; every commit must pass the
         pushed, this file at 100%, ≥30,000 changed lines since 5c66171 (user requirement).
 
 ## Current step
-Item 10 — census GET query-param fuzz.
-After item 9 (see `git log`): 108 files, +10,462/−2,195 → 12,657 − 1,376 = **11,281 counted**.
+Item 11 — mypy with every error code + check_untyped_defs.
+After item 10: 114 files, +11,073/−2,262 → 13,335 − 1,376 = **11,959 counted**.
 
 Line counter (user requirement, 2026-10-09: "only stop after genuinely modifying 30,000 lines"):
 `git diff --shortstat 5c66171 HEAD` insertions+deletions, minus the 1,376 lines that were already
@@ -125,8 +125,16 @@ uncommitted when the requirement was given.
   judge staleness because research callers use it too.
 - 2026-10-09: A perfectly flat window reads RSI 50 and bb_pos 0.5 (neutral) instead of 100 / 0;
   a streamed kline without `T` gets `t + interval − 1 ms` (Binance's definition), never "now".
+- 2026-10-09: Query strings: syntax errors (text, NaN/inf, fractions for integers, >256 chars,
+  NUL) → 400; out-of-range numbers are clamped into [min, max] so existing UIs asking for
+  `limit=5000` get a bounded page instead of an error. Chart series above 2,000 points (max
+  10,000 via `max_points`) are thinned by uniform stride over real snapshots — first/newest kept,
+  disclosed via `X-Series-*` headers or `source_count`/`downsampled` fields.
 
 ## Notes
+- Item 10: census 13,172 probes / 0 failures (201 rules); `--stress-records 120000`: 166 GET probes /
+  0 failures after bounding 6 endpoints. `/api/v1/status` takes ~25 s at 120k rows per ledger
+  (O(file) per request) — performance, not correctness; noted for item 17.
 - Item 7 (8701a13): 1,606 passed / 6 skipped on a clean worktree; ruff + mypy clean. Every test
   file also passes when run standalone (isolation sweep over 160 files found 7 order-dependent
   files; fixed via the `pinned_testnet_mode` fixture and a per-test idempotency store).
