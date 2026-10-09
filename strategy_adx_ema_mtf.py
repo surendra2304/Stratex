@@ -70,6 +70,9 @@ def compute_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return dx.ewm(alpha=1 / period, adjust=False).mean()
 
 
+_FEATURE_COLUMNS = ("ema_20", "ema_50", "ema_200", "atr", "adx")
+
+
 def add_features(df: pd.DataFrame) -> pd.DataFrame:
     """Adds EMA(20), EMA(50), EMA(200), ATR(14), and ADX(14) causal indicators."""
     df = df.copy()
@@ -89,7 +92,7 @@ def get_htf_trend_bias(df_1h: pd.DataFrame) -> str:
     if df_1h is None or len(df_1h) < 50:
         return "NEUTRAL"
 
-    if 'ema_200' not in df_1h.columns or 'adx' not in df_1h.columns:
+    if any(col not in df_1h.columns for col in _FEATURE_COLUMNS):
         df_1h = add_features(df_1h)
 
     last = df_1h.iloc[-1]
@@ -125,8 +128,10 @@ def get_signal(df_5m: pd.DataFrame, df_1h: pd.DataFrame | None = None) -> Signal
     if df_5m is None or len(df_5m) < 50:
         return _NO_SIGNAL
 
-    # Ensure 5m features
-    if 'atr' not in df_5m.columns or 'ema_50' not in df_5m.columns:
+    # Ensure 5m features. Checking only 'atr'/'ema_50' let frames from
+    # data.add_indicators (which have both, but no 'ema_20'/'adx') through,
+    # and the signal path crashed with KeyError.
+    if any(col not in df_5m.columns for col in _FEATURE_COLUMNS):
         df_5m = add_features(df_5m)
 
     last_5m = df_5m.iloc[-1]

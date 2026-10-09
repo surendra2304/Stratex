@@ -100,6 +100,7 @@ from data_client import MarketDataClient
 from features import add_features
 from atomic_io import atomic_write_json, load_json_state, locked_path, read_jsonl
 from logger import get_logger
+from market_data_quality import UNUSABLE, sanitize_ohlcv
 from paper_engine.experiment_config import (
     FrozenExperimentConfig,
     register_experiment,
@@ -328,10 +329,19 @@ def fetch_candles(symbol: str, interval: str, limit: int = 250) -> pd.DataFrame 
             "taker_buy_base", "taker_buy_quote", "ignore"
         ])
         for col in ["open", "high", "low", "close", "volume"]:
-            df[col] = pd.to_numeric(df[col])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-        df = df.sort_values("timestamp").reset_index(drop=True)
-        return filter_closed_candles(df)
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        df["timestamp"] = pd.to_datetime(pd.to_numeric(df["timestamp"], errors="coerce"), unit="ms")
+        df = filter_closed_candles(df)
+        # NaN/zero prices, high<low, negative volume and conflicting duplicate
+        # bars are dropped (never repaired); an invalid newest bar means the
+        # forward sample would silently evaluate an older bar — refuse instead.
+        df, quality = sanitize_ohlcv(df, interval=interval)
+        if quality.status == UNUSABLE:
+            logger.warning(f"fetch_candles {symbol}/{interval}: unusable candles ({quality.summary()})")
+            return None
+        if quality.reasons:
+            logger.warning(f"fetch_candles {symbol}/{interval}: {quality.summary()}")
+        return df
     except Exception as e:
         logger.error(f"fetch_candles failed for {symbol}/{interval}: {e}")
         return None

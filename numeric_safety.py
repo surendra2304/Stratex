@@ -191,3 +191,24 @@ def decimal_or_none(value: Any) -> Decimal | None:
     except (InvalidOperation, ValueError, TypeError):
         return None
     return number if number.is_finite() else None
+
+
+def signal_levels_valid(side: Any, entry: Any, stop_loss: Any, take_profit: Any) -> bool:
+    """True when a strategy's protective levels are finite, positive and on the
+    correct side of the entry (BUY/LONG: sl < entry < tp; SELL/SHORT: tp < entry < sl).
+
+    Strategies fed with degenerate candles (zero ATR, inf highs, sub-tick
+    prices) can emit a side with NaN, zero or inverted levels; such a signal
+    must never become an order.
+    """
+    entry_f = positive_float(entry)
+    stop_f = positive_float(stop_loss)
+    target_f = positive_float(take_profit)
+    if entry_f is None or stop_f is None or target_f is None:
+        return False
+    direction = str(side).strip().upper() if side is not None else ""
+    if direction in ("BUY", "LONG"):
+        return stop_f < entry_f < target_f
+    if direction in ("SELL", "SHORT"):
+        return target_f < entry_f < stop_f
+    return False

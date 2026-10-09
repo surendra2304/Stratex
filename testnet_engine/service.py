@@ -18,6 +18,7 @@ from config_strategy import ADX_EMA_STRATEGY_V2, PRODUCTION_STRATEGY_REGISTRY
 from data import add_indicators
 from execution import _load_active_trades, get_exchange_client, place_market_order
 from logger import get_logger
+from numeric_safety import signal_levels_valid
 from paper_engine.exceptions import ZeroFillError
 from research_phase9.cost_engine import CostEngine
 from testnet_engine.discovery import SymbolDiscoveryService
@@ -916,22 +917,29 @@ class TestnetService:
                 logger.warning(f"[STRATEGY_SKIPPED] reason=INSUFFICIENT_MARKET_DATA symbol={symbol} tf={tf} rows={len(df) if df is not None else 0}")
                 return
 
-            # Check candle age freshness against timeframe
+            # Check candle age freshness against timeframe. Fail closed: the old
+            # check compared naive utcnow() with tz-aware stamps, raised, and the
+            # bare except silently skipped the gate; future stamps passed too.
+            tf_seconds = _TF_SECONDS.get(tf, 3600)
             try:
-                last_ts = df["timestamp"].iloc[-1]
-                if isinstance(last_ts, pd.Timestamp):
-                    age_sec = (datetime.datetime.utcnow() - last_ts.to_pydatetime()).total_seconds()
-                else:
-                    age_sec = 0
-                max_allowed_age = _TF_SECONDS.get(tf, 3600) * 3
-                if age_sec > max_allowed_age and age_sec > 0:
-                    logger.warning(f"[STRATEGY_SKIPPED] reason=STALE_MARKET_DATA symbol={symbol} tf={tf} age={age_sec:.1f}s")
-                    return
-            except Exception:
-                pass
+                last_ts = pd.Timestamp(df["timestamp"].iloc[-1])
+                if pd.isna(last_ts):
+                    raise ValueError("NaT")
+                last_ts = last_ts.tz_localize("UTC") if last_ts.tzinfo is None else last_ts.tz_convert("UTC")
+            except (KeyError, TypeError, ValueError) as ts_err:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=BAD_CANDLE_TIMESTAMP symbol={symbol} tf={tf} error={ts_err}")
+                return
+            age_sec = (pd.Timestamp.now(tz="UTC") - last_ts).total_seconds()
+            if age_sec > tf_seconds * 3:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=STALE_MARKET_DATA symbol={symbol} tf={tf} age={age_sec:.1f}s")
+                return
+            if age_sec < -tf_seconds:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=FUTURE_CANDLE_TIMESTAMP symbol={symbol} tf={tf} age={age_sec:.1f}s")
+                return
 
-            df = add_indicators(df)
-            if df.empty:
+            df = add_indicators(df, strict_tail=True)
+            if df is None or df.empty:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=INDICATORS_UNAVAILABLE symbol={symbol} tf={tf}")
                 return
 
             current_price = df['close'].iloc[-1]
@@ -964,6 +972,16 @@ class TestnetService:
                         side = getattr(signal_result, 'side', signal_result[0] if signal_result else None)
                         sl   = getattr(signal_result, 'sl',   signal_result[1] if signal_result else None)
                         tp   = getattr(signal_result, 'tp',   signal_result[2] if signal_result else None)
+                        if side and not signal_levels_valid(side, current_price, sl, tp):
+                            # Degenerate candles (zero ATR, inf highs, sub-tick
+                            # prices) can yield NaN/zero/inverted levels; such a
+                            # signal must never reach the gates or the venue.
+                            logger.warning(
+                                f"[STRATEGY_SIGNAL_REJECTED] reason=INVALID_SIGNAL_LEVELS strategy={strat_name} "
+                                f"symbol={symbol} tf={tf} side={side} sl={sl!r} tp={tp!r} close={current_price}"
+                            )
+                            self.stats["INVALID_SIGNAL_LEVELS"] = self.stats.get("INVALID_SIGNAL_LEVELS", 0) + 1
+                            side, sl, tp = None, None, None
 
                         last_row = df.iloc[-1]
                         prev_row = df.iloc[-2] if len(df) >= 2 else last_row

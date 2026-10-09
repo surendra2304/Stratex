@@ -4,6 +4,8 @@
 
 from collections import namedtuple
 
+from numeric_safety import signal_levels_valid
+
 
 class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_type", "win_rate_prior", "rr_ratio"])):
     @property
@@ -65,7 +67,9 @@ def get_signal(df):
         risk = max(close - sl, atr * 0.8)
         # Target either BB Middle Band or at least 2.0x ATR
         tp = max(bb_middle, close + (risk * 2.0))
-        return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+        if signal_levels_valid("BUY", close, sl, tp):
+            return SignalResult("BUY", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+        return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     # --- SELL: Upper Band Exhaustion ---
     sweep_and_reenter_sell = (high >= bb_upper or prev_close >= prev.get("bb_upper", prev_close)) and (close < bb_upper)
@@ -76,6 +80,10 @@ def get_signal(df):
         sl = max(high, close + (atr * 1.2))
         risk = max(sl - close, atr * 0.8)
         tp = min(bb_middle, close - (risk * 2.0))
-        return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+        # A risk wider than half the price would put the target at or below
+        # zero; inf/NaN candles give NaN levels. Neither may become an order.
+        if signal_levels_valid("SELL", close, sl, tp):
+            return SignalResult("SELL", sl, tp, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+        return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
     return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
