@@ -22,6 +22,7 @@ from advisory_ledger import read_recent_advisory_entries
 from advisory_params import get_advisory_overlay
 from api.auth import require_permission
 from api.data_shapes import format_api_response
+from api.validation import query_int
 
 public_status_bp = Blueprint("public_status", __name__, url_prefix="/api/v1")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -212,8 +213,8 @@ def get_positions():
 @require_permission("read")
 def get_recent_trades():
     """Returns paginated closed trade history."""
-    page = int(request.args.get("page", 1))
-    limit = min(int(request.args.get("limit", 20)), 100)
+    page = query_int("page", 1, min=1, max=1_000_000)
+    limit = query_int("limit", 20, min=1, max=100)
 
     trades = list(reversed([
         row for row in _read_jsonl("paper_trade_ledger.jsonl")
@@ -299,9 +300,18 @@ def get_risk_metrics():
 @require_permission("read")
 def get_equity_history():
     """Return persisted equity samples, never seeded display values."""
+    max_points = query_int("max_points", 2000, min=2, max=10_000)
     points = [
         {"timestamp": row.get("timestamp"), "equity": row.get("equity"), "realized_pnl": row.get("realized_pnl"), "unrealized_pnl": row.get("unrealized_pnl")}
         for row in _read_jsonl("paper_equity_curve.jsonl")
         if row.get("timestamp") is not None and row.get("equity") is not None
     ]
-    return jsonify(format_api_response(points))
+    total = len(points)
+    if total > max_points:
+        # Uniform stride over the persisted samples (first and newest kept);
+        # thinning is disclosed, nothing is interpolated.
+        step = (total - 1) / (max_payload := max_points - 1)
+        points = [points[round(i * step)] for i in range(max_payload + 1)]
+    payload = format_api_response(points)
+    payload["series"] = {"source_count": total, "returned": len(points), "downsampled": total > len(points)}
+    return jsonify(payload)

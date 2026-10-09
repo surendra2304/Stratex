@@ -62,6 +62,7 @@ for bp_mod, bp_name in core_blueprints + adapter_blueprints:
 
 
 from api.request_guard import install_request_guards
+from api.validation import query_bool, query_choice, query_symbol, query_text
 
 install_request_guards(app)
 
@@ -93,7 +94,7 @@ def api_v1_futuris_forecast():
     try:
         from intelligence.futuris_client import get_futuris_client
         futuris = get_futuris_client()
-        sym = request.args.get("symbol", "BTCUSDT").upper().strip()
+        sym = query_symbol("symbol", "BTCUSDT")
         forecast = futuris.fetch_forecast(sym)
         return jsonify({
             "status": "OK",
@@ -120,6 +121,28 @@ def require_bot_api_key(f):
     Enforces SCOPE_CONTROL via security_hardening with rate limiting and audit logging.
     """
     return require_api_scope(scope=SCOPE_CONTROL, is_control=True)(f)
+
+# Chart series are downsampled (uniform stride, newest point always kept) to
+# this many points by default instead of returning every snapshot ever taken.
+DEFAULT_SERIES_POINTS = 2000
+MAX_SERIES_POINTS = 10000
+
+
+def downsample_series(points: list, max_points: int) -> tuple[list, bool]:
+    """Uniformly thin ``points`` to at most ``max_points`` (first and last kept).
+
+    Returns ``(points, downsampled)``. Nothing is interpolated or invented:
+    every returned element is one of the input snapshots.
+    """
+    total = len(points)
+    if max_points <= 0 or total <= max_points:
+        return points, False
+    if max_points == 1:
+        return [points[-1]], True
+    step = (total - 1) / (max_points - 1)
+    indices = sorted({round(i * step) for i in range(max_points)} | {0, total - 1})
+    return [points[i] for i in indices], True
+
 
 def safe_int_param(param_name: str, default: int = 100, min_val: int = 1, max_val: int = 1000) -> int:
     """Safely extracts and validates an integer query parameter from Flask request.args.
@@ -310,8 +333,8 @@ def handle_strategy_registry():
             return jsonify({"status": "ERROR", "error": str(e)}), 400
 
     # GET
-    s_id = request.args.get("strategy_id")
-    status = request.args.get("status")
+    s_id = query_text("strategy_id")
+    status = query_text("status", max_len=32)
     try:
         versions = [v.__dict__ for v in registry.list_versions(strategy_id=s_id, status=status)]
     except RegistryIntegrityError:
@@ -498,8 +521,8 @@ def handle_research_jobs():
         return jsonify({"status": "OK", "job": job.__dict__}), 202
 
     # GET
-    j_type = request.args.get("job_type")
-    j_status = request.args.get("status")
+    j_type = query_text("job_type", max_len=64)
+    j_status = query_text("status", max_len=32)
     jobs = [j.__dict__ for j in store.list_jobs(job_type=j_type, status=j_status)]
     return jsonify({"status": "OK", "jobs": jobs, "count": len(jobs)})
 
@@ -605,7 +628,7 @@ def agent_gateway_jobs():
 def get_microstructure():
     """Returns Hummingbot-style order-book depth, spread, mid-price, and top-N imbalance."""
     from stratex_hummingbot.orderbook import OrderBookSnapshot, OrderBookImbalance
-    sym = request.args.get('symbol', 'BTCUSDT').upper().strip()
+    sym = query_symbol("symbol", "BTCUSDT")
 
     depth_data = None
     try:
@@ -711,7 +734,7 @@ def get_volatility_forecast():
     import pandas as pd
     import numpy as np
 
-    sym = request.args.get('symbol', 'BTCUSDT').upper().strip()
+    sym = query_symbol("symbol", "BTCUSDT")
     rng = np.random.default_rng(10)
     returns = pd.Series(rng.normal(0.0002, 0.018, 120))
 
@@ -771,9 +794,8 @@ def get_candles():
     Fetches live Binance OHLCV candles for chart.
     Strictly prohibits data fabrication: if Binance is unavailable, returns DATA_UNAVAILABLE.
     """
-    raw_sym = request.args.get('symbol', 'BTCUSDT')
-    symbol = str(raw_sym).upper().strip() if raw_sym else 'BTCUSDT'
-    raw_tf = request.args.get('tf') or request.args.get('timeframe') or '15m'
+    symbol = query_symbol("symbol", "BTCUSDT")
+    raw_tf = query_text("tf", None, max_len=32) or query_text("timeframe", None, max_len=32) or "15m"
     tf = str(raw_tf).lower().strip()
     limit = safe_int_param('limit', default=300, min_val=1, max_val=1000)
 
@@ -1949,7 +1971,7 @@ def api_daily_pnl():
 def api_equity():
     """Returns historical equity & balance curve points with rich snapshot data for chart."""
     from testnet_engine.telemetry_manager import get_telemetry_manager
-    tf_filter = request.args.get("timeframe", "ALL").upper()
+    tf_filter = (query_text("timeframe", "ALL", max_len=8) or "ALL").upper()
     now = datetime.datetime.utcnow()
     cutoff = None
     if tf_filter == "1H":
@@ -2040,7 +2062,14 @@ def api_equity():
             "unrealized_pnl": 0.0
         })
 
-    return jsonify(points)
+    max_points = safe_int_param("max_points", default=DEFAULT_SERIES_POINTS, min_val=2, max_val=MAX_SERIES_POINTS)
+    total_points = len(points)
+    points, downsampled = downsample_series(points, max_points)
+    response = jsonify(points)
+    # The list shape is kept for existing charts; thinning is disclosed in headers.
+    response.headers["X-Series-Total-Points"] = str(total_points)
+    response.headers["X-Series-Downsampled"] = "true" if downsampled else "false"
+    return response
 
 @app.route('/api/scanner')
 def get_scanner():
@@ -2713,16 +2742,21 @@ def api_equity_history():
     '1h', '6h', '24h', '7d', '30d', 'all'.
     """
     from testnet_engine.telemetry_manager import get_telemetry_manager
-    time_range = request.args.get("range", "all").lower()
+    time_range = query_choice("range", "all", ("1h", "6h", "24h", "7d", "30d", "all"))
+    max_points = safe_int_param("max_points", default=DEFAULT_SERIES_POINTS, min_val=2, max_val=MAX_SERIES_POINTS)
     telemetry = get_telemetry_manager()
     timeline = telemetry.get_equity_timeline(time_range)
-    
+    source_count = len(timeline)
+    timeline, downsampled = downsample_series(timeline, max_points)
+
     return jsonify({
         "status": "SUCCESS",
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
         "data_age": 0.0,
         "range": time_range,
         "count": len(timeline),
+        "source_count": source_count,
+        "downsampled": downsampled,
         "snapshots": timeline
     })
 
@@ -2847,8 +2881,8 @@ def api_trade_history():
 def api_trade_events():
     """Returns canonical trade events with complete 40+ field lifecycle telemetry."""
     from testnet_engine.telemetry_manager import get_telemetry_manager
-    symbol = request.args.get("symbol")
-    status = request.args.get("status")
+    symbol = query_symbol("symbol", None)
+    status = query_text("status", max_len=32)
     limit = safe_int_param("limit", default=100, min_val=1, max_val=1000)
     telemetry = get_telemetry_manager()
     events = telemetry.get_trade_events(symbol=symbol, status=status, limit=limit)
@@ -2867,7 +2901,7 @@ def api_positions():
     Supports query parameter ?status=OPEN|CLOSED|ALL.
     """
     from testnet_engine.telemetry_manager import get_telemetry_manager
-    status_filter = request.args.get("status", "OPEN").upper()
+    status_filter = (query_text("status", "OPEN", max_len=32) or "OPEN").upper()
     telemetry = get_telemetry_manager()
     positions = telemetry.get_positions(status=status_filter)
     
@@ -3055,8 +3089,8 @@ def api_signals():
     """Returns strategy signal decision logs for terminal telemetry."""
     from testnet_engine.telemetry_manager import get_telemetry_manager
     limit = safe_int_param("limit", default=100, min_val=1, max_val=1000)
-    symbol = request.args.get("symbol")
-    strategy = request.args.get("strategy")
+    symbol = query_symbol("symbol", None)
+    strategy = query_text("strategy")
     telemetry = get_telemetry_manager()
     signals = telemetry.get_signals_log(limit=limit, symbol=symbol, strategy=strategy)
     
@@ -3508,8 +3542,8 @@ def api_analytics():
     """
     from testnet_engine.telemetry_manager import get_telemetry_manager
     telemetry = get_telemetry_manager()
-    tf_filter = request.args.get("timeframe", "ALL").upper()
-    include_synthetic = request.args.get("include_synthetic", "false").lower() == "true"
+    tf_filter = (query_text("timeframe", "ALL", max_len=8) or "ALL").upper()
+    include_synthetic = query_bool("include_synthetic", False)
 
     all_trades = telemetry.query_trades(limit=1000)
 
@@ -4134,7 +4168,7 @@ def api_risk_events():
     """
     from testnet_engine.telemetry_manager import get_telemetry_manager
     limit = safe_int_param("limit", default=100, min_val=1, max_val=1000)
-    symbol_filter = request.args.get("symbol")
+    symbol_filter = query_symbol("symbol", None)
     telemetry = get_telemetry_manager()
 
     risk_events = []
@@ -4458,10 +4492,10 @@ def api_telemetry_trades():
     merging it back re-invents rows the ledger does not contain.
     """
     try:
-        symbol = request.args.get('symbol')
-        strategy = request.args.get('strategy')
-        timeframe = request.args.get('timeframe')
-        status = request.args.get('status')
+        symbol = query_symbol("symbol", None)
+        strategy = query_text("strategy")
+        timeframe = query_text("timeframe", max_len=8)
+        status = query_text("status", max_len=32)
         limit = safe_int_param('limit', default=100, min_val=1, max_val=1000)
 
         trades = _authoritative_trades()
@@ -4491,7 +4525,7 @@ def api_telemetry_signals():
     per-process canonical index is only consulted when no such log exists at all.
     """
     try:
-        symbol = request.args.get('symbol')
+        symbol = query_symbol("symbol", None)
         limit = safe_int_param('limit', default=100, min_val=1, max_val=1000)
         signals = _authoritative_signals()
         if not signals and not os.path.exists(os.getenv("PAPER_FORWARD_SIGNAL_LOG", "forward_signal_log.jsonl")):
@@ -4515,11 +4549,16 @@ def api_telemetry_positions():
     try:
         from testnet_engine.telemetry import get_telemetry_manager
         tm = get_telemetry_manager()
-        status = request.args.get('status')
+        status = query_text("status", max_len=32)
+        limit = safe_int_param("limit", default=500, min_val=1, max_val=5000)
         positions = tm.query_positions(status=status)
+        total = len(positions)
+        positions = positions[-limit:]  # most recent records; total disclosed
         return jsonify({
             "status": "OK",
             "count": len(positions),
+            "total": total,
+            "truncated": total > len(positions),
             "positions": positions,
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
         })
@@ -5253,7 +5292,7 @@ def api_health_system():
 @app.route('/api/metrics')
 def api_prometheus_metrics():
     """Prometheus / OpenMetrics plain text metrics scraper or JSON metrics endpoint."""
-    fmt = request.args.get("format", "").lower()
+    fmt = query_choice("format", "", ("", "json", "prometheus", "text"))
     accept = request.headers.get("Accept", "").lower()
     if fmt == "json" or "application/json" in accept:
         try:

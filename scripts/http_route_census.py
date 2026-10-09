@@ -5,9 +5,12 @@ Unit tests call handlers through Flask's test client with well-formed input.
 This harness instead boots the real dashboard (threaded werkzeug server) on a
 scratch copy of the repository and sends every GET and POST route a battery of
 requests — anonymous and authenticated, empty / non-object / invalid /
-wrong-typed / oversized bodies, path-traversal path parameters — and reports
-every response class. Any 5xx other than an honest ``503`` (dependency
-unavailable), any transport error and any timeout fails the run.
+wrong-typed / oversized bodies, per-field body mutations, path-traversal path
+parameters, and per-parameter query-string mutations (wrong types, negative /
+huge / non-finite numbers, traversal, oversized, repeated parameters) — and
+reports every response class. Any 5xx other than an honest ``503``
+(dependency unavailable), any transport error, any timeout and any response
+body larger than ``--max-response-mb`` (an unbounded ``limit``) fails the run.
 
 The scratch copy keeps the census from touching the checkout's state files
 (panic flag, ledgers, registries); the server has no live-trading credentials
@@ -38,6 +41,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -60,6 +64,17 @@ WRONG_TYPES_BODY = {
     "candles": "many", "limit": "-5", "timeframe": 5, "exchange": ["binance"], "mode": 1,
     "capital": "infinite", "leverage": "1e309", "days": "seven", "trials": -3, "task": 5,
 }
+
+# Per-parameter query-string mutations sent (one parameter at a time) to every
+# GET route, using parameter names extracted from the view function's source
+# plus the paging names every list endpoint is expected to bound.
+QUERY_FUZZ_VALUES: list[tuple[str, str]] = [
+    ("negative", "-1"), ("zero", "0"), ("huge", "999999999999999999999"), ("float", "1.5"),
+    ("nan", "nan"), ("inf", "inf"), ("exp_overflow", "1e309"), ("text", "census"), ("empty", ""),
+    ("traversal", "../../../../etc/passwd"), ("long", "A" * 8192), ("unicode", "\u202e\U0001f4a5\u0000"),
+    ("sql", "' OR 1=1 --"), ("script", "<script>alert(1)</script>"),
+]
+QUERY_FALLBACK_PARAMS = ("limit", "offset", "days", "n")
 
 # Per-field mutations sent (one field at a time) to every POST route, using
 # field names extracted from the view function's source.
@@ -98,6 +113,15 @@ except Exception:
 import inspect, re
 _FIELD_RE = re.compile(r"""(?:\.get\(|get_[a-z_]+\(\s*[A-Za-z_]+\s*,|\[)\s*["']([A-Za-z_][A-Za-z0-9_]{0,40})["']""")
 _NOT_BODY = {"X-API-KEY", "Content-Type", "Authorization"}
+_QUERY_RE = re.compile(r"""(?:request\.args\s*(?:\.get(?:list)?\(|\[)|get_[a-z_]+\(\s*request\.args\s*,)\s*["']([A-Za-z_][A-Za-z0-9_]{0,40})["']""")
+
+
+def _query_params(view):
+    try:
+        source = inspect.getsource(inspect.unwrap(view))
+    except (OSError, TypeError):
+        return []
+    return sorted(set(_QUERY_RE.findall(source)))
 
 
 def _body_fields(view):
@@ -120,6 +144,7 @@ for rule in app.url_map.iter_rules():
         "arguments": sorted(rule.arguments),
         "converters": {k: type(v).__name__ for k, v in rule._converters.items()},
         "body_fields": _body_fields(view) if view is not None and "POST" in methods else [],
+        "query_params": _query_params(view) if view is not None and "GET" in methods else [],
     })
 with open(os.environ["CENSUS_RULES_OUT"], "w") as fh:
     json.dump(rules, fh, indent=1)
@@ -143,6 +168,7 @@ class Probe:
     content_type: str = ""
     error: str | None = None
     body_excerpt: str = ""
+    response_bytes: int = 0
 
 
 @dataclass
@@ -169,6 +195,37 @@ def _copy_scratch(dest: Path) -> None:
         return skipped
 
     shutil.copytree(REPO_ROOT, dest, ignore=ignore, dirs_exist_ok=True)
+
+
+# Append-only datasets the dashboard reads by default (relative to its CWD).
+STRESS_JSONL_FILES = (
+    "testnet_trade_ledger.jsonl", "paper_trade_ledger.jsonl", "trade_ledger.jsonl", "advisory_log.jsonl",
+    "production_alerts.jsonl", "live_equity_curve.jsonl", "testnet_equity_history.jsonl",
+    "testnet_signals_log.jsonl", "testnet_trade_events.jsonl", "testnet_opportunity_log.jsonl",
+    "testnet_execution_events.jsonl", "testnet_position_history.jsonl", "paper_equity_curve.jsonl",
+    "risk_orchestration_log.jsonl", "control_audit.jsonl", "signals.jsonl",
+)
+
+
+def _seed_stress_data(app_dir: Path, records: int) -> None:
+    """Fill the scratch copy's ledgers with ``records`` synthetic rows each.
+
+    Scratch-only test fixtures (flagged ``census_synthetic``) used to prove
+    that list/export endpoints bound their responses; they never touch the
+    checkout.
+    """
+    stamp = "2026-01-01T00:00:00+00:00"
+    for name in STRESS_JSONL_FILES:
+        with open(app_dir / name, "w", encoding="utf-8") as handle:
+            for index in range(records):
+                handle.write(json.dumps({
+                    "census_synthetic": True, "trade_id": f"syn-{index}", "signal_id": f"syn-{index}",
+                    "symbol": "BTCUSDT", "strategy": "adx_ema", "side": "BUY", "status": "CLOSED",
+                    "source": "BINANCE_EXECUTION", "entry_order_id": index, "exit_order_id": 10**9 + index,
+                    "entry_price": 100.0, "exit_price": 101.0, "quantity": 0.01, "net_pnl": 0.01, "pnl": 0.01,
+                    "equity": 10000.0, "balance": 10000.0, "timestamp": stamp, "entry_timestamp": stamp,
+                    "exit_timestamp": stamp, "closed_at": stamp, "pad": "x" * 120,
+                }) + "\n")
 
 
 def _server_env(scratch: Path, port: int, rules_out: Path) -> dict[str, str]:
@@ -231,7 +288,13 @@ def _send(probe: Probe, data: bytes | None, headers: dict[str, str], timeout: fl
             if probe.content_type.startswith("text/event-stream"):
                 response.readline()  # first event only; streams never end
             else:
-                response.read(256 * 1024)
+                # Count the whole body (up to the cap + 1 chunk) so an
+                # unbounded "limit" shows up as an oversized response.
+                while probe.response_bytes <= _MAX_RESPONSE_BYTES:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    probe.response_bytes += len(chunk)
     except urllib.error.HTTPError as exc:
         probe.status = exc.code
         probe.content_type = exc.headers.get("Content-Type", "") if exc.headers else ""
@@ -263,10 +326,28 @@ def _post_variants(include_oversized: bool) -> list[tuple[str, bytes | None, str
     return variants
 
 
+_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+
+
 def _is_failure(probe: Probe, allow_timeouts: bool) -> bool:
     if probe.error:
         return not (allow_timeouts and probe.error.startswith("TIMEOUT"))
+    if probe.response_bytes > _MAX_RESPONSE_BYTES:
+        probe.error = f"UNBOUNDED_RESPONSE: more than {_MAX_RESPONSE_BYTES // (1024 * 1024)} MiB"
+        return True
     return probe.status is not None and probe.status >= 500 and probe.status != 503
+
+
+def _query_variants(rule: dict[str, Any]) -> list[tuple[str, str]]:
+    """(variant label, query string) pairs: one mutated parameter per request."""
+    names = list(dict.fromkeys([*rule.get("query_params", []), *QUERY_FALLBACK_PARAMS]))
+    variants: list[tuple[str, str]] = []
+    for name in names:
+        for label, value in QUERY_FUZZ_VALUES:
+            variants.append((f"query:{name}={label}", urllib.parse.urlencode({name: value})))
+        variants.append((f"query:{name}=repeated", urllib.parse.urlencode([(name, "1"), (name, "x")])))
+    variants.append(("query:unknown_param", "census_unknown=" + "z" * 64))
+    return variants
 
 
 def run_census(args: argparse.Namespace) -> CensusReport:
@@ -276,6 +357,8 @@ def run_census(args: argparse.Namespace) -> CensusReport:
     port = args.port or _free_port()
     rules_out = scratch / "rules.json"
     (app_dir / "_census_server.py").write_text(SERVER_BOOTSTRAP)
+    if args.stress_records:
+        _seed_stress_data(app_dir, args.stress_records)
     log_path = scratch / "server.log"
     report = CensusReport()
     with open(log_path, "w") as log_handle:
@@ -326,6 +409,9 @@ def _exercise(rules: list[dict[str, Any]], base: str, args: argparse.Namespace, 
             url = _build_url(base, rule)
             if "GET" in wanted and "GET" in rule["methods"]:
                 jobs.append((Probe(phase, "GET", rule["rule"], url, "plain"), None, dict(auth)))
+                if phase == "admin" and args.query_fuzz and not rule["rule"].endswith("/stream"):
+                    for label, query in _query_variants(rule):
+                        jobs.append((Probe(phase, "GET", rule["rule"], f"{url}?{query}", label), None, dict(auth)))
                 if rule["arguments"]:
                     continue
             if "POST" in wanted and "POST" in rule["methods"]:
@@ -372,9 +458,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-timeouts", action="store_true", help="do not fail on request timeouts")
     parser.add_argument("--no-field-fuzz", dest="field_fuzz", action="store_false",
                         help="skip per-field type mutations on POST routes")
+    parser.add_argument("--no-query-fuzz", dest="query_fuzz", action="store_false",
+                        help="skip per-parameter query-string mutations on GET routes")
+    parser.add_argument("--stress-records", type=int, default=0,
+                        help="seed this many synthetic rows into each scratch ledger before probing")
+    parser.add_argument("--max-response-mb", type=float, default=8.0,
+                        help="fail any response body larger than this (unbounded limits)")
     parser.add_argument("--json", dest="json_out", default="", help="write the full report here")
     parser.add_argument("--keep-scratch", action="store_true")
     args = parser.parse_args(argv)
+    global _MAX_RESPONSE_BYTES
+    _MAX_RESPONSE_BYTES = int(args.max_response_mb * 1024 * 1024)
 
     report = run_census(args)
     print(f"rules: {report.rules_total} ({report.get_rules} GET, {report.post_rules} POST); "

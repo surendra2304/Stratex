@@ -5,7 +5,9 @@ strict result contract defined in `quantum/schemas.py`. It does **not**
 trigger any order execution or modify trading state.
 """
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
+
+from api.validation import query_symbol, query_timeframe
 
 from quantum.service import QuantumService
 
@@ -24,7 +26,7 @@ def advisory():
     The response follows the `QuantumResultSchema` fields and never
     includes any execution‑related keys.
     """
-    symbol = request.args.get('symbol', 'BTCUSDT')
-    tf = request.args.get('tf', '15m')
+    symbol = query_symbol('symbol', 'BTCUSDT')
+    tf = query_timeframe('tf', '15m')
     result = _quantum_service.get_advisory(symbol=symbol, tf=tf)
     return jsonify(result)

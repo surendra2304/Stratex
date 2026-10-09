@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
 import pandas as pd
 
+from api.validation import query_int
 from stratex_freqtrade_adapter import ft
 from stratex_freqtrade_adapter.data.downloader import OHLCVUnavailable
 from stratex_freqtrade_adapter.strategy.adapter import FreqtradeStrategyAdapter
@@ -47,7 +48,7 @@ def get_strategies():
 @freqtrade_bp.route("/pairlists/evaluate", methods=["GET"])
 def evaluate_pairlist():
     """Dynamically evaluates top trading pairs by 24h volume and price/spread filters."""
-    limit = int(request.args.get("limit", 15))
+    limit = query_int("limit", 15, min=1, max=100)
     try:
         pairs = ft.pairlists.evaluate_volume(number_assets=limit)
         return jsonify({
@@ -58,10 +59,12 @@ def evaluate_pairlist():
             "data": pairs,
         }), 200
     except Exception as e:
+        # The public ticker feed is an upstream dependency: unavailable, not a server bug.
         return jsonify({
             "status": "ERROR",
-            "message": str(e),
-        }), 500
+            "error": "UPSTREAM_UNAVAILABLE",
+            "message": f"{type(e).__name__}: {str(e)[:200]}",
+        }), 503
 
 
 @freqtrade_bp.route("/protections/status", methods=["GET"])

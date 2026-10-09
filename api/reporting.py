@@ -9,13 +9,19 @@ Endpoints:
 - GET /api/v1/reports/alerts : Recent intelligent alerts log.
 """
 
-from flask import Blueprint, Response, jsonify, request
+import datetime
+import re
+
+from flask import Blueprint, Response, jsonify
 
 from alerting.intelligent_alerts import IntelligentAlertEngine
 from api.auth import require_permission
 from api.data_shapes import format_api_response
+from api.validation import RequestValidationError, query_choice, query_int
 from reporting.daily_report import DailyReportGenerator
 from reporting.periodic_reports import PeriodicReportGenerator
+
+_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 reporting_bp = Blueprint("reporting_api", __name__, url_prefix="/api/v1/reports")
 
@@ -27,7 +33,7 @@ alert_engine = IntelligentAlertEngine()
 @reporting_bp.route("/daily/latest", methods=["GET"])
 @require_permission("read")
 def get_latest_daily_report():
-    fmt = request.args.get("format", "json").lower()
+    fmt = query_choice("format", "json", ("json", "markdown", "html"))
     report = daily_gen.generate_daily_report()
 
     if fmt == "markdown":
@@ -40,7 +46,15 @@ def get_latest_daily_report():
 @reporting_bp.route("/daily/<date_str>", methods=["GET"])
 @require_permission("read")
 def get_specific_daily_report(date_str: str):
-    fmt = request.args.get("format", "json").lower()
+    fmt = query_choice("format", "json", ("json", "markdown", "html"))
+    # The date becomes part of three file names the generator writes; only a
+    # real calendar date may reach it (no arbitrary names, no markup).
+    if not _DATE_RE.fullmatch(date_str):
+        raise RequestValidationError("date_str", "must be a date in YYYY-MM-DD format")
+    try:
+        datetime.date.fromisoformat(date_str)
+    except ValueError:
+        raise RequestValidationError("date_str", "is not a valid calendar date") from None
     report = daily_gen.generate_daily_report(date_str=date_str)
 
     if fmt == "markdown":
@@ -67,6 +81,6 @@ def get_latest_monthly_report():
 @reporting_bp.route("/alerts", methods=["GET"])
 @require_permission("read")
 def get_alerts():
-    limit = int(request.args.get("limit", 20))
+    limit = query_int("limit", 20, min=1, max=500)
     alerts = alert_engine.get_recent_alerts(limit=limit)
     return jsonify(format_api_response(alerts))
