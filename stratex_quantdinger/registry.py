@@ -27,6 +27,8 @@ try:
 except ImportError:  # POSIX fallback
     _msvcrt = None
 
+from atomic_io import append_jsonl, atomic_write_text
+
 from .models import StrategyVersion, AuditEvent
 from .promotion_policy import PROMOTION_ELIGIBLE, evaluate_oos_metrics
 
@@ -147,22 +149,15 @@ class StrategyRegistry:
 
     def _save(self, data: dict) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
         payload = json.dumps(data, indent=2, sort_keys=True)
-        # Durable atomic replace: the bytes must reach disk before the rename,
-        # otherwise a crash can leave a zero-length registry behind.
-        with open(tmp, "w", encoding="utf-8") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        tmp.replace(self.path)
+        # Durable atomic replace (unique temp file, fsync of file and
+        # directory): a crash can no longer leave a zero-length registry.
+        atomic_write_text(self.path, payload)
 
     def _audit(self, event: AuditEvent) -> None:
-        self.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.audit_log_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(event.__dict__) + "\n")
-            f.flush()
-            os.fsync(f.fileno())
+        # One complete line per event; a torn tail left by a crash is sealed
+        # off instead of being glued onto the next record.
+        append_jsonl(self.audit_log_path, event.__dict__, fsync=True)
 
     @staticmethod
     def compute_source_hash(source: str) -> str:

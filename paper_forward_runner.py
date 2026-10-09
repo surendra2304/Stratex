@@ -98,6 +98,7 @@ FROZEN_MIN_TRADES = 30
 
 from data_client import MarketDataClient
 from features import add_features
+from atomic_io import atomic_write_json, load_json_state, locked_path, read_jsonl
 from logger import get_logger
 from paper_engine.experiment_config import (
     FrozenExperimentConfig,
@@ -279,22 +280,27 @@ def load_or_create_experiment() -> FrozenExperimentConfig:
 def _update_experiment_registry_status(experiment_id: str, status: str):
     """Keep the summary registry aligned when an experiment is superseded."""
     path = os.path.join(EXPERIMENT_DIR, "registry.json")
-    try:
-        with open(path, encoding="utf-8") as f:
-            registry = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return
-    changed = False
-    for record in registry.get("experiments", []):
-        if record.get("experiment_id") == experiment_id:
-            record["status"] = status
-            changed = True
-    if not changed:
-        return
-    tmp_path = path + ".tmp"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(registry, f, indent=4)
-    os.replace(tmp_path, path)
+    with locked_path(path):
+        result = load_json_state(path, expected_type=dict, quarantine=False)
+        if result.status == "missing":
+            return
+        if result.status != "ok":
+            # Never rewrite (and thereby erase) a registry we cannot read.
+            logger.error(f"Experiment registry {path} is unreadable ({result.error}); status of {experiment_id} not updated")
+            return
+        registry = result.data
+        experiments = registry.get("experiments", [])
+        if not isinstance(experiments, list):
+            logger.error(f"Experiment registry {path} has a malformed 'experiments' field; not updated")
+            return
+        changed = False
+        for record in experiments:
+            if isinstance(record, dict) and record.get("experiment_id") == experiment_id:
+                record["status"] = status
+                changed = True
+        if not changed:
+            return
+        atomic_write_json(path, registry, indent=4, allow_nan=False)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -655,20 +661,14 @@ class ForwardHealth:
                 "experiment_started_at": self.experiment_started_at,
                 "last_update": self.last_update,
             }
-            tmp = HEALTH_FILE + ".tmp"
-            with open(tmp, "w") as f:
-                json.dump(data, f, indent=4)
-            os.replace(tmp, HEALTH_FILE)
+            atomic_write_json(HEALTH_FILE, data, indent=4, default=str)
 
             # Persist heartbeat.json
             hb_data = {
                 "last_process_heartbeat": self.last_update,
                 "last_market_data": self.last_update if self.market_data == "OK" else 0.0,
             }
-            tmp_hb = "heartbeat.json.tmp"
-            with open(tmp_hb, "w") as f:
-                json.dump(hb_data, f)
-            os.replace(tmp_hb, "heartbeat.json")
+            atomic_write_json("heartbeat.json", hb_data, indent=None)
             return True
         except Exception as exc:
             logger.error("Forward health persistence failed: %s", type(exc).__name__)
@@ -764,18 +764,19 @@ def _verify_json_file(path):
 
 
 def _verify_jsonl_file(path):
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            for line in handle:
-                if line.strip():
-                    value = json.loads(line)
-                    if not isinstance(value, dict):
-                        return "INVALID"
-        return "VALID"
-    except FileNotFoundError:
+    """VALID / MISSING / TORN_TAIL (only the last line is an interrupted
+    append) / INVALID (any other unreadable, non-object or non-finite line)."""
+    if not os.path.exists(path):
         return "MISSING"
-    except (OSError, ValueError):
+    try:
+        result = read_jsonl(path, expected_type=dict)
+    except OSError:
         return "INVALID"
+    if result.clean:
+        return "VALID"
+    if result.truncated_tail and result.skipped == 1:
+        return "TORN_TAIL"
+    return "INVALID"
 
 
 def _probe_directory_write(path):

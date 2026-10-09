@@ -522,7 +522,7 @@ def get_runtime_status():
     from stratex_quantdinger.runtime import RuntimeSupervisor
     sup = RuntimeSupervisor()
 
-    leases_file = Path("runtime_leases.json")
+    leases_file = sup.leases_path
     leases = {}
     if leases_file.exists():
         try:

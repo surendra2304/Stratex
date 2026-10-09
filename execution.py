@@ -2,7 +2,6 @@ import datetime
 import json
 import math
 import os
-import shutil
 import time
 from enum import Enum
 
@@ -18,6 +17,13 @@ from config import (
     TESTNET_ENABLED,
     TRADE_QTY,
     TRADING_MODE,
+)
+from atomic_io import (
+    append_jsonl,
+    atomic_write_bytes,
+    atomic_write_text,
+    load_json_state,
+    locked_path,
 )
 from logger import get_logger, log_trade
 from numeric_safety import finite_float, positive_float
@@ -252,14 +258,18 @@ def _validate_entry_request(side, quantity, sl, tp, *, require_protection: bool 
 def _load_active_trades():
     if not os.path.exists(ACTIVE_TRADES_FILE):
         return []
-    
-    try:
-        with open(ACTIVE_TRADES_FILE, "r") as f:
-            data = json.load(f)
-    except Exception as e:
-        sys_logger.error(f"Failed to load JSON from {ACTIVE_TRADES_FILE}: {e}")
+
+    # Strict load (NaN/Infinity tokens rejected) without quarantine: the file
+    # stays in place for the operator and the caller fails closed.
+    with locked_path(ACTIVE_TRADES_FILE):
+        result = load_json_state(ACTIVE_TRADES_FILE, expected_type=(list, dict), default_factory=list, quarantine=False)
+    if result.status == "missing":
+        return []
+    if result.status != "ok":
+        sys_logger.error(f"Failed to load JSON from {ACTIVE_TRADES_FILE}: {result.error}")
         raise StateCorruptionError("Active trades JSON is corrupt.")
-        
+    data = result.data
+
     if not isinstance(data, list):
         raise StateCorruptionError("Active trades state must be a list.")
         
@@ -278,16 +288,50 @@ def _load_active_trades():
             
     return data
 
+def _strict_json_copy(value, path="", replaced=None):
+    """Copy ``value`` replacing non-finite floats by None; collect their paths."""
+    if replaced is None:
+        replaced = []
+    if isinstance(value, float) and not math.isfinite(value):
+        replaced.append(path or "<root>")
+        return None, replaced
+    if isinstance(value, dict):
+        return {k: _strict_json_copy(v, f"{path}.{k}" if path else str(k), replaced)[0] for k, v in value.items()}, replaced
+    if isinstance(value, (list, tuple)):
+        return [_strict_json_copy(v, f"{path}[{i}]", replaced)[0] for i, v in enumerate(value)], replaced
+    return value, replaced
+
+
+def _append_ledger_record(path, entry):
+    """Append one trade-ledger record durably: a single complete, fsynced line
+    (a torn tail from an earlier crash is sealed off first).
+
+    Non-finite numbers are written as null and flagged with ``numeric_fault``
+    so a closed trade is never dropped and the ledger stays strict JSON.
+    """
+    clean, replaced = _strict_json_copy(entry)
+    if replaced:
+        clean["numeric_fault"] = True
+        clean["numeric_fault_fields"] = replaced
+        sys_logger.error(f"[LEDGER] Non-finite values {replaced} in ledger record for {entry.get('symbol')}; stored as null")
+    append_jsonl(path, clean, fsync=True)
+
+
 def _save_active_trades(trades):
-    if os.path.exists(ACTIVE_TRADES_FILE):
-        backup_dir = "backup"
-        os.makedirs(backup_dir, exist_ok=True)
-        shutil.copy(ACTIVE_TRADES_FILE, os.path.join(backup_dir, "active_trades.json.bak"))
-        
-    temp_file = ACTIVE_TRADES_FILE + ".tmp"
-    with open(temp_file, "w") as f:
-        json.dump(trades, f)
-    os.replace(temp_file, ACTIVE_TRADES_FILE)
+    # Serialize first: a record with NaN/inf (or an unserializable value) must
+    # fail loudly here instead of becoming a restart state that cannot load.
+    try:
+        payload = json.dumps(trades, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise StateCorruptionError(f"Refusing to persist active trades: {exc}") from exc
+    with locked_path(ACTIVE_TRADES_FILE):
+        if os.path.exists(ACTIVE_TRADES_FILE):
+            backup_dir = "backup"
+            with open(ACTIVE_TRADES_FILE, "rb") as current:
+                previous = current.read()
+            # Atomic backup: a crash mid-copy can no longer leave a torn .bak.
+            atomic_write_bytes(os.path.join(backup_dir, "active_trades.json.bak"), previous)
+        atomic_write_text(ACTIVE_TRADES_FILE, payload)
 
 # ==============================================================================
 # LEDGER DEDUP CACHE
@@ -926,8 +970,7 @@ def monitor_open_trades():
                         "is_futures":     True
                     }
                     with LEDGER_WRITE_LOCK:
-                        with open(ledger_file, "a") as lf:
-                            lf.write(json.dumps(ledger_entry) + "\n")
+                        _append_ledger_record(ledger_file, ledger_entry)
                     log_trade(
                         t["strategy"], t["symbol"],
                         f"{t['side']}_FUTURES_CLOSE_{outcome}",
@@ -1007,16 +1050,16 @@ def monitor_open_trades():
                 }
                 # Atomic append to ledger
                 with LEDGER_WRITE_LOCK:
-                    with open(ledger_file, "a") as lf:
-                        lf.write(json.dumps(ledger_entry) + "\n")
+                    _append_ledger_record(ledger_file, ledger_entry)
                     if t.get("strategy") == "adx_ema":
                         try:
-                            with open("adx_ema_forward_ledger.jsonl", "a") as fwd_f:
-                                fwd_entry = dict(ledger_entry)
-                                fwd_entry["strategy_version"] = "ADX_EMA_4H_V1"
-                                fwd_f.write(json.dumps(fwd_entry) + "\n")
-                        except Exception:
-                            pass
+                            fwd_entry = dict(ledger_entry)
+                            fwd_entry["strategy_version"] = "ADX_EMA_4H_V1"
+                            _append_ledger_record("adx_ema_forward_ledger.jsonl", fwd_entry)
+                        except (OSError, TypeError, ValueError) as fwd_err:
+                            # Secondary research ledger: never blocks the close,
+                            # but a gap in forward evidence must be visible.
+                            sys_logger.warning(f"[MONITOR] adx_ema forward ledger append failed: {fwd_err}")
 
                 log_trade(
                     t["strategy"], t["symbol"],
@@ -1086,9 +1129,8 @@ def monitor_open_trades():
                         "reason":         f"OCO_{status}"
                     }
                     with LEDGER_WRITE_LOCK:
-                        with open(ledger_file, "a") as lf:
-                            lf.write(json.dumps(ledger_entry) + "\n")
-                            
+                        _append_ledger_record(ledger_file, ledger_entry)
+
                 except Exception as ec_err:
                     sys_logger.critical(
                         f"[MONITOR] \U0001f6a8 FATAL: Emergency close failed for {t['symbol']}: {ec_err}",

@@ -10,11 +10,12 @@ CRITICAL CONTRACT:
 - The kill switch may stop new signals immediately.
 - Existing positions are closed using realistic costs (taker fees + slippage + spread).
 """
-import json
+import math
 import os
 import time
 import uuid
 
+from atomic_io import append_jsonl, atomic_write_json
 from logger import get_logger
 from research_phase9.cost_engine import CostEngine
 
@@ -60,14 +61,7 @@ def trigger_kill_switch(
         "reason": reason,
         "git_sha": _get_git_sha(),
     }
-    try:
-        tmp = KILL_SWITCH_LOCK_FILE + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(lock_data, f, indent=4)
-        os.replace(tmp, KILL_SWITCH_LOCK_FILE)
-        logger.info(f"Kill switch lock file written: {KILL_SWITCH_LOCK_FILE}")
-    except Exception as e:
-        logger.error(f"Failed to write kill switch lock file: {e}")
+    lock_written = _write_lock_file(lock_data)
 
     # ── 2. Flatten positions with realistic costs ──────────────────────────
     summary = {
@@ -78,7 +72,11 @@ def trigger_kill_switch(
         "total_exit_cost": 0.0,
         "total_exit_pnl": 0.0,
         "errors": [],
+        # Callers rely on the lock file to block new signals; say so when it is missing.
+        "lock_written": lock_written,
     }
+    if not lock_written:
+        summary["errors"].append("LOCK_FILE_NOT_WRITTEN")
 
     if portfolio is None:
         logger.warning("Kill switch: no portfolio provided — positions NOT flattened.")
@@ -96,16 +94,18 @@ def trigger_kill_switch(
         qty = pos["quantity"]
         entry_price = pos["entry_price"]
 
-        # Get exit price from market data; fall back to entry price with a warning
-        if symbol in prices:
-            raw_exit_price = prices[symbol]
-        else:
-            raw_exit_price = entry_price
-            logger.warning(
-                f"Kill switch: no market price for {symbol} — using entry price {entry_price}. "
-                "PnL may be inaccurate."
+        # Exit only at an observed market price. Booking a forced exit at the
+        # entry price would invent a fill (and a PnL) that never existed, so a
+        # position without a usable price stays OPEN and is reported.
+        raw_exit_price = _usable_price(prices.get(symbol))
+        if raw_exit_price is None:
+            logger.error(
+                f"Kill switch: no usable market price for {symbol} ({prices.get(symbol)!r}) — "
+                f"position {pos_id} left OPEN; new signals remain blocked by the lock file."
             )
+            summary["positions_skipped"] += 1
             summary["errors"].append(f"NO_PRICE_FOR_{symbol}")
+            continue
 
         notional = raw_exit_price * qty
 
@@ -179,10 +179,38 @@ def _append_kill_switch_metadata(ledger_file: str, pos_id: str, reason: str):
             "reason": reason,
             "annotated_at": time.time(),
         }
-        with open(ledger_file, "a", encoding="utf-8") as f:
-            f.write(json.dumps(annotation) + "\n")
-    except Exception as e:
+        append_jsonl(ledger_file, annotation, fsync=True)
+    except (OSError, TypeError, ValueError) as e:
         logger.error(f"Failed to annotate ledger for kill switch: {e}")
+
+
+def _usable_price(value) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        price = float(value)
+    except (TypeError, ValueError):
+        return None
+    return price if math.isfinite(price) and price > 0 else None
+
+
+def _write_lock_file(lock_data: dict) -> bool:
+    """Write the lock atomically; fall back to a bare marker (existence is what
+    blocks signals) when the JSON write fails. Returns True if the lock exists."""
+    try:
+        atomic_write_json(KILL_SWITCH_LOCK_FILE, lock_data, indent=4, default=str)
+        logger.info(f"Kill switch lock file written: {KILL_SWITCH_LOCK_FILE}")
+        return True
+    except (OSError, TypeError, ValueError) as e:
+        logger.error(f"Failed to write kill switch lock file atomically: {e}")
+    try:
+        with open(KILL_SWITCH_LOCK_FILE, "a", encoding="utf-8"):
+            pass
+    except OSError as e:
+        logger.critical(f"Kill switch lock file could NOT be created ({e}); new signals are NOT blocked.")
+        return False
+    logger.warning(f"Kill switch lock file created as a bare marker: {KILL_SWITCH_LOCK_FILE}")
+    return True
 
 
 def _get_git_sha() -> str:

@@ -14,13 +14,27 @@ import glob
 import hashlib
 import json
 import os
-import shutil
 import time
 from typing import Any
 
+from atomic_io import atomic_write_bytes, locked_path, parse_json_strict, quarantine_file
 from logger import get_logger
 
 logger = get_logger("self_healing")
+
+
+def _backup_sort_key(path: str) -> tuple[int, float]:
+    """Order backups by the epoch-seconds stamp in ``<name>.<ts>.bak`` (mtime breaks ties)."""
+    stamp = path[: -len(".bak")].rsplit(".", 1)[-1]
+    try:
+        seconds = int(stamp)
+    except ValueError:
+        seconds = -1
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        mtime = 0.0
+    return seconds, mtime
 
 
 class SelfHealingEngine:
@@ -70,21 +84,37 @@ class SelfHealingEngine:
         """Restores state from the most recent valid backup."""
         filename = os.path.basename(target_filepath)
         pattern = os.path.join(self.backup_dir, f"{filename}.*.bak")
-        backups = sorted(glob.glob(pattern))
+        backups = sorted(glob.glob(pattern), key=_backup_sort_key, reverse=True)
 
         if not backups:
             logger.warning(f"[SELF_HEALING] No backup found for {target_filepath}")
             return False
 
-        latest_backup = backups[-1]
-        try:
-            shutil.copy2(latest_backup, target_filepath)
+        # Newest backup that is itself valid JSON wins; a corrupt backup must
+        # never be copied over the live file.
+        for candidate in backups:
+            try:
+                with open(candidate, "rb") as handle:
+                    payload = handle.read()
+                parse_json_strict(payload.decode("utf-8"))
+            except (OSError, UnicodeDecodeError, ValueError, RecursionError) as e:
+                logger.warning(f"[SELF_HEALING] Skipping unusable backup {candidate}: {e}")
+                continue
+            try:
+                with locked_path(target_filepath):
+                    if os.path.exists(target_filepath):
+                        # Preserve the corrupt file as evidence instead of overwriting it.
+                        quarantine_file(target_filepath, "replaced by self-healing restore")
+                    atomic_write_bytes(target_filepath, payload)
+            except OSError as e:
+                logger.error(f"[SELF_HEALING] Failed to restore backup {candidate}: {e}")
+                return False
             self.healed_incidents_count += 1
-            logger.info(f"[SELF_HEALING] ✅ Restored {target_filepath} from backup {latest_backup}")
+            logger.info(f"[SELF_HEALING] ✅ Restored {target_filepath} from backup {candidate}")
             return True
-        except Exception as e:
-            logger.error(f"[SELF_HEALING] Failed to restore backup: {e}")
-            return False
+
+        logger.error(f"[SELF_HEALING] No valid backup available for {target_filepath} ({len(backups)} unusable)")
+        return False
 
     def handle_exchange_api_failure(self, consecutive_errors: int) -> dict[str, Any]:
         """

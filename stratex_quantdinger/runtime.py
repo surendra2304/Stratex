@@ -4,10 +4,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import json
+import logging
+import os
 import threading
 
+from atomic_io import atomic_write_json, load_json_state, locked_path
+
 from .models import RuntimeHeartbeat, AuditEvent
+
+logger = logging.getLogger("stratex_quantdinger.runtime")
+
+
+def default_leases_path() -> str:
+    """Runtime lease/heartbeat file (``RUNTIME_LEASES_FILE``, default ``runtime_leases.json``)."""
+    return os.getenv("RUNTIME_LEASES_FILE", "runtime_leases.json")
 
 
 @dataclass
@@ -40,24 +50,23 @@ class RuntimeLease:
 class RuntimeSupervisor:
     """Owns runtime health evaluation decisions; gates new entry execution intents."""
 
-    def __init__(self, leases_path: str = "runtime_leases.json"):
-        self.leases_path = Path(leases_path)
+    def __init__(self, leases_path: str | None = None):
+        self.leases_path = Path(leases_path or default_leases_path())
         self._lock = threading.Lock()
 
     def record_heartbeat(self, heartbeat: RuntimeHeartbeat) -> None:
         """Persists the latest heartbeat for observability."""
-        with self._lock:
-            data = {}
-            if self.leases_path.exists():
-                try:
-                    data = json.loads(self.leases_path.read_text(encoding="utf-8"))
-                except Exception:
-                    data = {}
+        with self._lock, locked_path(self.leases_path):
+            # Observability-only file: a corrupt copy is quarantined (kept for
+            # inspection) and rebuilt rather than blocking heartbeats.
+            result = load_json_state(self.leases_path, expected_type=dict)
+            if result.status == "corrupt":
+                logger.error("Runtime lease file %s was corrupt (%s); quarantined to %s",
+                             self.leases_path, result.error, result.quarantined_to)
+            data = result.data if result.status == "ok" else {}
             data[heartbeat.runtime_id] = heartbeat.__dict__
             self.leases_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.leases_path.with_suffix(self.leases_path.suffix + ".tmp")
-            tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
-            tmp.replace(self.leases_path)
+            atomic_write_json(self.leases_path, data, indent=2, sort_keys=True, default=str)
 
     def evaluate(self, heartbeat: RuntimeHeartbeat | None) -> tuple[bool, str]:
         """Evaluates whether the runtime lease is healthy and permitted to issue new execution intents."""

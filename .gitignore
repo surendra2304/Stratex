@@ -123,3 +123,6 @@ PRODUCTION_STRATEGIES.md
 *.json.lock
 *.jsonl.lock
 *.corrupt-*
+
+# atomic_io temporary files (".<name>.<random>.tmp") left by a killed writer
+.*.tmp

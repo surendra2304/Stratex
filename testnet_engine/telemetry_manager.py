@@ -5,6 +5,8 @@ import os
 import threading
 import time
 
+from atomic_io import append_jsonl, read_jsonl
+
 logger = logging.getLogger("telemetry_manager")
 
 def validate_signal_event(data: dict) -> dict:
@@ -175,6 +177,18 @@ def validate_equity_snapshot(data: dict) -> dict:
     }
     return validated
 
+
+def _finite_or_null(value):
+    """Copy of ``value`` with NaN/inf floats replaced by None (strict JSON)."""
+    if isinstance(value, float):
+        return value if value == value and value not in (float("inf"), float("-inf")) else None
+    if isinstance(value, dict):
+        return {k: _finite_or_null(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_finite_or_null(v) for v in value]
+    return value
+
+
 class TelemetryManager:
     """
     Thread-safe master telemetry and audit logging manager for the Binance Testnet trading bot.
@@ -240,38 +254,40 @@ class TelemetryManager:
         return datetime.datetime.utcnow().timestamp()
 
     def _append_jsonl(self, filepath: str, record: dict):
+        """One complete strict-JSON line per record (NaN/inf stored as null,
+        torn tails sealed), so a reload never stops at a corrupt line."""
         try:
-            line = json.dumps(record) + "\n"
-            with open(filepath, "a", encoding="utf-8") as f:
-                f.write(line)
-        except Exception as e:
+            append_jsonl(filepath, _finite_or_null(record))
+        except (OSError, TypeError, ValueError) as e:
             logger.error(f"[TELEMETRY] Error writing to {filepath}: {e}")
 
     def _load_persisted_state(self):
         """Loads historical records into in-memory caches."""
-        if os.path.exists(self.trade_events_file):
-            try:
-                with open(self.trade_events_file, "r", encoding="utf-8") as f:
-                    for line in f:
-                        if line.strip():
-                            rec = json.loads(line)
-                            tid = rec.get("trade_id")
-                            if tid:
-                                self._trade_events[tid] = rec
-            except Exception as e:
-                logger.warning(f"[TELEMETRY] Error loading trade events: {e}")
+        # Line-by-line: one unreadable line is skipped and counted instead of
+        # aborting the load and silently hiding every later record.
+        try:
+            events = read_jsonl(self.trade_events_file)
+        except OSError as e:
+            logger.warning(f"[TELEMETRY] Error loading trade events: {e}")
+        else:
+            for rec in events.records:
+                tid = rec.get("trade_id")
+                if tid:
+                    self._trade_events[tid] = rec
+            if events.skipped:
+                logger.warning(f"[TELEMETRY] Skipped {events.skipped} unreadable trade-event line(s)")
 
-        if os.path.exists(self.position_history_file):
-            try:
-                with open(self.position_history_file, "r", encoding="utf-8") as f:
-                    for line in f:
-                        if line.strip():
-                            rec = json.loads(line)
-                            pid = rec.get("position_id") or rec.get("trade_id")
-                            if pid:
-                                self._positions_history[pid] = rec
-            except Exception as e:
-                logger.warning(f"[TELEMETRY] Error loading position history: {e}")
+        try:
+            positions = read_jsonl(self.position_history_file)
+        except OSError as e:
+            logger.warning(f"[TELEMETRY] Error loading position history: {e}")
+        else:
+            for rec in positions.records:
+                pid = rec.get("position_id") or rec.get("trade_id")
+                if pid:
+                    self._positions_history[pid] = rec
+            if positions.skipped:
+                logger.warning(f"[TELEMETRY] Skipped {positions.skipped} unreadable position-history line(s)")
 
     # =========================================================================
     # 1. TRADE EVENT RECORDS (Canonical 40+ Field Model)

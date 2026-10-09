@@ -17,6 +17,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from atomic_io import atomic_write_bytes, atomic_write_text, locked_path
 from data_client import MarketDataClient
 
 
@@ -145,12 +146,13 @@ def load_market_data(symbols, timeframes, start_str="2025-01-01"):
                     "rows": len(df),
                     "sha256": digest,
                 }
-                cache_tmp = cache_file.with_suffix(cache_file.suffix + ".tmp")
-                provenance_tmp = provenance_file.with_suffix(provenance_file.suffix + ".tmp")
-                cache_tmp.write_bytes(csv_bytes)
-                provenance_tmp.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-                cache_tmp.replace(cache_file)
-                provenance_tmp.replace(provenance_file)
+                # Unique temp files + one lock per cache entry: concurrent
+                # fetchers can no longer interleave writes to a shared .tmp.
+                # A crash between the two replaces leaves a sha256 mismatch,
+                # which the read path above rejects (fail closed).
+                with locked_path(cache_file):
+                    atomic_write_bytes(cache_file, csv_bytes)
+                    atomic_write_text(provenance_file, json.dumps(metadata, indent=2))
                 print(
                     f"Downloaded & saved verified {sym} {tf} ({len(df)} bars; "
                     f"source={source}; sha256={digest[:12]})"

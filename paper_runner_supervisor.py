@@ -19,6 +19,7 @@ import threading
 import time
 import traceback
 
+from atomic_io import atomic_write_json, load_json_state
 from logger import get_logger
 
 logger = get_logger("paper_supervisor")
@@ -26,6 +27,7 @@ logger = get_logger("paper_supervisor")
 HEARTBEAT_FILE = os.getenv("PAPER_RUNNER_HEARTBEAT_FILE", "paper_runner_heartbeat.json")
 MAX_BACKOFF_SECONDS = 300
 HEARTBEAT_STALE_SECONDS = 180
+HEARTBEAT_FUTURE_TOLERANCE_SECONDS = 30
 
 _state = {
     "thread": None,
@@ -50,10 +52,7 @@ def _write_heartbeat(status, error=None):
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
     try:
-        tmp = HEARTBEAT_FILE + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
-        os.replace(tmp, HEARTBEAT_FILE)
+        atomic_write_json(HEARTBEAT_FILE, payload, indent=2, default=str)
     except Exception as e:  # heartbeat must never crash supervision
         logger.error(f"[PAPER_SUPERVISOR] heartbeat write failed: {e}")
 
@@ -131,14 +130,18 @@ def get_status():
         return {"paper_runner_status": "DISABLED", "restarts": 0}
     # Prefer the on-disk heartbeat (works across processes)
     try:
-        with open(HEARTBEAT_FILE, "r", encoding="utf-8") as f:
-            hb = json.load(f)
-        age = time.time() - datetime.datetime.fromisoformat(
-            hb["timestamp"].replace("Z", "+00:00")
-        ).timestamp()
+        hb = load_json_state(HEARTBEAT_FILE, expected_type=dict, quarantine=False).data
+        stamp = datetime.datetime.fromisoformat(str(hb["timestamp"]).replace("Z", "+00:00"))
+        if stamp.tzinfo is None:  # written as UTC; never interpret as local time
+            stamp = stamp.replace(tzinfo=datetime.timezone.utc)
+        age = time.time() - stamp.timestamp()
         status = hb.get("status", "UNKNOWN")
         if status == "RUNNING" and age > HEARTBEAT_STALE_SECONDS:
             status = "DEAD"  # heartbeat went stale — thread hung or killed
+        elif status == "RUNNING" and age < -HEARTBEAT_FUTURE_TOLERANCE_SECONDS:
+            # A heartbeat from the future proves nothing about liveness (clock
+            # skew or a hand-edited file) and would otherwise never go stale.
+            status = "DEAD"
         return {
             "paper_runner_status": status,
             "paper_runner_restarts": hb.get("restarts", 0),

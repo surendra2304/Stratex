@@ -32,6 +32,9 @@ os.environ["TRADING_PAUSE_STATE_FILE"] = os.path.join(test_dir, "trading_pause_s
 # key recorded by one test run (e.g. TEST_OCO_FAIL_001) made the same test see
 # an "in-flight duplicate" on the next run within 60 seconds.
 os.environ["IDEMPOTENCY_STORE_FILE"] = os.path.join(test_dir, "idempotency_store.json")
+os.environ["AUDIT_LOG_FILE"] = os.path.join(test_dir, "audit_log.jsonl")
+os.environ["RUNTIME_LEASES_FILE"] = os.path.join(test_dir, "runtime_leases.json")
+os.environ["EXECUTION_INTENTS_FILE"] = os.path.join(test_dir, "execution_intents.json")
 
 # Clear any secret keys for unauthenticated local test client assertions
 for k in ["BOT_API_KEY", "API_KEY_CONTROL", "API_KEY_READONLY", "API_KEY_FRIDAY"]:
@@ -119,7 +122,7 @@ def _reset_emergency_control_state():
 
 
 @pytest.fixture(autouse=True)
-def _fresh_idempotency_store(tmp_path):
+def _fresh_idempotency_store(tmp_path_factory):
     """Each test gets an empty order-idempotency store (it is a process-global
     singleton backed by a file)."""
     try:
@@ -128,11 +131,19 @@ def _fresh_idempotency_store(tmp_path):
         yield
         return
     previous = audit_manager._idempotency_store
-    audit_manager._idempotency_store = audit_manager.IdempotencyStore(str(tmp_path / "idempotency_store.json"))
+    previous_audit = audit_manager._audit_manager
+    # A separate directory (not the test's tmp_path) so the stores' lock files
+    # never show up in tests that inspect their own tmp_path.
+    state_dir = tmp_path_factory.mktemp("audit_state")
+    audit_manager._idempotency_store = audit_manager.IdempotencyStore(str(state_dir / "idempotency_store.json"))
+    # The hash-chained audit log is also a file-backed singleton; never let
+    # tests append to the repository's audit/audit_log.jsonl.
+    audit_manager._audit_manager = audit_manager.AuditManager(str(state_dir / "audit_log.jsonl"))
     try:
         yield
     finally:
         audit_manager._idempotency_store = previous
+        audit_manager._audit_manager = previous_audit
 
 
 @pytest.fixture

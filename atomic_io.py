@@ -39,6 +39,7 @@ lines, reporting how many were skipped instead of raising or hiding it.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import math
@@ -49,7 +50,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TypeVar
 
 try:  # POSIX advisory locks
     import fcntl as _fcntl
@@ -62,6 +63,8 @@ except ImportError:  # POSIX
     _msvcrt = None  # type: ignore[assignment]
 
 logger = logging.getLogger("atomic_io")
+
+_D = TypeVar("_D")
 
 #: Upper bound for state files this module will parse (protects against a
 #: runaway writer or a hostile file exhausting memory on load).
@@ -95,6 +98,39 @@ def atomic_write_text(path: str | os.PathLike[str], text: str, *, encoding: str 
         raise
     if fsync:
         _fsync_directory(directory)
+
+
+def publish_new_file(path: str | os.PathLike[str], text: str, *, encoding: str = "utf-8") -> None:
+    """Create ``path`` with ``text`` atomically, refusing to replace an existing file.
+
+    The content is written and fsynced to a unique temporary file, then
+    published with ``os.link`` — which fails with ``FileExistsError`` if the
+    target already exists — so concurrent writers can never overwrite each
+    other's report (unlike an ``exists()`` check followed by a replace).
+    """
+    target = os.fspath(path)
+    directory = os.path.dirname(os.path.abspath(target)) or "."
+    os.makedirs(directory, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix=f".{os.path.basename(target)}.", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding=encoding) as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(tmp_path, target)
+        except (AttributeError, NotImplementedError, PermissionError):  # pragma: no cover - FS without hard links
+            exclusive = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            with os.fdopen(exclusive, "w", encoding=encoding) as handle:
+                handle.write(text)
+                handle.flush()
+                os.fsync(handle.fileno())
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
+    _fsync_directory(directory)
 
 
 def atomic_write_bytes(path: str | os.PathLike[str], payload: bytes, *, fsync: bool = True) -> None:
@@ -320,6 +356,47 @@ def load_json_state(
     logger.error("State file %s is corrupt: %s", source, error)
     moved = quarantine_file(source, error) if quarantine else None
     return LoadResult(default_factory(), "corrupt", quarantined_to=moved, error=error)
+
+
+def load_json_document(
+    path: str | os.PathLike[str],
+    *,
+    expected_type: type | tuple[type, ...] = dict,
+    what: str = "state file",
+    max_bytes: int = DEFAULT_MAX_STATE_BYTES,
+) -> Any:
+    """Load a JSON document that *must* exist and be valid — never quarantines.
+
+    For records whose loss must stop the caller (frozen experiment configs,
+    immutable registries): raises ``FileNotFoundError`` when missing and
+    :class:`StateFileError` when unreadable, invalid, non-finite or of the
+    wrong top-level type.
+    """
+    result = load_json_state(path, expected_type=expected_type, quarantine=False, max_bytes=max_bytes)
+    if result.status == "missing":
+        raise FileNotFoundError(f"{what} not found: {os.fspath(path)}")
+    if result.status != "ok":
+        raise StateFileError(f"{what} {os.fspath(path)} is corrupt: {result.error}")
+    return result.data
+
+
+def dataclass_from_mapping(cls: type[_D], data: Any, *, source: str = "") -> _D:
+    """Build dataclass ``cls`` from ``data`` without masking schema drift.
+
+    Unknown keys and missing required fields raise :class:`StateFileError`
+    (with the offending names) instead of an opaque ``TypeError``.
+    """
+    where = f" in {source}" if source else ""
+    if not isinstance(data, dict):
+        raise StateFileError(f"expected a JSON object{where}, got {type(data).__name__}")
+    known = {item.name for item in dataclasses.fields(cls)}  # type: ignore[arg-type]
+    unknown = sorted(set(data) - known)
+    if unknown:
+        raise StateFileError(f"unknown field(s) {unknown}{where}")
+    try:
+        return cls(**data)
+    except TypeError as exc:
+        raise StateFileError(f"invalid {cls.__name__}{where}: {exc}") from exc
 
 
 def _type_names(expected: type | tuple[type, ...]) -> str:

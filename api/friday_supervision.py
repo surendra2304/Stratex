@@ -27,7 +27,7 @@ from flask import Blueprint, jsonify, request
 import config
 from advisory_params import get_advisory_overlay
 from api.validation import RequestValidationError, get_str, json_body
-from audit.audit_manager import get_audit_manager, get_idempotency_store
+from audit.audit_manager import get_audit_manager, get_idempotency_store, persisted_hash
 from atomic_io import atomic_write_json
 from logger import get_logger
 from security_hardening import SCOPE_FRIDAY, require_api_scope
@@ -193,13 +193,13 @@ def apply_supervision_panic(*, confirm: bool, release: bool, reason: str, source
                 "panic_active": still_active,
                 "failed_steps": errors,
                 "message": "Panic could not be fully released; order submission remains blocked.",
-                "audit_hash": audit.get("hash")
+                "audit_hash": persisted_hash(audit)
             }, 500)
         return ({
             "status": "SUCCESS",
             "panic_active": False,
             "message": "PANIC RELEASED: Trading engine unblocked.",
-            "audit_hash": audit.get("hash")
+            "audit_hash": persisted_hash(audit)
         }, 200)
 
     # Activate Panic — two independent blocking mechanisms; report what stuck.
@@ -236,7 +236,7 @@ def apply_supervision_panic(*, confirm: bool, release: bool, reason: str, source
             "error": "PANIC_NOT_PERSISTED",
             "panic_active": False,
             "message": "Neither the panic flag nor the kill-switch lock could be written; orders are NOT blocked.",
-            "audit_hash": audit.get("hash")
+            "audit_hash": persisted_hash(audit)
         }, 500)
 
     return ({
@@ -246,7 +246,7 @@ def apply_supervision_panic(*, confirm: bool, release: bool, reason: str, source
         "blocked_by": blocked_by,
         "message": ("EMERGENCY PANIC ACTIVATED: all new order submission blocked. "
                     "Existing open/protective orders were not cancelled by this endpoint."),
-        "audit_hash": audit.get("hash")
+        "audit_hash": persisted_hash(audit)
     }, 200)
 
 
