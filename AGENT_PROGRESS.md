@@ -29,10 +29,10 @@ Work happens only on branch `arena/bb27a2eb-stratex`; every commit must pass the
 7. [x] Stress pass — execution/risk numeric edge cases (NaN/inf/zero/negative price, size,
        balance, stop distance) through real sizing/protection code; fix fail-open paths + tests.
        (commit 8701a13; 228 regression cases in tests/test_numeric_edge_cases.py.)
-8. [~] Stress pass — persistence robustness (corrupt/truncated/concurrent JSON + JSONL state
+8. [x] Stress pass — persistence robustness (corrupt/truncated/concurrent JSON + JSONL state
        stores: trades, ledger, baseline, advisory params); convert every shared-`.tmp` writer to
        `atomic_io`; fix crashes/data loss + tests.
-9. [ ] Stress pass — malformed market data (NaN, duplicates, out-of-order, high<low, zero
+9. [~] Stress pass — malformed market data (NaN, duplicates, out-of-order, high<low, zero
        volume, short history) through indicator/strategy/signal path; fix + tests.
 10. [ ] Census extension — GET query-parameter fuzz (wrong types, traversal, huge limits) on all
         167 GET routes; fix every 500 / unbounded response.
@@ -58,7 +58,8 @@ Work happens only on branch `arena/bb27a2eb-stratex`; every commit must pass the
         pushed, this file at 100%, ≥30,000 changed lines since 5c66171 (user requirement).
 
 ## Current step
-Item 8 — persistence robustness (atomic_io conversion of shared-`.tmp` writers, corrupt-state handling).
+Item 9 — malformed market data through indicator/strategy/signal path.
+After item 8 (`2cc3550`): 96 files, +9,294/−2,095 → 11,389 − 1,376 = **10,013 counted**.
 
 Line counter (user requirement, 2026-10-09: "only stop after genuinely modifying 30,000 lines"):
 `git diff --shortstat 5c66171 HEAD` insertions+deletions, minus the 1,376 lines that were already
@@ -98,6 +99,26 @@ uncommitted when the requirement was given.
 - 2026-10-09: `risk/live_enforcer.py` was a byte-for-byte copy of `risk/circuit_breakers.py`;
   `LiveRiskEnforcer` now lives only in live_enforcer.py and `CircuitBreakerEngine` only in
   circuit_breakers.py (re-export kept for compatibility).
+- 2026-10-09: Audit writes that fail are returned with `persisted: False` (callers show
+  `audit_hash: null`); only parameter application *requires* a persisted audit record
+  (`RECOMMENDATION_AUTHORIZED`, `required=True`) — no audit, no change. Panic paths never block
+  on the audit log.
+- 2026-10-09: A torn final audit line is handled WAL-style: preserved in
+  `<log>.corrupt-torn-<UTC>` and cut before the next append; a log with no valid record at all
+  is quarantined and a new chain starts from genesis.
+- 2026-10-09: A corrupt order-idempotency store is quarantined (critical log) and trading
+  continues with an empty store — blocking every order on a corrupt cache was judged worse;
+  retention 30 days (`IDEMPOTENCY_RETENTION_DAYS`), cap 50,000 (`IDEMPOTENCY_MAX_ENTRIES`).
+  The quantdinger execution-intent guard instead fails closed (corrupt store ⇒ every intent
+  "seen", file left untouched) because it has no other dedupe layer.
+- 2026-10-09: Corrupt advisory overlay ⇒ quarantine + strategy defaults (same degradation the
+  module already uses for expired overrides); an apply whose save fails is rolled back, a
+  rollback/reset whose save fails stays active in memory (safe direction) with a critical log.
+- 2026-10-09: Kill switch without a usable market price leaves the position OPEN and reports
+  `NO_PRICE_FOR_<symbol>` instead of booking an exit at the entry price.
+- 2026-10-09: Non-finite numbers in append-only datasets (signals, telemetry, trade ledger) are
+  stored as `null` (ledger rows also get `numeric_fault`) so records are never dropped and
+  files stay strict JSON; restart state (active trades, testnet portfolio) refuses NaN instead.
 
 ## Notes
 - Item 7 (8701a13): 1,606 passed / 6 skipped on a clean worktree; ruff + mypy clean. Every test
