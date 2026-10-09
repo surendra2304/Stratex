@@ -32,9 +32,9 @@ Work happens only on branch `arena/bb27a2eb-stratex`; every commit must pass the
 8. [x] Stress pass — persistence robustness (corrupt/truncated/concurrent JSON + JSONL state
        stores: trades, ledger, baseline, advisory params); convert every shared-`.tmp` writer to
        `atomic_io`; fix crashes/data loss + tests.
-9. [~] Stress pass — malformed market data (NaN, duplicates, out-of-order, high<low, zero
+9. [x] Stress pass — malformed market data (NaN, duplicates, out-of-order, high<low, zero
        volume, short history) through indicator/strategy/signal path; fix + tests.
-10. [ ] Census extension — GET query-parameter fuzz (wrong types, traversal, huge limits) on all
+10. [~] Census extension — GET query-parameter fuzz (wrong types, traversal, huge limits) on all
         167 GET routes; fix every 500 / unbounded response.
 11. [ ] Type-safety pass — run mypy with every error code enabled + `check_untyped_defs`
         (602 findings at start: 171 attr-defined, 131 operator, 71 index, ...); fix real defects,
@@ -58,8 +58,8 @@ Work happens only on branch `arena/bb27a2eb-stratex`; every commit must pass the
         pushed, this file at 100%, ≥30,000 changed lines since 5c66171 (user requirement).
 
 ## Current step
-Item 9 — malformed market data through indicator/strategy/signal path.
-After item 8 (`2cc3550`): 96 files, +9,294/−2,095 → 11,389 − 1,376 = **10,013 counted**.
+Item 10 — census GET query-param fuzz.
+After item 9 (see `git log`): 108 files, +10,462/−2,195 → 12,657 − 1,376 = **11,281 counted**.
 
 Line counter (user requirement, 2026-10-09: "only stop after genuinely modifying 30,000 lines"):
 `git diff --shortstat 5c66171 HEAD` insertions+deletions, minus the 1,376 lines that were already
@@ -119,6 +119,12 @@ uncommitted when the requirement was given.
 - 2026-10-09: Non-finite numbers in append-only datasets (signals, telemetry, trade ledger) are
   stored as `null` (ledger rows also get `numeric_fault`) so records are never dropped and
   files stay strict JSON; restart state (active trades, testnet portfolio) refuses NaN instead.
+- 2026-10-09: Malformed candles are dropped, never repaired (no interpolation, no swapping
+  high/low). A frame is UNUSABLE when its newest bar is invalid, >5% of rows are invalid, too few
+  rows remain, or (decision paths only) the feed is stale/future; `data.get_candles` does not
+  judge staleness because research callers use it too.
+- 2026-10-09: A perfectly flat window reads RSI 50 and bb_pos 0.5 (neutral) instead of 100 / 0;
+  a streamed kline without `T` gets `t + interval − 1 ms` (Binance's definition), never "now".
 
 ## Notes
 - Item 7 (8701a13): 1,606 passed / 6 skipped on a clean worktree; ruff + mypy clean. Every test
