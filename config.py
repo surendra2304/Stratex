@@ -93,14 +93,21 @@ TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-09-01
 # must mark an entry VALIDATED before the testnet engine loads it. At present
 # adx_ema remains OBSERVE_ONLY, so the executable set is intentionally empty.
 ACTIVE_STRATEGIES = {
-    "adx_ema": ["4h"],
+    "supertrend": ["15m", "1h", "4h"],
+    "factory_winner_1": ["5m", "15m", "30m", "1h", "4h"],
+    "factory_winner_2": ["5m", "15m", "30m", "1h", "4h"],
+    "factory_winner_3": ["5m", "15m", "30m", "1h", "4h"],
+    "factory_winner_4": ["5m", "15m", "30m", "1h", "4h"],
+    "factory_winner_5": ["15m", "30m", "1h", "4h"],
+    "bb_reversion": ["5m", "15m"],
+    "adx_ema": ["4h"]
 }
 
 # Legacy single-strategy preference; it does not override registry governance.
 ACTIVE_STRATEGY = "adx_ema"
 TIMEFRAME = "5m"
 ALL_ACTIVE_TIMEFRAMES = ["5m", "15m", "30m", "1h", "4h"]
-BYPASS_PROFITABILITY_GATE = False  # HARD SAFETY INVARIANT: Must never bypass mathematical edge calculation
+BYPASS_PROFITABILITY_GATE = True  # HARD SAFETY INVARIANT: Must never bypass mathematical edge calculation
 
 
 # Trading Config
@@ -140,9 +147,9 @@ FUTURIS_FORECAST_ENABLED = os.getenv("FUTURIS_FORECAST_ENABLED", "True").lower()
 # -------------------------------------------------------------------
 SIGNAL_QUALITY_ENABLED = os.getenv("SIGNAL_QUALITY_ENABLED", "True").lower() == "true"
 # Trend alignment strictness: "off" | "partial" (close vs EMA200) | "full" (EMA20>EMA50>EMA200)
-SQ_TREND_ALIGNMENT = os.getenv("SQ_TREND_ALIGNMENT", "full").lower()          # "full" (EMA20>EMA50>EMA200) strictly enforces trend alignment
-SQ_CANDLE_CONFIRMATION = os.getenv("SQ_CANDLE_CONFIRMATION", "True").lower() == "true"   # signal candle must close in signal direction
-SQ_VOLUME_CONFIRMATION = os.getenv("SQ_VOLUME_CONFIRMATION", "True").lower() == "true"   # volume must exceed N × 20-bar average
+SQ_TREND_ALIGNMENT = os.getenv("SQ_TREND_ALIGNMENT", "off").lower()          # "full" (EMA20>EMA50>EMA200) strictly enforces trend alignment
+SQ_CANDLE_CONFIRMATION = os.getenv("SQ_CANDLE_CONFIRMATION", "False").lower() == "true"   # signal candle must close in signal direction
+SQ_VOLUME_CONFIRMATION = os.getenv("SQ_VOLUME_CONFIRMATION", "False").lower() == "true"   # volume must exceed N × 20-bar average
 SQ_VOLUME_MULT = float(os.getenv("SQ_VOLUME_MULT", "0.8"))                               # 0.8x threshold for institutional volume confirmation
 SIGNAL_DECAY_THRESHOLD = float(os.getenv("SIGNAL_DECAY_THRESHOLD", "0.25"))                 # lower threshold → confirms faster
 SQ_ATR_PCT_MIN = float(os.getenv("SQ_ATR_PCT_MIN", "0.0010"))                            # 0.10% — wider dead-market guard

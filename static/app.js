@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const REFRESH_MS = 15000;
+  const REFRESH_MS = 1000;
   const resourceUrls = {
     account: '/api/status',
     engine: '/api/engine-health',
@@ -67,7 +67,11 @@
     if (!value) return '—';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '—';
-    return `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+    const d = String(date.getUTCDate()).padStart(2, '0');
+    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const y = date.getUTCFullYear();
+    const t = date.toISOString().slice(11, 16);
+    return `${d}-${m}-${y} ${t} UTC`;
   };
   const moneyClass = (value) => {
     const amount = numeric(value);
@@ -92,30 +96,36 @@
     const refreshButton = byId('btn-refresh');
     if (refreshButton) refreshButton.classList.add('is-loading');
 
-    const settled = await Promise.allSettled(Object.entries(resourceUrls).map(async ([key, url]) => [key, await fetchJson(url)]));
-    settled.forEach((result) => {
-      if (result.status === 'fulfilled') {
-        const [key, value] = result.value;
-        resources[key] = { state: 'ready', value, error: null, updatedAt: Date.now() };
-      } else {
-        const index = settled.indexOf(result);
-        const key = Object.keys(resourceUrls)[index];
-        const previous = resources[key];
-        resources[key] = {
-          state: previous.value ? 'stale' : 'error',
-          value: previous.value,
-          error: result.reason instanceof Error ? result.reason.message : 'Request failed',
-          updatedAt: previous.updatedAt
-        };
-      }
-    });
+    try {
+      const settled = await Promise.allSettled(Object.entries(resourceUrls).map(async ([key, url]) => [key, await fetchJson(url)]));
+      settled.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          const [key, value] = result.value;
+          resources[key] = { state: 'ready', value, error: null, updatedAt: Date.now() };
+        } else {
+          const index = settled.indexOf(result);
+          const key = Object.keys(resourceUrls)[index];
+          const previous = resources[key];
+          resources[key] = {
+            state: previous.value ? 'stale' : 'error',
+            value: previous.value,
+            error: result.reason instanceof Error ? result.reason.message : 'Request failed',
+            updatedAt: previous.updatedAt
+          };
+        }
+      });
 
-    renderAll();
-    const now = new Date();
-    setText('last-sync-time', `Synced ${now.toLocaleTimeString()}`);
-    setText('footer-update', `Last refresh ${now.toLocaleTimeString()}`);
-    if (refreshButton) refreshButton.classList.remove('is-loading');
-    isRefreshing = false;
+      renderAll();
+      const now = new Date();
+      setText('last-sync-time', `Synced ${now.toLocaleTimeString()}`);
+      setText('footer-update', `Last refresh ${now.toLocaleTimeString()}`);
+    } catch (e) {
+      console.error("Error during refreshData:", e);
+    } finally {
+      if (refreshButton) refreshButton.classList.remove('is-loading');
+      isRefreshing = false;
+      setTimeout(refreshData, REFRESH_MS);
+    }
   }
 
   function renderAll() {
@@ -140,7 +150,8 @@
     const paper = resources.paper.value;
     const mode = account && account.mode ? account.mode : paper && paper.mode ? paper.mode : null;
     setText('header-mode', mode ? `${mode} MODE` : 'Mode unavailable');
-    setText('heading-date', new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(new Date()));
+    const _d = new Date();
+    setText('heading-date', `${String(_d.getDate()).padStart(2, '0')}-${String(_d.getMonth() + 1).padStart(2, '0')}-${_d.getFullYear()}`);
 
     const connection = byId('connection-state');
     const runtime = byId('runtime-pill');
@@ -440,7 +451,7 @@
       body.innerHTML = `<tr><td colspan="5" class="empty-cell">${stateMarkup('empty', 'No closed trades with a close timestamp were returned.')}</td></tr>`;
       return;
     }
-    body.innerHTML = ordered.map(([date, item]) => `<tr><td>${escapeHtml(date)}</td><td>${item.count}</td><td>${item.wins}</td><td>${item.losses}</td><td class="${moneyClass(item.knownPnl ? item.net : null)}">${item.knownPnl === item.count ? escapeHtml(formatMoney(item.net)) : 'Incomplete P&L data'}</td></tr>`).join('');
+    body.innerHTML = ordered.map(([date, item]) => `<tr><td>${escapeHtml(date.split('-').reverse().join('-'))}</td><td>${item.count}</td><td>${item.wins}</td><td>${item.losses}</td><td class="${moneyClass(item.knownPnl ? item.net : null)}">${item.knownPnl === item.count ? escapeHtml(formatMoney(item.net)) : 'Incomplete P&L data'}</td></tr>`).join('');
   }
 
   function renderMarkets() {
@@ -605,5 +616,5 @@
   const initialView = window.location.hash.replace('#', '');
   switchView(Object.prototype.hasOwnProperty.call(viewCopy, initialView) ? initialView : 'overview');
   refreshData();
-  window.setInterval(refreshData, REFRESH_MS);
+  
 })();

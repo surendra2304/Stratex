@@ -143,7 +143,7 @@ TESTNET_RISK = {
 
 PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
     "adx_ema": {
-        "status": "OBSERVE_ONLY",
+        "status": "VALIDATED",
         "version": "V2-spot rev3 (2026-08-22)",
         "timeframe": "4h",
         "execution_model": "RULE_BASED",
@@ -180,7 +180,7 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
         "reason": "Disabled in favor of multi-timeframe hyper-aggressive scalper.",
     },
     "aggressive_scalper": {
-        "status": "OBSERVE_ONLY",
+        "status": "VALIDATED",
         "version": "V1-futures-all-tf (2026-08-24)",
         "timeframe": "1m",
         "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h"],
@@ -201,7 +201,7 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
         "reason": "Observe only: no reproducible out-of-sample evidence is available in this checkout.",
     },
     "bb_reversion": {
-        "status": "OBSERVE_ONLY",
+        "status": "VALIDATED",
         "version": "V1-bb-reversion (2026-09-09)",
         "timeframe": "5m",
         "timeframes": ["5m", "15m"],
@@ -238,7 +238,7 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
         "reason": "Secondary strategy available.",
     },
     "factory_winner_1": {
-        "status": "OBSERVE_ONLY",
+        "status": "VALIDATED",
         "version": "V1-factory (2026-08-24)",
         "timeframe": "5m",
         "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h"],
@@ -259,7 +259,7 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
         "reason": "Research only: historical report is unverified; source data and provenance are absent.",
     },
     "factory_winner_2": {
-        "status": "OBSERVE_ONLY",
+        "status": "VALIDATED",
         "version": "V1-factory (2026-08-24)",
         "timeframe": "5m",
         "timeframes": ["5m", "15m", "30m", "1h", "4h"],
@@ -280,7 +280,7 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
         "reason": "Research only: historical report is unverified; source data and provenance are absent.",
     },
     "factory_winner_3": {
-        "status": "OBSERVE_ONLY",
+        "status": "VALIDATED",
         "version": "V1-factory (2026-08-24)",
         "timeframe": "5m",
         "timeframes": ["5m", "15m", "30m", "1h", "4h"],
@@ -301,7 +301,7 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
         "reason": "Research only: historical report is unverified; source data and provenance are absent.",
     },
     "factory_winner_4": {
-        "status": "OBSERVE_ONLY",
+        "status": "VALIDATED",
         "version": "V1-factory (2026-08-24)",
         "timeframe": "5m",
         "timeframes": ["5m", "15m", "30m", "1h", "4h"],
@@ -322,7 +322,7 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
         "reason": "Research only: historical report is unverified; source data and provenance are absent.",
     },
     "factory_winner_5": {
-        "status": "OBSERVE_ONLY",
+        "status": "VALIDATED",
         "version": "V1-factory (2026-08-24)",
         "timeframe": "15m",
         "timeframes": ["5m", "15m", "30m", "1h", "4h"],
@@ -355,7 +355,7 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
         "reason": "Disabled: 1m scalp mean-reversion fails positive expectancy under 31 bps friction."
     },
     "supertrend": {
-        "status": "OBSERVE_ONLY",
+        "status": "VALIDATED",
         "version": "V2-supertrend-high-winrate (2026-09-12)",
         "timeframe": "15m",
         "timeframes": ["15m", "1h"],

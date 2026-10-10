@@ -154,11 +154,28 @@ def get_exchange_client():
         client = Client(API_KEY, SECRET_KEY, testnet=True, ping=False)
         if mode == "TESTNET":
             client.API_URL = "https://testnet.binance.vision/api"
+        if mode in ["TESTNET", "FUTURES"]:
+            client.FUTURES_URL = "https://testnet.binancefuture.com/fapi"
         try:
-            st = client.futures_time()['serverTime'] if mode == "FUTURES" else client.get_server_time()['serverTime']
-            client.TIME_OFFSET = st - int(time.time() * 1000)
+            local_before = int(time.time() * 1000)
+            if mode == "FUTURES":
+                st = client.futures_time()['serverTime']
+            else:
+                st = client.get_server_time()['serverTime']
+            local_after = int(time.time() * 1000)
+            client.TIME_OFFSET = st - ((local_before + local_after) // 2)
         except Exception:
             pass
+            
+        original_request = client._request
+        def patched_request(method, uri, signed, force_params=False, **kwargs):
+            if signed:
+                if 'data' not in kwargs or kwargs['data'] is None:
+                    kwargs['data'] = {}
+                kwargs['data']['recvWindow'] = 60000
+            return original_request(method, uri, signed, force_params, **kwargs)
+        client._request = patched_request
+        
         return client
         
     return None

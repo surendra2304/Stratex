@@ -341,8 +341,8 @@ class MarketScanner:
                         if self._stop_event.is_set():
                             break
                         self._poll_single_symbol_tf(sym, tf)
-                        # 0.5-second sleep between REST calls for rate limit safety and low CPU usage
-                        time.sleep(0.5)
+                        # 0.05-second sleep between REST calls for high-frequency rate limit safety
+                        time.sleep(0.05)
 
             except Exception as e:
                 err_msg = str(e)
@@ -352,7 +352,7 @@ class MarketScanner:
                     logger.error(f"[SCANNER_LOOP_ERROR] Error in REST polling cycle: {e}")
 
             elapsed = time.time() - loop_start
-            remaining_sleep = max(1.0, 60.0 - elapsed)
+            remaining_sleep = max(1.0, 5.0 - elapsed)
             # Sleep remaining interval in 1s increments to respond promptly to stop_event
             for _ in range(int(remaining_sleep)):
                 if self._stop_event.is_set():

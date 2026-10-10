@@ -2,9 +2,12 @@ import os
 import signal
 import socket
 import sys
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
 
 _SOCKET_LOCK = None
 PID_FILE = "bot.pid"
+
 
 def _cleanup():
     global _SOCKET_LOCK

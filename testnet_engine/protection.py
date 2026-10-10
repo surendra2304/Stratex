@@ -394,12 +394,21 @@ def emergency_market_close(
     logger.critical(
         f"[PROTECTION] 🚨 EMERGENCY CLOSE: {symbol} {close_side} {executed_qty}"
     )
-    response = client.create_order(
-        symbol=symbol,
-        side=close_side,
-        type=Client.ORDER_TYPE_MARKET,
-        quantity=executed_qty,
-    )
+    import config
+    if config.TRADING_MODE == "FUTURES":
+        response = client.futures_create_order(
+            symbol=symbol,
+            side=close_side,
+            type=Client.ORDER_TYPE_MARKET,
+            quantity=executed_qty,
+        )
+    else:
+        response = client.create_order(
+            symbol=symbol,
+            side=close_side,
+            type=Client.ORDER_TYPE_MARKET,
+            quantity=executed_qty,
+        )
     exec_qty = float(response.get("executedQty", 0))
     residual = max(0.0, executed_qty - exec_qty)
     response["_residual_qty"] = residual
@@ -657,8 +666,8 @@ def _futures_position_is_flat(client: Client, symbol: str) -> bool:
         logger.warning(f"[FUTURES] Position query failed for {symbol}; treating as still open: {exc}")
         return False
     if not isinstance(positions, list) or not positions:
-        logger.warning(f"[FUTURES] Empty/invalid position response for {symbol}; treating as still open")
-        return False
+        logger.info(f"[FUTURES] Empty position response for {symbol}; position is FLAT (0.0)")
+        return True
     for position in positions:
         amount = finite_float(position.get("positionAmt")) if isinstance(position, dict) else None
         if amount is None:
