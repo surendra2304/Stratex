@@ -4407,6 +4407,9 @@ def _normalize_forward_signal(record):
     timestamp = record.get("timestamp")
     if isinstance(timestamp, (int, float)):
         timestamp = _epoch_to_iso(timestamp)
+    decision = record.get("decision") or record.get("execution_decision") or record.get("final_decision") or "SIGNAL"
+    entry_p = record.get("entry_price") or record.get("entry") or record.get("current_price")
+    reason_txt = record.get("rejection_reason") or record.get("reason") or record.get("execution_reason") or ""
     return {
         "signal_id": record.get("signal_id"),
         "timestamp": timestamp,
@@ -4414,12 +4417,12 @@ def _normalize_forward_signal(record):
         "side": record.get("side"),
         "strategy": record.get("strategy"),
         "timeframe": record.get("timeframe"),
-        "decision": record.get("decision"),
-        "final_decision": record.get("decision"),
+        "decision": decision,
+        "final_decision": decision,
         "confidence": record.get("confidence"),
-        "entry_price": record.get("entry_price"),
-        "reason": record.get("rejection_reason") or record.get("reason") or "",
-        "data_source": record.get("data_source"),
+        "entry_price": entry_p,
+        "reason": reason_txt,
+        "data_source": record.get("data_source", "OPPORTUNITY_LOG"),
     }
 
 

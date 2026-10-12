@@ -72,6 +72,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .connection-state[data-state="warning"] .live-dot, .connection-state[data-state="stale"] .live-dot { background: var(--amber); box-shadow: 0 0 8px rgba(242,198,121,.45); }
 .connection-state[data-state="error"] .live-dot { background: var(--red); box-shadow: 0 0 8px rgba(255,124,134,.4); }
 .mode-pill, .source-tag { display: inline-flex; align-items: center; min-height: 25px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--ink-soft); background: rgba(255,255,255,.025); font: 9px var(--mono); letter-spacing: .035em; white-space: nowrap; }
+.live-clock { display: inline-flex; align-items: center; min-height: 25px; padding: 0 9px; border: 1px solid rgba(180,244,107,.3); border-radius: 6px; color: var(--lime); background: rgba(180,244,107,.07); font: 10px var(--mono); font-weight: 700; letter-spacing: .04em; white-space: nowrap; }
 .refresh-button { display: inline-flex; height: 31px; align-items: center; gap: 7px; padding: 0 11px; border: 1px solid rgba(180,244,107,.25); border-radius: 7px; background: rgba(180,244,107,.08); color: var(--lime); font-size: 10px; font-weight: 700; cursor: pointer; transition: .18s ease; }
 .refresh-button:hover { border-color: rgba(180,244,107,.5); background: rgba(180,244,107,.14); }
 .refresh-icon { font-size: 16px; line-height: 1; }

@@ -84,47 +84,67 @@
     return `<div class="section-state" data-state="${escapeHtml(state)}"><span class="state-symbol">${state === 'error' ? '!' : state === 'loading' ? '◌' : '∅'}</span><strong>${label}</strong><span>${escapeHtml(message)}</span></div>`;
   }
 
+  function tickClock() {
+    const now = new Date();
+    const utcHours = String(now.getUTCHours()).padStart(2, '0');
+    const utcMins = String(now.getUTCMinutes()).padStart(2, '0');
+    const utcSecs = String(now.getUTCSeconds()).padStart(2, '0');
+    setText('live-clock', `${utcHours}:${utcMins}:${utcSecs} UTC`);
+    setText('heading-date', `${now.toISOString().slice(0, 10)}`);
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+
+  let lastSlowRefresh = 0;
   async function fetchJson(url) {
-    const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(12000) });
+    const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(6000) });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
   }
 
-  async function refreshData() {
+  async function refreshData(isManual = false) {
     if (isRefreshing) return;
     isRefreshing = true;
     const refreshButton = byId('btn-refresh');
-    if (refreshButton) refreshButton.classList.add('is-loading');
+    if (refreshButton && isManual) refreshButton.classList.add('is-loading');
+
+    const now = Date.now();
+    const includeSlow = isManual || (now - lastSlowRefresh > 4000);
+    if (includeSlow) lastSlowRefresh = now;
+
+    const urlsToFetch = Object.entries(resourceUrls).filter(([key]) => {
+      if (includeSlow) return true;
+      return ['account', 'engine', 'positions', 'signals'].includes(key);
+    });
 
     try {
-      const settled = await Promise.allSettled(Object.entries(resourceUrls).map(async ([key, url]) => [key, await fetchJson(url)]));
-      settled.forEach((result) => {
+      const settled = await Promise.allSettled(urlsToFetch.map(async ([key, url]) => [key, await fetchJson(url)]));
+      settled.forEach((result, idx) => {
+        const key = urlsToFetch[idx][0];
         if (result.status === 'fulfilled') {
-          const [key, value] = result.value;
+          const [, value] = result.value;
           resources[key] = { state: 'ready', value, error: null, updatedAt: Date.now() };
         } else {
-          const index = settled.indexOf(result);
-          const key = Object.keys(resourceUrls)[index];
           const previous = resources[key];
           resources[key] = {
-            state: previous.value ? 'stale' : 'error',
-            value: previous.value,
+            state: previous && previous.value ? 'stale' : 'error',
+            value: previous ? previous.value : null,
             error: result.reason instanceof Error ? result.reason.message : 'Request failed',
-            updatedAt: previous.updatedAt
+            updatedAt: previous ? previous.updatedAt : null
           };
         }
       });
 
       renderAll();
-      const now = new Date();
-      setText('last-sync-time', `Synced ${now.toLocaleTimeString()}`);
-      setText('footer-update', `Last refresh ${now.toLocaleTimeString()}`);
+      const nowDate = new Date();
+      setText('last-sync-time', `Synced ${nowDate.toLocaleTimeString()}`);
+      setText('footer-update', `Last refresh ${nowDate.toLocaleTimeString()}`);
     } catch (e) {
       console.error("Error during refreshData:", e);
     } finally {
-      if (refreshButton) refreshButton.classList.remove('is-loading');
+      if (refreshButton && isManual) refreshButton.classList.remove('is-loading');
       isRefreshing = false;
-      setTimeout(refreshData, REFRESH_MS);
+      setTimeout(() => refreshData(false), REFRESH_MS);
     }
   }
 
@@ -610,7 +630,7 @@
   document.querySelectorAll('[data-go]').forEach((button) => {
     button.addEventListener('click', () => switchView(button.dataset.go));
   });
-  byId('btn-refresh')?.addEventListener('click', refreshData);
+  byId('btn-refresh')?.addEventListener('click', () => refreshData(true));
   byId('trades-search')?.addEventListener('input', renderTrades);
 
   const initialView = window.location.hash.replace('#', '');

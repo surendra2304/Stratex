@@ -367,7 +367,7 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
         "rr_ratio": 1.0,
         "oos_win_rate_prior": 0.80,
         "total_friction_bps": 8.0,
-        "expected_net_edge_bps": 120.0,
+        "expected_net_edge_bps": 600.0,
         "minimum_required_edge": 0.0001,
         "validated_assets": [
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",

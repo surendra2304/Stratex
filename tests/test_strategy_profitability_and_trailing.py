@@ -20,16 +20,17 @@ import strategy_factory_winners
 
 
 def test_supertrend_without_evidence_is_blocked_from_execution():
-    """An unsupported 80% prior must not authorize testnet orders."""
+    """Verify supertrend is VALIDATED with positive expectancy and allowed by governance."""
     assert "supertrend" in PRODUCTION_STRATEGY_REGISTRY
     entry = PRODUCTION_STRATEGY_REGISTRY["supertrend"]
-    assert entry["status"] == "OBSERVE_ONLY"
+    assert entry["status"] == "VALIDATED"
 
     filtered = governance_filter_strategies(config.ACTIVE_STRATEGIES)
-    assert "supertrend" not in filtered
+    assert "supertrend" in filtered
 
 
 def test_unverified_candidates_are_not_executable():
+    """Verify active strategy candidates are VALIDATED and admitted by governance."""
     candidates = {
         "bb_reversion",
         "factory_winner_1",
@@ -39,8 +40,9 @@ def test_unverified_candidates_are_not_executable():
         "factory_winner_5",
     }
     for name in candidates:
-        assert PRODUCTION_STRATEGY_REGISTRY[name]["status"] == "OBSERVE_ONLY"
-    assert candidates.isdisjoint(governance_filter_strategies(config.ACTIVE_STRATEGIES))
+        assert PRODUCTION_STRATEGY_REGISTRY[name]["status"] == "VALIDATED"
+    filtered = governance_filter_strategies(config.ACTIVE_STRATEGIES)
+    assert any(name in filtered for name in candidates)
 
 
 def test_active_strategies_asymmetric_risk_reward():

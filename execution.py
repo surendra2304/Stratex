@@ -796,11 +796,50 @@ def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, 
         order = client.futures_create_order(**order_params)
         order_id = order.get("orderId", "N/A")
         
-        executed_qty = float(order.get("executedQty", quantity))
-        cum_quote = float(order.get("cumQuote", 0.0))
-        avg_price = float(order.get("avgPrice", 0.0))
+        executed_qty = float(order.get("executedQty", 0.0) or 0.0)
+        cum_quote = float(order.get("cumQuote", 0.0) or 0.0)
+        avg_price = float(order.get("avgPrice", 0.0) or 0.0)
         if avg_price == 0.0 and executed_qty > 0 and cum_quote > 0:
             avg_price = cum_quote / executed_qty
+
+        # Binance Futures market orders frequently return status 'NEW' with executedQty '0' on REST submission.
+        # Poll the order status to retrieve the filled execution quantity and actual price.
+        if (executed_qty <= 0 or avg_price <= 0) and order_id and order_id != "N/A":
+            for _poll_attempt in range(4):
+                time.sleep(0.25)
+                try:
+                    poll_order = client.futures_get_order(symbol=symbol, orderId=order_id)
+                    p_qty = float(poll_order.get("executedQty", 0.0) or 0.0)
+                    p_avg = float(poll_order.get("avgPrice", 0.0) or 0.0)
+                    p_quote = float(poll_order.get("cumQuote", 0.0) or 0.0)
+                    if p_qty > 0:
+                        executed_qty = p_qty
+                    if p_avg > 0:
+                        avg_price = p_avg
+                    elif p_qty > 0 and p_quote > 0:
+                        avg_price = p_quote / p_qty
+                    if executed_qty > 0 and avg_price > 0:
+                        order.update(poll_order)
+                        break
+                except Exception as pe:
+                    sys_logger.debug(f"[FUTURES] Polling order {order_id} fill: {pe}")
+
+        # If executedQty is still reported as 0, fall back to submitted quantity for market order
+        if executed_qty <= 0:
+            executed_qty = float(quantity)
+
+        # If avg_price is still 0, query the live mark ticker price
+        if avg_price <= 0:
+            try:
+                mark_ticker = client.futures_symbol_ticker(symbol=symbol)
+                if mark_ticker and "price" in mark_ticker:
+                    avg_price = float(mark_ticker["price"])
+            except Exception:
+                pass
+
+        # Final fallback to estimated price
+        if avg_price <= 0:
+            avg_price = float(est_entry_price or (sl or tp or 0.0))
 
         actual_price = avg_price
         total_fee = (cum_quote or (actual_price * executed_qty)) * 0.0005  # 0.05% taker fee estimate for futures

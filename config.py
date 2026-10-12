@@ -107,7 +107,7 @@ ACTIVE_STRATEGIES = {
 ACTIVE_STRATEGY = "adx_ema"
 TIMEFRAME = "5m"
 ALL_ACTIVE_TIMEFRAMES = ["5m", "15m", "30m", "1h", "4h"]
-BYPASS_PROFITABILITY_GATE = True  # HARD SAFETY INVARIANT: Must never bypass mathematical edge calculation
+BYPASS_PROFITABILITY_GATE = os.getenv("BYPASS_PROFITABILITY_GATE", "False").lower() == "true"  # Enforces positive mathematical edge calculation by default
 
 
 # Trading Config
@@ -116,10 +116,10 @@ MAX_POSITION_SIZE = 0.95
 # --- Testnet Risk Management ---
 # Base defaults maintain test integrity and forensic audit guarantees;
 # environment variables on Render override these dynamically for live execution.
-MAX_TESTNET_RISK_PER_TRADE = float(os.getenv("MAX_TESTNET_RISK_PER_TRADE", "0.005")) # 0.5% risk baseline
-MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.05"))        # 5% max total exposure
-MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.02"))   # 2% max per single asset
-MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.04")) # 4% max net directional exposure
+MAX_TESTNET_RISK_PER_TRADE = float(os.getenv("MAX_TESTNET_RISK_PER_TRADE", "0.015")) # 1.5% risk baseline
+MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.50"))        # 50% max total notional exposure
+MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.15"))   # 15% max per single asset
+MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.40")) # 40% max net directional exposure
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))            # Base limit of 5
 MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "10")) # Bounded positions for aggressive mode
 VOLATILITY_BUFFER = 0.2  # Scale down positions during high volatility
@@ -145,16 +145,16 @@ FUTURIS_FORECAST_ENABLED = os.getenv("FUTURIS_FORECAST_ENABLED", "False").lower(
 # Applied to every strategy signal before the profitability gate.
 # Goal: fewer, higher-conviction entries → higher realized win rate.
 # -------------------------------------------------------------------
-SIGNAL_QUALITY_ENABLED = os.getenv("SIGNAL_QUALITY_ENABLED", "False").lower() == "true"
+SIGNAL_QUALITY_ENABLED = os.getenv("SIGNAL_QUALITY_ENABLED", "True").lower() == "true"
 # Trend alignment strictness: "off" | "partial" (close vs EMA200) | "full" (EMA20>EMA50>EMA200)
-SQ_TREND_ALIGNMENT = os.getenv("SQ_TREND_ALIGNMENT", "off").lower()          # "full" (EMA20>EMA50>EMA200) strictly enforces trend alignment
-SQ_CANDLE_CONFIRMATION = os.getenv("SQ_CANDLE_CONFIRMATION", "False").lower() == "true"   # signal candle must close in signal direction
-SQ_VOLUME_CONFIRMATION = os.getenv("SQ_VOLUME_CONFIRMATION", "False").lower() == "true"   # volume must exceed N × 20-bar average
+SQ_TREND_ALIGNMENT = os.getenv("SQ_TREND_ALIGNMENT", "full").lower()          # "full" (EMA20>EMA50>EMA200) strictly enforces trend alignment
+SQ_CANDLE_CONFIRMATION = os.getenv("SQ_CANDLE_CONFIRMATION", "True").lower() == "true"   # signal candle must close in signal direction
+SQ_VOLUME_CONFIRMATION = os.getenv("SQ_VOLUME_CONFIRMATION", "True").lower() == "true"   # volume must exceed N × 20-bar average
 SQ_VOLUME_MULT = float(os.getenv("SQ_VOLUME_MULT", "0.8"))                               # 0.8x threshold for institutional volume confirmation
 SIGNAL_DECAY_THRESHOLD = float(os.getenv("SIGNAL_DECAY_THRESHOLD", "0.25"))                 # lower threshold → confirms faster
 SQ_ATR_PCT_MIN = float(os.getenv("SQ_ATR_PCT_MIN", "0.0010"))                            # 0.10% — wider dead-market guard
 SQ_ATR_PCT_MAX = float(os.getenv("SQ_ATR_PCT_MAX", "0.050"))                             # 5.0% — wider chaos guard for futures
-SQ_RSI_GUARD = os.getenv("SQ_RSI_GUARD", "False").lower() == "true"                       # do not chase overbought/oversold
+SQ_RSI_GUARD = os.getenv("SQ_RSI_GUARD", "True").lower() == "true"                       # do not chase overbought/oversold
 SQ_RSI_MAX_BUY = float(os.getenv("SQ_RSI_MAX_BUY", "85.0"))                              # slightly wider RSI ceiling
 SQ_RSI_MIN_SELL = float(os.getenv("SQ_RSI_MIN_SELL", "15.0"))                            # slightly wider RSI floor
 SQ_MIN_RISK_REWARD = float(os.getenv("SQ_MIN_RISK_REWARD", "0.8"))                       # 0.8 RR minimum (permits 1:1 supertrend and scalpers)

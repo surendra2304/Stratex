@@ -11,7 +11,7 @@ class SignalResult(namedtuple("SignalResult", ["side", "sl", "tp", "strategy_typ
         return self.win_rate_prior
 
 _STRATEGY_TYPE = "RULE_BASED"
-_OOS_WIN_RATE_PRIOR = 0.80  # High-probability sniper architecture
+_OOS_WIN_RATE_PRIOR = 0.80  # High-probability sniper architecture (80% win rate)
 _RR_RATIO = 1.0             # 1:1 R:R for swift take-profit attainment (>80% win rate)
 
 def get_signal(df):

@@ -545,14 +545,30 @@ def place_futures_bracket_protection(
 
     if is_buy:
         if sl_price >= actual_fill_price:
-            raise ValueError(f"BUY position: SL ({sl_price}) must be below fill price ({actual_fill_price})")
+            delta = abs(actual_fill_price - sl_price)
+            if delta <= 0 or delta >= actual_fill_price * 0.1:
+                delta = actual_fill_price * 0.015
+            sl_price = actual_fill_price - delta
+            logger.warning(f"[FUTURES_PROTECTION] Adjusted SL for {symbol} BUY due to fill slippage: {sl_price}")
         if tp_price <= actual_fill_price:
-            raise ValueError(f"BUY position: TP ({tp_price}) must be above fill price ({actual_fill_price})")
+            delta = abs(tp_price - actual_fill_price)
+            if delta <= 0 or delta >= actual_fill_price * 0.2:
+                delta = actual_fill_price * 0.02
+            tp_price = actual_fill_price + delta
+            logger.warning(f"[FUTURES_PROTECTION] Adjusted TP for {symbol} BUY due to fill slippage: {tp_price}")
     else:
         if sl_price <= actual_fill_price:
-            raise ValueError(f"SELL/SHORT position: SL ({sl_price}) must be above fill price ({actual_fill_price})")
+            delta = abs(sl_price - actual_fill_price)
+            if delta <= 0 or delta >= actual_fill_price * 0.1:
+                delta = actual_fill_price * 0.015
+            sl_price = actual_fill_price + delta
+            logger.warning(f"[FUTURES_PROTECTION] Adjusted SL for {symbol} SELL due to fill slippage: {sl_price}")
         if tp_price >= actual_fill_price:
-            raise ValueError(f"SELL/SHORT position: TP ({tp_price}) must be below fill price ({actual_fill_price})")
+            delta = abs(actual_fill_price - tp_price)
+            if delta <= 0 or delta >= actual_fill_price * 0.2:
+                delta = actual_fill_price * 0.02
+            tp_price = actual_fill_price - delta
+            logger.warning(f"[FUTURES_PROTECTION] Adjusted TP for {symbol} SELL due to fill slippage: {tp_price}")
 
     filters = _get_futures_symbol_filters(client, symbol)
     tick = filters["tick_size"]
@@ -644,6 +660,12 @@ def emergency_futures_market_close(
                     break
     except Exception:
         pass
+
+    if actual_qty <= 0:
+        logger.warning(
+            f"[FUTURES_PROTECTION] Emergency close called with non-positive qty {actual_qty} on {symbol}; position is already flat"
+        )
+        return {"status": "SKIPPED", "executedQty": 0.0, "_is_flat": True}
 
     logger.critical(
         f"[FUTURES_PROTECTION] 🚨 EMERGENCY CLOSE: {symbol} {close_side} {actual_qty}"

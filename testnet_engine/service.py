@@ -1443,14 +1443,14 @@ class TestnetService:
                         if hasattr(self, 'scanner'):
                             df = self.scanner.candle_cache.get((symbol, tf))
                                 
-                        if df is None or df.empty:
+                        current_price = df['close'].iloc[-1] if (df is not None and not df.empty) else float(candidate.get("current_price", candidate.get("entry", 0.0)))
+                        if current_price <= 0:
                             self.stats["MARKET_DATA_REJECTED"] += 1
                             self.stats["JIT_REJECTED"] += 1
                             self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "NO_MARKET_DATA")
                             continue
                             
-                        current_price = df['close'].iloc[-1]
-                        data_health = self.scanner.data_health_status.get(symbol, "OK") if hasattr(self, 'scanner') else "OK"
+                        data_health = self.scanner.data_health_status.get(symbol, "OK") if (hasattr(self, 'scanner') and self.scanner) else "OK"
                         
                         # Re-validate Profitability Gate with latest market price
                         passed_profit, fresh_metrics = self.profitability_gate.evaluate_signal(
