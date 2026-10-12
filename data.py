@@ -126,6 +126,10 @@ def add_indicators(df, strict_tail=False):
         df['rsi'] = df['rsi_14']
         df['atr'] = df['atr_14']
         df['bb_mid'] = df['bb_middle']
+        if 'ema_20' not in df.columns and 'ema_21' in df.columns:
+            df['ema_20'] = df['ema_21']
+        if 'adx' not in df.columns and 'adx_14' in df.columns:
+            df['adx'] = df['adx_14']
 
         numeric = df.select_dtypes(include="number").columns
         df[numeric] = df[numeric].replace([np.inf, -np.inf], np.nan)

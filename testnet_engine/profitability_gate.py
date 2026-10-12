@@ -198,7 +198,17 @@ class ProfitabilityGate:
         min_edge              = getattr(config, "MINIMUM_EXPECTED_EDGE", 0.0001)
 
         MIN_PROB_THRESHOLD = getattr(config, "MIN_PROBABILITY_THRESHOLD", 0.40)
-        if prob_win < MIN_PROB_THRESHOLD:
+        # Adapt probability threshold to risk:reward geometry (e.g. 3:1 RR needs only 28% win rate)
+        rr_geom = reward_pct / max(1e-5, risk_pct)
+        if rr_geom >= 2.5:
+            MIN_PROB_THRESHOLD = min(MIN_PROB_THRESHOLD, 0.28)
+        elif rr_geom >= 1.8:
+            MIN_PROB_THRESHOLD = min(MIN_PROB_THRESHOLD, 0.33)
+
+        if getattr(config, "BYPASS_PROFITABILITY_GATE", False):
+            is_accepted = (expected_net_return >= -0.001)
+            reason      = "BYPASS_PROFITABILITY_GATE" if is_accepted else "NEGATIVE_EXPECTED_NET_RETURN"
+        elif prob_win < MIN_PROB_THRESHOLD:
             is_accepted = False
             reason      = f"PROB_WIN_BELOW_{int(MIN_PROB_THRESHOLD*100)}PCT"
         else:

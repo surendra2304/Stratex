@@ -4476,7 +4476,13 @@ def _authoritative_trades():
 
 
 def _authoritative_signals():
-    """Signal funnel records from the forward runner's log, which is what actually runs."""
+    """Signal records from testnet opportunity log when in testnet/futures mode, or paper forward log."""
+    trading_mode = getattr(config, "TRADING_MODE", "TESTNET").upper()
+    opp_file = os.getenv("TESTNET_OPPORTUNITY_LOG", "testnet_opportunity_log.jsonl")
+    if trading_mode in ["TESTNET", "FUTURES"] and os.path.exists(opp_file):
+        records = _read_jsonl_records(opp_file)
+        if records:
+            return [_normalize_forward_signal(record) for record in records]
     path = os.getenv("PAPER_FORWARD_SIGNAL_LOG", "forward_signal_log.jsonl")
     return [_normalize_forward_signal(record) for record in _read_jsonl_records(path)]
 

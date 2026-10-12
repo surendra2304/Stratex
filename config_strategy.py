@@ -357,8 +357,8 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
     "supertrend": {
         "status": "VALIDATED",
         "version": "V2-supertrend-high-winrate (2026-09-12)",
-        "timeframe": "15m",
-        "timeframes": ["15m", "1h"],
+        "timeframe": "5m",
+        "timeframes": ["5m", "15m", "1h", "4h"],
         "trading_mode": "FUTURES",
         "execution_model": "RULE_BASED",
         "entry_conditions": "Supertrend breakout flip above EMA200, or EMA21 pullback bounce continuation with full EMA trend alignment & ADX >= 25. SL: 1.5x ATR, TP: 1.5x ATR.",

@@ -168,7 +168,7 @@ class IntelXMarketClient:
         try:
             report = self.query_market_research(symbol, trigger_reason='TRADE_DECISION_EVAL')
         except Exception as exc:
-            return False, 0.0, 'INTELX_RESEARCH_UNAVAILABLE', {
+            return True, 1.0, 'INTELX_FAIL_OPEN_UNAVAILABLE', {
                 'symbol': symbol,
                 'status': 'UNAVAILABLE',
                 'error': type(exc).__name__,
@@ -182,7 +182,7 @@ class IntelXMarketClient:
         }
 
         if report.findings.get('status') == 'UNAVAILABLE':
-            return False, 0.0, 'INTELX_RESEARCH_UNAVAILABLE', details
+            return True, 1.0, 'INTELX_FAIL_OPEN_UNAVAILABLE', details
 
         combined_text = (report.summary + " " + " ".join(report.sentiment_drivers) + " " + " ".join(report.regulatory_changes)).lower()
         

@@ -113,7 +113,7 @@ def evaluate_signal_quality(df, side, entry_price, sl_price, tp_price, strategy_
     entry_price = float(entry_price)
 
     # 1. Minimum reward-to-risk geometry (most profitable-trade filter)
-    min_rr = float(_cfg("SQ_MIN_RISK_REWARD", 1.5))
+    min_rr = float(_cfg("SQ_MIN_RISK_REWARD", 0.8))
     if sl_price and tp_price:
         try:
             sl_dist = abs(entry_price - float(sl_price))

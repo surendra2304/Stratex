@@ -122,13 +122,13 @@ class FuturisMarketClient:
         try:
             forecast = self.fetch_forecast(symbol)
         except Exception as exc:
-            return False, 0.0, 'FUTURIS_FORECAST_UNAVAILABLE', {
+            return True, 1.0, 'FUTURIS_FAIL_OPEN_UNAVAILABLE', {
                 'symbol': symbol,
                 'status': 'UNAVAILABLE',
                 'error': type(exc).__name__,
             }
         if forecast.status != 'LIVE':
-            return False, 0.0, 'FUTURIS_FORECAST_UNAVAILABLE', {
+            return True, 1.0, 'FUTURIS_FAIL_OPEN_NON_LIVE', {
                 'symbol': symbol,
                 'status': forecast.status,
             }

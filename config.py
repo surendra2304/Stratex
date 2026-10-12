@@ -93,7 +93,7 @@ TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-09-01
 # must mark an entry VALIDATED before the testnet engine loads it. At present
 # adx_ema remains OBSERVE_ONLY, so the executable set is intentionally empty.
 ACTIVE_STRATEGIES = {
-    "supertrend": ["15m", "1h", "4h"],
+    "supertrend": ["5m", "15m", "1h", "4h"],
     "factory_winner_1": ["5m", "15m", "30m", "1h", "4h"],
     "factory_winner_2": ["5m", "15m", "30m", "1h", "4h"],
     "factory_winner_3": ["5m", "15m", "30m", "1h", "4h"],
@@ -137,15 +137,15 @@ MIN_WIN_RATE_THRESHOLD = 0.35      # Automatically switch to OBSERVE-ONLY if < 3
 MAX_PREDICTION_ERROR = 0.02        # Automatically switch to OBSERVE-ONLY if actual differs from expected by > 2%
 
 BTC_REGIME_FILTER = os.getenv("BTC_REGIME_FILTER", "True").lower() == "true" # Altcoins follow BTC; block alt longs when BTC < 4h EMA200
-INTELX_INTELLIGENCE_ENABLED = os.getenv("INTELX_INTELLIGENCE_ENABLED", "True").lower() == "true" # IntelX sentiment & news catalyst gate
-FUTURIS_FORECAST_ENABLED = os.getenv("FUTURIS_FORECAST_ENABLED", "True").lower() == "true" # Futuris predictive volatility & regime gate
+INTELX_INTELLIGENCE_ENABLED = os.getenv("INTELX_INTELLIGENCE_ENABLED", "False").lower() == "true" # IntelX sentiment & news catalyst gate
+FUTURIS_FORECAST_ENABLED = os.getenv("FUTURIS_FORECAST_ENABLED", "False").lower() == "true" # Futuris predictive volatility & regime gate
 
 # -------------------------------------------------------------------
 # SIGNAL QUALITY FILTERS (v3 upgrade) — real-data entry gates
 # Applied to every strategy signal before the profitability gate.
 # Goal: fewer, higher-conviction entries → higher realized win rate.
 # -------------------------------------------------------------------
-SIGNAL_QUALITY_ENABLED = os.getenv("SIGNAL_QUALITY_ENABLED", "True").lower() == "true"
+SIGNAL_QUALITY_ENABLED = os.getenv("SIGNAL_QUALITY_ENABLED", "False").lower() == "true"
 # Trend alignment strictness: "off" | "partial" (close vs EMA200) | "full" (EMA20>EMA50>EMA200)
 SQ_TREND_ALIGNMENT = os.getenv("SQ_TREND_ALIGNMENT", "off").lower()          # "full" (EMA20>EMA50>EMA200) strictly enforces trend alignment
 SQ_CANDLE_CONFIRMATION = os.getenv("SQ_CANDLE_CONFIRMATION", "False").lower() == "true"   # signal candle must close in signal direction
@@ -154,24 +154,24 @@ SQ_VOLUME_MULT = float(os.getenv("SQ_VOLUME_MULT", "0.8"))                      
 SIGNAL_DECAY_THRESHOLD = float(os.getenv("SIGNAL_DECAY_THRESHOLD", "0.25"))                 # lower threshold → confirms faster
 SQ_ATR_PCT_MIN = float(os.getenv("SQ_ATR_PCT_MIN", "0.0010"))                            # 0.10% — wider dead-market guard
 SQ_ATR_PCT_MAX = float(os.getenv("SQ_ATR_PCT_MAX", "0.050"))                             # 5.0% — wider chaos guard for futures
-SQ_RSI_GUARD = os.getenv("SQ_RSI_GUARD", "True").lower() == "true"                       # do not chase overbought/oversold
-SQ_RSI_MAX_BUY = float(os.getenv("SQ_RSI_MAX_BUY", "82.0"))                              # slightly wider RSI ceiling
-SQ_RSI_MIN_SELL = float(os.getenv("SQ_RSI_MIN_SELL", "18.0"))                            # slightly wider RSI floor
-SQ_MIN_RISK_REWARD = float(os.getenv("SQ_MIN_RISK_REWARD", "1.0"))                       # 1.0 RR minimum (optimized for >80% win rate)
+SQ_RSI_GUARD = os.getenv("SQ_RSI_GUARD", "False").lower() == "true"                       # do not chase overbought/oversold
+SQ_RSI_MAX_BUY = float(os.getenv("SQ_RSI_MAX_BUY", "85.0"))                              # slightly wider RSI ceiling
+SQ_RSI_MIN_SELL = float(os.getenv("SQ_RSI_MIN_SELL", "15.0"))                            # slightly wider RSI floor
+SQ_MIN_RISK_REWARD = float(os.getenv("SQ_MIN_RISK_REWARD", "0.8"))                       # 0.8 RR minimum (permits 1:1 supertrend and scalpers)
 
 # -------------------------------------------------------------------
 # ADAPTIVE STRATEGY PERFORMANCE GATE (v3 upgrade)
 # Automatically demotes strategies whose recent REALIZED results are poor
 # (win rate / net PnL from the ledger), for a cooldown period.
 # -------------------------------------------------------------------
-STRATEGY_PERFORMANCE_GATE = os.getenv("STRATEGY_PERFORMANCE_GATE", "True").lower() == "true"
+STRATEGY_PERFORMANCE_GATE = os.getenv("STRATEGY_PERFORMANCE_GATE", "False").lower() == "true"
 STRATEGY_GATE_MIN_TRADES = int(os.getenv("STRATEGY_GATE_MIN_TRADES", "10"))
 STRATEGY_GATE_WIN_RATE = float(os.getenv("STRATEGY_GATE_WIN_RATE", "0.40"))
 STRATEGY_GATE_MIN_NET_PNL = float(os.getenv("STRATEGY_GATE_MIN_NET_PNL", "0.0"))
 STRATEGY_DEMOTION_COOLDOWN_HOURS = float(os.getenv("STRATEGY_DEMOTION_COOLDOWN_HOURS", "4.0"))
 
 # Global performance degradation guard (observe-only halt safeguard)
-DEGRADATION_GUARD_ENABLED = os.getenv("DEGRADATION_GUARD_ENABLED", "True").lower() == "true"
+DEGRADATION_GUARD_ENABLED = os.getenv("DEGRADATION_GUARD_ENABLED", "False").lower() == "true"
 DEGRADATION_WINDOW = int(os.getenv("DEGRADATION_WINDOW", "20"))
 MIN_WIN_RATE_THRESHOLD = float(os.getenv("MIN_WIN_RATE_THRESHOLD", "0.30"))
 OBSERVE_ONLY_COOLDOWN_SECONDS = float(os.getenv("OBSERVE_ONLY_COOLDOWN_SECONDS", "7200"))
