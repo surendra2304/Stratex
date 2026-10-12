@@ -130,7 +130,8 @@ def evaluate_signal_quality(df, side, entry_price, sl_price, tp_price, strategy_
 
     # 2. Trend alignment (fail-open when EMA200 is missing)
     mode = str(_cfg("SQ_TREND_ALIGNMENT", "full")).lower()
-    if mode != "off" and ema200 > 0:
+    is_reversion = bool(strategy_name and ("reversion" in strategy_name.lower() or "bb" in strategy_name.lower()))
+    if mode != "off" and ema200 > 0 and not is_reversion:
         if side == "BUY":
             aligned_full = (ema20 > ema50 > ema200) and close > ema200
             aligned_partial = close > ema200
@@ -167,14 +168,16 @@ def evaluate_signal_quality(df, side, entry_price, sl_price, tp_price, strategy_
             if ratio < vol_mult:
                 return False, "QUALITY_LOW_VOLUME", detail
 
-    # 5. ADX Regime Filter — strictly reject choppy markets with no directional power
+    # 5. ADX Regime Filter — strictly reject choppy markets with no directional power (reversion thrives in chop)
     adx_val = _f(last, "adx", 0.0)
     if adx_val <= 0:
         adx_val = _f(last, "adx_14", 0.0)
     if adx_val <= 0:
         adx_val = _f(last, "adx_adx_ema", 0.0)
     min_adx = float(_cfg("SQ_MIN_ADX", 25.0))
-    if adx_val > 0:
+    if is_reversion:
+        min_adx = 0.0  # Mean reversion is profitable in range-bound chop
+    if adx_val > 0 and min_adx > 0:
         detail["adx"] = round(adx_val, 2)
         detail["min_adx"] = min_adx
         if adx_val < min_adx:

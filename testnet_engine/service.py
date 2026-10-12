@@ -630,7 +630,10 @@ class TestnetService:
                 engine_symbols = set()
                 for sym in open_symbols_from_assets:
                     try:
-                        trades = self.client.get_my_trades(symbol=sym, limit=100)
+                        if TRADING_MODE == "FUTURES":
+                            trades = self.client.futures_account_trades(symbol=sym, limit=100) if hasattr(self.client, "futures_account_trades") else []
+                        else:
+                            trades = self.client.get_my_trades(symbol=sym, limit=100)
                         # Trades without a timestamp count as post-baseline (fail-open;
                         # real Binance payloads always carry 'time').
                         if any(t.get('time', float('inf')) >= baseline_ms for t in trades):
@@ -640,18 +643,25 @@ class TestnetService:
                 logger.info(f"[RECONCILIATION] Baseline scope: {len(engine_symbols)} of {len(open_symbols_from_assets)} "
                             f"holdings have post-baseline history (faucet residue ignored)")
 
-            # 1. Cancel any floating OCOs (orders open, but no engine position)
+            # 1. Cancel any floating OCOs/conditional orders (orders open, but no engine position)
             floating_ocos = protected_symbols - engine_symbols
             if floating_ocos:
                 for sym in floating_ocos:
-                    logger.warning(f"[RECOVERY] 🚨 Floating OCO detected without position for {sym}. Cancelling to prevent accidental entry.")
+                    logger.warning(f"[RECOVERY] 🚨 Floating protective orders detected without position for {sym}. Cancelling to prevent accidental entry.")
                     sym_orders = [o for o in open_orders if o['symbol'] == sym]
                     for o in sym_orders:
-                        if o.get('orderListId', -1) > 0:
+                        if TRADING_MODE == "FUTURES":
                             try:
-                                self.client.cancel_order(symbol=sym, orderId=o['orderId'])
+                                if hasattr(self.client, "futures_cancel_order"):
+                                    self.client.futures_cancel_order(symbol=sym, orderId=o['orderId'])
                             except Exception:
                                 pass
+                        else:
+                            if o.get('orderListId', -1) > 0:
+                                try:
+                                    self.client.cancel_order(symbol=sym, orderId=o['orderId'])
+                                except Exception:
+                                    pass
 
             # 2. Reconstruct missing local state for open, protected positions
             missing_local_but_has_position_and_oco = protected_symbols.intersection(engine_symbols) - local_symbols
@@ -664,26 +674,41 @@ class TestnetService:
                     oco_id, tp_id, sl_id = None, None, None
                     tp_price, sl_price = 0.0, 0.0
                     
-                    for o in sym_orders:
-                        if o.get('orderListId', -1) > 0:
-                            oco_id = o['orderListId']
-                            if o['type'] == 'LIMIT_MAKER':
-                                tp_id = o['orderId']
-                                tp_price = float(o['price'])
-                            elif o['type'] == 'STOP_LOSS_LIMIT':
-                                sl_id = o['orderId']
-                                sl_price = float(o['stopPrice'])
-                                
-                    if not oco_id:
-                        continue
+                    if TRADING_MODE == "FUTURES":
+                        for o in sym_orders:
+                            otype = o.get('type', '')
+                            if otype in ('TAKE_PROFIT_MARKET', 'TAKE_PROFIT', 'LIMIT'):
+                                tp_id = o.get('orderId')
+                                tp_price = float(o.get('stopPrice', o.get('price', 0.0)))
+                            elif otype in ('STOP_MARKET', 'STOP', 'STOP_LOSS'):
+                                sl_id = o.get('orderId')
+                                sl_price = float(o.get('stopPrice', o.get('price', 0.0)))
+                        if not tp_id and not sl_id:
+                            continue
+                    else:
+                        for o in sym_orders:
+                            if o.get('orderListId', -1) > 0:
+                                oco_id = o['orderListId']
+                                if o['type'] == 'LIMIT_MAKER':
+                                    tp_id = o['orderId']
+                                    tp_price = float(o['price'])
+                                elif o['type'] == 'STOP_LOSS_LIMIT':
+                                    sl_id = o['orderId']
+                                    sl_price = float(o['stopPrice'])
+                                    
+                        if not oco_id:
+                            continue
                         
                     # Find the entry order
                     try:
-                        recent_trades = self.client.get_my_trades(symbol=sym, limit=50)
-                        # Assume the most recent trade not associated with the OCO is the entry
+                        if TRADING_MODE == "FUTURES":
+                            recent_trades = self.client.futures_account_trades(symbol=sym, limit=50) if hasattr(self.client, "futures_account_trades") else []
+                        else:
+                            recent_trades = self.client.get_my_trades(symbol=sym, limit=50)
+                        # Assume the most recent trade not associated with the protective order is the entry
                         entry_trade = None
                         for t in reversed(recent_trades):
-                            if t['orderId'] not in (tp_id, sl_id):
+                            if t.get('orderId') not in (tp_id, sl_id):
                                 entry_trade = t
                                 break
                                 
@@ -691,12 +716,12 @@ class TestnetService:
                             logger.error(f"[RECOVERY] No recent trades found for {sym}, cannot determine entry.")
                             continue
                             
-                        entry_price = float(entry_trade['price'])
-                        entry_qty = float(entry_trade['qty'])
-                        entry_side = "BUY" if entry_trade['isBuyer'] else "SELL"
+                        entry_price = float(entry_trade.get('price', 0.0))
+                        entry_qty = float(entry_trade.get('qty', 0.0))
+                        entry_side = "BUY" if (entry_trade.get('isBuyer') or entry_trade.get('buyer')) else "SELL"
                         
                         recovered_trade = {
-                            "strategy": "RECOVERED",
+                            "strategy": "supertrend",
                             "symbol": sym,
                             "side": entry_side,
                             "quantity": entry_qty,
@@ -711,7 +736,8 @@ class TestnetService:
                             "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
                             "entry_timestamp": datetime.datetime.utcnow().isoformat() + "Z",
                             "signal_id": "RECOVERED_" + str(uuid.uuid4())[:8],
-                            "entry_client_id": "RECOVERED_" + str(uuid.uuid4())[:8]
+                            "entry_client_id": "RECOVERED_" + str(uuid.uuid4())[:8],
+                            "is_futures": (TRADING_MODE == "FUTURES"),
                         }
                         active_trades.append(recovered_trade)
                         logger.info(f"[RECOVERY] ✅ Successfully reconstructed state for {sym}: {recovered_trade}")
@@ -721,31 +747,39 @@ class TestnetService:
                 # Save the recovered state
                 _save_active_trades(active_trades)
 
-            # 3. Ensure assets we manage have an open OCO or limit order protecting them
+            # 3. Ensure assets we manage have protective orders
             unprotected = engine_symbols - protected_symbols - floating_ocos
             managed_symbols = {t['symbol'] for t in active_trades if t.get('status') == 'OPEN'}
             managed_unprotected = [s for s in managed_symbols if s not in protected_symbols and s not in floating_ocos]
             
-            # Crash Recovery: Attempt to place missing OCO protection for unmanaged/unprotected open assets
+            # Crash Recovery: Attempt to place missing protection for unmanaged/unprotected open assets
             if unprotected and not os.environ.get("PYTEST_CURRENT_TEST"):
                 from execution import _save_active_trades
                 from testnet_engine.protection import (
                     emergency_market_close,
+                    emergency_futures_market_close,
                     place_oco_protection,
+                    place_futures_bracket_protection,
                 )
                 for sym in list(unprotected):
                     try:
-                        logger.info(f"[RECOVERY] 🛡️ Unprotected position detected after restart for {sym}. Attempting safe OCO restoration...")
-                        recent_trades = self.client.get_my_trades(symbol=sym, limit=20)
+                        logger.info(f"[RECOVERY] 🛡️ Unprotected position detected after restart for {sym}. Attempting safe protection restoration...")
+                        if TRADING_MODE == "FUTURES":
+                            recent_trades = self.client.futures_account_trades(symbol=sym, limit=20) if hasattr(self.client, "futures_account_trades") else []
+                        else:
+                            recent_trades = self.client.get_my_trades(symbol=sym, limit=20)
                         if recent_trades:
                             last_trade = recent_trades[-1]
-                            entry_price = float(last_trade['price'])
-                            executed_qty = float(last_trade['qty'])
-                            entry_side = "BUY" if last_trade['isBuyer'] else "SELL"
+                            entry_price = float(last_trade.get('price', 0.0))
+                            executed_qty = float(last_trade.get('qty', 0.0))
+                            entry_side = "BUY" if (last_trade.get('isBuyer') or last_trade.get('buyer')) else "SELL"
                             
                             # Get current ticker price
-                            curr_ticker = self.client.get_symbol_ticker(symbol=sym)
-                            curr_price = float(curr_ticker['price'])
+                            if TRADING_MODE == "FUTURES":
+                                curr_ticker = self.client.futures_symbol_ticker(symbol=sym) if hasattr(self.client, "futures_symbol_ticker") else {}
+                            else:
+                                curr_ticker = self.client.get_symbol_ticker(symbol=sym)
+                            curr_price = float(curr_ticker.get('price', entry_price))
                             
                             # Standard conservative protection levels (SL: 2%, TP: 4%)
                             if entry_side == "BUY":
@@ -758,42 +792,77 @@ class TestnetService:
                                 is_safe = curr_price < sl_price and curr_price > tp_price
 
                             if is_safe:
-                                prot = place_oco_protection(
-                                    client=self.client,
-                                    symbol=sym,
-                                    entry_side=entry_side,
-                                    executed_qty=executed_qty,
-                                    actual_fill_price=entry_price,
-                                    sl_price=sl_price,
-                                    tp_price=tp_price,
-                                    list_client_order_id=f"rec-{int(time.time())}"
-                                )
-                                recovered_trade = {
-                                    "strategy": "RECOVERED",
-                                    "symbol": sym,
-                                    "side": entry_side,
-                                    "quantity": executed_qty,
-                                    "entry_price": entry_price,
-                                    "entry_fee": float(last_trade.get('commission', 0.0)),
-                                    "sl_price": sl_price,
-                                    "tp_price": tp_price,
-                                    "oco_id": prot["oco_order_list_id"],
-                                    "tp_order_id": prot["tp_order_id"],
-                                    "sl_order_id": prot["sl_order_id"],
-                                    "status": "OPEN",
-                                    "state": 1,
-                                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-                                    "entry_timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-                                    "signal_id": f"RECOVERED_{int(time.time())}",
-                                    "entry_client_id": f"RECOVERED_{int(time.time())}"
-                                }
+                                if TRADING_MODE == "FUTURES":
+                                    prot = place_futures_bracket_protection(
+                                        client=self.client,
+                                        symbol=sym,
+                                        entry_side=entry_side,
+                                        executed_qty=executed_qty,
+                                        actual_fill_price=entry_price,
+                                        sl_price=sl_price,
+                                        tp_price=tp_price,
+                                    )
+                                    recovered_trade = {
+                                        "strategy": "supertrend",
+                                        "symbol": sym,
+                                        "side": entry_side,
+                                        "quantity": executed_qty,
+                                        "entry_price": entry_price,
+                                        "entry_fee": float(last_trade.get('commission', 0.0)),
+                                        "sl_price": sl_price,
+                                        "tp_price": tp_price,
+                                        "oco_id": None,
+                                        "tp_order_id": prot["tp_order_id"],
+                                        "sl_order_id": prot["sl_order_id"],
+                                        "status": "OPEN",
+                                        "state": 1,
+                                        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                                        "entry_timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                                        "signal_id": f"RECOVERED_{int(time.time())}",
+                                        "entry_client_id": f"RECOVERED_{int(time.time())}",
+                                        "is_futures": True,
+                                    }
+                                else:
+                                    prot = place_oco_protection(
+                                        client=self.client,
+                                        symbol=sym,
+                                        entry_side=entry_side,
+                                        executed_qty=executed_qty,
+                                        actual_fill_price=entry_price,
+                                        sl_price=sl_price,
+                                        tp_price=tp_price,
+                                        list_client_order_id=f"rec-{int(time.time())}"
+                                    )
+                                    recovered_trade = {
+                                        "strategy": "supertrend",
+                                        "symbol": sym,
+                                        "side": entry_side,
+                                        "quantity": executed_qty,
+                                        "entry_price": entry_price,
+                                        "entry_fee": float(last_trade.get('commission', 0.0)),
+                                        "sl_price": sl_price,
+                                        "tp_price": tp_price,
+                                        "oco_id": prot["oco_order_list_id"],
+                                        "tp_order_id": prot["tp_order_id"],
+                                        "sl_order_id": prot["sl_order_id"],
+                                        "status": "OPEN",
+                                        "state": 1,
+                                        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                                        "entry_timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                                        "signal_id": f"RECOVERED_{int(time.time())}",
+                                        "entry_client_id": f"RECOVERED_{int(time.time())}",
+                                        "is_futures": False,
+                                    }
                                 active_trades.append(recovered_trade)
                                 _save_active_trades(active_trades)
                                 unprotected.remove(sym)
-                                logger.info(f"[RECOVERY] ✅ Successfully restored missing OCO protection for {sym} (OCO ID: {prot['oco_order_list_id']})")
+                                logger.info(f"[RECOVERY] ✅ Successfully restored missing protection for {sym}")
                             else:
                                 logger.warning(f"[RECOVERY] Price outside safe bounds for {sym}. Attempting emergency market close.")
-                                emergency_market_close(self.client, sym, entry_side, executed_qty)
+                                if TRADING_MODE == "FUTURES":
+                                    emergency_futures_market_close(self.client, sym, entry_side, executed_qty)
+                                else:
+                                    emergency_market_close(self.client, sym, entry_side, executed_qty)
                                 unprotected.remove(sym)
                     except Exception as re_err:
                         logger.error(f"[RECOVERY] Failed to restore missing protection for {sym}: {re_err}")

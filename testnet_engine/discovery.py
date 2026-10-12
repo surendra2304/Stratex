@@ -1,3 +1,4 @@
+import config
 from binance.client import Client
 
 from logger import get_logger
@@ -11,6 +12,7 @@ class SymbolDiscoveryService:
             self.client = Client("", "", testnet=testnet, ping=False)
             if testnet:
                 self.client.API_URL = "https://testnet.binance.vision/api"
+                self.client.FUTURES_URL = "https://testnet.binancefuture.com/fapi"
         except Exception:
             self.client = None
             
@@ -25,20 +27,29 @@ class SymbolDiscoveryService:
         and meet the liquidity criteria, ranking them by 24hr volume.
         """
         logger.info("[DISCOVERY] Fetching exchange metadata and 24hr tickers...")
+        is_futures = getattr(config, "TRADING_MODE", "TESTNET").upper() == "FUTURES"
         try:
             exchange_info = None
             tickers = None
             if self.client:
                 try:
-                    exchange_info = self.client.get_exchange_info()
-                    tickers = self.client.get_ticker()
+                    if is_futures and hasattr(self.client, "futures_exchange_info"):
+                        exchange_info = self.client.futures_exchange_info()
+                        tickers = self.client.futures_ticker() if hasattr(self.client, "futures_ticker") else None
+                    else:
+                        exchange_info = self.client.get_exchange_info()
+                        tickers = self.client.get_ticker()
                 except Exception as ex_err:
                     logger.warning(f"[DISCOVERY] Testnet exchange info error: {ex_err}")
             
             if (not exchange_info or not tickers) and self.prod_client:
                 try:
-                    exchange_info = self.prod_client.get_exchange_info()
-                    tickers = self.prod_client.get_ticker()
+                    if is_futures and hasattr(self.prod_client, "futures_exchange_info"):
+                        exchange_info = self.prod_client.futures_exchange_info()
+                        tickers = self.prod_client.futures_ticker() if hasattr(self.prod_client, "futures_ticker") else None
+                    else:
+                        exchange_info = self.prod_client.get_exchange_info()
+                        tickers = self.prod_client.get_ticker()
                 except Exception as prod_err:
                     logger.warning(f"[DISCOVERY] Prod exchange info fallback error: {prod_err}")
 
@@ -146,14 +157,21 @@ class SymbolDiscoveryService:
         """
         out = {}
         exchange_info = None
+        is_futures = getattr(config, "TRADING_MODE", "TESTNET").upper() == "FUTURES"
         if self.client:
             try:
-                exchange_info = self.client.get_exchange_info()
+                if is_futures and hasattr(self.client, "futures_exchange_info"):
+                    exchange_info = self.client.futures_exchange_info()
+                else:
+                    exchange_info = self.client.get_exchange_info()
             except Exception as e:
                 logger.debug(f"[DISCOVERY] Testnet get_symbol_filters error: {e}")
         if not exchange_info and self.prod_client:
             try:
-                exchange_info = self.prod_client.get_exchange_info()
+                if is_futures and hasattr(self.prod_client, "futures_exchange_info"):
+                    exchange_info = self.prod_client.futures_exchange_info()
+                else:
+                    exchange_info = self.prod_client.get_exchange_info()
             except Exception as e:
                 logger.error(f"[DISCOVERY] Prod get_symbol_filters error: {e}")
         if not exchange_info:
@@ -161,7 +179,8 @@ class SymbolDiscoveryService:
         wanted = set(symbols)
         for symbol_info in exchange_info.get("symbols", []):
             symbol = symbol_info["symbol"]
-            if symbol not in wanted or symbol_info.get("status") != "TRADING":
+            status = symbol_info.get("status")
+            if symbol not in wanted or (status != "TRADING" and symbol_info.get("contractStatus") != "TRADING"):
                 continue
             if symbol_info.get("quoteAsset") != "USDT":
                 continue
