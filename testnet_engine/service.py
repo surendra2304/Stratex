@@ -1189,7 +1189,7 @@ class TestnetService:
                                     "REJECTED", "BTC_REGIME_RISK_OFF"
                                 )
                                 continue
-                            elif side == "SELL" and regime_ok is True and getattr(config, "BLOCK_SHORTS_IN_BULL_REGIME", True):
+                            elif side == "SELL" and regime_ok is True and getattr(config, "BLOCK_SHORTS_IN_BULL_REGIME", False):
                                 self.stats["OTHER_REJECTED"] += 1
                                 if strat_name in self.stats["strategy_metrics"]:
                                     self.stats["strategy_metrics"][strat_name]["rejected"] += 1

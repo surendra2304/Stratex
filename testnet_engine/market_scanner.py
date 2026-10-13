@@ -199,6 +199,13 @@ class MarketScanner:
                 self._fetch_historical_candles(sym, tf)
                 self.last_market_update[(sym, tf)] = boot_now
                 self.last_candle_close[(sym, tf)] = boot_now
+                clean_df = self.candle_cache.get((sym, tf))
+                if clean_df is not None and not clean_df.empty:
+                    for cb in self.callbacks:
+                        try:
+                            cb(sym, tf, clean_df.copy(), "OK")
+                        except Exception as cb_err:
+                            logger.error(f"[SCANNER] Initial boot callback error for {sym} ({tf}): {cb_err}")
             self.data_health_status[sym] = "OK"
             time.sleep(0.1) # Small delay to respect REST rate limits during init
             

@@ -4499,10 +4499,19 @@ def _authoritative_signals():
     """Signal records from testnet opportunity log when in testnet/futures mode, or paper forward log."""
     trading_mode = getattr(config, "TRADING_MODE", "TESTNET").upper()
     opp_file = os.getenv("TESTNET_OPPORTUNITY_LOG", "testnet_opportunity_log.jsonl")
-    if trading_mode in ["TESTNET", "FUTURES"] and os.path.exists(opp_file):
-        records = _read_jsonl_records(opp_file)
-        if records:
-            return [_normalize_forward_signal(record) for record in records]
+    if trading_mode in ["TESTNET", "FUTURES"]:
+        if os.path.exists(opp_file):
+            records = _read_jsonl_records(opp_file)
+            if records:
+                return [_normalize_forward_signal(record) for record in records]
+        try:
+            from testnet_engine.telemetry_manager import get_telemetry_manager
+            tm_signals = get_telemetry_manager().get_signals_log(limit=100)
+            if tm_signals:
+                return [_normalize_forward_signal(record) for record in tm_signals]
+        except Exception:
+            pass
+        return []
     path = os.getenv("PAPER_FORWARD_SIGNAL_LOG", "forward_signal_log.jsonl")
     return [_normalize_forward_signal(record) for record in _read_jsonl_records(path)]
 

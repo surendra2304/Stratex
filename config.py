@@ -118,7 +118,7 @@ MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))            # Base limit of 5
 MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "10")) # Bounded positions for aggressive mode
 VOLATILITY_BUFFER = 0.2  # Scale down positions during high volatility
-BLOCK_SHORTS_IN_BULL_REGIME = os.getenv("BLOCK_SHORTS_IN_BULL_REGIME", "True").lower() == "true" # Confluence: do not short alts when BTC is bullish
+BLOCK_SHORTS_IN_BULL_REGIME = os.getenv("BLOCK_SHORTS_IN_BULL_REGIME", "False").lower() == "true" # Allow both long and short setups
 
 MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.02"))          # 2% daily loss limit
 MAX_TESTNET_DRAWDOWN_PCT = float(os.getenv("MAX_TESTNET_DRAWDOWN_PCT", "0.05"))    # 5% drawdown tolerance
@@ -146,7 +146,7 @@ SIGNAL_QUALITY_ENABLED = os.getenv("SIGNAL_QUALITY_ENABLED", "True").lower() == 
 SQ_TREND_ALIGNMENT = os.getenv("SQ_TREND_ALIGNMENT", "full").lower()          # "full" (EMA20>EMA50>EMA200) strictly enforces trend alignment
 SQ_CANDLE_CONFIRMATION = os.getenv("SQ_CANDLE_CONFIRMATION", "True").lower() == "true"   # signal candle must close in signal direction
 SQ_VOLUME_CONFIRMATION = os.getenv("SQ_VOLUME_CONFIRMATION", "True").lower() == "true"   # volume must exceed N × 20-bar average
-SQ_VOLUME_MULT = float(os.getenv("SQ_VOLUME_MULT", "0.8"))                               # 0.8x threshold for institutional volume confirmation
+SQ_VOLUME_MULT = float(os.getenv("SQ_VOLUME_MULT", "0.2"))                               # 0.2x allows pullback bounce continuation while filtering dead markets
 SIGNAL_DECAY_THRESHOLD = float(os.getenv("SIGNAL_DECAY_THRESHOLD", "0.25"))                 # lower threshold → confirms faster
 SQ_ATR_PCT_MIN = float(os.getenv("SQ_ATR_PCT_MIN", "0.0010"))                            # 0.10% — wider dead-market guard
 SQ_ATR_PCT_MAX = float(os.getenv("SQ_ATR_PCT_MAX", "0.050"))                             # 5.0% — wider chaos guard for futures
