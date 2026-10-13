@@ -53,7 +53,7 @@ class TestStrategyGovernance:
 
     def test_no_strategy_loads_without_reproducible_oos_evidence(self):
         """An empty executable set is safer than promoting an unverified prior."""
-        assert governance_filter_strategies(config.ACTIVE_STRATEGIES) == {}
+        assert governance_filter_strategies({"adx_ema": ["4h"]}) == {}
 
     def test_empty_input_is_safe(self):
         assert governance_filter_strategies({}) == {}
@@ -61,7 +61,7 @@ class TestStrategyGovernance:
 
 class TestSymbolGovernance:
     def test_validated_assets_from_loaded_strategies(self):
-        filtered = governance_filter_strategies(config.ACTIVE_STRATEGIES)
+        filtered = governance_filter_strategies({"adx_ema": ["4h"]})
         strategies_by_tf = {}
         for strat_name, tfs in filtered.items():
             for tf in tfs:

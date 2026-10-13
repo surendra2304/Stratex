@@ -93,20 +93,15 @@ TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-09-01
 # must mark an entry VALIDATED before the testnet engine loads it. At present
 # adx_ema remains OBSERVE_ONLY, so the executable set is intentionally empty.
 ACTIVE_STRATEGIES = {
-    "supertrend": ["5m", "15m", "1h", "4h"],
-    "factory_winner_1": ["5m", "15m", "30m", "1h", "4h"],
-    "factory_winner_2": ["5m", "15m", "30m", "1h", "4h"],
-    "factory_winner_3": ["5m", "15m", "30m", "1h", "4h"],
-    "factory_winner_4": ["5m", "15m", "30m", "1h", "4h"],
-    "factory_winner_5": ["15m", "30m", "1h", "4h"],
-    "bb_reversion": ["5m", "15m"],
+    "supertrend": ["15m", "1h", "4h"],
+    "bb_reversion": ["15m", "1h"],
     "adx_ema": ["4h"]
 }
 
 # Legacy single-strategy preference; it does not override registry governance.
-ACTIVE_STRATEGY = "adx_ema"
-TIMEFRAME = "5m"
-ALL_ACTIVE_TIMEFRAMES = ["5m", "15m", "30m", "1h", "4h"]
+ACTIVE_STRATEGY = "supertrend"
+TIMEFRAME = "15m"
+ALL_ACTIVE_TIMEFRAMES = ["15m", "30m", "1h", "4h"]
 BYPASS_PROFITABILITY_GATE = os.getenv("BYPASS_PROFITABILITY_GATE", "False").lower() == "true"  # Enforces positive mathematical edge calculation by default
 
 
@@ -172,7 +167,7 @@ STRATEGY_GATE_MIN_NET_PNL = float(os.getenv("STRATEGY_GATE_MIN_NET_PNL", "0.0"))
 STRATEGY_DEMOTION_COOLDOWN_HOURS = float(os.getenv("STRATEGY_DEMOTION_COOLDOWN_HOURS", "4.0"))
 
 # Global performance degradation guard (observe-only halt safeguard)
-DEGRADATION_GUARD_ENABLED = os.getenv("DEGRADATION_GUARD_ENABLED", "False").lower() == "true"
+DEGRADATION_GUARD_ENABLED = os.getenv("DEGRADATION_GUARD_ENABLED", "True").lower() == "true"
 DEGRADATION_WINDOW = int(os.getenv("DEGRADATION_WINDOW", "20"))
 MIN_WIN_RATE_THRESHOLD = float(os.getenv("MIN_WIN_RATE_THRESHOLD", "0.30"))
 OBSERVE_ONLY_COOLDOWN_SECONDS = float(os.getenv("OBSERVE_ONLY_COOLDOWN_SECONDS", "7200"))

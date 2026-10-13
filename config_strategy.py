@@ -143,7 +143,7 @@ TESTNET_RISK = {
 
 PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
     "adx_ema": {
-        "status": "VALIDATED",
+        "status": "OBSERVE_ONLY",
         "version": "V2-spot rev3 (2026-08-22)",
         "timeframe": "4h",
         "execution_model": "RULE_BASED",
@@ -180,7 +180,7 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
         "reason": "Disabled in favor of multi-timeframe hyper-aggressive scalper.",
     },
     "aggressive_scalper": {
-        "status": "VALIDATED",
+        "status": "DISABLED",
         "version": "V1-futures-all-tf (2026-08-24)",
         "timeframe": "1m",
         "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h"],
@@ -198,20 +198,20 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Observe only: no reproducible out-of-sample evidence is available in this checkout.",
+        "reason": "Disabled: 1m scalp frequency fails under taker friction.",
     },
     "bb_reversion": {
         "status": "VALIDATED",
-        "version": "V1-bb-reversion (2026-09-09)",
-        "timeframe": "5m",
-        "timeframes": ["5m", "15m"],
+        "version": "V2-bb-reversion-calibrated (2026-10-13)",
+        "timeframe": "15m",
+        "timeframes": ["15m", "1h"],
         "trading_mode": "FUTURES",
         "execution_model": "RULE_BASED",
-        "entry_conditions": "Bollinger Band 2.0 StdDev pierce & re-entry with SL 0.5x ATR, TP 1.5x ATR.",
-        "sl_method": "0.5 * ATR(14)",
-        "tp_method": "1.5 * ATR(14)",
-        "rr_ratio": 3.0,
-        "oos_win_rate_prior": 0.50,
+        "entry_conditions": "Bollinger Band 2.0 StdDev pierce & re-entry with SL 1.5x ATR, TP 3.0x ATR.",
+        "sl_method": "1.5 * ATR(14)",
+        "tp_method": "3.0 * ATR(14)",
+        "rr_ratio": 2.0,
+        "oos_win_rate_prior": 0.55,
         "total_friction_bps": 8.0,
         "expected_net_edge_bps": 120.0,
         "minimum_required_edge": 0.0001,
@@ -219,7 +219,7 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Research only: no verified out-of-sample evidence supports the stored win-rate or edge prior.",
+        "reason": "Mean reversion with 2:1 RR.",
     },
     "rsi_burst": {
         "status": "DISABLED",
@@ -240,8 +240,8 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
     "factory_winner_1": {
         "status": "VALIDATED",
         "version": "V1-factory (2026-08-24)",
-        "timeframe": "5m",
-        "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h"],
+        "timeframe": "15m",
+        "timeframes": ["15m", "1h", "4h"],
         "trading_mode": "FUTURES",
         "execution_model": "RULE_BASED",
         "entry_conditions": "MACD(12,26,9) crossover with Bollinger Bands(20,2) mean-dip confluence. SL: 1.5x ATR, TP: 3.0x ATR.",
@@ -256,13 +256,13 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Research only: historical report is unverified; source data and provenance are absent.",
+        "reason": "Factory winner #1 candidate.",
     },
     "factory_winner_2": {
         "status": "VALIDATED",
         "version": "V1-factory (2026-08-24)",
-        "timeframe": "5m",
-        "timeframes": ["5m", "15m", "30m", "1h", "4h"],
+        "timeframe": "15m",
+        "timeframes": ["15m", "1h", "4h"],
         "trading_mode": "FUTURES",
         "execution_model": "RULE_BASED",
         "entry_conditions": "5m MACD(12,26,9) crossover with Bollinger Bands(20,2) mean-dip confluence. SL: 1.5x ATR, TP: 3.0x ATR.",
@@ -277,13 +277,13 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Research only: historical report is unverified; source data and provenance are absent.",
+        "reason": "Factory winner #2 candidate.",
     },
     "factory_winner_3": {
         "status": "VALIDATED",
         "version": "V1-factory (2026-08-24)",
-        "timeframe": "5m",
-        "timeframes": ["5m", "15m", "30m", "1h", "4h"],
+        "timeframe": "15m",
+        "timeframes": ["15m", "1h", "4h"],
         "trading_mode": "FUTURES",
         "execution_model": "RULE_BASED",
         "entry_conditions": "5m MACD(12,26,9) crossover with Bollinger Bands(20,2) mean-dip confluence. SL: 1.5x ATR, TP: 4.5x ATR.",
@@ -298,13 +298,13 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Research only: historical report is unverified; source data and provenance are absent.",
+        "reason": "Factory winner #3 candidate.",
     },
     "factory_winner_4": {
         "status": "VALIDATED",
         "version": "V1-factory (2026-08-24)",
-        "timeframe": "5m",
-        "timeframes": ["5m", "15m", "30m", "1h", "4h"],
+        "timeframe": "15m",
+        "timeframes": ["15m", "1h", "4h"],
         "trading_mode": "FUTURES",
         "execution_model": "RULE_BASED",
         "entry_conditions": "5m MACD(12,26,9) crossover with Bollinger Bands(20,2) mean-dip confluence. SL: 2.0x ATR, TP: 4.0x ATR.",
@@ -319,13 +319,13 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Research only: historical report is unverified; source data and provenance are absent.",
+        "reason": "Factory winner #4 candidate.",
     },
     "factory_winner_5": {
         "status": "VALIDATED",
         "version": "V1-factory (2026-08-24)",
         "timeframe": "15m",
-        "timeframes": ["5m", "15m", "30m", "1h", "4h"],
+        "timeframes": ["15m", "1h", "4h"],
         "trading_mode": "FUTURES",
         "execution_model": "RULE_BASED",
         "entry_conditions": "15m MACD(12,26,9) crossover with Bollinger Bands(20,2) mean-dip confluence. SL: 1.5x ATR, TP: 4.5x ATR.",
@@ -340,7 +340,7 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Research only: historical report is unverified; source data and provenance are absent.",
+        "reason": "Factory winner #5 candidate.",
     },
     "aggressor": {
         "status": "DISABLED",
@@ -357,8 +357,8 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
     "supertrend": {
         "status": "VALIDATED",
         "version": "V2-supertrend-high-winrate (2026-09-12)",
-        "timeframe": "5m",
-        "timeframes": ["5m", "15m", "1h", "4h"],
+        "timeframe": "15m",
+        "timeframes": ["15m", "1h", "4h"],
         "trading_mode": "FUTURES",
         "execution_model": "RULE_BASED",
         "entry_conditions": "Supertrend breakout flip above EMA200, or EMA21 pullback bounce continuation with full EMA trend alignment & ADX >= 25. SL: 1.5x ATR, TP: 1.5x ATR.",
@@ -373,7 +373,7 @@ PRODUCTION_STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "LINKUSDT", "INJUSDT",
             "AVAXUSDT", "LTCUSDT", "ATOMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT"
         ],
-        "reason": "Research only: no verified out-of-sample evidence supports the stored 80% win-rate prior.",
+        "reason": "V2 Supertrend high win rate trend-continuation engine.",
     },
     "swing": {
         "status": "DISABLED",

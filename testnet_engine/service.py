@@ -315,6 +315,7 @@ class TestnetService:
         self.safety_halt = False
         self.observe_only = False
         self.cooldowns = {} # symbol -> timestamp (float)
+        self.last_trade_execution_time = 0.0
         
         # Stratex Deep Upgrade: UpgradeRiskManager, MarketDataGuard
         try:
@@ -1467,6 +1468,10 @@ class TestnetService:
                 # Rank candidates by Deterministic Score (Descending), then Net Edge, Confidence, Risk, Symbol
                 candidates.sort(key=lambda x: (x["score"], x["net_edge"], x["confidence"], -x["risk"], x["symbol"]), reverse=True)
                 
+                executed_in_batch = 0
+                max_executions_per_batch = int(os.getenv("MAX_EXECUTIONS_PER_BATCH", "1"))
+                global_spacing_seconds = float(os.getenv("GLOBAL_EXECUTION_SPACING_SECONDS", "0.0" if os.environ.get("PYTEST_CURRENT_TEST") else "60.0"))
+
                 for rank_idx, candidate in enumerate(candidates, 1):
                     candidate["rank"] = rank_idx
                     logger.info(
@@ -1482,6 +1487,28 @@ class TestnetService:
                     tp = candidate["tp"]
                     strategy_name = candidate.get("strategy", "adx_ema")
                     with self.lock:
+                        # Anti-Cluster Throttle: Prevent multiple trades from executing at the exact same minute
+                        if executed_in_batch >= max_executions_per_batch:
+                            logger.info(
+                                f"[CONCURRENCY_THROTTLE] Batch limit reached ({executed_in_batch}/{max_executions_per_batch}). "
+                                f"Skipping #{rank_idx} {symbol} to prevent simultaneous trade clusters."
+                            )
+                            self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                            self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "CONCURRENCY_THROTTLE_BATCH_LIMIT")
+                            continue
+
+                        now_ts = datetime.datetime.utcnow().timestamp()
+                        last_exec_ts = getattr(self, "last_trade_execution_time", 0.0)
+                        if global_spacing_seconds > 0 and (now_ts - last_exec_ts) < global_spacing_seconds:
+                            rem = int(global_spacing_seconds - (now_ts - last_exec_ts))
+                            logger.info(
+                                f"[GLOBAL_SPACING_THROTTLE] Global trade spacing active ({rem}s remaining). "
+                                f"Skipping {symbol} to prevent simultaneous trade clusters."
+                            )
+                            self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                            self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "GLOBAL_EXECUTION_SPACING")
+                            continue
+
                         # QuantDinger Runtime Lease & Health Supervisor Gate
                         if getattr(self, "runtime_supervisor", None) and getattr(self, "runtime_heartbeat", None):
                             is_healthy, h_reason = self.runtime_supervisor.evaluate(self.runtime_heartbeat)
@@ -1819,6 +1846,8 @@ class TestnetService:
                                     "entry_client_id": signal_id
                                 }
                                 self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
+                                self.last_trade_execution_time = datetime.datetime.utcnow().timestamp()
+                                executed_in_batch += 1
                                 
                                 # Telemetry Recording
                                 self.telemetry.record_execution_event({

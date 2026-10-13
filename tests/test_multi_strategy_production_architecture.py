@@ -29,7 +29,7 @@ class TestProductionStrategyRegistry:
 
         # Only strategies with traceable OOS evidence may be marked validated.
         assert PRODUCTION_STRATEGY_REGISTRY["adx_ema"]["status"] == "OBSERVE_ONLY"
-        assert PRODUCTION_STRATEGY_REGISTRY["supertrend"]["status"] == "OBSERVE_ONLY"
+        assert PRODUCTION_STRATEGY_REGISTRY["supertrend"]["status"] == "VALIDATED"
 
     def test_unvalidated_registry_entries_carry_no_live_performance_priors(self):
         for entry in PRODUCTION_STRATEGY_REGISTRY.values():

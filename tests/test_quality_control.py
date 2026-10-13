@@ -31,6 +31,7 @@ def quality_service(tmp_path):
     import config
     config.DEGRADATION_WINDOW = 5
     config.MIN_WIN_RATE_THRESHOLD = 0.40
+    config.DEGRADATION_GUARD_ENABLED = True
     
     from unittest import mock
     with mock.patch("testnet_engine.service.get_exchange_client") as mock_get_client:

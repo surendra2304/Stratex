@@ -1872,12 +1872,16 @@ def _get_trades_data():
                     # Closed long: entry was lower than exit by (pnl / qty)
                     entry_p = round(exit_p - (gross_pnl_val / qty_val), 4)
                 
+            trade_source = str(trade.get("source") or ("PAPER_ENGINE" if "paper" in str(ledger_file) else "BINANCE_EXECUTION"))
+            trade_prov = str(trade.get("provenance") or "BINANCE_EXECUTION")
+
             positions.append({
                 "timestamp": ts_val,
                 "symbol": symbol,
                 "action": trade.get("direction", trade.get("side", trade.get("action", "BUY"))).replace("CLOSED_", "").replace("CLOSE_", ""),
                 "strategy": trade.get("strategy") or "SUPERTREND",
-                "source": source or trade.get("source", "PAPER_ENGINE" if "paper" in ledger_file else "BINANCE_EXECUTION"),
+                "source": trade_source,
+                "provenance": trade_prov,
                 "entry_price": entry_p,
                 "exit_price": exit_p,
                 "quantity": qty_val,
