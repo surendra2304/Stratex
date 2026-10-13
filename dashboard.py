@@ -1663,9 +1663,10 @@ def sync_binance_futures_trades_to_ledger(force: bool = False):
                     if line.strip():
                         try:
                             rec = json.loads(line)
-                            oid = str(rec.get("order_id") or rec.get("exit_order_id") or "")
-                            if oid:
-                                existing_order_ids.add(oid)
+                            for fid in ("order_id", "exit_order_id", "entry_order_id", "trade_id"):
+                                val = str(rec.get(fid) or "")
+                                if val and val != "None":
+                                    existing_order_ids.add(val)
                         except Exception:
                             pass
 
@@ -1776,6 +1777,7 @@ def _get_trades_data():
         if not baseline_iso:
             baseline_iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-01T00:00:00Z")
 
+    raw_candidates = []
     for ledger_file in ledger_files:
         if not os.path.exists(ledger_file):
             continue
@@ -1799,84 +1801,95 @@ def _get_trades_data():
                     if source in INVALID_PROVENANCES or prov in INVALID_PROVENANCES or strategy in INVALID_PROVENANCES or status == "OPEN":
                         continue
                     
-                    symbol = trade.get("symbol", "")
-                    trade_id = str(trade.get("trade_id") or trade.get("id") or "")
-                    entry_oid = str(trade.get("entry_order_id", ""))
-                    exit_oid = str(trade.get("exit_order_id", ""))
-                    
-                    signal_id = str(trade.get("signal_id") or "")
-                    if signal_id and signal_id != "None":
-                        key = signal_id
-                    elif entry_oid and exit_oid and entry_oid != "None" and exit_oid != "None":
-                        key = f"{symbol}_{entry_oid}_{exit_oid}"
-                    elif exit_oid and exit_oid != "None":
-                        key = f"{symbol}_{exit_oid}_{trade.get('exit_timestamp', '')}_{trade.get('pnl', '')}"
-                    elif entry_oid and entry_oid != "None":
-                        key = f"{symbol}_{entry_oid}_{trade.get('entry_timestamp', '')}_{trade.get('pnl', '')}"
-                    elif trade_id and trade_id != "None":
-                        key = f"{symbol}_{trade_id}"
-                    else:
-                        key = f"{symbol}_{trade.get('exit_timestamp', trade.get('exit_time', trade.get('timestamp', '')))}_{trade.get('pnl', trade.get('net_pnl', ''))}"
-                    
-                    if key in seen_trade_keys:
-                        continue
-                    seen_trade_keys.add(key)
-                    
-                    pnl = float(trade.get("net_pnl", trade.get("pnl", trade.get("gross_pnl", 0.0))))
-                    fees = float(trade.get("total_fees", trade.get("fees", trade.get("exit_fee", 0.0) + trade.get("entry_fee", 0.0))))
-                    
-                    if pnl > 0:
-                        wins += 1
-                        gross_profit += pnl
-                    elif pnl < 0:
-                        losses += 1
-                        gross_loss += abs(pnl)
-                    
-                    # Format timestamp cleanly to ISO UTC string
-                    ts_val = trade.get("exit_timestamp") or trade.get("timestamp") or trade.get("entry_timestamp")
-                    if not ts_val:
-                        epoch_val = trade.get("exit_time") or trade.get("entry_time")
-                        if epoch_val:
-                            try:
-                                ts_val = datetime.datetime.fromtimestamp(float(epoch_val), datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-                            except Exception:
-                                ts_val = str(epoch_val)
-                        else:
-                            ts_val = datetime.datetime.utcnow().isoformat() + "Z"
-                        
-                    entry_p = float(trade.get("entry_price", 0.0))
-                    exit_p = float(trade.get("exit_price", 0.0))
-                    qty_val = float(trade.get("quantity", trade.get("entry_executed_quantity", 0.0)))
-                    gross_pnl_val = float(trade.get("gross_pnl", pnl))
-                    
-                    # Mathematical derivation fallback if entry_price is missing or 0.0
-                    if entry_p <= 0.0 and exit_p > 0.0 and qty_val > 0.0:
-                        trade_dir = str(trade.get("direction", trade.get("side", trade.get("action", "BUY")))).upper()
-                        if "SHORT" in trade_dir or "BUY" in str(trade.get("action", "")).upper():
-                            # Closed short: entry was higher than exit by (pnl / qty)
-                            entry_p = round(exit_p + (gross_pnl_val / qty_val), 4)
-                        else:
-                            # Closed long: entry was lower than exit by (pnl / qty)
-                            entry_p = round(exit_p - (gross_pnl_val / qty_val), 4)
-                        
-                    positions.append({
-                        "timestamp": ts_val,
-                        "symbol": symbol,
-                        "action": trade.get("direction", trade.get("side", trade.get("action", "BUY"))).replace("CLOSED_", "").replace("CLOSE_", ""),
-                        "strategy": trade.get("strategy") or "SUPERTREND",
-                        "source": source or trade.get("source", "PAPER_ENGINE" if "paper" in ledger_file else "BINANCE_EXECUTION"),
-                        "entry_price": entry_p,
-                        "exit_price": exit_p,
-                        "quantity": qty_val,
-                        "gross_pnl": gross_pnl_val,
-                        "fees": fees,
-                        "pnl": pnl,
-                        "status": "CLOSED",
-                        "exit_reason": trade.get("exit_reason", "TARGET_REACHED"),
-                        "order_id": trade_id or trade.get("exit_order_id") or trade.get("entry_order_id") or trade.get("signal_id", "PAPER-TRADE")
-                    })
-                except Exception as e:
-                    logger.error(f"Error parsing trade ledger line: {e}")
+                    raw_candidates.append(trade)
+                except Exception:
+                    pass
+
+    # Sort candidates so authentic strategy executions are processed before "RECOVERED" syntheses
+    raw_candidates.sort(key=lambda t: (1 if str(t.get("strategy", "")).upper() == "RECOVERED" else 0))
+
+    for trade in raw_candidates:
+        try:
+            symbol = trade.get("symbol", "")
+            strategy = str(trade.get("strategy", "")).upper()
+            trade_id = str(trade.get("trade_id") or trade.get("id") or "")
+            entry_oid = str(trade.get("entry_order_id", ""))
+            exit_oid = str(trade.get("exit_order_id", ""))
+            signal_id = str(trade.get("signal_id") or "")
+            
+            # Canonical deduplication keys: prioritize exit order id and entry order id
+            keys_to_check = []
+            if exit_oid and exit_oid != "None" and exit_oid != "0":
+                keys_to_check.append(f"{symbol}_exit_{exit_oid}")
+            if entry_oid and entry_oid != "None" and entry_oid != "0":
+                keys_to_check.append(f"{symbol}_entry_{entry_oid}")
+            if signal_id and signal_id != "None" and not signal_id.startswith("RECOVERED_"):
+                keys_to_check.append(signal_id)
+            if not keys_to_check:
+                t_ts = trade.get("exit_timestamp") or trade.get("timestamp") or trade.get("entry_timestamp") or ""
+                keys_to_check.append(f"{symbol}_{t_ts}_{trade.get('pnl', trade.get('net_pnl', ''))}")
+            
+            # If any of the canonical keys were already accepted from a real strategy execution, skip duplicate
+            if any(k in seen_trade_keys for k in keys_to_check):
+                continue
+            for k in keys_to_check:
+                seen_trade_keys.add(k)
+
+            pnl = float(trade.get("net_pnl", trade.get("pnl", trade.get("gross_pnl", 0.0))))
+            fees = float(trade.get("total_fees", trade.get("fees", trade.get("exit_fee", 0.0) + trade.get("entry_fee", 0.0))))
+            
+            if pnl > 0:
+                wins += 1
+                gross_profit += pnl
+            elif pnl < 0:
+                losses += 1
+                gross_loss += abs(pnl)
+            
+            # Format timestamp cleanly to ISO UTC string
+            ts_val = trade.get("exit_timestamp") or trade.get("timestamp") or trade.get("entry_timestamp")
+            if not ts_val:
+                epoch_val = trade.get("exit_time") or trade.get("entry_time")
+                if epoch_val:
+                    try:
+                        ts_val = datetime.datetime.fromtimestamp(float(epoch_val), datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                    except Exception:
+                        ts_val = str(epoch_val)
+                else:
+                    ts_val = datetime.datetime.utcnow().isoformat() + "Z"
+                
+            entry_p = float(trade.get("entry_price", 0.0))
+            exit_p = float(trade.get("exit_price", 0.0))
+            qty_val = float(trade.get("quantity", trade.get("entry_executed_quantity", 0.0)))
+            gross_pnl_val = float(trade.get("gross_pnl", pnl))
+            
+            # Mathematical derivation fallback if entry_price is missing or 0.0
+            if entry_p <= 0.0 and exit_p > 0.0 and qty_val > 0.0:
+                trade_dir = str(trade.get("direction", trade.get("side", trade.get("action", "BUY")))).upper()
+                if "SHORT" in trade_dir or "BUY" in str(trade.get("action", "")).upper():
+                    # Closed short: entry was higher than exit by (pnl / qty)
+                    entry_p = round(exit_p + (gross_pnl_val / qty_val), 4)
+                else:
+                    # Closed long: entry was lower than exit by (pnl / qty)
+                    entry_p = round(exit_p - (gross_pnl_val / qty_val), 4)
+                
+            positions.append({
+                "timestamp": ts_val,
+                "symbol": symbol,
+                "action": trade.get("direction", trade.get("side", trade.get("action", "BUY"))).replace("CLOSED_", "").replace("CLOSE_", ""),
+                "strategy": trade.get("strategy") or "SUPERTREND",
+                "source": source or trade.get("source", "PAPER_ENGINE" if "paper" in ledger_file else "BINANCE_EXECUTION"),
+                "entry_price": entry_p,
+                "exit_price": exit_p,
+                "quantity": qty_val,
+                "gross_pnl": gross_pnl_val,
+                "fees": fees,
+                "pnl": pnl,
+                "status": "CLOSED",
+                "exit_reason": trade.get("exit_reason", "TARGET_REACHED"),
+                "order_id": trade_id or trade.get("exit_order_id") or trade.get("entry_order_id") or trade.get("signal_id", "PAPER-TRADE")
+            })
+        except Exception as e:
+            logger.error(f"Error parsing trade ledger line: {e}")
 
     positions.sort(key=lambda x: str(x.get("timestamp", "")), reverse=True)
     total_closed = wins + losses

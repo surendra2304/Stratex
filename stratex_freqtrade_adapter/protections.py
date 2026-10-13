@@ -117,8 +117,9 @@ class ProtectionManager:
                 return ProtectionDecision(False, "LOW_PROFIT_PAIR")
 
         # Max drawdown guard
-        if peak_equity > 0:
-            dd = (peak_equity - equity) / peak_equity
+        if peak_equity > 0 and equity > 0:
+            effective_peak = min(peak_equity, equity * 1.5)
+            dd = (effective_peak - equity) / effective_peak
             if dd >= self.max_drawdown_pct:
                 return ProtectionDecision(False, "MAX_DRAWDOWN")
 

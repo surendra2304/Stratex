@@ -162,7 +162,7 @@ class TestnetService:
         try:
             if TRADING_MODE == "FUTURES":
                 account = self.client.futures_account()
-                actual_binance_balance = float(account.get("availableBalance", account.get("totalWalletBalance", 0.0)))
+                actual_binance_balance = float(account.get("totalMarginBalance", account.get("totalWalletBalance", 0.0)))
             else:
                 account = self.client.get_account()
                 usdt_balance = next((item for item in account['balances'] if item['asset'] == 'USDT'), None)
@@ -250,6 +250,12 @@ class TestnetService:
         except Exception as e:
             logger.warning(f"[PROTECTION_INIT_WARN] Could not initialize ProtectionManager: {e}")
             self.protection_manager = None
+
+        # Write initial heartbeat so dashboard immediately registers active strategies
+        try:
+            self._write_heartbeat(status="INITIALIZING", worker_alive=True)
+        except Exception as hb_init_err:
+            logger.debug(f"[BOOT_HB_WARN] Could not write initial heartbeat: {hb_init_err}")
 
         # CCXT unified exchange abstraction
         self.ccxt_adapter = None
@@ -1182,7 +1188,7 @@ class TestnetService:
                                     "REJECTED", "BTC_REGIME_RISK_OFF"
                                 )
                                 continue
-                            elif side == "SELL" and regime_ok is True and getattr(config, "BLOCK_SHORTS_IN_BULL_REGIME", False):
+                            elif side == "SELL" and regime_ok is True and getattr(config, "BLOCK_SHORTS_IN_BULL_REGIME", True):
                                 self.stats["OTHER_REJECTED"] += 1
                                 if strat_name in self.stats["strategy_metrics"]:
                                     self.stats["strategy_metrics"][strat_name]["rejected"] += 1
@@ -2252,15 +2258,26 @@ class TestnetService:
         while True:
             try:
                 # 1. Update Equity
+                active = _load_active_trades()
+                active_open_positions = [t for t in active if t.get('status') == 'OPEN']
                 if TRADING_MODE == "FUTURES":
                     account = self.client.futures_account() if hasattr(self.client, "futures_account") else {}
-                    actual_binance_balance = float(account.get("availableBalance", account.get("totalWalletBalance", 0.0)))
+                    # In Futures USDⓈ-M, totalMarginBalance is TRUE ACCOUNT EQUITY (wallet balance + unrealized PnL)
+                    actual_binance_total = float(account.get("totalMarginBalance", account.get("totalWalletBalance", 0.0)))
+                    actual_binance_balance = float(account.get("availableBalance", actual_binance_total))
+                    used_margin = float(account.get("totalInitialMargin", 0.0))
+                    if used_margin == 0.0 and active_open_positions:
+                        # Fallback margin estimation if Binance payload lacked totalInitialMargin
+                        lev = float(getattr(config, "FUTURES_LEVERAGE", 5.0))
+                        used_margin = sum(float(t.get('quantity', 0.0)) * float(t.get('entry_price', 0.0)) / max(1.0, lev) for t in active_open_positions)
                 else:
                     account = self.client.get_account()
                     usdt_balance = next((item for item in account.get('balances', []) if item['asset'] == 'USDT'), None)
                     actual_binance_balance = 0.0
                     if usdt_balance:
                         actual_binance_balance = float(usdt_balance['free']) + float(usdt_balance['locked'])
+                    used_margin = sum(float(t.get('quantity', 0.0)) * float(t.get('entry_price', 0.0)) for t in active_open_positions)
+                    actual_binance_total = actual_binance_balance + used_margin
                     
                 # 2. Reconcile Positions
                 from execution import monitor_open_trades
@@ -2290,12 +2307,6 @@ class TestnetService:
                                 pass
                 
                 self.local_portfolio_balance = self.initial_deposit + total_reconstructable_pnl
-                
-                # Active position capital deployed
-                active = _load_active_trades()
-                active_open_positions = [t for t in active if t.get('status') == 'OPEN']
-                used_margin = sum(float(t.get('quantity', 0.0)) * float(t.get('entry_price', 0.0)) for t in active_open_positions)
-                actual_binance_total = actual_binance_balance + used_margin
                 
                 tolerance = getattr(config, "RECONCILIATION_TOLERANCE", 25.0)
                 mismatch = abs(self.local_portfolio_balance - actual_binance_total)
@@ -2536,98 +2547,102 @@ class TestnetService:
             from testnet_engine.protection import LEDGER_WRITE_LOCK
             with LEDGER_WRITE_LOCK:
                 with locked_path(ledger_file):
-                    existing_exit_ids = set()
+                    existing_order_ids = set()
                     for record in read_jsonl(ledger_file).records:
-                        if record.get("exit_order_id"):
-                            existing_exit_ids.add(str(record["exit_order_id"]))
-                        elif record.get("exit_client_id"):
-                            existing_exit_ids.add(str(record["exit_client_id"]))
+                        for fid in ("exit_order_id", "exit_client_id", "entry_order_id", "order_id"):
+                            val = str(record.get(fid) or "")
+                            if val and val != "None":
+                                existing_order_ids.add(val)
                     for ct in completed_trades:
-                        if str(ct["exit_order_id"]) not in existing_exit_ids:
-                            append_jsonl(ledger_file, ct, fsync=True)
-                            existing_exit_ids.add(str(ct["exit_order_id"]))
-                            if hasattr(self, "protection_manager") and self.protection_manager:
-                                try:
-                                    self.protection_manager.on_trade_closed(ct)
-                                except Exception as e:
-                                    logger.warning(f"[PROTECTION_HOOK_ERR] Failed on_trade_closed: {e}")
-                            
-                            # Telemetry update — full 40-field canonical lifecycle record
-
+                        ex_id = str(ct.get("exit_order_id") or "")
+                        en_id = str(ct.get("entry_order_id") or "")
+                        if (ex_id and ex_id in existing_order_ids) or (en_id and en_id in existing_order_ids):
+                            continue
+                        append_jsonl(ledger_file, ct, fsync=True)
+                        if ex_id: existing_order_ids.add(ex_id)
+                        if en_id: existing_order_ids.add(en_id)
+                        if hasattr(self, "protection_manager") and self.protection_manager:
                             try:
-                                if hasattr(self, "telemetry") and self.telemetry:
-                                    # Compute balance state before/after exit
-                                    net_pnl_ct = float(ct.get("net_pnl", 0.0))
-                                    equity_before_exit = self.current_equity
-                                    equity_after_exit = self.current_equity + net_pnl_ct
-                                    notional_ct = float(ct.get("quantity", 0.0)) * float(ct.get("entry_price", 0.0))
-                                    cash_before_exit = max(0.0, self.current_equity - notional_ct)
-                                    cash_after_exit = cash_before_exit + float(ct.get("quantity", 0.0)) * float(ct.get("exit_price", 0.0))
+                                self.protection_manager.on_trade_closed(ct)
+                            except Exception as e:
+                                logger.warning(f"[PROTECTION_HOOK_ERR] Failed on_trade_closed: {e}")
+                        
+                        # Telemetry update — full 40-field canonical lifecycle record
 
-                                    self.telemetry.record_trade_event({
-                                        "trade_id": str(ct.get("entry_client_id", ct.get("entry_order_id", ct.get("exit_order_id", "")))),
-                                        "symbol": ct.get("symbol"),
-                                        "strategy": ct.get("strategy", ""),
-                                        "timeframe": ct.get("timeframe", "5m"),
-                                        "side": ct.get("side", ct.get("action", "BUY")).replace("CLOSED_", "").replace("CLOSE_", ""),
-                                        "status": "CLOSED",
-                                        "entry_order_id": str(ct.get("entry_order_id", "")),
-                                        "exit_order_id": str(ct.get("exit_order_id", "")),
-                                        # Timestamps — fill_timestamp is the entry fill time
-                                        "fill_timestamp": ct.get("entry_timestamp", ""),
-                                        "close_timestamp": ct.get("exit_timestamp", ""),
-                                        "signal_timestamp": ct.get("signal_timestamp", ct.get("entry_timestamp", "")),
-                                        # Prices
-                                        "entry_price": float(ct.get("entry_price", 0.0)),
-                                        "average_entry_price": float(ct.get("entry_price", 0.0)),
-                                        "exit_price": float(ct.get("exit_price", 0.0)),
-                                        "quantity": float(ct.get("quantity", 0.0)),
-                                        "notional": notional_ct,
-                                        # Protection
-                                        "stop_loss": float(ct.get("sl_price", ct.get("sl", 0.0))),
-                                        "take_profit": float(ct.get("tp_price", ct.get("tp", 0.0))),
-                                        # PnL & Fees
-                                        "gross_pnl": float(ct.get("gross_pnl", 0.0)),
-                                        "net_pnl": net_pnl_ct,
-                                        "total_fees": float(ct.get("total_fees", ct.get("fees", ct.get("entry_fee", 0.0) + ct.get("exit_fee", 0.0)))),
-                                        "entry_fee": float(ct.get("entry_fee", 0.0)),
-                                        "exit_fee": float(ct.get("exit_fee", 0.0)),
-                                        # Balance/Equity state at exit
-                                        "equity_before_exit": equity_before_exit,
-                                        "equity_after_exit": equity_after_exit,
-                                        "cash_before_exit": cash_before_exit,
-                                        "cash_after_exit": cash_after_exit,
-                                        # Close metadata
-                                        "close_reason": ct.get("exit_reason", ct.get("action", "")),
-                                        "source": ct.get("source", "BINANCE_EXECUTION"),
-                                        "provenance": "PRODUCTION_TESTNET"
-                                    })
-                                    self.telemetry.record_position_update({
-                                        "position_id": ct.get("symbol"),
-                                        "trade_id": str(ct.get("entry_client_id", ct.get("entry_order_id", ""))),
-                                        "symbol": ct.get("symbol"),
-                                        "strategy": ct.get("strategy", ""),
-                                        "timeframe": ct.get("timeframe", "5m"),
-                                        "exit_timestamp": ct.get("exit_timestamp", ""),
-                                        "exit_price": float(ct.get("exit_price", 0.0)),
-                                        "status": "CLOSED",
-                                        "realized_pnl": net_pnl_ct
-                                    })
-                                    self.telemetry.record_balance_event({
-                                        "event_type": "TRADE_CLOSE",
-                                        "reason": f"CLOSE {ct.get('symbol')} via {ct.get('exit_reason', 'OCO')}",
-                                        "balance_before": equity_before_exit,
-                                        "balance_after": equity_after_exit,
-                                        "delta": net_pnl_ct,
-                                        "realized_pnl_delta": net_pnl_ct,
-                                        "fees_delta": float(ct.get("total_fees", 0.0)),
-                                        "trade_id": str(ct.get("entry_order_id", "")),
-                                        "symbol": ct.get("symbol"),
-                                        "strategy": ct.get("strategy", ""),
-                                        "timeframe": ct.get("timeframe", "5m")
-                                    })
-                            except Exception as te_err:
-                                logger.error(f"[TELEMETRY] Failed to record closed trade: {te_err}")
+                        try:
+                            if hasattr(self, "telemetry") and self.telemetry:
+                                # Compute balance state before/after exit
+                                net_pnl_ct = float(ct.get("net_pnl", 0.0))
+                                equity_before_exit = self.current_equity
+                                equity_after_exit = self.current_equity + net_pnl_ct
+                                notional_ct = float(ct.get("quantity", 0.0)) * float(ct.get("entry_price", 0.0))
+                                cash_before_exit = max(0.0, self.current_equity - notional_ct)
+                                cash_after_exit = cash_before_exit + float(ct.get("quantity", 0.0)) * float(ct.get("exit_price", 0.0))
+
+                                self.telemetry.record_trade_event({
+                                    "trade_id": str(ct.get("entry_client_id", ct.get("entry_order_id", ct.get("exit_order_id", "")))),
+                                    "symbol": ct.get("symbol"),
+                                    "strategy": ct.get("strategy", ""),
+                                    "timeframe": ct.get("timeframe", "5m"),
+                                    "side": ct.get("side", ct.get("action", "BUY")).replace("CLOSED_", "").replace("CLOSE_", ""),
+                                    "status": "CLOSED",
+                                    "entry_order_id": str(ct.get("entry_order_id", "")),
+                                    "exit_order_id": str(ct.get("exit_order_id", "")),
+                                    # Timestamps — fill_timestamp is the entry fill time
+                                    "fill_timestamp": ct.get("entry_timestamp", ""),
+                                    "close_timestamp": ct.get("exit_timestamp", ""),
+                                    "signal_timestamp": ct.get("signal_timestamp", ct.get("entry_timestamp", "")),
+                                    # Prices
+                                    "entry_price": float(ct.get("entry_price", 0.0)),
+                                    "average_entry_price": float(ct.get("entry_price", 0.0)),
+                                    "exit_price": float(ct.get("exit_price", 0.0)),
+                                    "quantity": float(ct.get("quantity", 0.0)),
+                                    "notional": notional_ct,
+                                    # Protection
+                                    "stop_loss": float(ct.get("sl_price", ct.get("sl", 0.0))),
+                                    "take_profit": float(ct.get("tp_price", ct.get("tp", 0.0))),
+                                    # PnL & Fees
+                                    "gross_pnl": float(ct.get("gross_pnl", 0.0)),
+                                    "net_pnl": net_pnl_ct,
+                                    "total_fees": float(ct.get("total_fees", ct.get("fees", ct.get("entry_fee", 0.0) + ct.get("exit_fee", 0.0)))),
+                                    "entry_fee": float(ct.get("entry_fee", 0.0)),
+                                    "exit_fee": float(ct.get("exit_fee", 0.0)),
+                                    # Balance/Equity state at exit
+                                    "equity_before_exit": equity_before_exit,
+                                    "equity_after_exit": equity_after_exit,
+                                    "cash_before_exit": cash_before_exit,
+                                    "cash_after_exit": cash_after_exit,
+                                    # Close metadata
+                                    "close_reason": ct.get("exit_reason", ct.get("action", "")),
+                                    "source": ct.get("source", "BINANCE_EXECUTION"),
+                                    "provenance": "PRODUCTION_TESTNET"
+                                })
+                                self.telemetry.record_position_update({
+                                    "position_id": ct.get("symbol"),
+                                    "trade_id": str(ct.get("entry_client_id", ct.get("entry_order_id", ""))),
+                                    "symbol": ct.get("symbol"),
+                                    "strategy": ct.get("strategy", ""),
+                                    "timeframe": ct.get("timeframe", "5m"),
+                                    "exit_timestamp": ct.get("exit_timestamp", ""),
+                                    "exit_price": float(ct.get("exit_price", 0.0)),
+                                    "status": "CLOSED",
+                                    "realized_pnl": net_pnl_ct
+                                })
+                                self.telemetry.record_balance_event({
+                                    "event_type": "TRADE_CLOSE",
+                                    "reason": f"CLOSE {ct.get('symbol')} via {ct.get('exit_reason', 'OCO')}",
+                                    "balance_before": equity_before_exit,
+                                    "balance_after": equity_after_exit,
+                                    "delta": net_pnl_ct,
+                                    "realized_pnl_delta": net_pnl_ct,
+                                    "fees_delta": float(ct.get("total_fees", 0.0)),
+                                    "trade_id": str(ct.get("entry_order_id", "")),
+                                    "symbol": ct.get("symbol"),
+                                    "strategy": ct.get("strategy", ""),
+                                    "timeframe": ct.get("timeframe", "5m")
+                                })
+                        except Exception as te_err:
+                            logger.error(f"[TELEMETRY] Failed to record closed trade: {te_err}")
                     
             # 2. Update Risk bounds mathematically
             # Filter completed_trades by today's date for daily loss (C-05 fix)
