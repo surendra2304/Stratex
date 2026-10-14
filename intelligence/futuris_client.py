@@ -8,6 +8,7 @@ from typing import Any
 import requests
 
 from logger import get_logger
+from resilience import get_circuit_breaker
 
 logger = get_logger('futuris_client')
 
@@ -44,6 +45,7 @@ class FuturisMarketClient:
         self.forecast_history: list[FuturisForecastContext] = []
         self.accuracy_records: list[dict[str, Any]] = []
         self._lock = threading.Lock()
+        self.circuit_breaker = get_circuit_breaker("futuris", failure_threshold=4, recovery_timeout=30.0)
 
     def _get_headers(self) -> dict[str, str]:
         headers = {'Content-Type': 'application/json'}
@@ -58,6 +60,10 @@ class FuturisMarketClient:
             if cached and cached.is_valid():
                 return cached
 
+        if not self.circuit_breaker.allow_request():
+            logger.info(f'[FUTURIS_CLIENT] Circuit breaker is {self.circuit_breaker.state.value}; fast-failing forecast for {symbol}.')
+            return self._unavailable_forecast(symbol, 'CIRCUIT_BREAKER_OPEN')
+
         url = f'{self.base_url}/v1/futuris/forecast'
         forecast = None
         try:
@@ -69,6 +75,7 @@ class FuturisMarketClient:
                 timeout=self.timeout_seconds
             )
             if resp.status_code == 200:
+                self.circuit_breaker.record_success()
                 data = resp.json()
                 required = ('volatility_forecast', 'drawdown_risk', 'regime_outlook')
                 if isinstance(data, dict) and all(isinstance(data.get(key), dict) and data[key] for key in required):
@@ -83,8 +90,10 @@ class FuturisMarketClient:
                 else:
                     forecast = self._unavailable_forecast(symbol, 'INVALID_RESPONSE')
             else:
+                self.circuit_breaker.record_failure()
                 forecast = self._unavailable_forecast(symbol, f'HTTP_{resp.status_code}')
         except Exception as e:
+            self.circuit_breaker.record_failure(e)
             logger.warning(f'[FUTURIS_CLIENT] Futuris forecast unavailable: {type(e).__name__}')
             forecast = self._unavailable_forecast(symbol, 'CONNECTION_ERROR')
 

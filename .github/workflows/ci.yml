@@ -11,7 +11,6 @@ jobs:
     name: Test and Build Verification
     runs-on: ubuntu-latest
     env:
-      PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
       PORT: "8000"
       TRADING_MODE: "TESTNET"
       TESTNET_ENABLED: "True"

@@ -22,3 +22,4 @@ psutil>=5.9.0
 # Production WSGI server for the dashboard (docs claim it; it was never declared).
 # Dev/run-as-script mode still uses Flask's built-in server via `python dashboard.py`.
 gunicorn>=21.2.0
+httpx>=0.27.0

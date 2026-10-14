@@ -13,33 +13,41 @@
 
 **Stratex** is the dedicated 24/7 algorithmic trading, quantitative execution, and live telemetry platform of the **FRIDAY Universe**. It operates autonomously in continuous execution mode to discover trade opportunities, evaluate multi-timeframe quantitative strategies, manage microstructural friction, enforce portfolio risk limits, and execute orders against Binance Testnet while providing real-time telemetry streaming to the ecosystem.
 
-```
-                     ┌─────────────────────────────────────────────────────────┐
-                     │            Public Gateway (HTTPS Reverse Proxy)         │
-                     │          https://friday-universe.duckdns.org            │
-                     └────────────────────────────┬────────────────────────────┘
-                                                  │ /stratex/*
-                                                  ▼
-                     ┌─────────────────────────────────────────────────────────┐
-                     │             Unified Container Mesh: friday_mesh         │
-                     │                 Container Name: stratex                 │
-                     │            Internal: 8000  |  Host: 8008                │
-                     ├─────────────────────────────────────────────────────────┤
-                     │         Process Supervisor (supervise_services.py)      │
-                     │                                                         │
-                     │  ┌─────────────────────────┐ ┌───────────────────────┐  │
-                     │  │   Gunicorn WSGI Server  │ │  Trading Bot Daemon   │  │
-                     │  │  (workers: 2, threads: 4│ │       (bot.py)        │  │
-                     │  │     timeout: 0 / SSE)   │ │                       │  │
-                     │  │      dashboard:app      │ │ Singleton Socket Lock │  │
-                     │  │     Port: 0.0.0.0:8000  │ │    PID Tracking       │  │
-                     │  └───────────┬─────────────┘ └───────────┬───────────┘  │
-                     │              │                           │              │
-                     │              ▼                           ▼              │
-                     │      Live Telemetry & SSE        Testnet Engine Service │
-                     │       Endpoints (/health)          Order Execution &    │
-                     │                                   Risk Gate Funnel      │
-                     └─────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Public["Public Internet (HTTPS)"]
+        Gateway["Reverse Proxy: https://friday-universe.duckdns.org/stratex/*"]
+    end
+
+    subgraph Mesh["friday_mesh (Private Docker Network)"]
+        subgraph StratexContainer["Stratex Container (:8000, Non-Root appuser)"]
+            Supervisor["Process Supervisor: scripts/supervise_services.py"]
+            WSGI["Gunicorn WSGI: dashboard:app (2 workers, 4 threads, timeout: 0)"]
+            Bot["Trading Bot Daemon: bot.py (Singleton Socket Lock)"]
+            Resilience["Resilience Layer: CircuitBreakers, TTLCache, Secret Sanitizer"]
+            Engine["Testnet Engine: Risk Gates & Execution Funnel"]
+
+            Supervisor --> WSGI
+            Supervisor --> Bot
+            WSGI <--> Resilience
+            Bot <--> Resilience
+            Bot --> Engine
+        end
+
+        subgraph Upstream["Upstream FRIDAY Mesh Microservices"]
+            Memora["Memora (:8000)"]
+            Inference["Inference / Cortex (:8000)"]
+            IntelX["IntelX (:8000)"]
+            Futuris["Futuris (:8000)"]
+        end
+
+        Resilience -.->|Circuit-Broken Async Requests| Memora
+        Resilience -.->|Circuit-Broken Async Requests| Inference
+        Resilience -.->|Circuit-Broken Async Requests| IntelX
+        Resilience -.->|Circuit-Broken Async Requests| Futuris
+    end
+
+    Gateway -->|Forward /stratex/*| WSGI
 ```
 
 ---
@@ -133,6 +141,37 @@ Returns current open positions, active stop-loss (SL) / take-profit (TP) prices,
 
 #### `GET /api/trades`
 Returns the historical executed trades ledger, win/loss breakdown, gross profit/loss, and total net returns.
+
+#### `GET /api/circuit-breakers`
+Real-time diagnostic telemetry on all internal mesh circuit breakers (`intelx`, `futuris`, `inference_prediction`):
+```json
+{
+  "status": "OK",
+  "service": "stratex",
+  "circuit_breakers": {
+    "intelx": {
+      "name": "intelx",
+      "state": "CLOSED",
+      "failure_count": 0,
+      "failure_threshold": 4,
+      "recovery_timeout": 30.0,
+      "total_trips": 0,
+      "seconds_since_state_change": 12.4
+    }
+  },
+  "timestamp": "2026-10-14T21:30:00Z"
+}
+```
+
+#### Standardized API Error Envelopes
+All API routes (`/api/*`) return clean, predictable, and sanitized JSON error payloads:
+```json
+{
+  "error": "BAD_REQUEST",
+  "message": "Invalid query parameters provided",
+  "success": false
+}
+```
 
 #### Risk Control Halters (`POST /api/panic`, `POST /api/halt`, `POST /api/unhalt`)
 Emergency risk control endpoints to immediately halt scanning, disallow new entries, or flatten existing exposures. Protected by `require_bot_api_key` and scoped authentication tokens.

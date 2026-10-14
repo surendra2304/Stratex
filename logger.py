@@ -33,8 +33,11 @@ def log_trade(strategy, symbol, side, quantity, price, sl, tp, order_id, status)
 # --- Structured System Logging (Bounded) ---
 class JSONFormatter(logging.Formatter):
     def format(self, record):
+        from resilience import sanitize_secrets
+
         log_record = {
             "timestamp": datetime.utcnow().isoformat() + "Z",
+            "service": "stratex",
             "level": record.levelname,
             "component": record.name,
             "message": record.getMessage(),
@@ -48,8 +51,13 @@ class JSONFormatter(logging.Formatter):
             log_record["symbol"] = record.symbol
         if hasattr(record, "event_id"):
             log_record["event_id"] = record.event_id
+        if hasattr(record, "request_id"):
+            log_record["request_id"] = record.request_id
+        if hasattr(record, "correlation_id"):
+            log_record["correlation_id"] = record.correlation_id
             
-        return json.dumps(log_record)
+        sanitized = sanitize_secrets(log_record)
+        return json.dumps(sanitized)
 
 class SafeRotatingFileHandler(RotatingFileHandler):
     """Subclass of RotatingFileHandler that silently handles Windows file lock race conditions during rollover."""

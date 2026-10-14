@@ -8,6 +8,7 @@ from typing import Any
 import requests
 
 from logger import get_logger
+from resilience import get_circuit_breaker
 
 logger = get_logger('intelx_client')
 
@@ -48,6 +49,7 @@ class IntelXMarketClient:
         self.research_history: list[MarketResearchReport] = []
         self._lock = threading.Lock()
         self.total_queries_submitted = 0
+        self.circuit_breaker = get_circuit_breaker("intelx", failure_threshold=4, recovery_timeout=30.0)
 
     def _get_headers(self) -> dict[str, str]:
         headers = {'Content-Type': 'application/json'}
@@ -80,6 +82,10 @@ class IntelXMarketClient:
         except Exception:
             pass
 
+        if not self.circuit_breaker.allow_request():
+            logger.info(f'[INTELX_CLIENT] Circuit breaker is {self.circuit_breaker.state.value}; fast-failing query for {symbol}.')
+            return self._unavailable_report(symbol, trigger_reason, query, 'CIRCUIT_BREAKER_OPEN')
+
         report = None
         try:
             logger.info(f'[INTELX_CLIENT] Submitting market research query for {symbol} (trigger: {trigger_reason})')
@@ -87,6 +93,7 @@ class IntelXMarketClient:
             know_url = f'{self.base_url}/api/v1/knowledge/query'
             resp = requests.post(know_url, json={'q': f'{symbol} market sentiment regulatory catalysts'}, headers=self._get_headers(), timeout=self.timeout_seconds)
             if resp.status_code == 200:
+                self.circuit_breaker.record_success()
                 data = resp.json()
                 results = data.get('results', [])
                 summary_text = f"IntelX intelligence: {len(results)} active claims tracked for {symbol}."
@@ -110,6 +117,7 @@ class IntelXMarketClient:
                 feed_url = f'{self.base_url}/api/v1/friday-universe/intelligence?agent=all&limit=20'
                 f_resp = requests.get(feed_url, headers=self._get_headers(), timeout=self.timeout_seconds)
                 if f_resp.status_code == 200:
+                    self.circuit_breaker.record_success()
                     f_data = f_resp.json()
                     items = f_data.get('items', [])
                     drivers = [item.get('title', '') for item in items[:3]]
@@ -126,8 +134,10 @@ class IntelXMarketClient:
                         expires_at=time.time() + self.cache_ttl_seconds
                     )
                 else:
+                    self.circuit_breaker.record_failure()
                     report = self._unavailable_report(symbol, trigger_reason, query, f'HTTP_{f_resp.status_code}')
         except Exception as e:
+            self.circuit_breaker.record_failure(e)
             logger.warning(f'[INTELX_CLIENT] IntelX research unavailable: {type(e).__name__}')
             report = self._unavailable_report(symbol, trigger_reason, query, 'CONNECTION_ERROR')
 

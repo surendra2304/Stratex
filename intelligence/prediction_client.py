@@ -16,6 +16,7 @@ from typing import Any
 import requests
 
 from logger import get_logger
+from resilience import get_circuit_breaker
 
 logger = get_logger("prediction_client")
 
@@ -50,6 +51,7 @@ class PredictionClient:
         self.timeout_seconds = timeout_seconds
         self.cache: dict[str, AssetPrediction] = {}
         self.history: list[dict[str, Any]] = []
+        self.circuit_breaker = get_circuit_breaker("inference_prediction", failure_threshold=4, recovery_timeout=30.0)
 
     def get_prediction(self, symbol: str) -> AssetPrediction | None:
         """Returns cached prediction if valid, otherwise fetches fresh from AI-Universe."""
@@ -64,9 +66,23 @@ class PredictionClient:
         endpoint = f"{self.base_url}/v1/trading/predictions/{symbol}"
         now = time.time()
 
+        if not self.circuit_breaker.allow_request():
+            logger.info(f"[PREDICTION_CLIENT] Circuit breaker OPEN; returning fallback prediction for {symbol}.")
+            fallback_pred = AssetPrediction(
+                symbol=symbol,
+                direction="NEUTRAL",
+                confidence=0.50,
+                horizon_minutes=60,
+                target_price_change_pct=0.0,
+                timestamp=now,
+                expires_at=now + self.cache_ttl_seconds
+            )
+            return fallback_pred
+
         try:
             resp = requests.get(endpoint, timeout=self.timeout_seconds)
             if resp.status_code == 200:
+                self.circuit_breaker.record_success()
                 data = resp.json()
                 pred = AssetPrediction(
                     symbol=symbol,
@@ -80,7 +96,10 @@ class PredictionClient:
                 self.cache[symbol] = pred
                 self.history.append(asdict(pred))
                 return pred
+            else:
+                self.circuit_breaker.record_failure()
         except Exception as e:
+            self.circuit_breaker.record_failure(e)
             logger.debug(f"[PREDICTION_CLIENT] Could not fetch prediction for {symbol}: {e}")
 
         # Fallback heuristic prediction when offline

@@ -993,8 +993,11 @@ def get_engine_health_data():
 
 def _health_payload(evidence_class):
     engine_data = get_engine_health_data()
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
     return {
         "status": "ok",
+        "service": "stratex",
+        "version": getattr(config, "VERSION", "2.2.0"),
         "dashboard": "online",
         "engine": engine_data["engine_status"].lower(),
         "engine_healthy": engine_data["healthy"],
@@ -1002,7 +1005,8 @@ def _health_payload(evidence_class):
         "capability_reasons": engine_data.get("capability_reasons", []),
         "mode": getattr(config, "TRADING_MODE", "TESTNET"),
         "evidence_class": evidence_class,
-        "observed_at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
+        "observed_at": now_iso,
+        "timestamp": now_iso,
     }
 
 
@@ -6327,6 +6331,52 @@ def api_stream():
     response.headers["Cache-Control"] = "no-cache"
     response.headers["X-Accel-Buffering"] = "no"
     return response
+
+
+@app.route('/api/circuit-breakers')
+def api_circuit_breakers():
+    """Returns telemetry on mesh and external service circuit breakers."""
+    from resilience import get_all_circuit_breaker_stats
+    return jsonify({
+        "status": "OK",
+        "service": "stratex",
+        "circuit_breakers": get_all_circuit_breaker_stats(),
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
+    })
+
+
+@app.errorhandler(400)
+def handle_bad_request(e):
+    if request.path.startswith('/api/') or request.headers.get("Accept") == "application/json":
+        return jsonify({
+            "error": "BAD_REQUEST",
+            "message": str(getattr(e, "description", e)),
+            "success": False
+        }), 400
+    return "Bad Request", 400
+
+
+@app.errorhandler(404)
+def handle_not_found(e):
+    if request.path.startswith('/api/') or request.headers.get("Accept") == "application/json":
+        return jsonify({
+            "error": "NOT_FOUND",
+            "message": f"Resource {request.path} not found",
+            "success": False
+        }), 404
+    return "Not Found", 404
+
+
+@app.errorhandler(500)
+def handle_internal_error(e):
+    logger.error(f"[SERVER_ERROR] Internal server error on {request.path}: {e}")
+    if request.path.startswith('/api/') or request.headers.get("Accept") == "application/json":
+        return jsonify({
+            "error": "INTERNAL_SERVER_ERROR",
+            "message": "An internal server error occurred.",
+            "success": False
+        }), 500
+    return "Internal Server Error", 500
 
 
 @app.route('/<path:path>')
