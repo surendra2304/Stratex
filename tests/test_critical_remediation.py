@@ -386,16 +386,20 @@ class TestC4ExecutionPackageIsNotSilentlyEmpty:
         with pytest.raises(ImportError, match="is missing"):
             execution._load_execution_module(str(missing), target={})
 
-    def test_unreadable_execution_py_raises_instead_of_passing(self, tmp_path):
+    def test_unreadable_execution_py_raises_instead_of_passing(self, tmp_path, monkeypatch):
         import execution
         real = tmp_path / "execution.py"
         real.write_text("ExecutionPolicy = object()\n", encoding="utf-8")
-        real.chmod(0o000)
-        try:
-            with pytest.raises(ImportError, match="failed to read"):
-                execution._load_execution_module(str(real), target={})
-        finally:
-            real.chmod(0o644)
+        
+        orig_open = open
+        def mock_open(file, *args, **kwargs):
+            if str(file) == str(real):
+                raise PermissionError(13, "Permission denied")
+            return orig_open(file, *args, **kwargs)
+
+        monkeypatch.setattr("builtins.open", mock_open)
+        with pytest.raises(ImportError, match="failed to read"):
+            execution._load_execution_module(str(real), target={})
 
     def test_broken_execution_py_raises_instead_of_passing(self, tmp_path):
         import execution

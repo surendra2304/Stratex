@@ -62,8 +62,10 @@ def test_signal_quality_trend_alignment():
     assert reason == "QUALITY_COUNTER_TREND"
 
 
-def test_signal_quality_volume_filter():
+def test_signal_quality_volume_filter(monkeypatch):
     """Verify low volume (< 0.8x avg) is rejected."""
+    import config
+    monkeypatch.setattr(config, "SQ_VOLUME_MULT", 0.8)
     # Volume 500 when avg is 1000 -> ratio 0.5 < 0.8
     df = create_mock_df(adx=30.0, volume=500.0)
     ok, reason, detail = evaluate_signal_quality(df, "BUY", 106.0, 105.0, 107.0, "supertrend")

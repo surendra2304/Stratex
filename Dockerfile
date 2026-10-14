@@ -6,6 +6,7 @@ FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    PORT=8000 \
     TRADING_MODE=TESTNET \
     TESTNET_ENABLED=True \
     LIVE_TRADING_ENABLED=False \
@@ -13,7 +14,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Install system dependencies (build tools if needed for xgboost/numpy)
+# Install system dependencies (build tools if needed for native packages & curl for healthcheck)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
@@ -28,7 +29,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 
 # Expose Dashboard Web UI port
-EXPOSE 5000
+EXPOSE 8000
+
+# Docker Healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD curl -f http://localhost:8000/health || exit 1
 
 # Supervised production entrypoint monitoring bot.py and dashboard.py
 CMD ["python", "scripts/supervise_services.py"]

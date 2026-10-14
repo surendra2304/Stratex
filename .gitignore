@@ -5,6 +5,7 @@
 # ── Secrets ────────────────────────────────────────────────────────────────────
 .env
 .env.*
+.env.production
 *.key
 
 # ── Python cache ───────────────────────────────────────────────────────────────
@@ -120,8 +121,11 @@ FINAL_VERIFICATION_COMPLETE.md
 PRODUCTION_STRATEGIES.md
 
 # atomic_io.locked_path sidecar lock files
+*.lock
 *.json.lock
 *.jsonl.lock
+*.csv.lock
+testnet_portfolio.json.lock
 *.corrupt-*
 
 # atomic_io temporary files (".<name>.<random>.tmp") left by a killed writer

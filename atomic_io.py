@@ -46,6 +46,7 @@ import math
 import os
 import tempfile
 import threading
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -63,6 +64,17 @@ except ImportError:  # POSIX
     _msvcrt = None  # type: ignore[assignment]
 
 logger = logging.getLogger("atomic_io")
+
+def _safe_replace(src: str, dst: str, max_retries: int = 25, base_delay: float = 0.002) -> None:
+    """Atomically replace ``dst`` with ``src``, retrying transient Windows file-lock contention."""
+    for attempt in range(max_retries):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if os.name != "nt" or attempt == max_retries - 1:
+                raise
+            time.sleep(base_delay * (2 ** min(attempt, 4)))
 
 _D = TypeVar("_D")
 
@@ -89,7 +101,7 @@ def atomic_write_text(path: str | os.PathLike[str], text: str, *, encoding: str 
             handle.flush()
             if fsync:
                 os.fsync(handle.fileno())
-        os.replace(tmp_path, target)
+        _safe_replace(tmp_path, target)
     except BaseException:
         try:
             os.unlink(tmp_path)
@@ -145,7 +157,7 @@ def atomic_write_bytes(path: str | os.PathLike[str], payload: bytes, *, fsync: b
             handle.flush()
             if fsync:
                 os.fsync(handle.fileno())
-        os.replace(tmp_path, target)
+        _safe_replace(tmp_path, target)
     except BaseException:
         try:
             os.unlink(tmp_path)
@@ -268,7 +280,7 @@ def quarantine_file(path: str | os.PathLike[str], reason: str) -> str | None:
     source = os.fspath(path)
     destination = f"{source}.corrupt-{_utc_stamp()}"
     try:
-        os.replace(source, destination)
+        _safe_replace(source, destination)
     except FileNotFoundError:
         return None
     except OSError as exc:

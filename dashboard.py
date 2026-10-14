@@ -23,8 +23,8 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='repla
 logger = get_logger("dashboard")
 
 app = Flask(__name__, static_folder='static')
-# Hardened CORS configuration: Whitelist Render production, local dev servers, and localhost
-ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "https://stratex-fra.onrender.com,http://localhost:5000,http://127.0.0.1:5000,http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()]
+# Hardened CORS configuration: Whitelist FRIDAY Universe production, local dev servers, and localhost
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "https://friday-universe.duckdns.org,http://localhost:8000,http://127.0.0.1:8000,http://localhost:8008,http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()]
 CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}, r"/health": {"origins": "*"}})
 
 # Register Quantum advisory blueprint (research only, no execution)
@@ -1561,6 +1561,10 @@ def get_status():
     clean_mdd = abs(mdd) if mdd != 0.0 else 0.0
 
     return jsonify({
+        "status": "ok",
+        "dashboard": "online",
+        "evidence_class": "process_liveness",
+        "observed_at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         "mode": getattr(config, "TRADING_MODE", "TESTNET"),
         "overall_health": overall,
         "engine_status": engine_data["engine_status"],
@@ -2212,10 +2216,10 @@ def get_scanner():
             "timeframe": opp.get("timeframe", "5m"),
             "strategy": opp.get("strategy"),
             "side": opp.get("side", opp.get("decision", "BUY")),
-            "entry_price": float(opp.get("entry_price", opp.get("current_price", 0.0))),
-            "stop_loss": float(opp.get("sl", opp.get("stop_loss", 0.0))),
-            "take_profit": float(opp.get("tp", opp.get("take_profit", 0.0))),
-            "confidence": float(opp.get("confidence", 0.0)),
+            "entry_price": float(opp.get("entry_price") or opp.get("current_price") or 0.0),
+            "stop_loss": float(opp.get("sl") or opp.get("stop_loss") or 0.0),
+            "take_profit": float(opp.get("tp") or opp.get("take_profit") or 0.0),
+            "confidence": float(opp.get("confidence") or 0.0),
             "final_decision": str(opp.get("final_decision", opp.get("decision", ""))).upper(),
             "evaluation": {
                 "expected_net_percent": round(expected_net_pct, 4) if expected_net_pct is not None else None,
@@ -4499,9 +4503,14 @@ def _authoritative_signals():
     """Signal records from testnet opportunity log when in testnet/futures mode, or paper forward log."""
     trading_mode = getattr(config, "TRADING_MODE", "TESTNET").upper()
     opp_file = os.getenv("TESTNET_OPPORTUNITY_LOG", "testnet_opportunity_log.jsonl")
+    paper_log = os.getenv("PAPER_FORWARD_SIGNAL_LOG", "forward_signal_log.jsonl")
     if trading_mode in ["TESTNET", "FUTURES"]:
         if os.path.exists(opp_file):
             records = _read_jsonl_records(opp_file)
+            if records:
+                return [_normalize_forward_signal(record) for record in records]
+        if os.path.exists(paper_log):
+            records = _read_jsonl_records(paper_log)
             if records:
                 return [_normalize_forward_signal(record) for record in records]
         try:
@@ -4512,8 +4521,7 @@ def _authoritative_signals():
         except Exception:
             pass
         return []
-    path = os.getenv("PAPER_FORWARD_SIGNAL_LOG", "forward_signal_log.jsonl")
-    return [_normalize_forward_signal(record) for record in _read_jsonl_records(path)]
+    return [_normalize_forward_signal(record) for record in _read_jsonl_records(paper_log)]
 
 
 @app.route('/api/telemetry/trades')
@@ -6354,7 +6362,7 @@ if _AUTOSTART_SERVICES:
 
 if __name__ == '__main__':
     print("🚀 Starting Unified Live Trading Dashboard...")
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 8000))
     print(f"👉 Open http://127.0.0.1:{port} in your browser")
     is_debug = os.environ.get('FLASK_DEBUG') == '1'
     # threaded=True is REQUIRED: /api/stream is a Server-Sent Events endpoint

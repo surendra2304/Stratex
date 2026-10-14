@@ -35,8 +35,8 @@ class FuturisForecastContext:
         }
 
 class FuturisMarketClient:
-    def __init__(self, base_url='https://futuris-th6f.onrender.com', cache_ttl_seconds=1800, timeout_seconds=3.0):
-        self.base_url = (os.getenv('FUTURIS_URL') or os.getenv('FUTURIS_BASE_URL') or base_url or 'https://futuris-th6f.onrender.com').rstrip('/')
+    def __init__(self, base_url='https://friday-universe.duckdns.org/futuris', cache_ttl_seconds=1800, timeout_seconds=3.0):
+        self.base_url = (os.getenv('FUTURIS_URL') or os.getenv('FUTURIS_BASE_URL') or base_url or 'https://friday-universe.duckdns.org/futuris').rstrip('/')
         self.api_key = os.getenv('FUTURIS_API_KEY')
         self.cache_ttl_seconds = cache_ttl_seconds
         self.timeout_seconds = float(os.getenv('FUTURIS_TIMEOUT_SECONDS', str(timeout_seconds)))
@@ -122,13 +122,13 @@ class FuturisMarketClient:
         try:
             forecast = self.fetch_forecast(symbol)
         except Exception as exc:
-            return True, 1.0, 'FUTURIS_FAIL_OPEN_UNAVAILABLE', {
+            return False, 0.0, 'FUTURIS_FORECAST_UNAVAILABLE', {
                 'symbol': symbol,
                 'status': 'UNAVAILABLE',
                 'error': type(exc).__name__,
             }
         if forecast.status != 'LIVE':
-            return True, 1.0, 'FUTURIS_FAIL_OPEN_NON_LIVE', {
+            return False, 0.0, 'FUTURIS_FORECAST_UNAVAILABLE', {
                 'symbol': symbol,
                 'status': forecast.status,
             }

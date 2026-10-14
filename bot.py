@@ -1,3 +1,4 @@
+import atexit
 import os
 import signal
 import socket
@@ -25,8 +26,10 @@ def _cleanup():
 def acquire_singleton_lock(port=48888):
     """Binds to a local port to guarantee exactly one bot daemon runs at any time."""
     global _SOCKET_LOCK
+    atexit.register(_cleanup)
     _SOCKET_LOCK = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
+        _SOCKET_LOCK.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         _SOCKET_LOCK.bind(("127.0.0.1", port))
     except OSError as e:
         print(f"\n[FATAL] Another instance of the trading bot is already running on port {port}!")

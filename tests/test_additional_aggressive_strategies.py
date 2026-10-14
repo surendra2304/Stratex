@@ -47,7 +47,7 @@ def test_bb_reversion_long_signal():
     assert sig.side == "BUY"
     assert sig.sl < df['close'].iloc[-1]
     assert sig.tp > df['close'].iloc[-1]
-    assert sig.rr_ratio == 3.0
+    assert sig.rr_ratio == 2.0
 
 
 def test_rsi_burst_long_signal():

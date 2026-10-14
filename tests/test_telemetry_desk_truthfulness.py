@@ -85,6 +85,8 @@ def desk(tmp_path, monkeypatch):
     # point at the fixture ledger explicitly. This also suppresses the live Binance
     # reconciliation path, keeping the test hermetic.
     monkeypatch.setenv("TESTNET_LEDGER_FILE", str(tmp_path / "testnet_trade_ledger.jsonl"))
+    monkeypatch.setenv("TESTNET_OPPORTUNITY_LOG", str(tmp_path / "testnet_opportunity_log.jsonl"))
+    monkeypatch.setenv("PAPER_FORWARD_SIGNAL_LOG", str(tmp_path / "forward_signal_log.jsonl"))
     monkeypatch.setenv("BINANCE_API_KEY", "")
     monkeypatch.setenv("BINANCE_API_SECRET", "")
 

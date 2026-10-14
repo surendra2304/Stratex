@@ -39,8 +39,8 @@ class MarketResearchReport:
         }
 
 class IntelXMarketClient:
-    def __init__(self, base_url='https://intelx-mygl.onrender.com', cache_ttl_seconds=1800, timeout_seconds=5):
-        self.base_url = (os.getenv('INTELX_URL') or os.getenv('INTELX_BASE_URL') or base_url or 'https://intelx-mygl.onrender.com').rstrip('/')
+    def __init__(self, base_url='https://friday-universe.duckdns.org/intelx', cache_ttl_seconds=1800, timeout_seconds=5):
+        self.base_url = (os.getenv('INTELX_URL') or os.getenv('INTELX_BASE_URL') or base_url or 'https://friday-universe.duckdns.org/intelx').rstrip('/')
         self.api_key = os.getenv('INTELX_API_KEY')
         self.cache_ttl_seconds = cache_ttl_seconds
         self.timeout_seconds = timeout_seconds
@@ -168,7 +168,7 @@ class IntelXMarketClient:
         try:
             report = self.query_market_research(symbol, trigger_reason='TRADE_DECISION_EVAL')
         except Exception as exc:
-            return True, 1.0, 'INTELX_FAIL_OPEN_UNAVAILABLE', {
+            return False, 0.0, 'INTELX_RESEARCH_UNAVAILABLE', {
                 'symbol': symbol,
                 'status': 'UNAVAILABLE',
                 'error': type(exc).__name__,
@@ -182,7 +182,7 @@ class IntelXMarketClient:
         }
 
         if report.findings.get('status') == 'UNAVAILABLE':
-            return True, 1.0, 'INTELX_FAIL_OPEN_UNAVAILABLE', details
+            return False, 0.0, 'INTELX_RESEARCH_UNAVAILABLE', details
 
         combined_text = (report.summary + " " + " ".join(report.sentiment_drivers) + " " + " ".join(report.regulatory_changes)).lower()
         

@@ -4,7 +4,7 @@
 > **Repository**: `https://github.com/surendra2304/stratex.git`  
 > **Local Workspace**: `D:/MT5/python_bot`  
 > **Active Branch**: `main`
-> **Production / Render Dashboard**: `https://stratex-fra.onrender.com`  
+> **Production Dashboard**: `https://friday-universe.duckdns.org/stratex/`  
 > **System State**: TESTNET / PAPER ONLY — Live Trading Permanently Locked (`LIVE_TRADING_ENABLED = False`)
 
 ---

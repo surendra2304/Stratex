@@ -28,28 +28,30 @@ class TestRenderDeploymentHardening:
         with app.test_client() as c:
             yield c
 
-    def test_render_yaml_specification(self):
-        """render.yaml must match Stratex's Singapore Docker service and /health endpoint."""
-        render_file = _REPO_ROOT / "render.yaml"
-        assert os.path.exists(render_file)
-        with open(render_file, "r") as f:
+    def test_docker_compose_specification(self):
+        """docker-compose.yml must specify Stratex service on port 8008:8000 and friday_mesh network."""
+        dc_file = _REPO_ROOT / "docker-compose.yml"
+        assert os.path.exists(dc_file)
+        with open(dc_file, "r") as f:
             spec = yaml.safe_load(f)
             
-        services = spec.get("services", [])
-        assert len(services) >= 1
-        svc = services[0]
-        assert svc["region"] == "singapore"
-        assert svc["runtime"] == "docker"
-        assert svc["healthCheckPath"] == "/health"
+        services = spec.get("services", {})
+        assert "stratex" in services
+        svc = services["stratex"]
+        assert "8008:8000" in svc["ports"]
+        assert "supervise_services.py" in svc["command"]
+        assert "friday_mesh" in svc["networks"]
 
     def test_dockerfile_specification(self):
-        """Dockerfile must specify Python 3.11-slim, expose port 5000, and run supervisor."""
+        """Dockerfile must specify Python 3.11-slim, expose port 8000, include healthcheck, and run supervisor."""
         df_path = _REPO_ROOT / "Dockerfile"
         assert os.path.exists(df_path)
         with open(df_path, "r") as f:
             content = f.read()
         assert "python:3.11-slim" in content
-        assert "EXPOSE 5000" in content
+        assert "EXPOSE 8000" in content
+        assert "PORT=8000" in content
+        assert "HEALTHCHECK" in content
         assert "supervise_services.py" in content
 
     def test_health_distinguishes_process_vs_engine_health(self, tmp_path, monkeypatch, client):

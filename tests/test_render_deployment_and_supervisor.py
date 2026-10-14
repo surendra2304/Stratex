@@ -174,5 +174,5 @@ class TestDynamicPortBinding:
     def test_port_environment_variable_parsing(self, monkeypatch):
         """Ensure dashboard properly parses dynamic PORT variable."""
         monkeypatch.setenv("PORT", "8080")
-        port = int(os.environ.get('PORT', 5000))
+        port = int(os.environ.get('PORT', 8000))
         assert port == 8080

@@ -1,254 +1,206 @@
-# STRATEX — Quantitative Algorithmic Trading & Forward Validation Framework
+# STRATEX — Quantitative Algorithmic Execution & Live Telemetry Platform
 
-A robust, multi-strategy quantitative trading and statistical validation platform built in Python. Designed with strict risk controls, zero-credential-leak architecture, reproducible backtesting, and two distinct execution tracks (**Paper Engine** and **Binance Testnet Engine**).
-
-![Platform](https://img.shields.io/badge/Platform-STRATEX-blue?logo=crystal)
-![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
-![Exchange](https://img.shields.io/badge/Exchange-Binance%20Testnet-yellow?logo=binance)
-![Tests](https://img.shields.io/badge/Tests-not%20currently%20reported-blue)
-![Status](https://img.shields.io/badge/Live%20Trading-BLOCKED-red)
-![License](https://img.shields.io/badge/License-MIT-green)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Gunicorn](https://img.shields.io/badge/WSGI-Gunicorn_21.2+-499848?logo=gunicorn&logoColor=white)](https://gunicorn.org/)
+[![Flask](https://img.shields.io/badge/Framework-Flask_3.0+-000000?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
+[![Docker](https://img.shields.io/badge/Container-Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Network](https://img.shields.io/badge/Mesh-friday__mesh-orange)](https://friday-universe.duckdns.org)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ---
 
-## 🤖 AI Agent & Copilot Instructions
+## 🏛️ Executive Summary & Architecture
 
-> [!IMPORTANT]
-> **If you are an AI coding assistant, LLM, or autonomous agent:** You **MUST** read [`AGENTS.md`](AGENTS.md), [`docs/LIVE_SYSTEM.md`](docs/LIVE_SYSTEM.md), and [`docs/AI_DEBUGGING.md`](docs/AI_DEBUGGING.md) before interacting with this repository. These documents serve as the canonical source of truth for architectural constraints, debugging protocols, and strict safety rules (e.g., TESTNET ONLY).
-
----
-
-## Current Status & Deployment Gates
-
-> [!CAUTION]
-> **Live real-money trading is strictly BLOCKED.** Passing software tests proves implementation properties only; it does **not** prove an economic edge. Live trading is gated until genuine out-of-sample forward validation criteria are satisfied.
-
-### Deployment Gate Checklist
-
-| Criterion / Deployment Gate | Required Status | Current State | Notes |
-|---|---|---|---|
-| **Zero Credential Exposure** | PASS |  PASS | Environment-variable isolation; git history sanitized |
-| **Zero Live Orders Placed** | PASS |  PASS | `ExecutionPolicy` strictly blocks live order creation |
-| **State Corruption Invariants** | PASS |  PASS | Atomic file writes (`.tmp` -> rename) with corruption fallback |
-| **Kill Switch Cost Attribution** | PASS |  PASS | `CostEngine` slippage & taker fees applied on forced exits |
-| **Monte Carlo Benchmark Parity** | PASS |  PASS | Identical cost model used across strategy and benchmarks |
-| **Statistical Significance ($p < 0.05$)** | REQUIRED | ❌ UNPROVEN | Requires $\ge 30$ genuine forward trades |
-| **Positive Net Expectancy After Costs**| REQUIRED | ❌ UNPROVEN | Microsecond friction & fees must be overcome out-of-sample |
-| **Profit Factor $\ge 1.20$** | REQUIRED | ❌ UNPROVEN | Pre-registered quantitative acceptance threshold |
-| **Executable Testnet Strategy** | REQUIRED | NONE | `adx_ema` is OBSERVE_ONLY until its historical inputs and OOS claims can be reproduced; the engine intentionally loads no trading strategy. |
-| **Genuine Forward Validation Duration**| $\ge 30$ Days |  NOT VERIFIED | The live `/api/paper/forward-status` currently has no persisted paper ledger or portfolio. A runner heartbeat and signal log are operational evidence only; validation also requires the preregistered sample and statistical review. |
-
-The checked-in `research/upgrade_2026_08/walk_forward_report.json` calls its parameter-selection result **FRAGILE** and reports 34 trades for the frozen configuration in its 2024–2026 holdout fold. The raw OHLCV inputs required to reproduce the study are not present in this checkout. Strategy performance figures in configuration are therefore not treated as validated priors or proof of a tradable edge.
-
----
-
-## Architecture Overview: Two Execution Tracks
-
-The repository maintains two independent execution tracks governed by the `TRADING_MODE` configuration (`PAPER` vs `TESTNET`):
+**Stratex** is the dedicated 24/7 algorithmic trading, quantitative execution, and live telemetry platform of the **FRIDAY Universe**. It operates autonomously in continuous execution mode to discover trade opportunities, evaluate multi-timeframe quantitative strategies, manage microstructural friction, enforce portfolio risk limits, and execute orders against Binance Testnet while providing real-time telemetry streaming to the ecosystem.
 
 ```
-                       ┌──────────────────────────────────────┐
-                       │           Market Data Feeds          │
-                       │    (Binance REST & WebSocket API)    │
-                       └──────────────────┬───────────────────┘
-                                          │
-                                          ▼
-                       ┌──────────────────────────────────────┐
-                       │      Signal Generation & Funnel      │
-                       │ (ADX+EMA, Supertrend, Swing, ML, ...)│
-                       └──────────┬────────────────┬──────────┘
-                                  │                │
-             ┌────────────────────┘                └────────────────────┐
-             ▼                                                          ▼
-┌───────────────────────────────┐                          ┌───────────────────────────────┐
-│     TRACK 1: PAPER ENGINE     │                          │   TRACK 2: TESTNET ENGINE     │
-│   (Zero External Orders)      │                          │ (Real Binance Spot Testnet)   │
-├───────────────────────────────┤                          ├───────────────────────────────┤
-│ • Pure simulated execution    │                          │ • Real Testnet order placement│
-│ • Realistic CostEngine model  │                          │ • Dynamic symbol discovery    │
-│ • Frozen immutable experiment │                          │ • Multi-asset scanner         │
-│ • Automated reconciliation    │                          │ • Multi-tier risk & profit gate│
-│ • Process & market heartbeats │                          │ • Live position monitor & SL/TP│
-│ • Statistical classification  │                          │ • Real exchange reconciliation│
-└──────────────┬────────────────┘                          └──────────────┬────────────────┘
-               │                                                          │
-               └────────────────────┬─────────────────────────────────────┘
-                                    ▼
-                       ┌──────────────────────────────┐
-                       │     Unified Dashboard UI     │
-                       │   (Routes by TRADING_MODE)   │
-                       └──────────────────────────────┘
-```
-
-1. **Paper Validation Track (`paper_engine/`)**:
-   - Zero-order paper execution simulator designed for statistical validation.
-   - Integrates `FrozenExperimentConfig` (persisted immutable configs with Git SHA tracking), `PaperReconciliation` for duplicate ledger prevention, `HeartbeatState` and `DataMonitor` for feed freshness, and `KillSwitch`.
-   - Entry point: `paper_forward_runner.py`.
-
-2. **Testnet Execution Track (`testnet_engine/`)**:
-   - Executes real spot testnet orders via `python-binance`.
-   - Features `SymbolDiscovery` for market universe filtering, `MarketScanner` for live signal generation, `RiskGate` for portfolio exposure / daily loss enforcement, `ProfitabilityGate` with taker fee / spread coverage, and `PositionProtection` for real-time stop-loss and take-profit lifecycle tracking.
-   - Entry point: `bot.py`.
-
-3. **Web Dashboard (`dashboard.py`)**:
-   - Modern dark-mode monitoring terminal with real-time WebSocket clock, portfolio telemetry, and signal funnel statistics.
-   - Automatically adapts routes and metrics based on `TRADING_MODE` (`PAPER` or `TESTNET`).
-
----
-
-## Trading Strategies
-
-The platform supports six modular quantitative strategies:
-
-| Strategy | File | Core Mechanism | Timeframe |
-|---|---|---|---|
-| **ADX + EMA Trend** | [`strategy_adx_ema.py`](strategy_adx_ema.py) | 200 EMA trend filter with 9/21 EMA momentum and ADX > 25 confirmation | 5m / 15m / 1H |
-| **Supertrend** | [`strategy_supertrend.py`](strategy_supertrend.py) | Volatility-adjusted ATR band trend following | 5m / 15m |
-| **Swing Trader** | [`strategy_swing.py`](strategy_swing.py) | MACD signal line crossover filtered by 200 EMA baseline | 1H / 4H |
-| **ML Predictor** | [`strategy_ml.py`](strategy_ml.py) | Random Forest & XGBoost classifiers trained on backward-looking features | 5m / 15m |
-| **Scalper** | [`strategy_scalper.py`](strategy_scalper.py) | Mean-reversion via RSI oversold/overbought and Bollinger Bands | 1m / 5m |
-| **The Aggressor** | [`strategy_aggressor.py`](strategy_aggressor.py) | Order book volume delta and bid-ask imbalance scalper | Tick / 1m |
-
----
-
-## Project Structure
-
-```
-.
-├── account_client.py           # Authenticated Binance account query wrapper
-├── backtester.py               # Classical historical backtest runner
-├── backtest_engine.py          # Vectorized and event-driven backtest framework
-├── bot.py                      # Main entry point for the Testnet trading bot
-├── config.py                   # Central configuration (loads environment variables)
-├── config_strategy.py          # Strategy parameter definitions
-├── config_template.py          # Reference template for .env configuration
-├── dashboard.py                # Flask + WebSocket dashboard UI (PAPER & TESTNET)
-├── data.py                     # Historical and live data loading utilities
-├── data_client.py              # Binance market data REST client
-├── diagnostics.py              # System health and environment diagnostics
-├── execution.py                # Low-level Binance order routing and safety gates
-├── features.py                 # Backward-looking technical feature engineering
-├── advisory_gate.py            # Safety bounds gate for AI advisory parameter changes
-├── advisory_ledger.py          # Append-only durable audit ledger (advisory_log.jsonl)
-├── advisory_params.py          # Dynamic runtime parameter overlay and rollback manager
-├── advisory_scheduler.py       # Autonomous background periodic/event-driven AI consultant
-├── advisory_telemetry.py       # Telemetry collector assembling live metrics and regime data
-├── ai_universe_client.py       # Resilient HTTP client for AI-Universe (POST /v1/trading/consult)
-├── logger.py                   # Structured JSON and CSV logging
-├── metrics.py                  # PnL, Sharpe, Sortino, Drawdown calculation engine
-├── ml_research.py              # Machine learning training and feature evaluation
-├── paper_forward_runner.py     # Long-running paper forward validation daemon
-├── regime.py                   # Market volatility and regime detection
-├── status_check.py             # CLI status report for account and market data
-│
-├── paper_engine/               # Track 1: Paper trading & statistical validation
-│   ├── alerts.py               # Internal alerting mechanism
-│   ├── benchmark.py            # Monte Carlo and random trade benchmarks
-│   ├── config.py               # Paper engine capital and sizing defaults
-│   ├── data_monitor.py         # Market data gap and staleness monitor
-│   ├── experiment_config.py    # Frozen immutable experiment configurations
-│   ├── funding_simulator.py    # Funding rate and carry trade simulation
-│   ├── heartbeat.py            # Process and subsystem heartbeat tracking
-│   ├── kill_switch.py          # Safe liquidation trigger with realistic costs
-│   ├── portfolio.py            # Paper portfolio state, cash, margin, and equity
-│   ├── reconciliation.py       # Paper ledger uniqueness and reconciliation engine
-│   ├── session.py              # Paper execution session management
-│   ├── signal_logger.py        # Durable forward signal logger
-│   └── statistical_report.py   # Statistical significance and classification gates
-│
-├── testnet_engine/             # Track 2: Binance Spot Testnet execution
-│   ├── discovery.py            # Dynamic market symbol universe discovery
-│   ├── market_scanner.py       # Multi-asset real-time signal scanner
-│   ├── profitability_gate.py   # Fee and spread hurdle validation
-│   ├── protection.py           # Real-time SL/TP and position protection
-│   ├── report_quality.py       # Execution telemetry and fill quality tracking
-│   ├── risk_gate.py            # Daily loss, drawdown, and position limits
-│   └── service.py              # Testnet orchestrator service
-│
-├── backtest_results/           # Research history & audit reports (Stages 4-15)
-│   └── stage15/                # Stage 15 Final Quantitative Audit Report
-├── experiments/                # Immutable frozen experiment JSON registry
-├── research_stage6/ – stage10/ # Stage-specific historical research notebooks & scripts
-├── static/                     # Dashboard frontend assets (JS, CSS, HTML templates)
-└── tests/                      # Pytest comprehensive test suite (690 tests)
+                     ┌─────────────────────────────────────────────────────────┐
+                     │            Public Gateway (HTTPS Reverse Proxy)         │
+                     │          https://friday-universe.duckdns.org            │
+                     └────────────────────────────┬────────────────────────────┘
+                                                  │ /stratex/*
+                                                  ▼
+                     ┌─────────────────────────────────────────────────────────┐
+                     │             Unified Container Mesh: friday_mesh         │
+                     │                 Container Name: stratex                 │
+                     │            Internal: 8000  |  Host: 8008                │
+                     ├─────────────────────────────────────────────────────────┤
+                     │         Process Supervisor (supervise_services.py)      │
+                     │                                                         │
+                     │  ┌─────────────────────────┐ ┌───────────────────────┐  │
+                     │  │   Gunicorn WSGI Server  │ │  Trading Bot Daemon   │  │
+                     │  │  (workers: 2, threads: 4│ │       (bot.py)        │  │
+                     │  │     timeout: 0 / SSE)   │ │                       │  │
+                     │  │      dashboard:app      │ │ Singleton Socket Lock │  │
+                     │  │     Port: 0.0.0.0:8000  │ │    PID Tracking       │  │
+                     │  └───────────┬─────────────┘ └───────────┬───────────┘  │
+                     │              │                           │              │
+                     │              ▼                           ▼              │
+                     │      Live Telemetry & SSE        Testnet Engine Service │
+                     │       Endpoints (/health)          Order Execution &    │
+                     │                                   Risk Gate Funnel      │
+                     └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Getting Started
+## 🌐 Infrastructure & Network Topology
 
-### 1. Prerequisites
-- Python 3.11+
-- Binance Spot Testnet API Key & Secret ([Binance Testnet Portal](https://testnet.binance.vision))
+Stratex is modernized and deployed on **Oracle Cloud Always Free**:
 
-### 2. Installation
+| Component | Specification |
+| :--- | :--- |
+| **Hardware Target** | Oracle Cloud Always Free (2 OCPUs, 12 GB RAM Ampere A1 ARM64 / AMD x86_64 host) |
+| **Public Gateway URL** | `https://friday-universe.duckdns.org/stratex/` |
+| **Internal Mesh URL** | `http://stratex:8000` (Directly reachable by FRIDAY Core) |
+| **Internal Container Port** | `8000` (*Port 5000 is permanently decommissioned*) |
+| **Host Mapped Port** | `8008` (`8008:8000`) |
+| **Container Mesh Network** | `friday_mesh` (Docker bridge network managed with Caddy HTTPS proxy) |
+| **Execution WSGI Stack** | Multi-threaded Gunicorn (`--bind 0.0.0.0:8000 --workers 2 --threads 4 --timeout 0 dashboard:app`) |
+| **Bot Execution Daemon** | Singleton process `bot.py` managed via `scripts/supervise_services.py` |
+
+---
+
+## 🛡️ Safeguards & Execution Isolation
+
+Stratex implements strict defense-in-depth safeguards preventing unintended real-money order execution:
+
+1. **Testnet / Paper Isolation**:
+   - `LIVE_TRADING_ENABLED` is hardcoded to `False` by default in source.
+   - `ExecutionPolicy.can_place_order()` strictly checks `TRADING_MODE`, `TESTNET_ENABLED`, and `LIVE_TRADING_ENABLED`. Orders are blocked with explicit rejection reasons (`LIVE_TRADING_LOCKED`, `TESTNET_DISABLED`).
+2. **Singleton Socket Lock**:
+   - `bot.py` acquires an exclusive local socket lock (`acquire_singleton_lock(port=48888)`) with `SO_REUSEADDR` and `atexit` cleanup. This guarantees that container restarts or duplicate supervisor triggers cannot run parallel order-dispatching loops.
+3. **Atomic File Persistence**:
+   - Trade ledgers (`testnet_trade_ledger.jsonl`), portfolio snapshots (`testnet_portfolio.json`), and equity records (`testnet_equity_history.jsonl`) are managed via atomic write-and-rename mechanics to prevent file corruption during abrupt shutdowns.
+4. **Signal Trapping & Clean Teardown**:
+   - `scripts/supervise_services.py` traps `SIGTERM`, `SIGINT`, and `SIGHUP`. It forwards termination signals to both child processes, awaiting exit for up to 5 seconds before forcing termination.
+
+---
+
+## 📡 API & Telemetry Specifications
+
+Stratex provides structured JSON and Server-Sent Event (SSE) endpoints:
+
+### Core Endpoints
+
+#### `GET /health` or `GET /api/health`
+Returns process liveness status suitable for container orchestrators and reverse proxy healthchecks.
+```json
+{
+  "status": "ok",
+  "dashboard": "online",
+  "mode": "TESTNET",
+  "evidence_class": "process_liveness",
+  "engine": "online",
+  "engine_healthy": true,
+  "engine_trading_capable": false,
+  "capability_reasons": ["NO_VALIDATED_STRATEGIES_LOADED"],
+  "observed_at": "2026-10-14T21:30:00Z"
+}
+```
+
+#### `GET /ready` or `GET /api/ready`
+Returns `HTTP 200 OK` only when the trading engine has a fresh heartbeat and is capable of generating signals, or `HTTP 503 Service Unavailable` otherwise.
+
+#### `GET /api/status`
+Authoritative system status, portfolio balances, risk utilization, and performance metrics.
+```json
+{
+  "status": "ok",
+  "dashboard": "online",
+  "evidence_class": "process_liveness",
+  "mode": "TESTNET",
+  "overall_health": "OK",
+  "equity": 10000.0,
+  "cash": 10000.0,
+  "crypto_holdings_value": 0.0,
+  "total_pnl": 0.0,
+  "realized_pnl": 0.0,
+  "unrealized_pnl": 0.0,
+  "win_rate": 0.0,
+  "open_positions": 0,
+  "max_drawdown": 0.0,
+  "observed_at": "2026-10-14T21:30:00Z"
+}
+```
+
+#### `GET /api/stream`
+Server-Sent Events (SSE) telemetry stream for real-time frontend charts and bot state propagation.
+* *Note: Requires `--timeout 0` in Gunicorn WSGI configuration to prevent connection drops.*
+
+#### `GET /api/positions`
+Returns current open positions, active stop-loss (SL) / take-profit (TP) prices, unrealized PnL, and duration.
+
+#### `GET /api/trades`
+Returns the historical executed trades ledger, win/loss breakdown, gross profit/loss, and total net returns.
+
+#### Risk Control Halters (`POST /api/panic`, `POST /api/halt`, `POST /api/unhalt`)
+Emergency risk control endpoints to immediately halt scanning, disallow new entries, or flatten existing exposures. Protected by `require_bot_api_key` and scoped authentication tokens.
+
+---
+
+## ⚙️ Environment Configuration
+
+Stratex reads environment variables from `.env`. A complete configuration template is provided in `.env.example`:
+
+| Variable | Description | Default | Allowed Values |
+| :--- | :--- | :--- | :--- |
+| `PORT` | WSGI listening port | `8000` | Any valid TCP port |
+| `TRADING_MODE` | Trading execution mode | `TESTNET` | `TESTNET`, `PAPER`, `FUTURES` |
+| `TESTNET_ENABLED` | Enable Binance Testnet order placement | `True` | `True`, `False` |
+| `LIVE_TRADING_ENABLED` | Enable live real-money trading | `False` | Strictly `False` |
+| `ALLOWED_ORIGINS` | CORS origin whitelist | `https://friday-universe.duckdns.org,...` | Comma-delimited URLs |
+| `BINANCE_API_KEY` | Binance Spot/Futures Testnet API Key | `""` | User-provided secret |
+| `BINANCE_API_SECRET` | Binance Spot/Futures Testnet Secret | `""` | User-provided secret |
+| `MAX_TESTNET_EXPOSURE` | Maximum portfolio capital exposure | `0.05` | Float (e.g. `0.05` = 5%) |
+| `MAX_DAILY_LOSS_PCT` | Maximum daily loss tolerance | `0.02` | Float (e.g. `0.02` = 2%) |
+| `MAX_TESTNET_DRAWDOWN_PCT` | Maximum drawdown circuit breaker | `0.05` | Float (e.g. `0.05` = 5%) |
+| `MAX_OPEN_POSITIONS` | Maximum simultaneous open positions | `5` | Positive integer |
+| `INFERENCE_URL` | FRIDAY Cortex / Inference gateway | `https://friday-universe.duckdns.org/cortex` | Mesh route |
+| `MEMORA_URL` | FRIDAY Memora cloud memory gateway | `https://friday-universe.duckdns.org/memora` | Mesh route |
+| `INTELX_URL` | FRIDAY IntelX research gateway | `https://friday-universe.duckdns.org/intelx` | Mesh route |
+| `FUTURIS_URL` | FRIDAY Futuris predictive forecasting | `https://friday-universe.duckdns.org/futuris` | Mesh route |
+| `STRATEX_URL` | Public Stratex gateway route | `https://friday-universe.duckdns.org/stratex` | Gateway URL |
+
+---
+
+## 🚀 Deployment & Operations
+
+### Docker Compose (Production Deployment)
+
+Run Stratex directly attached to the `friday_mesh` Docker bridge:
+
 ```bash
-# Clone repository
-git clone https://github.com/surendra2304/stratex.git
-cd stratex
+# 1. Create or ensure friday_mesh exists
+docker network create friday_mesh || true
 
-# Install dependencies
+# 2. Build and launch container
+docker compose up -d --build
+
+# 3. Check container logs
+docker compose logs -f stratex
+```
+
+### Local Development / Supervisor
+
+To execute locally under Python 3.11+:
+
+```bash
+# 1. Create and activate virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# 2. Install dependencies
 pip install -r requirements.txt
+
+# 3. Launch supervised services
+python scripts/supervise_services.py
 ```
 
-### 3. Environment Configuration
-Create a `.env` file in the root directory (or copy from `.env.example`):
+### Testing & Verification
+
+Run the full automated test suite:
 
 ```bash
-# --- Exchange Credentials ---
-API_KEY="your_binance_testnet_api_key"
-SECRET_KEY="your_binance_testnet_api_secret"
-
-# --- Execution Track Mode ---
-# Options: "PAPER" (internal simulation) or "TESTNET" (Binance Testnet orders)
-TRADING_MODE="TESTNET"
-
-# --- Safety Controls ---
-TESTNET_ENABLED="True"          # Must be True to place Testnet orders
-LIVE_TRADING_ENABLED="False"    # Hardcoded safety: NEVER set to True
-PAPER_SAFE_MODE="True"
-RESEARCH_MODE="0"
-
-# --- Optional Isolated State Paths ---
-# FORWARD_RECONCILIATION_FILE="forward_reconciliation.jsonl"
+pytest -v --tb=short
 ```
-
----
-
-## Running the Bot & Services
-
-### Running Track 2: Binance Testnet Bot
-```bash
-# Run the live testnet scanner and execution engine
-python bot.py
-```
-
-### Running Track 1: Paper Forward Validation
-```bash
-# Run the long-running paper validation runner with frozen experiment tracking
-python paper_forward_runner.py
-```
-
-### Running the Web Dashboard
-```bash
-# Start the monitoring web server (defaults to http://127.0.0.1:5000)
-python dashboard.py
-```
-
-### Running the Test Suite
-```bash
-# Run all 690 automated unit, integration, and accounting fuzz tests
-pytest
-```
-
----
-
-## Security & Risk Notice
-
-- **No Real Capital at Risk**: Default configuration targets Binance Testnet and internal paper simulations with zero financial liability.
-- **Credential Protection**: Do not commit `.env` or any files containing private keys.
-- **Disclaimer**: This codebase is for quantitative research and software development purposes. Quantitative models are subject to regime shifts, liquidity constraints, and execution slippage.
-
----
-
-*Maintained by [Surendra](https://github.com/surendra2304)*

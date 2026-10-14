@@ -85,6 +85,7 @@ def _increment_in_subprocess(path: str, rounds: int) -> None:
             atomic_write_json(path, current, fsync=False)
 
 
+@pytest.mark.skipif("fork" not in getattr(multiprocessing, "get_all_start_methods", lambda: [])(), reason="fork start method required")
 def test_locked_path_serializes_read_modify_write_across_processes(tmp_path):
     path = str(tmp_path / "counter.json")
     ctx = multiprocessing.get_context("fork")

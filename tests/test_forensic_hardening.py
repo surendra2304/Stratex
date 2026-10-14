@@ -104,13 +104,13 @@ class TestForensicHardening:
         """Proof that CORS headers restrict untrusted domains while allowing trusted origins."""
         client = app.test_client()
 
-        # Trusted Render production origin
-        res = client.get('/api/config', headers={"Origin": "https://stratex-fra.onrender.com"})
-        assert res.headers.get("Access-Control-Allow-Origin") == "https://stratex-fra.onrender.com"
+        # Trusted production origin
+        res = client.get('/api/config', headers={"Origin": "https://friday-universe.duckdns.org"})
+        assert res.headers.get("Access-Control-Allow-Origin") == "https://friday-universe.duckdns.org"
 
         # Local development origin
-        res = client.get('/api/config', headers={"Origin": "http://localhost:5000"})
-        assert res.headers.get("Access-Control-Allow-Origin") == "http://localhost:5000"
+        res = client.get('/api/config', headers={"Origin": "http://localhost:8000"})
+        assert res.headers.get("Access-Control-Allow-Origin") == "http://localhost:8000"
 
         # Untrusted external origin is not allowed for /api routes
         res = client.get('/api/config', headers={"Origin": "https://malicious-external-site.com"})

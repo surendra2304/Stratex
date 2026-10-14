@@ -1,16 +1,16 @@
 version: '3.8'
 
 services:
-  # ----------------------------------------------------------------------------
-  # 1. Trading Engine (Binance Spot Testnet Execution Daemon)
-  # ----------------------------------------------------------------------------
-  trading-bot:
+  stratex:
     build: .
-    container_name: binance_testnet_bot
+    container_name: stratex
     restart: unless-stopped
+    ports:
+      - "8008:8000"
     env_file:
       - .env
     environment:
+      - PORT=8000
       - TRADING_MODE=TESTNET
       - TESTNET_ONLY=TRUE
       - TESTNET_ENABLED=True
@@ -23,26 +23,17 @@ services:
       - ./testnet_equity_history.jsonl:/app/testnet_equity_history.jsonl
       - ./active_trades.json:/app/active_trades.json
       - ./bot.log:/app/bot.log
-    command: python bot.py
+    command: python scripts/supervise_services.py
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - friday_mesh
 
-  # ----------------------------------------------------------------------------
-  # 2. Web Dashboard UI (Real-time Telemetry Terminal)
-  # ----------------------------------------------------------------------------
-  dashboard:
-    build: .
-    container_name: binance_testnet_dashboard
-    restart: unless-stopped
-    ports:
-      - "5000:5000"
-    env_file:
-      - .env
-    environment:
-      - TRADING_MODE=TESTNET
-      - TESTNET_ONLY=TRUE
-    volumes:
-      - ./testnet_portfolio.json:/app/testnet_portfolio.json:ro
-      - ./testnet_trade_ledger.jsonl:/app/testnet_trade_ledger.jsonl:ro
-      - ./testnet_opportunity_log.jsonl:/app/testnet_opportunity_log.jsonl:ro
-      - ./testnet_equity_history.jsonl:/app/testnet_equity_history.jsonl:ro
-      - ./active_trades.json:/app/active_trades.json:ro
-    command: python dashboard.py
+networks:
+  friday_mesh:
+    name: friday_mesh
+    external: true

@@ -50,6 +50,7 @@ def _audit_worker(log, worker, count):
         manager.record_event("STRESS", f"w{worker}", {"i": index})
 
 
+@pytest.mark.skipif("fork" not in getattr(multiprocessing, "get_all_start_methods", lambda: [])(), reason="fork start method required")
 def test_concurrent_processes_keep_the_chain_valid(tmp_path):
     log = str(tmp_path / "audit.jsonl")
     ctx = multiprocessing.get_context("fork")
@@ -210,6 +211,7 @@ def _idempotency_worker(path, queue):
     queue.put(IdempotencyStore(path).check_and_record("same-key", "ORDER")[0])
 
 
+@pytest.mark.skipif("fork" not in getattr(multiprocessing, "get_all_start_methods", lambda: [])(), reason="fork start method required")
 def test_exactly_one_process_wins_a_key(tmp_path):
     path = str(tmp_path / "store.json")
     ctx = multiprocessing.get_context("fork")

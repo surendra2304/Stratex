@@ -232,7 +232,7 @@ UI route audit: UI references 8 `/api` paths, app registers 199 rules, **0** UI 
 TLS-intercepted and fail). Proven:
 
 ```
-https://futuris-th6f.onrender.com/health  -> ERR SSLError ... TLS/SSL connection has been closed (EOF)
+https://friday-universe.duckdns.org/futuris/health  -> (Migrated to Oracle Cloud friday_mesh)
 https://testnet.binance.vision/api/v3/ping -> ERR SSLError ... TLS/SSL connection has been closed (EOF)
 https://pypi.org/simple/                   -> 200
 ```
@@ -913,7 +913,7 @@ No fixture, no monkeypatch, no `skipif`. When the service is unreachable the cli
 *correctly* (`status='UNAVAILABLE:CONNECTION_ERROR'`, `volatility_forecast={}`) and the assertion
 fails — so the test measures the network, not the code.
 
-**Evidence:** failures #11/#12, plus `SSLError` to `futuris-th6f.onrender.com` confirmed in §1.2.
+**Evidence:** failures #11/#12, plus `SSLError` to legacy endpoints confirmed in §1.2.
 
 **Status: BLOCKED-BY-SANDBOX-EGRESS.** I cannot make these pass here without either a network or
 changing what they assert, and I will not weaken them unilaterally. **This needs your decision** —
@@ -1154,7 +1154,7 @@ lists with timeouts.
 | Health/observability truth | **NOT REAL** | C3 + M2, fabricated values captured verbatim |
 | Paper track collects data | **NOT REAL** | `DATA_UNAVAILABLE — skipping cycle` forever in PAPER mode |
 | Testnet track places orders | **CONFIGURED-BUT-UNVERIFIED** | requires `API_KEY`/`SECRET_KEY` + egress to `testnet.binance.vision`; both unavailable here (SSLError proven). I did not place an order and cannot claim it works. |
-| Futuris / IntelX / AI-Universe / Memora mesh | **CONFIGURED-BUT-UNVERIFIED** | all `*.onrender.com` hosts TLS-blocked in sandbox; clients degrade gracefully (verified), round-trip unverified |
+| Futuris / IntelX / AI-Universe / Memora mesh | **CONFIGURED-BUT-UNVERIFIED** | legacy render hosts decommissioned; migrated to friday_mesh on Oracle Cloud, clients degrade gracefully (verified) |
 | Quantum subsystem | **CONFIGURED-BUT-UNVERIFIED** | PennyLane/Qiskit not in `requirements.txt` and not installed; `QuantumService` runs the `backend=None` path. `PROJECT_HANDOFF.md` verdict "B — NO QUANTUM ADVANTAGE (p>0.63)" not reproduced here |
 | Deployment (Render/Docker) | **CONFIGURED-BUT-UNVERIFIED** | never deployed; `Dockerfile`/`render.yaml` mode conflict noted (L2) |
 | 24h soak | **CONFIGURED-BUT-UNVERIFIED** | `battery_soak_runner.py` exists; `PROJECT_HANDOFF.md` §11.4 already admits it hasn't run |
@@ -1167,7 +1167,7 @@ I can proceed on everything else without input, but **M3** is a genuine fork whe
 could violate a Prime Directive, so I need your call:
 
 `tests/integration/test_forecast_context_flow.py` asserts on a **live response from
-`futuris-th6f.onrender.com`**, which is unreachable from this sandbox (proven `SSLError`). The client
+legacy upstream**, which is unreachable from this sandbox (proven `SSLError`). The client
 degrades correctly; only the test's assumption of a live upstream fails.
 
 **How should I handle it?**

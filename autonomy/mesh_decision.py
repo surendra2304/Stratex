@@ -19,7 +19,7 @@ from typing import Any, Callable
 
 CONSUMER_ID_DEFAULT = "stratex-journey"
 DECISION_INTENT = "stratex.decision"
-_MEMORA_BASE_DEFAULT = "https://memora-cavc.onrender.com"
+_MEMORA_BASE_DEFAULT = "https://friday-universe.duckdns.org/memora"
 
 # Memora's ack route answers {"status": "acknowledged"}; some client wrappers
 # normalize to "ok". Both mean the durable cursor advanced.

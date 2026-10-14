@@ -230,7 +230,7 @@ def test_order_book_analyzer_empty():
 # ------------------------------------------------------------------------------
 # 5. Flask REST API Routes Tests
 # ------------------------------------------------------------------------------
-def test_flask_ccxt_routes(flask_client):
+def test_flask_ccxt_routes(flask_client, monkeypatch):
     # GET /status
     res = flask_client.get("/api/v1/ccxt/status")
     assert res.status_code == 200
@@ -245,6 +245,16 @@ def test_flask_ccxt_routes(flask_client):
     assert "binance" in data["data"]
 
     # Offline: no real quotes -> honest 503, never a synthetic opportunity/book.
+    from api import ccxt_routes
+    from stratex_ccxt_adapter.errors import MarketDataUnavailable
+    monkeypatch.setattr(ccxt_routes.ccxt_hub, "fetch_multi_ticker", lambda *a, **kw: {})
+    def _mock_analyze_depth(symbol, exchange_id="binance", **kwargs):
+        if exchange_id not in ccxt_routes.ccxt_hub.list_exchanges():
+            raise KeyError(exchange_id)
+        raise MarketDataUnavailable("offline test")
+    monkeypatch.setattr(ccxt_routes.ccxt_hub, "analyze_depth", _mock_analyze_depth)
+    monkeypatch.setattr(ccxt_routes.ccxt_hub, "compare_funding_rates", lambda *a, **kw: (_ for _ in ()).throw(MarketDataUnavailable("offline test")))
+
     for url in ("/api/v1/ccxt/arbitrage?symbol=BTCUSDT",
                 "/api/v1/ccxt/depth?symbol=BTCUSDT&exchange=binance",
                 "/api/v1/ccxt/funding?symbol=BTCUSDT"):

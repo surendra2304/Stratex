@@ -58,15 +58,38 @@ class ServiceSupervisor:
         logger.info(f"[SUPERVISOR] Trading Engine spawned with PID {self.bot_proc.pid}")
 
     def _start_dashboard(self):
-        """Starts the Flask dashboard subprocess."""
+        """Starts the dashboard subprocess using Gunicorn WSGI server."""
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        dash_script = os.path.join(repo_root, "dashboard.py")
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
-        port = os.environ.get("PORT", "5000")
-        logger.info(f"[SUPERVISOR] 🚀 Spawning Dashboard on port {port} (python dashboard.py)...")
+        port = os.environ.get("PORT", "8000")
+        env["PORT"] = port
+
+        # Check if gunicorn is available
+        try:
+            import gunicorn
+            has_gunicorn = True
+        except ImportError:
+            has_gunicorn = False
+
+        if has_gunicorn:
+            # Multi-threaded production WSGI server with unlimited timeout for SSE streaming (/api/stream)
+            cmd = [
+                sys.executable, "-m", "gunicorn",
+                "--bind", f"0.0.0.0:{port}",
+                "--workers", "2",
+                "--threads", "4",
+                "--timeout", "0",
+                "dashboard:app"
+            ]
+            logger.info(f"[SUPERVISOR] 🚀 Spawning Dashboard on port {port} with Gunicorn WSGI ({' '.join(cmd)})...")
+        else:
+            dash_script = os.path.join(repo_root, "dashboard.py")
+            cmd = [sys.executable, dash_script]
+            logger.info(f"[SUPERVISOR] 🚀 Spawning Dashboard on port {port} (fallback: python dashboard.py)...")
+
         self.dash_proc = subprocess.Popen(
-            [sys.executable, dash_script],
+            cmd,
             cwd=repo_root,
             env=env
         )

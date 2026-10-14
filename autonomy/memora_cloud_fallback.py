@@ -16,7 +16,7 @@ class MemoraClient:
     """HTTP adapter for agent containers; it never writes to an agent-local DB."""
 
     def __init__(self, base_url: str | None = None, api_key: str | None = None, timeout: float = 5.0):
-        self.base_url = (base_url or os.getenv("MEMORA_URL", "https://memora-cavc.onrender.com")).rstrip("/")
+        self.base_url = (base_url or os.getenv("MEMORA_URL", "https://friday-universe.duckdns.org/memora")).rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
         self.last_error: str | None = None

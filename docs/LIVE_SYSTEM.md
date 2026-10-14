@@ -1,6 +1,6 @@
 # Live System Architecture
 
-This document describes the production deployment and the core trading pipeline of the STRATEX.
+This document describes the production deployment and the core trading pipeline of STRATEX within the FRIDAY Universe.
 
 ## Trading Pipeline Flow
 
@@ -18,22 +18,24 @@ The bot operates on a strict event-driven pipeline, primarily triggering on comp
 10. **Position**: Position is tracked. Real-time Stop Loss (SL) and Take Profit (TP) lifecycle management begins.
 11. **PnL**: Realized and Unrealized Profit and Loss are calculated upon exit.
 12. **Persistence**: Trade results and portfolio states are appended to atomic JSON ledgers.
-13. **Dashboard**: Telemetry is served to the frontend UI via `dashboard.py`.
+13. **Dashboard**: Telemetry is served to the frontend UI via multi-threaded Gunicorn WSGI running `dashboard:app`.
 
 ## Production Environment
 
-- **Hosting Platform**: Render
-- **Region**: Frankfurt, Germany. 
-  *Note: Frankfurt is deliberately chosen to minimize network latency to Binance's European API endpoints.*
-- **Containerization**: Docker (see `Dockerfile`).
-- **Process Management**: `supervise_services.py` uses Python's `subprocess` to act as a lightweight supervisor. It runs both `dashboard.py` (the Flask web server) and `bot.py` (the trading engine) concurrently within the same Docker container.
-- **Exchange**: Binance Spot Testnet.
+- **Hosting Platform**: Oracle Cloud Always Free (2 OCPUs, 12 GB RAM Ampere A1 ARM64 / AMD x86_64 host)
+- **Container Network**: `friday_mesh` Docker bridge network with automated HTTPS via Caddy reverse proxy
+- **Internal Port**: 8000
+- **Host Port**: 8008
+- **Process Management**: `scripts/supervise_services.py` acts as production process supervisor. It supervises both `dashboard:app` (via multi-threaded Gunicorn WSGI) and `bot.py` (singleton trading engine daemon) concurrently within the container.
+- **Exchange**: Binance Spot Testnet / Futures Testnet.
 
 ## Live Endpoints
 
-- **Frontend UI**: https://stratex-fra.onrender.com
-- **Web Health**: https://stratex-fra.onrender.com/health
-- **Engine Diagnostic**: https://stratex-fra.onrender.com/api/engine-health
-- **System Status**: https://stratex-fra.onrender.com/api/status
-- **Scanner Stats**: https://stratex-fra.onrender.com/api/scanner
-- **Trade Ledger**: https://stratex-fra.onrender.com/api/trades
+- **Public Gateway Route**: https://friday-universe.duckdns.org/stratex/
+- **Web Health**: https://friday-universe.duckdns.org/stratex/health
+- **Engine Diagnostic**: https://friday-universe.duckdns.org/stratex/api/engine-health
+- **System Status**: https://friday-universe.duckdns.org/stratex/api/status
+- **Scanner Stats**: https://friday-universe.duckdns.org/stratex/api/scanner
+- **Trade Ledger**: https://friday-universe.duckdns.org/stratex/api/trades
+- **SSE Stream**: https://friday-universe.duckdns.org/stratex/api/stream
+- **Internal Mesh URL**: http://stratex:8000

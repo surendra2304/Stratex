@@ -46,7 +46,7 @@ class MemoraShadowStore:
         timeout: float = 5.0,
         transport: Callable[[str, str, dict[str, str], dict[str, Any] | None, float], tuple[int, Any]] | None = None,
     ) -> None:
-        self.base_url = (base_url or os.getenv("MEMORA_URL", "https://memora-cavc.onrender.com")).rstrip("/")
+        self.base_url = (base_url or os.getenv("MEMORA_URL", "https://friday-universe.duckdns.org/memora")).rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
         self._transport = transport or _http_transport
