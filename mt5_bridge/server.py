@@ -5,17 +5,35 @@ Expose only over a private VPN/firewall and use a high-entropy bearer token.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from functools import wraps
 from typing import Any
 
 from flask import Flask, jsonify, request
 
+from mt5_bridge.idempotency import (
+    BridgeOrderStore, DuplicateOrderIdConflict, UnresolvedBridgeOrder,
+)
+
 app = Flask(__name__)
 TOKEN = os.getenv("MT5_BRIDGE_TOKEN", "")
 EXPECTED_SERVER = os.getenv("MT5_EXPECTED_SERVER", "ICMarketsSC-Demo")
 BIND_HOST = os.getenv("MT5_BRIDGE_BIND", "127.0.0.1")
 PORT = int(os.getenv("MT5_BRIDGE_PORT", "8765"))
+
+
+_ORDER_STORES: dict[str, BridgeOrderStore] = {}
+
+
+def _order_store() -> BridgeOrderStore:
+    """Lazily open the bridge ledger so importing the Flask app creates no state."""
+    path = os.getenv("MT5_BRIDGE_IDEMPOTENCY_DB", "mt5_bridge_orders.sqlite3")
+    if path not in _ORDER_STORES:
+        _ORDER_STORES[path] = BridgeOrderStore(path)
+    return _ORDER_STORES[path]
+
 
 
 def _mt5():
@@ -149,12 +167,15 @@ def fees():
 @app.post("/v1/orders")
 @_auth
 def place_order():
-    mt5, _ = _mt5()  # account-mode validation occurs immediately before every order
+    mt5, _ = _mt5()  # revalidate account mode immediately before every submission
     body = request.get_json(silent=True) or {}
-    symbol = str(body.get("symbol", ""))
+    symbol = str(body.get("symbol", "")).strip()
     side = str(body.get("side", "")).upper()
     kind = str(body.get("type", "MARKET")).upper()
+    client_order_id = str(body.get("client_order_id", "")).strip()
     volume = float(body.get("volume", 0))
+    if not client_order_id or len(client_order_id) > 36:
+        raise ValueError("client_order_id is required and must be 1-36 characters")
     if side not in {"BUY", "SELL"} or volume <= 0:
         raise ValueError("side must be BUY/SELL and volume must be positive")
     if kind not in {"MARKET", "LIMIT", "STOP", "STOP_LIMIT"}:
@@ -168,6 +189,7 @@ def place_order():
         raise ValueError("volume is outside broker limits")
     if step > 0 and abs(round(volume / step) * step - volume) > 1e-8:
         raise ValueError("volume does not match broker volume_step")
+
     is_buy = side == "BUY"
     if kind == "MARKET":
         request_type = mt5.ORDER_TYPE_BUY if is_buy else mt5.ORDER_TYPE_SELL
@@ -184,23 +206,109 @@ def place_order():
         if price <= 0:
             raise ValueError("pending orders require a positive price")
         action = mt5.TRADE_ACTION_PENDING
-    order = {"action": action, "symbol": symbol, "volume": volume, "type": request_type,
-             "price": price, "deviation": int(os.getenv("MT5_DEVIATION_POINTS", "20")),
-             "magic": int(os.getenv("MT5_MAGIC_NUMBER", "260101")), "comment": "Stratex demo",
-             "type_time": mt5.ORDER_TIME_GTC, "type_filling": info.filling_mode}
+
+    # Every new entry must be protected at submission time. Closing is a separate
+    # by-ticket operation; this endpoint intentionally has no unprotected-entry mode.
+    stop_loss = float(body.get("stop_loss") or 0)
+    take_profit = float(body.get("take_profit") or 0)
+    if stop_loss <= 0 or take_profit <= 0:
+        raise ValueError("new MT5 entries require both stop_loss and take_profit")
+    if is_buy and not stop_loss < price < take_profit:
+        raise ValueError("BUY entry requires stop_loss < entry price < take_profit")
+    if not is_buy and not take_profit < price < stop_loss:
+        raise ValueError("SELL entry requires take_profit < entry price < stop_loss")
+
+    digits = int(info.digits)
+    price = round(price, digits)
+    stop_loss = round(stop_loss, digits)
+    take_profit = round(take_profit, digits)
+    point = float(info.point or 0)
+    min_stop_distance = float(getattr(info, "trade_stops_level", 0) or 0) * point
+    if min_stop_distance > 0:
+        if abs(price - stop_loss) < min_stop_distance or abs(take_profit - price) < min_stop_distance:
+            raise ValueError("stop_loss/take_profit violate broker minimum stop distance")
+
+    order = {
+        "action": action, "symbol": symbol, "volume": volume, "type": request_type,
+        "price": price, "sl": stop_loss, "tp": take_profit,
+        "deviation": int(os.getenv("MT5_DEVIATION_POINTS", "20")),
+        "magic": int(os.getenv("MT5_MAGIC_NUMBER", "260101")),
+        "comment": f"STX:{client_order_id[:24]}",
+        "type_time": mt5.ORDER_TIME_GTC, "type_filling": info.filling_mode,
+    }
     stop_price = body.get("stop_price")
     if stop_price:
-        order["stoplimit"] = float(stop_price)
-    result = mt5.order_send(order)
+        order["stoplimit"] = round(float(stop_price), digits)
+
+    request_hash = hashlib.sha256(
+        json.dumps(body, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    ).hexdigest()
+    store = _order_store()
+    try:
+        reservation = store.reserve(client_order_id, request_hash, body)
+    except DuplicateOrderIdConflict as exc:
+        return jsonify(ok=False, error=str(exc)), 409
+    except UnresolvedBridgeOrder as exc:
+        return jsonify(ok=False, error="ORDER_STATE_UNKNOWN", message=str(exc)), 409
+
+    if reservation["kind"] == "duplicate":
+        response_data = dict(reservation.get("response") or {})
+        response_data["duplicate"] = True
+        return _data(response_data)
+
+    try:
+        result = mt5.order_send(order)
+    except Exception as exc:
+        store.finish(client_order_id, "UNKNOWN", error=type(exc).__name__)
+        return jsonify(
+            ok=False, error="ORDER_STATE_UNKNOWN",
+            message="MT5 submission raised an exception; reconcile terminal state before retrying.",
+        ), 503
     if result is None:
-        raise RuntimeError(f"MT5 order_send failed: {mt5.last_error()}")
-    status = "REJECTED" if result.retcode not in {mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_PLACED,
-                                                  getattr(mt5, "TRADE_RETCODE_DONE_PARTIAL", -1)} else (
-        "FILLED" if result.retcode == mt5.TRADE_RETCODE_DONE else "PENDING")
-    return _data({"order": int(getattr(result, "order", 0)), "deal": int(getattr(result, "deal", 0)),
-                  "status": status, "price": float(getattr(result, "price", 0)),
-                  "volume_filled": float(getattr(result, "volume", 0)),
-                  "commission": 0.0, "retcode": int(result.retcode), "comment": str(result.comment)})
+        store.finish(client_order_id, "UNKNOWN", error="order_send returned None")
+        return jsonify(
+            ok=False, error="ORDER_STATE_UNKNOWN",
+            message=f"MT5 submission result is ambiguous (last_error={mt5.last_error()}); reconcile before retrying.",
+        ), 503
+
+    code = int(result.retcode)
+    done = code == int(mt5.TRADE_RETCODE_DONE)
+    partial_code = int(getattr(mt5, "TRADE_RETCODE_DONE_PARTIAL", -1))
+    placed = code == int(mt5.TRADE_RETCODE_PLACED)
+    accepted = done or code == partial_code or placed
+    status = "REJECTED" if not accepted else (
+        "FILLED" if done else "PARTIALLY_FILLED" if code == partial_code else "PENDING"
+    )
+    response_data = {
+        "order": int(getattr(result, "order", 0)), "deal": int(getattr(result, "deal", 0)),
+        "status": status, "price": float(getattr(result, "price", 0)),
+        "volume_filled": float(getattr(result, "volume", 0)), "commission": 0.0,
+        "retcode": code, "comment": str(result.comment), "client_order_id": client_order_id,
+    }
+    ledger_status = {
+        "PENDING": "ACCEPTED", "PARTIALLY_FILLED": "PARTIALLY_FILLED",
+        "FILLED": "FILLED", "REJECTED": "REJECTED",
+    }[status]
+    store.finish(client_order_id, ledger_status, response=response_data)
+    return _data(response_data)
+
+
+@app.get("/v1/orders/by-client-id/<client_order_id>")
+@_auth
+def get_order_by_client_id(client_order_id: str):
+    """Read the idempotency record; UNKNOWN records require explicit broker reconciliation."""
+    record = _order_store().get(client_order_id)
+    if record is None:
+        return jsonify(ok=False, error="ORDER_NOT_FOUND"), 404
+    return _data({
+        "client_order_id": client_order_id,
+        "status": record["status"],
+        "response": record.get("response"),
+        "created_at": record["created_at"],
+        "updated_at": record["updated_at"],
+        "error": record.get("error_text"),
+        "manual_reconciliation_required": record["status"] == "UNKNOWN",
+    })
 
 
 @app.delete("/v1/orders/<order_id>")
