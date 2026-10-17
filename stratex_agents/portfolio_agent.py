@@ -42,24 +42,44 @@ class PortfolioAgent:
         currency_to_reporting_rate: dict[str, float] | None = None,
         mt5_adapter: Any | None = None,
     ) -> "PortfolioAgent":
-        """Construct only explicitly non-production account adapters."""
+        """Construct read-only adapters only for explicitly allowlisted demo venues."""
+        allowed = {
+            item.strip().lower()
+            for item in os.getenv("STRATEX_ALLOWED_EXECUTION_VENUES", "binance").split(",")
+            if item.strip()
+        }
+        if not allowed or not allowed.issubset({"binance", "mt5"}):
+            raise ValueError("Portfolio venues must be an explicit subset of binance,mt5.")
         providers: dict[str, Any] = {}
-        try:
-            from .venue.binance_futures_portfolio_adapter import BinanceFuturesPortfolioAdapter
-            providers["binance"] = BinanceFuturesPortfolioAdapter()
-        except Exception as exc:
-            providers["binance"] = _UnavailablePortfolioVenue("binance", type(exc).__name__)
+        notional_calculators: dict[str, Callable[[Any], float | None]] = {}
 
-        mt5_enabled = os.getenv("MT5_BRIDGE_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
-        if mt5_enabled:
-            if mt5_adapter is None:
+        if "binance" in allowed:
+            try:
+                from .venue.binance_futures_portfolio_adapter import BinanceFuturesPortfolioAdapter
+                providers["binance"] = BinanceFuturesPortfolioAdapter()
+                notional_calculators["binance"] = lambda position: abs(
+                    float(position.quantity) * float(position.mark_price)
+                )
+            except Exception as exc:
+                providers["binance"] = _UnavailablePortfolioVenue("binance", type(exc).__name__)
+
+        if "mt5" in allowed:
+            mt5_enabled = os.getenv("MT5_BRIDGE_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+            if not mt5_enabled:
+                providers["mt5"] = _UnavailablePortfolioVenue("mt5", "bridge_disabled")
+            elif mt5_adapter is None:
                 try:
                     from exchanges.mt5_bridge_adapter import MT5BridgeAdapter
                     mt5_adapter = MT5BridgeAdapter()
                 except Exception as exc:
                     mt5_adapter = _UnavailablePortfolioVenue("mt5", type(exc).__name__)
             providers["mt5"] = mt5_adapter
-        return cls(providers, currency_to_reporting_rate=currency_to_reporting_rate)
+
+        return cls(
+            providers,
+            currency_to_reporting_rate=currency_to_reporting_rate,
+            notional_calculators=notional_calculators,
+        )
 
     def __init__(
         self,
