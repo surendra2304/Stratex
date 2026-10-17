@@ -23,8 +23,8 @@ if '\ufeffAPI_KEY' in os.environ:
 # Credentials from the legacy Testnet must never be silently reused.
 BINANCE_DEMO_TRADING = os.getenv("BINANCE_DEMO_TRADING", "false").strip().lower() in {"1", "true", "yes", "on"}
 if BINANCE_DEMO_TRADING:
-    API_KEY = os.getenv("BINANCE_API_KEY", "").strip().strip("'\\"")
-    SECRET_KEY = os.getenv("BINANCE_API_SECRET", "").strip().strip("'\\"")
+    API_KEY = os.getenv("BINANCE_API_KEY", "").strip().strip(chr(34) + chr(39))
+    SECRET_KEY = os.getenv("BINANCE_API_SECRET", "").strip().strip(chr(34) + chr(39))
 else:
     API_KEY = (
         os.getenv("API_KEY")
