@@ -77,6 +77,7 @@ def add_header(response):
 
 from security_hardening import (
     SCOPE_CONTROL,
+    SCOPE_READ,
     control_scope_denial,
     get_security_status_report,
     require_api_scope,
@@ -105,6 +106,94 @@ def api_stratex_agents():
     except Exception as exc:
         logger.exception("[AGENTS_API] Unable to load agent registry")
         return jsonify({"status": "error", "error": type(exc).__name__}), 500
+
+@app.route('/api/v1/market/instruments', methods=['GET'])
+@require_api_scope(scope=SCOPE_READ)
+def api_v1_market_instruments():
+    """Return broker-native instrument metadata normalized by venue."""
+    try:
+        from stratex_agents.market_data import MarketDataAgent
+        venue = query_choice("venue", "all", {"all", "binance", "mt5"})
+        query = query_text("query", "", max_len=80, pattern=None) or ""
+        asset_class = query_text("asset_class", "", max_len=40, pattern=re.compile(r"^[A-Za-z0-9_-]{1,40}$")) or ""
+        visible_only = query_bool("visible_only", False)
+        try:
+            limit = int(request.args.get("limit", "1000"))
+        except (TypeError, ValueError):
+            from api.validation import RequestValidationError
+            raise RequestValidationError("limit", "must be an integer from 1 to 5000")
+        if not 1 <= limit <= 5000:
+            from api.validation import RequestValidationError
+            raise RequestValidationError("limit", "must be between 1 and 5000")
+        agent = MarketDataAgent.from_environment()
+        result = agent.list_instruments(
+            venue=None if venue == "all" else venue,
+            query=query,
+            asset_class=asset_class or None,
+            limit=limit,
+            visible_only=visible_only,
+        )
+        return jsonify({"status": "ok", **result})
+    except Exception as exc:
+        from api.validation import RequestValidationError
+        if isinstance(exc, RequestValidationError):
+            raise
+        logger.warning("[MARKET_DATA] Instrument discovery failed: %s", type(exc).__name__)
+        return jsonify({"status": "error", "error": type(exc).__name__}), 503
+
+
+@app.route('/api/v1/market/quote', methods=['GET'])
+@require_api_scope(scope=SCOPE_READ)
+def api_v1_market_quote():
+    """Return a normalized quote from one explicitly selected venue."""
+    from api.validation import RequestValidationError
+    from stratex_agents.market_data import MarketDataAgent
+    venue = query_choice("venue", "binance", {"binance", "mt5"})
+    symbol = query_text("symbol", None, max_len=40, pattern=re.compile(r"^[A-Za-z0-9._:-]{2,40}$"))
+    if not symbol:
+        raise RequestValidationError("symbol", "is required")
+    try:
+        quote = MarketDataAgent.from_environment().get_quote(venue, symbol)
+        return jsonify({"status": "ok", "quote": quote})
+    except MarketDataUnavailable as exc:
+        return jsonify({"status": "unavailable", "error": str(exc)}), 503
+    except Exception as exc:
+        logger.warning("[MARKET_DATA] Quote request failed for %s:%s (%s)", venue, symbol, type(exc).__name__)
+        return jsonify({"status": "error", "error": type(exc).__name__}), 503
+
+
+@app.route('/api/v1/market/candles', methods=['GET'])
+@require_api_scope(scope=SCOPE_READ)
+def api_v1_market_candles():
+    """Return normalized OHLCV candles from one explicitly selected venue."""
+    from api.validation import RequestValidationError
+    from stratex_agents.market_data import MarketDataAgent
+    venue = query_choice("venue", "binance", {"binance", "mt5"})
+    symbol = query_text("symbol", None, max_len=40, pattern=re.compile(r"^[A-Za-z0-9._:-]{2,40}$"))
+    if not symbol:
+        raise RequestValidationError("symbol", "is required")
+    timeframe = query_text(
+        "timeframe", "15m", max_len=4,
+        pattern=re.compile(r"^(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|1w)$"),
+    )
+    try:
+        limit = int(request.args.get("limit", "300"))
+    except (TypeError, ValueError):
+        raise RequestValidationError("limit", "must be an integer from 1 to 1500")
+    if not 1 <= limit <= 1500:
+        raise RequestValidationError("limit", "must be between 1 and 1500")
+    try:
+        candles = MarketDataAgent.from_environment().get_candles(venue, symbol, timeframe, limit)
+        return jsonify({
+            "status": "ok", "venue": venue, "symbol": symbol,
+            "timeframe": timeframe, "count": len(candles), "candles": candles,
+        })
+    except MarketDataUnavailable as exc:
+        return jsonify({"status": "unavailable", "error": str(exc)}), 503
+    except Exception as exc:
+        logger.warning("[MARKET_DATA] Candle request failed for %s:%s (%s)", venue, symbol, type(exc).__name__)
+        return jsonify({"status": "error", "error": type(exc).__name__}), 503
+
 
 @app.route('/api/v1/futuris/forecast')
 def api_v1_futuris_forecast():
