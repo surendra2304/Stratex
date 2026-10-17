@@ -10,6 +10,7 @@ from .reconciliation_agent import OrderReconciliationAgent
 from .portfolio_risk_gate import PortfolioRiskGate
 from .portfolio_risk_state import PortfolioRiskStateStore, PortfolioRiskStateError
 from .portfolio_risk_runtime import build_portfolio_risk_context
+from .runtime import build_order_manager, build_reconciliation_agent, build_venue_aware_authorizer
 
 __all__ = [
     "get_agent_catalog",
@@ -31,4 +32,7 @@ __all__ = [
     "PortfolioRiskStateStore",
     "PortfolioRiskStateError",
     "build_portfolio_risk_context",
+    "build_order_manager",
+    "build_reconciliation_agent",
+    "build_venue_aware_authorizer",
 ]
