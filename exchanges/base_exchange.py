@@ -43,6 +43,8 @@ class UnifiedPosition:
     leverage: float = 1.0
     liquidation_price: float | None = None
     exchange: str = ""
+    # Native ticket/position identifier (important for MT5 hedge-mode accounts).
+    position_id: str | None = None
 
 
 @dataclass
