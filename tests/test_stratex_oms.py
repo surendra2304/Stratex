@@ -30,6 +30,7 @@ def intent(client_id="stx-test-001", venue="binance", environment="binance_demo"
 
 def setup_binance_env(monkeypatch):
     monkeypatch.setenv("TRADING_MODE", "FUTURES")
+    monkeypatch.setenv("STRATEX_EXECUTION_MODE", "DEMO")
     monkeypatch.setenv("TESTNET_ENABLED", "true")
     monkeypatch.setenv("LIVE_TRADING_ENABLED", "false")
     monkeypatch.setenv("BINANCE_DEMO_TRADING", "true")
