@@ -68,3 +68,16 @@ The repository now includes `stratex_agents.order_intent.TradeIntent`, `stratex_
 - intentionally does not automatically fail over from one venue to another.
 
 This is a durable OMS foundation with contract tests, not yet an assertion that every legacy strategy uses the manager. Wiring the existing signal/trailing/protection lifecycle through this manager is a separate integration milestone.
+
+
+## Binance Futures OMS adapter foundation
+
+`stratex_agents.venue.binance_futures_oms_adapter.BinanceFuturesOMSAdapter` implements the venue submitter contract for market-entry intents in the selected Binance Demo Trading or legacy Futures Testnet environment. It verifies the account position mode, loads the venue's symbol filters and quantity step, checks the configured contract is tradable and the order is above minimum notional, submits with the stable client order ID, and establishes both broker-native stop-loss and take-profit conditional orders using the Futures Algo Order API.
+
+- It is deliberately limited to MARKET entries for this phase; LIMIT and STOP entries are refused until their asynchronous fill and protection lifecycle is implemented.
+- It respects One-way and Hedge position mode, using positionSide where required.
+- If bracket creation fails after entry, it attempts to close the filled quantity; it cancels an acknowledged stop only after the close is confirmed. If safety close is ambiguous, the stop is preserved and the shared OMS records UNKNOWN.
+- The adapter doesn't decide whether a strategy signal should trade. Call it only through the shared OMS after deterministic risk and authorization checks.
+- Conditional Futures orders use `futures_create_algo_order`; conditional types moved to the algo API in recent Binance API changes. See [python-binance Futures Algo Order example](https://github.com/sammchardy/python-binance/blob/master/examples/futures_algo_order_examples.py) and [Binance USDⓈ-M Futures order documentation](https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/New-Algo-Order).
+
+This does not yet migrate every legacy `bot.py` entry, trailing stop, close and ledger path through the OMS. Do not treat the adapter foundation as production approval.
