@@ -21,6 +21,14 @@ class BinanceVenueError(RuntimeError):
     """The Binance demo adapter could not establish a safe order state."""
 
 
+class BinanceProtectionError(BinanceVenueError):
+    """Protective conditional-order setup failed after a stop was acknowledged."""
+
+    def __init__(self, message: str, stop_response: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.stop_response = stop_response
+
+
 def _truthy(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -124,10 +132,12 @@ class BinanceFuturesOMSAdapter:
                 triggerPrice=str(take_profit),
                 clientAlgoId=_algo_client_id(client_order_id, "tp"),
             )
-        except Exception:
-            # The caller will close the position as a safety abort. Do not report
-            # a fully protected entry when only its stop-loss was acknowledged.
-            raise BinanceVenueError("Take-profit protection failed after stop-loss was acknowledged.")
+        except Exception as exc:
+            # The caller will close the exposure and preserve this order ID until
+            # the close is confirmed, then cancel the stop if still open.
+            raise BinanceProtectionError(
+                "Take-profit protection failed after stop-loss was acknowledged.", stop_response=stop
+            ) from exc
         return stop, take
 
     def _cancel_algo(self, symbol: str, response: dict[str, Any] | None) -> None:
@@ -222,18 +232,20 @@ class BinanceFuturesOMSAdapter:
                     "client_order_id": intent.client_order_id, "reason": f"entry status {status} has no confirmed fill",
                 }
 
-        self._validate_bracket(is_long, avg_price, intent.stop_loss, intent.take_profit)
         stop_response: dict[str, Any] | None = None
         take_response: dict[str, Any] | None = None
         try:
+            self._validate_bracket(is_long, avg_price, intent.stop_loss, intent.take_profit)
             stop_response, take_response = self._place_protection(
                 symbol=symbol, is_long=is_long, position_side=position_side,
                 stop_loss=intent.stop_loss, take_profit=intent.take_profit,
                 client_order_id=intent.client_order_id,
             )
         except Exception as protection_error:
-            # Best effort safe abort: close the filled amount. If the close is
-            # ambiguous/fails, keep any acknowledged protection and surface UNKNOWN.
+            # Preserve any acknowledged stop while attempting to close exposure;
+            # cancel the stop only after the close is confirmed.
+            if isinstance(protection_error, BinanceProtectionError):
+                stop_response = protection_error.stop_response
             try:
                 close = self._safety_close(
                     symbol=symbol, side=side, quantity=executed, hedge_mode=hedge_mode,
