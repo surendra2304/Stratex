@@ -262,3 +262,10 @@ pytest -v --tb=short
 ### Venue-aware market data
 
 The read-only market-data layer now normalizes broker-native instruments, quotes and OHLCV bars by explicit venue. Use `GET /api/v1/market/instruments?venue=all` to discover symbols and contract constraints, `GET /api/v1/market/quote?venue=mt5&symbol=EURUSD` for one broker's quote, and `GET /api/v1/market/candles?venue=mt5&symbol=EURUSD&timeframe=15m` for that venue's candles. These endpoints require read API scope. MT5 returns the broker's exact symbol names and contract sizing; the market-data layer never assumes an MT5 lot is equivalent to a Binance quantity.
+
+
+## Opt-in route from the existing Futures runner to the shared OMS
+
+The existing Futures strategy path now has an explicit, disabled-by-default integration point. `STRATEX_ORDER_MANAGER_ENABLED=false` preserves the legacy executor. When it is explicitly enabled, the Futures entry call requires the current RiskGate and risk context, creates a normalized `TradeIntent`, and sends it through the shared OMS. The OMS calls the same deterministic RiskGate again immediately before submit, checks the execution policy and kill switch, persists the order ID/status, and refuses blind retries for an ambiguous result. Successful protected fills are mirrored to the legacy active-trade store so the existing Futures monitor/trailing loops can see the protective Algo Order IDs.
+
+This flag is **not a production readiness toggle**. Keep `STRATEX_EXECUTION_MODE=DISABLED` and `STRATEX_ORDER_MANAGER_ENABLED=false` until CI is green, Demo Trading keys are installed privately, a Binance demo integration run verifies fills + both protective Algo orders + sibling-order cancellation, and restart/reconciliation tests have passed. MT5 routing remains allowlisted separately and requires its own demo bridge soak test.
