@@ -16,7 +16,7 @@ class SymbolDiscoveryService:
             if testnet:
                 # Use the same endpoint policy as order execution. Do not let demo
                 # trading accidentally use legacy testnet URLs (or vice versa).
-                self.client = self.venue_agent.create_public_client(futures=is_futures)
+                self.client = self.venue_agent.create_public_client(futures=is_futures, client_cls=Client)
             else:
                 # Public-only production market data is explicitly requested only
                 # when the caller passes testnet=False; this client is never signed.
