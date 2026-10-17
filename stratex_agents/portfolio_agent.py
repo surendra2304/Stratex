@@ -83,9 +83,12 @@ class PortfolioAgent:
                 def mt5_notional(position):
                     info = mt5_adapter.get_symbol_info(position.symbol)
                     contract_size = float(info.get("contract_size", 0) or 0)
+                    calc_mode = int(info.get("calc_mode", -1))
                     profit_currency = str(info.get("profit_currency", "")).strip().upper()
                     quantity = abs(float(position.quantity))
                     price = float(position.mark_price)
+                    if calc_mode not in {0, 1, 3, 4, 5, 32}:
+                        return None
                     if contract_size <= 0 or price <= 0 or not profit_currency:
                         return None
                     return quantity * contract_size * price, profit_currency
