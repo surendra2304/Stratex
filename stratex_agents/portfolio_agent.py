@@ -74,6 +74,17 @@ class PortfolioAgent:
                 except Exception as exc:
                     mt5_adapter = _UnavailablePortfolioVenue("mt5", type(exc).__name__)
             providers["mt5"] = mt5_adapter
+            if callable(getattr(mt5_adapter, "get_symbol_info", None)):
+                def mt5_notional(position):
+                    info = mt5_adapter.get_symbol_info(position.symbol)
+                    contract_size = float(info.get("contract_size", 0) or 0)
+                    profit_currency = str(info.get("profit_currency", "")).strip().upper()
+                    quantity = abs(float(position.quantity))
+                    price = float(position.mark_price)
+                    if contract_size <= 0 or price <= 0 or not profit_currency:
+                        return None
+                    return quantity * contract_size * price, profit_currency
+                notional_calculators["mt5"] = mt5_notional
 
         return cls(
             providers,
