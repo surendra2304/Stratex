@@ -158,6 +158,7 @@ def get_exchange_client():
             mode=mode,
             legacy_api_key=API_KEY,
             legacy_secret_key=SECRET_KEY,
+            client_cls=Client,
         )
         try:
             local_before = int(time.time() * 1000)
