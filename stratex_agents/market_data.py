@@ -6,6 +6,7 @@ Execution decisions remain outside the market-data layer.
 """
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -121,20 +122,13 @@ class MarketDataAgent:
 
         providers: dict[str, Any] = {}
         # The Binance data adapter pins itself to current Demo Trading or legacy Futures Testnet.
-        try:
-            providers["binance"] = BinanceFuturesMarketDataAdapter()
-        except Exception:
-            # An unconfigured Binance adapter is not silently replaced with production data.
-            pass
+        # If adapter initialization fails, surface that failure to the caller;
+        # never silently omit a venue and imply discovery was complete.
+        providers["binance"] = BinanceFuturesMarketDataAdapter()
 
-        if mt5_adapter is None:
-            if (
-                mt5_adapter is None
-                and __import__("os").getenv("MT5_BRIDGE_ENABLED", "false").strip().lower()
-                in {"1", "true", "yes", "on"}
-            ):
-                from exchanges.mt5_bridge_adapter import MT5BridgeAdapter
-                mt5_adapter = MT5BridgeAdapter()
+        if mt5_adapter is None and os.getenv("MT5_BRIDGE_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}:
+            from exchanges.mt5_bridge_adapter import MT5BridgeAdapter
+            mt5_adapter = MT5BridgeAdapter()
         if mt5_adapter is not None:
             providers["mt5"] = mt5_adapter
         return cls(providers)
