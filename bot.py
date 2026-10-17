@@ -11,7 +11,6 @@ PID_FILE = "bot.pid"
 
 
 def _cleanup():
-    global _SOCKET_LOCK
     if _SOCKET_LOCK:
         try:
             _SOCKET_LOCK.close()

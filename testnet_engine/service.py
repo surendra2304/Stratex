@@ -1777,7 +1777,15 @@ class TestnetService:
                                 from execution import place_futures_market_order
                                 leverage = getattr(config, "FUTURES_LEVERAGE", 5)
                                 order_res = place_futures_market_order(
-                                    strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp, client_order_id=signal_id, leverage=leverage
+                                    strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp,
+                                    client_order_id=signal_id, leverage=leverage,
+                                    risk_gate=self.risk_gate,
+                                    risk_context={
+                                        "current_equity": self.current_equity,
+                                        "active_positions": self.active_positions,
+                                        "entry_price": current_price,
+                                        "data_health_status": data_health,
+                                    },
                                 )
                             else:
                                 order_res = place_market_order(

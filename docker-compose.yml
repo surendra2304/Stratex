@@ -11,9 +11,10 @@ services:
       - .env
     environment:
       - PORT=8000
-      - TRADING_MODE=TESTNET
+      # Resolve mode from the deployment environment; use PAPER if none is set.
+      - TRADING_MODE=${TRADING_MODE:-PAPER}
       - TESTNET_ONLY=TRUE
-      - TESTNET_ENABLED=True
+      - TESTNET_ENABLED=${TESTNET_ENABLED:-False}
       - LIVE_TRADING_ENABLED=False
     volumes:
       # Persist state files, ledgers, portfolios, and logs across container restarts
@@ -22,6 +23,8 @@ services:
       - ./testnet_opportunity_log.jsonl:/app/testnet_opportunity_log.jsonl
       - ./testnet_equity_history.jsonl:/app/testnet_equity_history.jsonl
       - ./active_trades.json:/app/active_trades.json
+      # Durable SQLite OMS ledger; persists across container recreation and redeploys.
+      - stratex_order_state:/app/state
       - ./bot.log:/app/bot.log
     command: python scripts/supervise_services.py
     healthcheck:
@@ -32,6 +35,9 @@ services:
       start_period: 15s
     networks:
       - friday_mesh
+
+volumes:
+  stratex_order_state:
 
 networks:
   friday_mesh:

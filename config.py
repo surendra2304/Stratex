@@ -18,24 +18,30 @@ if '\ufeffAPI_KEY' in os.environ:
     os.environ['API_KEY'] = os.environ['\ufeffAPI_KEY']
     del os.environ['\ufeffAPI_KEY']
 
-# --- Binance API Credentials (from environment / .env file only) ---
-API_KEY = (
-    os.getenv("API_KEY")
-    or os.getenv("BINANCE_API_KEY")
-    or os.getenv("BINANCE_TESTNET_API_KEY")
-    or os.getenv("TESTNET_API_KEY")
-    or ""
-).strip().strip("'\"")
-
-SECRET_KEY = (
-    os.getenv("SECRET_KEY")
-    or os.getenv("BINANCE_SECRET_KEY")
-    or os.getenv("BINANCE_API_SECRET")
-    or os.getenv("BINANCE_SECRET")
-    or os.getenv("BINANCE_TESTNET_SECRET_KEY")
-    or os.getenv("TESTNET_SECRET_KEY")
-    or ""
-).strip().strip("'\"")
+# --- Binance environment and credentials ---
+# Current Demo Trading keys take precedence only when that environment is explicitly selected.
+# Credentials from the legacy Testnet must never be silently reused.
+BINANCE_DEMO_TRADING = os.getenv("BINANCE_DEMO_TRADING", "false").strip().lower() in {"1", "true", "yes", "on"}
+if BINANCE_DEMO_TRADING:
+    API_KEY = os.getenv("BINANCE_API_KEY", "").strip().strip(chr(34) + chr(39))
+    SECRET_KEY = os.getenv("BINANCE_API_SECRET", "").strip().strip(chr(34) + chr(39))
+else:
+    API_KEY = (
+        os.getenv("API_KEY")
+        or os.getenv("BINANCE_TESTNET_API_KEY")
+        or os.getenv("TESTNET_API_KEY")
+        or os.getenv("BINANCE_API_KEY")
+        or ""
+    ).strip().strip(chr(34) + chr(39))
+    SECRET_KEY = (
+        os.getenv("SECRET_KEY")
+        or os.getenv("BINANCE_SECRET_KEY")
+        or os.getenv("BINANCE_TESTNET_SECRET_KEY")
+        or os.getenv("TESTNET_SECRET_KEY")
+        or os.getenv("BINANCE_API_SECRET")
+        or os.getenv("BINANCE_SECRET")
+        or ""
+    ).strip().strip(chr(34) + chr(39))
 
 # --- Gemini AI Configuration (from environment / .env file only) ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -58,10 +64,12 @@ ADVISORY_TIMEOUT_SECONDS = int(os.getenv("ADVISORY_TIMEOUT_SECONDS", "120"))
 TESTNET_ADVISORY_ENABLED = os.getenv("TESTNET_ADVISORY_ENABLED", "False").lower() == "true"
 TESTNET_ADVISORY_SHADOW_MODE = os.getenv("TESTNET_ADVISORY_SHADOW_MODE", "True").lower() == "true"
 TESTNET_ADVISORY_MAX_DRAWDOWN_PCT = float(os.getenv("TESTNET_ADVISORY_MAX_DRAWDOWN_PCT", "0.15"))  # 15% hard cutoff for AI advisory
-BASE_URL = "https://testnet.binance.vision"
+# BINANCE_DEMO_TRADING switches endpoints only when fresh Demo Trading credentials
+# are configured. Credentials are not inferred from the legacy testnet variables.
+BASE_URL = "https://demo-api.binance.com" if BINANCE_DEMO_TRADING else "https://testnet.binance.vision"
 WS_URL = "wss://ws-api.testnet.binance.vision/ws-api/v3"
-FUTURES_BASE_URL = "https://testnet.binancefuture.com"
-FUTURES_WS_URL = "wss://stream.binancefuture.com/ws"
+FUTURES_BASE_URL = "https://demo-fapi.binance.com" if BINANCE_DEMO_TRADING else "https://testnet.binancefuture.com"
+FUTURES_WS_URL = "wss://demo-fstream.binance.com/ws" if BINANCE_DEMO_TRADING else "wss://stream.binancefuture.com/ws"
 
 # --- Futures Configuration ---
 FUTURES_LEVERAGE = int(os.getenv("FUTURES_LEVERAGE", "5"))  # Default 5x leverage for testnet testing
@@ -225,17 +233,27 @@ def validate_environment_safety():
                     "Stratex operates strictly in PAPER or TESTNET mode with zero live capital risk."
                 )
 
-        # Check for non-testnet Binance production URLs
+        # Allow only known non-production Binance endpoints. Demo Trading hosts
+        # contain the string API.BINANCE.COM/FAPI.BINANCE.COM, so they must be
+        # explicitly allowlisted rather than misclassified as production.
         if k_upper in ["BASE_URL", "FUTURES_BASE_URL", "BINANCE_URL", "BINANCE_API_URL"]:
-            if "testnet" not in v_upper and any(prod in v_upper for prod in ["API.BINANCE.COM", "FAPI.BINANCE.COM"]):
+            is_legacy_testnet = "TESTNET" in v_upper
+            is_current_demo = (
+                v_upper.startswith("HTTPS://DEMO-API.BINANCE.COM")
+                or v_upper.startswith("HTTPS://DEMO-FAPI.BINANCE.COM")
+            )
+            looks_like_binance_production = any(
+                prod in v_upper for prod in ["API.BINANCE.COM", "FAPI.BINANCE.COM"]
+            )
+            if looks_like_binance_production and not (is_legacy_testnet or is_current_demo):
                 raise SecurityConfigurationError(
                     f"SECURITY CRITICAL: Production Binance URL '{key}={val}' is forbidden. "
-                    "Only testnet endpoints are allowed."
+                    "Only explicitly supported Demo Trading or Testnet endpoints are allowed."
                 )
 
 
 def validate_config():
-    global TRADING_MODE, PAPER_SAFE_MODE, ACTIVE_STRATEGY, TIMEFRAME
+    global TRADING_MODE, PAPER_SAFE_MODE
     if TRADING_MODE not in VALID_MODES:
         raise ValueError(f"Configuration Error: Invalid TRADING_MODE '{TRADING_MODE}'. Only {VALID_MODES} are supported.")
 

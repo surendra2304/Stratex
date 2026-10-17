@@ -65,10 +65,15 @@ class AccountClient:
         if TRADING_MODE == "PAPER":
             self._client = None
         else:
-            # Testnet for non-PAPER modes.
-            # For LIVE, config.py must supply production credentials.
-            testnet = TRADING_MODE != "LIVE"
-            self._client = Client(API_KEY, SECRET_KEY, testnet=testnet, ping=False)
+            # The read-only account view must use the same demo/testnet endpoint
+            # policy as execution, and must never create a production client.
+            from stratex_agents.venue.binance_futures_agent import BinanceFuturesAgent
+            self._client = BinanceFuturesAgent().create_client(
+                mode=TRADING_MODE,
+                legacy_api_key=API_KEY,
+                legacy_secret_key=SECRET_KEY,
+                client_cls=Client,
+            )
 
     def is_available(self) -> bool:
         return self._client is not None

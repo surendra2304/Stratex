@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import time
+import uuid
 from typing import Any
 
 import requests
@@ -105,6 +106,54 @@ class MT5BridgeAdapter(BaseExchange):
             # merge hedge-mode positions solely by symbol.
         return result
 
+    def calculate_position_size(
+        self,
+        symbol: str,
+        side: str,
+        stop_loss: float,
+        take_profit: float,
+    ) -> dict[str, Any]:
+        """Ask the MT5 demo terminal to size a lot using broker-calculated PnL and margin."""
+        result = self._request(
+            "POST", "/v1/risk/size",
+            json={
+                "symbol": symbol,
+                "side": side.upper(),
+                "stop_loss": float(stop_loss),
+                "take_profit": float(take_profit),
+            },
+        )
+        if not isinstance(result, dict) or result.get("approved") is not True:
+            raise MT5BridgeError("MT5 broker-aware risk sizing did not approve this intent.")
+        recommended = result.get("recommended_volume")
+        if not isinstance(recommended, (int, float)) or recommended <= 0:
+            raise MT5BridgeError("MT5 risk sizing returned an invalid recommended volume.")
+        return result
+
+    def get_symbols(
+        self,
+        query: str = "",
+        *,
+        visible_only: bool = False,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Discover broker-native symbols and actual contract rules from the MT5 terminal."""
+        bounded_limit = max(1, min(5000, int(limit)))
+        data = self._request(
+            "GET", "/v1/symbols",
+            params={"query": query, "visible_only": str(visible_only).lower(), "limit": bounded_limit},
+        )
+        if not isinstance(data, dict) or not isinstance(data.get("symbols"), list):
+            raise MT5BridgeError("MT5 symbol discovery returned an invalid payload.")
+        return data["symbols"]
+
+    def get_symbol_info(self, symbol: str) -> dict[str, Any]:
+        """Return exact symbol metadata; substring matches must not be mistaken for the requested symbol."""
+        for item in self.get_symbols(query=symbol, visible_only=False, limit=5000):
+            if str(item.get("symbol", "")).casefold() == symbol.casefold():
+                return item
+        raise MT5BridgeError(f"MT5 symbol {symbol!r} was not found in broker metadata.")
+
     def get_ticker(self, symbol: str) -> UnifiedTicker:
         data = self._request("GET", "/v1/ticker", params={"symbol": symbol})
         return UnifiedTicker(
@@ -117,8 +166,19 @@ class MT5BridgeAdapter(BaseExchange):
         data = self._request("GET", "/v1/orderbook", params={"symbol": symbol, "limit": limit})
         return {"bids": data.get("bids", []), "asks": data.get("asks", [])}
 
-    def place_order(self, symbol: str, side: str, order_type: str, quantity: float,
-                    price: float | None = None, stop_price: float | None = None) -> UnifiedOrderResult:
+    def place_order(
+        self,
+        symbol: str,
+        side: str,
+        order_type: str,
+        quantity: float,
+        price: float | None = None,
+        stop_price: float | None = None,
+        *,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
+        client_order_id: str | None = None,
+    ) -> UnifiedOrderResult:
         if quantity <= 0:
             raise ValueError("quantity must be positive")
         normalized_side = side.upper()
@@ -127,10 +187,13 @@ class MT5BridgeAdapter(BaseExchange):
         kind = order_type.upper()
         if kind not in {"MARKET", "LIMIT", "STOP", "STOP_LIMIT"}:
             raise ValueError("unsupported MT5 order type")
+        if stop_loss is None or take_profit is None:
+            raise ValueError("MT5 entry orders require stop_loss and take_profit")
         data = self._request("POST", "/v1/orders", json={
             "symbol": symbol, "side": "BUY" if normalized_side in {"BUY", "LONG"} else "SELL",
             "type": kind, "volume": quantity, "price": price, "stop_price": stop_price,
-            "client_order_id": None,
+            "stop_loss": stop_loss, "take_profit": take_profit,
+            "client_order_id": client_order_id or f"stx-{uuid.uuid4().hex[:28]}",
         })
         return UnifiedOrderResult(
             order_id=str(data.get("order", data.get("deal", ""))), symbol=symbol,
@@ -146,6 +209,79 @@ class MT5BridgeAdapter(BaseExchange):
 
     def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> list[dict[str, Any]]:
         return self._request("GET", "/v1/candles", params={"symbol": symbol, "timeframe": timeframe, "limit": limit})
+
+    def submit_intent(self, intent) -> dict[str, Any]:
+        """Submit a normalized Stratex TradeIntent with broker-native SL/TP protection."""
+        if getattr(intent, "venue", None) != "mt5" or getattr(intent, "environment", None) != "mt5_demo":
+            raise MT5BridgeError("MT5 adapter accepts only explicitly routed MT5 demo intents.")
+        sizing = self.calculate_position_size(
+            intent.symbol, intent.side, intent.stop_loss, intent.take_profit
+        )
+        recommended_volume = float(sizing["recommended_volume"])
+        requested_volume = float(intent.quantity)
+        if requested_volume > recommended_volume + 1e-9:
+            raise MT5BridgeError(
+                f"Requested MT5 volume {requested_volume} exceeds broker-aware safe volume {recommended_volume}."
+            )
+        result = self.place_order(
+            symbol=intent.symbol,
+            side=intent.side,
+            order_type=intent.order_type,
+            quantity=intent.quantity,
+            price=getattr(intent, "limit_price", None),
+            stop_loss=intent.stop_loss,
+            take_profit=intent.take_profit,
+            client_order_id=intent.client_order_id,
+        )
+        return {
+            "status": result.status,
+            "order_id": result.order_id,
+            "symbol": result.symbol,
+            "side": result.side,
+            "order_type": result.order_type,
+            "quantity": result.quantity,
+            "executed_qty": result.executed_qty,
+            "avg_price": result.avg_price,
+            "exchange": result.exchange,
+            "client_order_id": intent.client_order_id,
+        }
+
+    def reconcile_intent(self, stored: dict[str, Any]) -> dict[str, Any]:
+        """Read the persistent bridge record; UNKNOWN is never auto-resolved by assumption."""
+        payload = stored.get("payload") if isinstance(stored, dict) else None
+        if not isinstance(payload, dict) or payload.get("venue") != "mt5":
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "invalid_stored_intent"}
+        if payload.get("environment") != "mt5_demo":
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "environment_mismatch"}
+        client_order_id = str(stored.get("client_order_id") or payload.get("client_order_id") or "")
+        if not client_order_id:
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "missing_client_order_id"}
+        try:
+            record = self.get_order_by_client_id(client_order_id)
+        except MT5BridgeError:
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "bridge_order_record_not_confirmed"}
+        status = str(record.get("status", "UNKNOWN")).upper()
+        if record.get("manual_reconciliation_required") is True or status == "UNKNOWN":
+            return {
+                "confirmed": False,
+                "status": "UNKNOWN",
+                "evidence": "MT5 bridge flags ambiguous order state for manual reconciliation",
+            }
+        accepted = {"ACCEPTED", "PARTIALLY_FILLED", "FILLED", "CANCELLED", "REJECTED"}
+        if status not in accepted:
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "unsupported_bridge_order_status"}
+        response = record.get("response")
+        if response is not None and not isinstance(response, dict):
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "invalid_bridge_response"}
+        return {
+            "confirmed": True,
+            "status": status,
+            "result": response or {"status": status, "client_order_id": client_order_id, "venue": "mt5"},
+            "evidence": "Persistent MT5 bridge record confirmed order state",
+        }
+
+    def get_order_by_client_id(self, client_order_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/v1/orders/by-client-id/{client_order_id}")
 
     def close_position(self, position_id: str) -> bool:
         """Close exactly one MT5 position by native ticket (required for hedge mode)."""

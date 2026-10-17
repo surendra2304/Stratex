@@ -178,19 +178,33 @@ Emergency risk control endpoints to immediately halt scanning, disallow new entr
 
 ---
 
+## Agent and order-management environment
+
+- `STRATEX_EXECUTION_MODE=DISABLED` is the default. Set it to `DEMO` only after the selected venue's demo credentials and safety configuration have been verified.
+- `STRATEX_ALLOWED_EXECUTION_VENUES` explicitly allowlists eligible venues; MT5 is not allowed by default.
+- `STRATEX_ORDER_DB=state/stratex_orders.sqlite3` stores order intents and idempotency state. The state directory is persistent runtime data and must not be committed.
+- The new shared OMS package is a foundation for venue routing and duplicate protection; the legacy strategy engine must still be wired to it before this is end-to-end.
+
 ## ⚙️ Environment Configuration
 
-Stratex reads environment variables from `.env`. A complete configuration template is provided in `.env.example`:
+Stratex reads environment variables from `.env`. A complete configuration template is provided in `.env.example`.
+
+The credential sets for legacy Binance Testnet and the current Demo Trading environment are not interchangeable. When `BINANCE_DEMO_TRADING=true`, the Binance venue agent requires the fresh `BINANCE_API_KEY` and `BINANCE_API_SECRET` values and pins execution to Demo endpoints. It does not fall back to legacy keys. Use `GET /api/agents` to inspect the safe agent catalog and configuration state.
+
 
 | Variable | Description | Default | Allowed Values |
 | :--- | :--- | :--- | :--- |
 | `PORT` | WSGI listening port | `8000` | Any valid TCP port |
-| `TRADING_MODE` | Trading execution mode | `TESTNET` | `TESTNET`, `PAPER`, `FUTURES` |
-| `TESTNET_ENABLED` | Enable Binance Testnet order placement | `True` | `True`, `False` |
-| `LIVE_TRADING_ENABLED` | Enable live real-money trading | `False` | Strictly `False` |
-| `ALLOWED_ORIGINS` | CORS origin whitelist | `https://friday-universe.duckdns.org,...` | Comma-delimited URLs |
-| `BINANCE_API_KEY` | Binance Spot/Futures Testnet API Key | `""` | User-provided secret |
-| `BINANCE_API_SECRET` | Binance Spot/Futures Testnet Secret | `""` | User-provided secret |
+| `TRADING_MODE` | Execution mode | `PAPER` | `PAPER`, `TESTNET`, `FUTURES` |
+| `TESTNET_ENABLED` | Allow the existing non-production execution path | `False` in the sample | `True`, `False` |
+| `LIVE_TRADING_ENABLED` | Live money trading | `False` | Must remain `False` |
+| `BINANCE_DEMO_TRADING` | Select current Binance Demo Trading endpoints | `false` | `true`, `false` |
+| `BINANCE_API_KEY` | Current Binance Demo Trading API key (when Demo Trading is selected) | Empty | Demo Trading key only |
+| `BINANCE_API_SECRET` | Current Binance Demo Trading API secret | Empty | Demo Trading secret only |
+| `API_KEY` / `SECRET_KEY` | Legacy Binance Testnet credentials (used only when Demo Trading is false) | Placeholder in sample | Legacy Testnet keys only |
+| `MT5_BRIDGE_ENABLED` | Enable the remote MT5 bridge adapter | `false` | `true`, `false` |
+| `MT5_BRIDGE_URL` | Private/VPN address for the Windows MT5 bridge | Empty | Private network URL only |
+| `MT5_BRIDGE_TOKEN` | Bearer token for the MT5 bridge | Empty | High-entropy secret |
 | `MAX_TESTNET_EXPOSURE` | Maximum portfolio capital exposure | `0.05` | Float (e.g. `0.05` = 5%) |
 | `MAX_DAILY_LOSS_PCT` | Maximum daily loss tolerance | `0.02` | Float (e.g. `0.02` = 2%) |
 | `MAX_TESTNET_DRAWDOWN_PCT` | Maximum drawdown circuit breaker | `0.05` | Float (e.g. `0.05` = 5%) |
@@ -243,3 +257,20 @@ Run the full automated test suite:
 ```bash
 pytest -v --tb=short
 ```
+
+
+### Venue-aware market data
+
+The read-only market-data layer now normalizes broker-native instruments, quotes and OHLCV bars by explicit venue. Use `GET /api/v1/market/instruments?venue=all` to discover symbols and contract constraints, `GET /api/v1/market/quote?venue=mt5&symbol=EURUSD` for one broker's quote, and `GET /api/v1/market/candles?venue=mt5&symbol=EURUSD&timeframe=15m` for that venue's candles. These endpoints require read API scope. MT5 returns the broker's exact symbol names and contract sizing; the market-data layer never assumes an MT5 lot is equivalent to a Binance quantity.
+
+
+## Opt-in route from the existing Futures runner to the shared OMS
+
+The existing Futures strategy path now has an explicit, disabled-by-default integration point. `STRATEX_ORDER_MANAGER_ENABLED=false` preserves the legacy executor. When it is explicitly enabled, the Futures entry call requires the current RiskGate and risk context, creates a normalized `TradeIntent`, and sends it through the shared OMS. The OMS calls the same deterministic RiskGate again immediately before submit, checks the execution policy and kill switch, persists the order ID/status, and refuses blind retries for an ambiguous result. Successful protected fills are mirrored to the legacy active-trade store so the existing Futures monitor/trailing loops can see the protective Algo Order IDs.
+
+This flag is **not a production readiness toggle**. Keep `STRATEX_EXECUTION_MODE=DISABLED` and `STRATEX_ORDER_MANAGER_ENABLED=false` until CI is green, Demo Trading keys are installed privately, a Binance demo integration run verifies fills + both protective Algo orders + sibling-order cancellation, and restart/reconciliation tests have passed. MT5 routing remains allowlisted separately and requires its own demo bridge soak test.
+
+
+### Order reconciliation worker (opt-in)
+
+A read-only reconciliation process can be supervised alongside the trading engine. It remains off unless both `STRATEX_ORDER_MANAGER_ENABLED=true` and `STRATEX_RECONCILIATION_ENABLED=true`, the runtime is explicitly Demo Futures, the live flag is false, and the selected venues are properly configured. It never creates or cancels orders; ambiguous states remain unresolved until a venue confirms them. Keep both flags disabled until complete demo validation.

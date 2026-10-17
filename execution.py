@@ -2,6 +2,7 @@ import datetime
 import json
 import math
 import os
+import re
 import time
 from enum import Enum
 
@@ -128,7 +129,7 @@ class ExecutionPolicy:
 # CLIENT INITIALIZATION (TESTNET ONLY)
 # ==============================================================================
 def get_exchange_client():
-    """Lazily evaluates ExecutionPolicy to construct and return the Binance Testnet Client."""
+    """Lazily applies ExecutionPolicy then delegates safe venue configuration to BinanceFuturesAgent."""
     mode, paper_safe, live_enabled, testnet_enabled = _resolve_execution_flags()
     if mode == "LIVE" or live_enabled:
         raise RuntimeError("SECURITY CRITICAL: LIVE trading is permanently disabled by design in this repository.")
@@ -151,11 +152,15 @@ def get_exchange_client():
         raise RuntimeError(f"CRITICAL ERROR: Client creation blocked. ({reason})")
 
     if mode in ["TESTNET", "FUTURES"]:
-        client = Client(API_KEY, SECRET_KEY, testnet=True, ping=False)
-        if mode == "TESTNET":
-            client.API_URL = "https://testnet.binance.vision/api"
-        if mode in ["TESTNET", "FUTURES"]:
-            client.FUTURES_URL = "https://testnet.binancefuture.com/fapi"
+        # The venue-specific credentials and endpoint selection live inside the
+        # Binance agent, not the strategy/risk/order lifecycle.
+        from stratex_agents.venue.binance_futures_agent import BinanceFuturesAgent
+        client = BinanceFuturesAgent().create_client(
+            mode=mode,
+            legacy_api_key=API_KEY,
+            legacy_secret_key=SECRET_KEY,
+            client_cls=Client,
+        )
         try:
             local_before = int(time.time() * 1000)
             if mode == "FUTURES":
@@ -165,8 +170,10 @@ def get_exchange_client():
             local_after = int(time.time() * 1000)
             client.TIME_OFFSET = st - ((local_before + local_after) // 2)
         except Exception:
+            # Public time endpoint is only a best-effort clock-skew correction.
+            # Signed-order failures still propagate normally.
             pass
-            
+
         original_request = client._request
         def patched_request(method, uri, signed, force_params=False, **kwargs):
             if signed:
@@ -175,7 +182,7 @@ def get_exchange_client():
                 kwargs['data']['recvWindow'] = 60000
             return original_request(method, uri, signed, force_params, **kwargs)
         client._request = patched_request
-        
+
         return client
         
     return None
@@ -703,7 +710,114 @@ def set_futures_leverage_and_margin(client: Client, symbol: str, leverage: int =
         sys_logger.warning(f"[FUTURES] Error setting leverage/margin for {symbol}: {e}")
 
 
-def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None, tp=None, client_order_id=None, leverage=5):
+
+def _place_futures_market_order_via_oms(
+    strategy_name, side, symbol, quantity, sl, tp, client_order_id, leverage,
+    *, risk_gate, risk_context
+):
+    """Opt-in route from the existing Futures strategy runner into the shared OMS."""
+    if risk_gate is None or not isinstance(risk_context, dict):
+        raise RuntimeError("OMS routing requires the existing RiskGate and risk_context; failing closed.")
+    quantity, sl, tp = _validate_entry_request(side, quantity, sl, tp)
+    leverage_value = finite_float(leverage)
+    if leverage_value is None or not float(leverage_value).is_integer() or not 1 <= leverage_value <= 125:
+        raise InvalidOrderRequest(f"leverage must be a whole number between 1 and 125, got {leverage!r}")
+
+    original_client_id = str(client_order_id or f"stx-{strategy_name}-{int(time.time_ns())}")
+    if len(original_client_id) <= 36 and re.fullmatch(r"[A-Za-z0-9_.:-]{1,36}", original_client_id):
+        oms_client_id = original_client_id
+    else:
+        import hashlib
+        oms_client_id = "stx-" + hashlib.sha256(original_client_id.encode("utf-8")).hexdigest()[:28]
+
+    demo = os.getenv("BINANCE_DEMO_TRADING", "false").strip().lower() in {"1", "true", "yes", "on"}
+    environment = "binance_demo" if demo else "binance_testnet"
+
+    from stratex_agents.order_intent import TradeIntent
+    from stratex_agents.risk_agent import DeterministicRiskAgent
+    from stratex_agents.runtime import build_order_manager
+
+    intent = TradeIntent(
+        venue="binance", symbol=symbol, side=side, order_type="MARKET", quantity=float(quantity),
+        environment=environment, stop_loss=float(sl), take_profit=float(tp),
+        strategy=str(strategy_name), client_order_id=oms_client_id,
+        metadata={"leverage": int(leverage_value), "original_signal_id": original_client_id},
+    )
+
+    risk_agent = DeterministicRiskAgent(
+        binance_risk_gate=risk_gate,
+        execution_policy=ExecutionPolicy.can_place_order,
+    )
+
+    def authorize_with_existing_risk_gate(trade_intent):
+        decision = risk_agent.authorize(trade_intent, risk_context)
+        reason = decision.reason if not decision.details else f"{decision.reason}: {decision.details}"
+        return decision.approved, reason
+
+    manager = build_order_manager(authorize_with_existing_risk_gate)
+    outcome = manager.submit(intent)
+    response = outcome.result or {}
+    if outcome.status == "REJECTED":
+        sys_logger.warning(
+            f"[OMS_REJECTED] [{strategy_name}] {symbol} | {outcome.reason or 'execution blocked'}",
+            extra={"strategy": strategy_name, "symbol": symbol},
+        )
+        return None
+    if outcome.status == "UNKNOWN":
+        raise RuntimeError(
+            f"OMS outcome UNKNOWN for {symbol}/{oms_client_id}; reconcile venue state before retrying."
+        )
+    if outcome.status not in {"FILLED", "PARTIALLY_FILLED"}:
+        raise RuntimeError(f"OMS returned unsupported Futures entry status {outcome.status!r}.")
+
+    actual_price = positive_float(response.get("avg_price"))
+    executed_qty = positive_float(response.get("quantity"))
+    if actual_price is None or executed_qty is None:
+        raise RuntimeError("OMS reported a fill without a valid average price and positive executed quantity.")
+
+    active_trades = _load_active_trades()
+    matching = next((
+        trade for trade in active_trades
+        if trade.get("signal_id") == original_client_id
+        or trade.get("entry_client_id") == oms_client_id
+        or str(trade.get("entry_order_id")) == str(response.get("order_id"))
+    ), None)
+    if matching is None:
+        new_trade = {
+            "strategy": strategy_name, "symbol": symbol, "side": side,
+            "quantity": executed_qty, "entry_price": actual_price,
+            "entry_fee": (actual_price * executed_qty) * 0.0005,
+            "entry_timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            "signal_id": original_client_id, "oco_id": None,
+            "tp_order_id": response.get("take_profit_algo_id"),
+            "sl_order_id": response.get("stop_algo_id"),
+            "tp_price": response.get("take_profit", tp),
+            "sl_price": response.get("stop_loss", sl),
+            "state": OrderState.PROTECTED.value, "status": "OPEN",
+            "entry_client_id": oms_client_id, "entry_order_id": response.get("order_id"),
+            "is_futures": True, "leverage": int(leverage_value),
+            "execution_venue": "binance", "execution_environment": environment,
+            "oms_client_order_id": oms_client_id,
+        }
+        active_trades.append(new_trade)
+        _save_active_trades(active_trades)
+        log_trade(
+            strategy_name, symbol, side, executed_qty, actual_price,
+            new_trade["sl_price"], new_trade["tp_price"], response.get("order_id"), OrderState.PROTECTED,
+        )
+
+    return {
+        "orderId": response.get("order_id"), "status": outcome.status,
+        "_actual_price": actual_price, "_executed_qty": executed_qty,
+        "_total_fee": (actual_price * executed_qty) * 0.0005,
+        "_final_state": OrderState.PROTECTED, "_oms_client_order_id": oms_client_id,
+        "_signal_id": original_client_id, "_is_duplicate": outcome.duplicate,
+        "stop_algo_id": response.get("stop_algo_id"),
+        "take_profit_algo_id": response.get("take_profit_algo_id"),
+    }
+
+
+def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, sl=None, tp=None, client_order_id=None, leverage=5, *, risk_gate=None, risk_context=None):
     """
     Places a Futures market order (BUY for Long, SELL for Short) with attached STOP_MARKET and TAKE_PROFIT_MARKET orders.
     """
@@ -711,6 +825,12 @@ def place_futures_market_order(strategy_name, side, symbol, quantity=TRADE_QTY, 
     allowed, reason = ExecutionPolicy.can_place_order()
     if not allowed:
         raise RuntimeError(f"CRITICAL ERROR: Order blocked. ({reason})")
+
+    if os.getenv("STRATEX_ORDER_MANAGER_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}:
+        return _place_futures_market_order_via_oms(
+            strategy_name, side, symbol, quantity, sl, tp, client_order_id, leverage,
+            risk_gate=risk_gate, risk_context=risk_context,
+        )
 
     # Check Idempotency Store
     if client_order_id:

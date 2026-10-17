@@ -25,11 +25,14 @@ class ServiceSupervisor:
         self.stop_event = threading.Event()
         self.bot_proc = None
         self.dash_proc = None
-        
+        self.reconciliation_proc = None
+
         self.bot_restarts = 0
         self.dash_restarts = 0
+        self.reconciliation_restarts = 0
         self.last_bot_crash = 0
         self.last_dash_crash = 0
+        self.last_reconciliation_crash = 0
         
         # Setup signal handlers
         signal.signal(signal.SIGTERM, self._handle_signal)
@@ -56,6 +59,66 @@ class ServiceSupervisor:
             env=env
         )
         logger.info(f"[SUPERVISOR] Trading Engine spawned with PID {self.bot_proc.pid}")
+
+    @staticmethod
+    def _truthy_env(name):
+        return os.getenv(name, "false").strip().lower() in {"1", "true", "yes", "on"}
+
+    def _start_reconciliation_worker(self):
+        """Launch only when both opt-in flags and the demo-only runtime gates are valid."""
+        # A failed child may have left an exited Popen here. Clear it before evaluating
+        # the gates so changing config cannot create a tight restart loop.
+        self.reconciliation_proc = None
+        if not (
+            self._truthy_env("STRATEX_ORDER_MANAGER_ENABLED")
+            and self._truthy_env("STRATEX_RECONCILIATION_ENABLED")
+        ):
+            logger.info(
+                "[SUPERVISOR] Reconciliation worker disabled "
+                "(requires STRATEX_ORDER_MANAGER_ENABLED=true and STRATEX_RECONCILIATION_ENABLED=true)."
+            )
+            return
+
+        trading_mode = os.getenv("TRADING_MODE", "PAPER").strip().upper()
+        execution_mode = os.getenv("STRATEX_EXECUTION_MODE", "DISABLED").strip().upper()
+        if self._truthy_env("LIVE_TRADING_ENABLED") or trading_mode != "FUTURES" or execution_mode != "DEMO":
+            logger.error(
+                "[SUPERVISOR] Reconciliation worker requested but safety gates are not satisfied; not starting it."
+            )
+            return
+        allowed = {
+            item.strip().lower()
+            for item in os.getenv("STRATEX_ALLOWED_EXECUTION_VENUES", "binance").split(",")
+            if item.strip()
+        }
+        if not allowed or not allowed.issubset({"binance", "mt5"}):
+            logger.error("[SUPERVISOR] Reconciliation worker has an invalid venue allowlist; not starting it.")
+            return
+        if "binance" in allowed and not self._truthy_env("TESTNET_ENABLED"):
+            logger.error("[SUPERVISOR] Reconciliation worker needs TESTNET_ENABLED=true for Binance demo/testnet.")
+            return
+        if "mt5" in allowed and (
+            not self._truthy_env("MT5_BRIDGE_ENABLED")
+            or not self._truthy_env("MT5_REQUIRE_DEMO")
+            or not os.getenv("MT5_BRIDGE_URL", "").strip()
+            or not os.getenv("MT5_BRIDGE_TOKEN", "").strip()
+        ):
+            logger.error("[SUPERVISOR] Reconciliation worker needs an explicitly enabled, configured MT5 demo bridge.")
+            return
+
+        worker_script = os.path.join(repo_root, "scripts", "reconciliation_worker.py")
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        logger.info("[SUPERVISOR] Starting read-only OMS reconciliation worker.")
+        self.reconciliation_proc = subprocess.Popen(
+            [sys.executable, worker_script],
+            cwd=repo_root,
+            env=env,
+        )
+        logger.info(
+            "[SUPERVISOR] Reconciliation worker spawned with PID %s",
+            self.reconciliation_proc.pid,
+        )
 
     def _start_dashboard(self):
         """Starts the dashboard subprocess using Gunicorn WSGI server."""
@@ -97,7 +160,11 @@ class ServiceSupervisor:
 
     def _terminate_children(self):
         """Cleanly terminates child processes with SIGTERM, then SIGKILL if unresponsive."""
-        for name, proc in [("Dashboard", self.dash_proc), ("Trading Engine", self.bot_proc)]:
+        for name, proc in [
+            ("Dashboard", self.dash_proc),
+            ("Trading Engine", self.bot_proc),
+            ("OMS Reconciliation", self.reconciliation_proc),
+        ]:
             if proc and proc.poll() is None:
                 logger.info(f"[SUPERVISOR] Sending SIGTERM to {name} (PID {proc.pid})...")
                 try:
@@ -107,7 +174,11 @@ class ServiceSupervisor:
                     
         # Wait up to 5 seconds for clean exit
         start_wait = time.time()
-        for name, proc in [("Dashboard", self.dash_proc), ("Trading Engine", self.bot_proc)]:
+        for name, proc in [
+            ("Dashboard", self.dash_proc),
+            ("Trading Engine", self.bot_proc),
+            ("OMS Reconciliation", self.reconciliation_proc),
+        ]:
             if proc and proc.poll() is None:
                 try:
                     remaining = max(0.1, 5.0 - (time.time() - start_wait))
@@ -129,7 +200,8 @@ class ServiceSupervisor:
         self._start_bot()
         time.sleep(1) # Brief pause before dashboard starts
         self._start_dashboard()
-        
+        self._start_reconciliation_worker()
+
         while not self.stop_event.is_set():
             try:
                 time.sleep(1)
@@ -151,6 +223,31 @@ class ServiceSupervisor:
                     time.sleep(backoff)
                     self._start_bot()
                     
+                # 3. Check optional OMS reconciliation worker (read-only; never submits orders)
+                reconciliation_status = (
+                    self.reconciliation_proc.poll() if self.reconciliation_proc else None
+                )
+                if (
+                    self.reconciliation_proc is not None
+                    and reconciliation_status is not None
+                    and not self.stop_event.is_set()
+                ):
+                    logger.error(
+                        "[SUPERVISOR] OMS Reconciliation worker exited with code %s.",
+                        reconciliation_status,
+                    )
+                    self.reconciliation_restarts += 1
+                    now = time.time()
+                    backoff = 5.0 if now - self.last_reconciliation_crash >= 10 else 15.0
+                    self.last_reconciliation_crash = now
+                    logger.info(
+                        "[SUPERVISOR] Restarting OMS Reconciliation worker in %ss (restart count: %s).",
+                        backoff, self.reconciliation_restarts,
+                    )
+                    self.stop_event.wait(backoff)
+                    if not self.stop_event.is_set():
+                        self._start_reconciliation_worker()
+
                 # 2. Check Dashboard (dashboard.py)
                 dash_status = self.dash_proc.poll() if self.dash_proc else None
                 if dash_status is not None and not self.stop_event.is_set():

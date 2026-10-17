@@ -162,7 +162,6 @@ def emergency_panic():
 @require_permission("control")
 def toggle_strategy(name: str):
     """Enables or disables a specific quantitative strategy."""
-    global _STRATEGY_STATES
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         data = {}

@@ -1,0 +1,27 @@
+"""Stratex bounded agent catalog and order-management primitives."""
+from .registry import get_agent_catalog
+from .order_intent import TradeIntent
+from .order_store import OrderIntentStore, IntentConflictError, IntentInFlightError
+from .oms import StratexOrderManager, OMSResult, OrderBlockedError
+from .market_data import MarketDataAgent, MarketDataUnavailable
+from .risk_agent import DeterministicRiskAgent, RiskDecision
+from .portfolio_agent import PortfolioAgent, PortfolioSnapshotError
+from .reconciliation_agent import OrderReconciliationAgent
+
+__all__ = [
+    "get_agent_catalog",
+    "TradeIntent",
+    "OrderIntentStore",
+    "IntentConflictError",
+    "IntentInFlightError",
+    "StratexOrderManager",
+    "OMSResult",
+    "OrderBlockedError",
+    "MarketDataAgent",
+    "MarketDataUnavailable",
+    "DeterministicRiskAgent",
+    "RiskDecision",
+    "PortfolioAgent",
+    "PortfolioSnapshotError",
+    "OrderReconciliationAgent",
+]
