@@ -58,10 +58,13 @@ ADVISORY_TIMEOUT_SECONDS = int(os.getenv("ADVISORY_TIMEOUT_SECONDS", "120"))
 TESTNET_ADVISORY_ENABLED = os.getenv("TESTNET_ADVISORY_ENABLED", "False").lower() == "true"
 TESTNET_ADVISORY_SHADOW_MODE = os.getenv("TESTNET_ADVISORY_SHADOW_MODE", "True").lower() == "true"
 TESTNET_ADVISORY_MAX_DRAWDOWN_PCT = float(os.getenv("TESTNET_ADVISORY_MAX_DRAWDOWN_PCT", "0.15"))  # 15% hard cutoff for AI advisory
-BASE_URL = "https://testnet.binance.vision"
+# BINANCE_DEMO_TRADING switches endpoints only when fresh Demo Trading credentials
+# are configured. Credentials are not inferred from the legacy testnet variables.
+BINANCE_DEMO_TRADING = os.getenv("BINANCE_DEMO_TRADING", "false").strip().lower() in {"1", "true", "yes", "on"}
+BASE_URL = "https://demo-api.binance.com" if BINANCE_DEMO_TRADING else "https://testnet.binance.vision"
 WS_URL = "wss://ws-api.testnet.binance.vision/ws-api/v3"
-FUTURES_BASE_URL = "https://testnet.binancefuture.com"
-FUTURES_WS_URL = "wss://stream.binancefuture.com/ws"
+FUTURES_BASE_URL = "https://demo-fapi.binance.com" if BINANCE_DEMO_TRADING else "https://testnet.binancefuture.com"
+FUTURES_WS_URL = "wss://demo-fstream.binancefuture.com/ws" if BINANCE_DEMO_TRADING else "wss://stream.binancefuture.com/ws"
 
 # --- Futures Configuration ---
 FUTURES_LEVERAGE = int(os.getenv("FUTURES_LEVERAGE", "5"))  # Default 5x leverage for testnet testing
