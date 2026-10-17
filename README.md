@@ -257,3 +257,8 @@ Run the full automated test suite:
 ```bash
 pytest -v --tb=short
 ```
+
+
+### Venue-aware market data
+
+The read-only market-data layer now normalizes broker-native instruments, quotes and OHLCV bars by explicit venue. Use `GET /api/v1/market/instruments?venue=all` to discover symbols and contract constraints, `GET /api/v1/market/quote?venue=mt5&symbol=EURUSD` for one broker's quote, and `GET /api/v1/market/candles?venue=mt5&symbol=EURUSD&timeframe=15m` for that venue's candles. These endpoints require read API scope. MT5 returns the broker's exact symbol names and contract sizing; the market-data layer never assumes an MT5 lot is equivalent to a Binance quantity.
