@@ -33,19 +33,16 @@ class OrderIntentStore:
                 raise RuntimeError("STRATEX_DATABASE_URL must use PostgreSQL; refusing an implicit local-ledger fallback.")
             self.path = configured_dsn
         else:
-            environment = (
-                os.getenv("STRATEX_ENVIRONMENT") or os.getenv("ENVIRONMENT") or "development"
-            ).strip().lower()
             oms_enabled = os.getenv("STRATEX_ORDER_MANAGER_ENABLED", "false").strip().lower() in {
                 "1", "true", "yes", "on"
             }
             reconciliation_enabled = os.getenv("STRATEX_RECONCILIATION_ENABLED", "false").strip().lower() in {
                 "1", "true", "yes", "on"
             }
-            if environment == "production" and (oms_enabled or reconciliation_enabled):
+            if oms_enabled or reconciliation_enabled:
                 raise RuntimeError(
-                    "Production Stratex OMS/reconciliation requires STRATEX_DATABASE_URL "
-                    "pointing to the isolated PostgreSQL stratex_db."
+                    "Stratex OMS/reconciliation requires STRATEX_DATABASE_URL pointing "
+                    "to the isolated PostgreSQL stratex_db; refusing a local SQLite ledger."
                 )
             self.path = os.getenv("STRATEX_ORDER_DB", "state/stratex_orders.sqlite3")
         self._use_postgres = self.path.lower().startswith(
