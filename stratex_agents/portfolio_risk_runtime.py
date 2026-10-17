@@ -88,7 +88,13 @@ def build_portfolio_risk_context(
         try:
             if intent.venue == "binance":
                 price = float(context["entry_price"])
-                raw_currency = str(context.get("candidate_notional_currency", "USDT")).strip().upper()
+                symbol = intent.symbol.upper()
+                raw_currency = next(
+                    (quote for quote in ("USDT", "USDC", "FDUSD", "BUSD") if symbol.endswith(quote)),
+                    "",
+                )
+                if not raw_currency:
+                    raise ValueError("unsupported Binance quote currency for portfolio exposure conversion")
             elif intent.venue == "mt5":
                 adapter = getattr(agent, "venues", {}).get("mt5") if agent is not None else None
                 if adapter is None or not callable(getattr(adapter, "get_symbol_info", None)):
