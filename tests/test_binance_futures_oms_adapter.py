@@ -39,7 +39,7 @@ class FakeBinanceClient:
 
     def futures_create_order(self, **params):
         self.order_calls.append(params)
-        if params.get("newClientOrderId", "").endswith("cx") and self.fail_close:
+        if params.get("newClientOrderId", "").startswith("stxcx-") and self.fail_close:
             raise TimeoutError("close ambiguous")
         if params.get("newClientOrderId", "").endswith("cx"):
             return {"status": "FILLED", "orderId": 222, "avgPrice": "100", "executedQty": params["quantity"]}
