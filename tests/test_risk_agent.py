@@ -121,6 +121,7 @@ def test_risk_agent_runs_portfolio_gate_before_venue_risk_gate():
         "captured_at": 1000.0,
         "reporting_currency": "USD",
         "currency_conversion_complete": True,
+        "equity_basis": "account_equity",
         "reporting_equity": 960.0,
         "day_start_equity": 1000.0,
         "high_water_equity": 1000.0,
