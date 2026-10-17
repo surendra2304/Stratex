@@ -56,9 +56,11 @@ class BinanceFuturesAgent:
         *,
         legacy_api_key: str = "",
         legacy_secret_key: str = "",
+        client_cls: Any = None,
     ) -> Any:
         """Create a signed client pinned to demo/testnet URLs only."""
         self._assert_safe_mode(mode)
+        client_type = client_cls or Client
         if self.demo_trading:
             # Deliberately do not fallback to API_KEY/SECRET_KEY: those may belong
             # to a different, legacy testnet or account.
@@ -69,7 +71,7 @@ class BinanceFuturesAgent:
                     "BINANCE_DEMO_TRADING=true requires fresh Demo Trading credentials in "
                     "BINANCE_API_KEY and BINANCE_API_SECRET. Legacy API_KEY/SECRET_KEY are not used."
                 )
-            client = Client(api_key, api_secret, testnet=False, ping=False)
+            client = client_type(api_key, api_secret, testnet=False, ping=False)
             client.API_URL = BINANCE_DEMO_SPOT_API_URL
             client.FUTURES_URL = BINANCE_DEMO_FUTURES_API_URL
             # Explicit audit markers; not used to choose endpoint URLs downstream.
@@ -82,7 +84,7 @@ class BinanceFuturesAgent:
                 raise RuntimeError(
                     "Legacy Binance Testnet mode requires API_KEY/SECRET_KEY (or the legacy testnet aliases)."
                 )
-            client = Client(api_key, api_secret, testnet=True, ping=False)
+            client = client_type(api_key, api_secret, testnet=True, ping=False)
             client.API_URL = BINANCE_LEGACY_SPOT_TESTNET_URL
             client.FUTURES_URL = BINANCE_LEGACY_FUTURES_TESTNET_URL
             client.stratex_venue = "binance"
