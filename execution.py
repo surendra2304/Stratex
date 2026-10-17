@@ -753,7 +753,7 @@ def _place_futures_market_order_via_oms(
         portfolio_risk_gate = PortfolioRiskGate()
         # Refresh broker equity/positions and persist UTC-day/high-water baselines
         # immediately before authorization. Any missing data makes the gate deny.
-        effective_risk_context = build_portfolio_risk_context(trade_intent, risk_context)
+        effective_risk_context = build_portfolio_risk_context(intent, risk_context)
 
     risk_agent = DeterministicRiskAgent(
         binance_risk_gate=risk_gate,
