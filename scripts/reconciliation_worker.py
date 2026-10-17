@@ -48,7 +48,7 @@ def reconcile_worker_configuration_error() -> str | None:
     if not allowed or not allowed.issubset({"binance", "mt5"}):
         return "STRATEX_ALLOWED_EXECUTION_VENUES must contain binance and/or mt5 only"
     if "binance" in allowed and not _enabled("TESTNET_ENABLED"):
-        return "TESTNET_ENABLED must be true for demo/testnet reconciliation"
+        return "Set TESTNET_ENABLED=true for demo/testnet reconciliation"
     if "mt5" in allowed:
         if not _enabled("MT5_BRIDGE_ENABLED") or not _enabled("MT5_REQUIRE_DEMO"):
             return "MT5 bridge must be enabled with MT5_REQUIRE_DEMO=true"
