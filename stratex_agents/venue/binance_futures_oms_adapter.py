@@ -105,6 +105,29 @@ class BinanceFuturesOMSAdapter:
             return price
         return (price / tick_size).to_integral_value(rounding=rounding) * tick_size
 
+    def _assert_symbol_flat(self, symbol: str) -> None:
+        """Refuse entries when an existing exchange position needs reconciliation."""
+        try:
+            positions = self.client.futures_position_information(symbol=symbol)
+        except Exception as exc:
+            raise BinanceVenueError(
+                f"Cannot reconcile current Futures positions for {symbol}; no new order was submitted."
+            ) from exc
+        if not isinstance(positions, list):
+            raise BinanceVenueError(f"Binance returned an invalid position response for {symbol}.")
+        for position in positions:
+            try:
+                amount = Decimal(str(position.get("positionAmt", "0") or "0"))
+            except Exception as exc:
+                raise BinanceVenueError(
+                    f"Cannot verify an existing Futures position for {symbol}; refusing a new entry."
+                ) from exc
+            if amount != 0:
+                side = str(position.get("positionSide", "BOTH")).upper()
+                raise BinanceVenueError(
+                    f"Existing {side} position for {symbol} must be reconciled before a new OMS entry."
+                )
+
     def _configure_margin_and_leverage(self, symbol: str, intent: TradeIntent) -> int:
         raw_leverage = intent.metadata.get("leverage", os.getenv("FUTURES_LEVERAGE", "5"))
         try:
@@ -230,6 +253,7 @@ class BinanceFuturesOMSAdapter:
         if quantity * market_price < rules["min_notional"]:
             raise BinanceVenueError("Order notional is below Binance's minimum notional.")
 
+        self._assert_symbol_flat(symbol)
         leverage = self._configure_margin_and_leverage(symbol, intent)
         try:
             account = self.client.futures_account()
