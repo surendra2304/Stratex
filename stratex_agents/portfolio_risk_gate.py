@@ -79,6 +79,8 @@ class PortfolioRiskGate:
             return False, "PORTFOLIO_DEGRADED", "All enabled venue balance and position reads must be healthy."
         if snapshot.get("currency_conversion_complete") is not True:
             return False, "PORTFOLIO_CURRENCY_CONVERSION_INCOMPLETE", "Portfolio equity must be in one explicit reporting currency."
+        if snapshot.get("equity_basis") != "account_equity":
+            return False, "PORTFOLIO_ACCOUNT_EQUITY_REQUIRED", "Broker-reported account equity is required; wallet balance totals are not sufficient."
         try:
             captured_at = self._number(snapshot, "captured_at")
             age = self.clock() - captured_at
@@ -89,8 +91,6 @@ class PortfolioRiskGate:
             equity = self._number(snapshot, "reporting_equity")
             day_start = self._number(snapshot, "day_start_equity")
             high_water = self._number(snapshot, "high_water_equity")
-            realized_pnl = self._number(snapshot, "realized_pnl_today")
-            unrealized_pnl = self._number(snapshot, "unrealized_pnl")
             candidate_notional = self._number(context, "candidate_notional")
         except ValueError as exc:
             return False, "PORTFOLIO_RISK_CONTEXT_INVALID", str(exc)
@@ -103,9 +103,10 @@ class PortfolioRiskGate:
         if candidate_notional < 0:
             return False, "CANDIDATE_NOTIONAL_INVALID", "Candidate notional cannot be negative."
 
-        # Both realized and unrealized PnL are included; callers must supply the
-        # ledger-derived realized PnL and portfolio snapshot's unrealized PnL.
-        daily_loss = max(0.0, -(realized_pnl + unrealized_pnl))
+        # Broker-reported equity includes realized and unrealized account PnL.
+        # The UTC-day baseline is persisted separately and is never inferred from
+        # a single model estimate or wallet-balance sum.
+        daily_loss = max(0.0, day_start - equity)
         daily_loss_pct = daily_loss / day_start
         drawdown_pct = max(0.0, (high_water - equity) / high_water)
         if daily_loss_pct >= self.max_daily_loss_pct:
