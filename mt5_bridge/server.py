@@ -355,6 +355,26 @@ def symbols():
     return _data({"count": len(found), "returned": min(len(found), limit), "symbols": found[:limit]})
 
 
+@app.post("/v1/risk/size")
+@_auth
+def risk_size():
+    """Calculate a demo MT5 volume from broker PnL and margin calculations without submitting an order."""
+    mt5, account_info = _mt5()
+    body = request.get_json(silent=True) or {}
+    symbol = str(body.get("symbol", "")).strip()
+    side = str(body.get("side", "")).upper()
+    if not re.fullmatch(r"[A-Za-z0-9._:-]{1,40}", symbol):
+        raise ValueError("symbol must be a valid broker-native symbol name")
+    if side not in {"BUY", "SELL"}:
+        raise ValueError("side must be BUY or SELL")
+    stop_loss = _finite_number(body.get("stop_loss"), "stop_loss")
+    take_profit = _finite_number(body.get("take_profit"), "take_profit")
+    return _data(_calculate_mt5_entry_size(
+        mt5, account_info, symbol=symbol, side=side,
+        stop_loss=stop_loss, take_profit=take_profit,
+    ))
+
+
 @app.get("/v1/ticker")
 @_auth
 def ticker():
@@ -418,7 +438,7 @@ def fees():
 @app.post("/v1/orders")
 @_auth
 def place_order():
-    mt5, _ = _mt5()  # revalidate account mode immediately before every submission
+    mt5, account_info = _mt5()  # revalidate demo account immediately before every submission
     body = request.get_json(silent=True) or {}
     symbol = str(body.get("symbol", "")).strip()
     side = str(body.get("side", "")).upper()
@@ -431,10 +451,32 @@ def place_order():
         raise ValueError("side must be BUY/SELL and volume must be positive")
     if kind not in {"MARKET", "LIMIT", "STOP", "STOP_LIMIT"}:
         raise ValueError("unsupported order type")
+
+    request_hash = hashlib.sha256(
+        json.dumps(body, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    ).hexdigest()
+    store = _order_store()
+    try:
+        cached = store.lookup(client_order_id, request_hash)
+    except DuplicateOrderIdConflict as exc:
+        return jsonify(ok=False, error=str(exc)), 409
+    except UnresolvedBridgeOrder as exc:
+        return jsonify(ok=False, error="ORDER_STATE_UNKNOWN", message=str(exc)), 409
+    if cached is not None:
+        response_data = dict(cached.get("response") or {})
+        response_data["duplicate"] = True
+        return _data(response_data)
     info = mt5.symbol_info(symbol)
     tick = mt5.symbol_info_tick(symbol)
     if info is None or tick is None or not info.visible:
         raise ValueError("symbol is not available in MT5 Market Watch")
+    trade_mode = int(getattr(info, "trade_mode", 0) or 0)
+    if trade_mode not in {1, 2, 4}:
+        raise ValueError("MT5 symbol is disabled or close-only for new entries")
+    if side == "BUY" and trade_mode == 2:
+        raise ValueError("MT5 symbol only permits short entries")
+    if side == "SELL" and trade_mode == 1:
+        raise ValueError("MT5 symbol only permits long entries")
     step = float(info.volume_step)
     if volume < float(info.volume_min) or volume > float(info.volume_max):
         raise ValueError("volume is outside broker limits")
@@ -479,6 +521,12 @@ def place_order():
         if abs(price - stop_loss) < min_stop_distance or abs(take_profit - price) < min_stop_distance:
             raise ValueError("stop_loss/take_profit violate broker minimum stop distance")
 
+    # Broker-calculated PnL and margin are the final deterministic pre-trade risk check.
+    financials = _mt5_entry_financials(
+        mt5, account_info, symbol=symbol, side=side, volume=volume,
+        entry_price=price, stop_loss=stop_loss, take_profit=take_profit,
+    )
+
     order = {
         "action": action, "symbol": symbol, "volume": volume, "type": request_type,
         "price": price, "sl": stop_loss, "tp": take_profit,
@@ -491,10 +539,17 @@ def place_order():
     if stop_price:
         order["stoplimit"] = round(float(stop_price), digits)
 
-    request_hash = hashlib.sha256(
-        json.dumps(body, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
-    ).hexdigest()
-    store = _order_store()
+    # Validate the assembled request with MT5 before reserving/submitting it.
+    check = mt5.order_check(order)
+    if check is None:
+        raise RuntimeError(f"MT5 order_check failed: {mt5.last_error()}")
+    check_retcode = int(getattr(check, "retcode", -1))
+    if check_retcode != 0:
+        raise ValueError(
+            f"MT5 order_check rejected the request (retcode={check_retcode}, "
+            f"comment={getattr(check, 'comment', '')})"
+        )
+
     try:
         reservation = store.reserve(client_order_id, request_hash, body)
     except DuplicateOrderIdConflict as exc:
