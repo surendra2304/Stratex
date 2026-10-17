@@ -23,6 +23,7 @@ class FakeBinanceClient:
         self.cancelled_algos = []
         self.configuration_calls = []
         self.position_amount = "0"
+        self.open_algo_orders = []
         self.reconcile_entry = {"status": "FILLED", "orderId": 111, "avgPrice": "100", "executedQty": "0.105"}
         self.reconcile_algo_status = "NEW"
         self.fail_reconcile_algo = False
@@ -48,6 +49,9 @@ class FakeBinanceClient:
 
     def futures_position_information(self, symbol):
         return [{"symbol": symbol, "positionSide": "BOTH", "positionAmt": self.position_amount}]
+
+    def futures_get_open_algo_orders(self, symbol):
+        return list(self.open_algo_orders)
 
     def futures_change_margin_type(self, symbol, marginType):
         self.configuration_calls.append(("margin", symbol, marginType))
@@ -230,3 +234,17 @@ def test_binance_reconciliation_keeps_unknown_when_protection_cannot_be_verified
     assert result["confirmed"] is False
     assert result["status"] == "UNKNOWN"
     assert "not both confirmed working" in result["evidence"]
+
+def test_binance_adapter_blocks_new_entry_when_stale_stratex_algo_order_remains(monkeypatch):
+    set_demo_env(monkeypatch)
+    client = FakeBinanceClient(hedge_mode=False)
+    client.open_algo_orders = [{
+        "symbol": "BTCUSDT", "algoId": 1001,
+        "clientAlgoId": "stxtp-0123456789012345678901",
+        "algoStatus": "NEW",
+    }]
+    adapter = BinanceFuturesOMSAdapter(client=client, venue_agent=FakeAgent())
+    with pytest.raises(BinanceVenueError, match="Outstanding Stratex protective Algo Order"):
+        adapter.submit_intent(make_intent())
+    assert client.order_calls == []
+    assert client.algo_calls == []
