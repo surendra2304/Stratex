@@ -88,6 +88,9 @@ class ServiceSupervisor:
             for item in os.getenv("STRATEX_ALLOWED_EXECUTION_VENUES", "binance").split(",")
             if item.strip()
         }
+        if not allowed or not allowed.issubset({"binance", "mt5"}):
+            logger.error("[SUPERVISOR] Reconciliation worker has an invalid venue allowlist; not starting it.")
+            return
         if "binance" in allowed and not self._truthy_env("TESTNET_ENABLED"):
             logger.error("[SUPERVISOR] Reconciliation worker needs TESTNET_ENABLED=true for Binance demo/testnet.")
             return
