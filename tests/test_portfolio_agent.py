@@ -119,3 +119,18 @@ def test_portfolio_agent_does_not_call_wallet_balance_sum_verified_equity():
     snapshot = PortfolioAgent({"mt5": venue}).snapshot("USD")
     assert snapshot["reporting_equity"] == 1000.0
     assert snapshot["equity_basis"] == "balance_total_estimate"
+
+
+
+def test_portfolio_environment_factory_refuses_mt5_when_demo_only_policy_is_disabled(monkeypatch):
+    monkeypatch.setenv("STRATEX_ALLOWED_EXECUTION_VENUES", "mt5")
+    monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
+    monkeypatch.setenv("MT5_REQUIRE_DEMO", "false")
+    fake = FakePortfolioVenue(
+        balances={"USD": UnifiedBalance("USD", free=100, used=0, total=100)},
+        positions=[],
+        equity={"USD": 100},
+    )
+    snapshot = PortfolioAgent.from_environment(mt5_adapter=fake).snapshot("USD")
+    assert snapshot["status"] == "degraded"
+    assert snapshot["venues"]["mt5"]["balance_error"] == "PortfolioSnapshotError"
