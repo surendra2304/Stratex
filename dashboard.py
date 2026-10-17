@@ -147,7 +147,7 @@ def api_v1_market_instruments():
 def api_v1_market_quote():
     """Return a normalized quote from one explicitly selected venue."""
     from api.validation import RequestValidationError
-    from stratex_agents.market_data import MarketDataAgent
+    from stratex_agents.market_data import MarketDataAgent, MarketDataUnavailable
     venue = query_choice("venue", "binance", {"binance", "mt5"})
     symbol = query_text("symbol", None, max_len=40, pattern=re.compile(r"^[A-Za-z0-9._:-]{2,40}$"))
     if not symbol:
