@@ -65,7 +65,10 @@ class PortfolioAgent:
 
         if "mt5" in allowed:
             mt5_enabled = os.getenv("MT5_BRIDGE_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
-            if not mt5_enabled:
+            mt5_demo_required = os.getenv("MT5_REQUIRE_DEMO", "true").strip().lower() in {"1", "true", "yes", "on"}
+            if not mt5_demo_required:
+                providers["mt5"] = _UnavailablePortfolioVenue("mt5", "demo_only_policy_disabled")
+            elif not mt5_enabled:
                 providers["mt5"] = _UnavailablePortfolioVenue("mt5", "bridge_disabled")
             elif mt5_adapter is None:
                 try:
@@ -73,8 +76,10 @@ class PortfolioAgent:
                     mt5_adapter = MT5BridgeAdapter()
                 except Exception as exc:
                     mt5_adapter = _UnavailablePortfolioVenue("mt5", type(exc).__name__)
-            providers["mt5"] = mt5_adapter
-            if callable(getattr(mt5_adapter, "get_symbol_info", None)):
+            else:
+                providers["mt5"] = mt5_adapter
+            if callable(getattr(providers["mt5"], "get_symbol_info", None)):
+                mt5_adapter = providers["mt5"]
                 def mt5_notional(position):
                     info = mt5_adapter.get_symbol_info(position.symbol)
                     contract_size = float(info.get("contract_size", 0) or 0)
