@@ -73,6 +73,17 @@ class MT5VenueAgent:
             }
         try:
             account = self.adapter.health()
+            if account.get("demo") is not True:
+                self.adapter.is_connected = False
+                return {
+                    "agent_id": self.agent_id,
+                    "status": "unhealthy",
+                    "connected": False,
+                    "demo_required": True,
+                    "server": account.get("server"),
+                    "account_mode": "rejected",
+                    "error": "bridge did not confirm a demo account",
+                }
             return {
                 "agent_id": self.agent_id,
                 "status": "healthy",
@@ -80,7 +91,7 @@ class MT5VenueAgent:
                 "demo_required": True,
                 "server": account.get("server"),
                 # Do not expose login IDs, tokens, account balances or credentials.
-                "account_mode": "demo" if account.get("demo") else "rejected",
+                "account_mode": "demo",
             }
         except MT5BridgeError as exc:
             self.adapter.is_connected = False
