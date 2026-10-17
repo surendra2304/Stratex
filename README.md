@@ -269,3 +269,8 @@ The read-only market-data layer now normalizes broker-native instruments, quotes
 The existing Futures strategy path now has an explicit, disabled-by-default integration point. `STRATEX_ORDER_MANAGER_ENABLED=false` preserves the legacy executor. When it is explicitly enabled, the Futures entry call requires the current RiskGate and risk context, creates a normalized `TradeIntent`, and sends it through the shared OMS. The OMS calls the same deterministic RiskGate again immediately before submit, checks the execution policy and kill switch, persists the order ID/status, and refuses blind retries for an ambiguous result. Successful protected fills are mirrored to the legacy active-trade store so the existing Futures monitor/trailing loops can see the protective Algo Order IDs.
 
 This flag is **not a production readiness toggle**. Keep `STRATEX_EXECUTION_MODE=DISABLED` and `STRATEX_ORDER_MANAGER_ENABLED=false` until CI is green, Demo Trading keys are installed privately, a Binance demo integration run verifies fills + both protective Algo orders + sibling-order cancellation, and restart/reconciliation tests have passed. MT5 routing remains allowlisted separately and requires its own demo bridge soak test.
+
+
+### Order reconciliation worker (opt-in)
+
+A read-only reconciliation process can be supervised alongside the trading engine. It remains off unless both `STRATEX_ORDER_MANAGER_ENABLED=true` and `STRATEX_RECONCILIATION_ENABLED=true`, the runtime is explicitly Demo Futures, the live flag is false, and the selected venues are properly configured. It never creates or cancels orders; ambiguous states remain unresolved until a venue confirms them. Keep both flags disabled until complete demo validation.
