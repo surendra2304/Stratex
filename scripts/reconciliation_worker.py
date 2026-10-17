@@ -104,11 +104,22 @@ def run_worker(stop_event: threading.Event | None = None) -> int:
         "[RECONCILIATION] Starting read-only worker; interval=%ss; ledger=%s",
         interval, os.getenv("STRATEX_ORDER_DB", "state/stratex_orders.sqlite3"),
     )
+    agent = None
 
     while not event.is_set():
+        if agent is None:
+            try:
+                resolvers = _build_resolvers()
+                if not resolvers:
+                    raise RuntimeError("no venue resolvers are available")
+                agent = OrderReconciliationAgent(store, resolvers)
+            except Exception as exc:
+                # Retry later if configuration or a private bridge is temporarily unavailable.
+                logger.error("[RECONCILIATION] Cannot initialize venue resolvers (%s).", type(exc).__name__)
+                event.wait(interval)
+                continue
+
         try:
-            resolvers = _build_resolvers()
-            agent = OrderReconciliationAgent(store, resolvers)
             result = agent.reconcile_once(limit=100)
             logger.info(
                 "[RECONCILIATION] candidates=%s confirmed=%s resolved=%s pending=%s errors=%s",
