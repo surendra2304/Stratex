@@ -233,12 +233,22 @@ def validate_environment_safety():
                     "Stratex operates strictly in PAPER or TESTNET mode with zero live capital risk."
                 )
 
-        # Check for non-testnet Binance production URLs
+        # Allow only known non-production Binance endpoints. Demo Trading hosts
+        # contain the string API.BINANCE.COM/FAPI.BINANCE.COM, so they must be
+        # explicitly allowlisted rather than misclassified as production.
         if k_upper in ["BASE_URL", "FUTURES_BASE_URL", "BINANCE_URL", "BINANCE_API_URL"]:
-            if "testnet" not in v_upper and any(prod in v_upper for prod in ["API.BINANCE.COM", "FAPI.BINANCE.COM"]):
+            is_legacy_testnet = "TESTNET" in v_upper
+            is_current_demo = (
+                v_upper.startswith("HTTPS://DEMO-API.BINANCE.COM")
+                or v_upper.startswith("HTTPS://DEMO-FAPI.BINANCE.COM")
+            )
+            looks_like_binance_production = any(
+                prod in v_upper for prod in ["API.BINANCE.COM", "FAPI.BINANCE.COM"]
+            )
+            if looks_like_binance_production and not (is_legacy_testnet or is_current_demo):
                 raise SecurityConfigurationError(
                     f"SECURITY CRITICAL: Production Binance URL '{key}={val}' is forbidden. "
-                    "Only testnet endpoints are allowed."
+                    "Only explicitly supported Demo Trading or Testnet endpoints are allowed."
                 )
 
 
