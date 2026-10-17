@@ -42,6 +42,9 @@ class FakeBinanceClient:
     def futures_account(self):
         return {"availableBalance": "10000"}
 
+    def futures_position_information(self, symbol):
+        return [{"symbol": symbol, "positionSide": "BOTH", "positionAmt": "0"}]
+
     def futures_change_margin_type(self, symbol, marginType):
         self.configuration_calls.append(("margin", symbol, marginType))
         return {"symbol": symbol, "marginType": marginType}
