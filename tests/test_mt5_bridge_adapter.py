@@ -194,3 +194,41 @@ def test_mt5_get_symbol_info_requires_exact_broker_symbol(monkeypatch):
     )
     with pytest.raises(MT5BridgeError, match="not found"):
         adapter.get_symbol_info("XAUUSD")
+
+
+def test_mt5_reconciliation_confirms_persistent_bridge_record(monkeypatch):
+    monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
+    session = FakeSession({"ok": True, "data": {
+        "client_order_id": "stx-mt5-reconcile-01",
+        "status": "FILLED",
+        "response": {"status": "FILLED", "order": 765, "deal": 876},
+        "manual_reconciliation_required": False,
+    }})
+    adapter = MT5BridgeAdapter(base_url="http://100.64.0.2:8765", token="test-token", session=session)
+    stored = {
+        "client_order_id": "stx-mt5-reconcile-01",
+        "payload": {"venue": "mt5", "environment": "mt5_demo", "client_order_id": "stx-mt5-reconcile-01"},
+    }
+    result = adapter.reconcile_intent(stored)
+    assert result["confirmed"] is True
+    assert result["status"] == "FILLED"
+    assert result["result"]["order"] == 765
+
+
+def test_mt5_reconciliation_keeps_ambiguous_bridge_record_unresolved(monkeypatch):
+    monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
+    session = FakeSession({"ok": True, "data": {
+        "client_order_id": "stx-mt5-reconcile-02",
+        "status": "UNKNOWN",
+        "response": None,
+        "manual_reconciliation_required": True,
+    }})
+    adapter = MT5BridgeAdapter(base_url="http://100.64.0.2:8765", token="test-token", session=session)
+    stored = {
+        "client_order_id": "stx-mt5-reconcile-02",
+        "payload": {"venue": "mt5", "environment": "mt5_demo", "client_order_id": "stx-mt5-reconcile-02"},
+    }
+    result = adapter.reconcile_intent(stored)
+    assert result["confirmed"] is False
+    assert result["status"] == "UNKNOWN"
+    assert "manual reconciliation" in result["evidence"]
