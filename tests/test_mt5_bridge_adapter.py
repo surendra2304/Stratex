@@ -71,6 +71,7 @@ def test_mt5_position_mapping_preserves_each_hedged_position(monkeypatch):
     assert len(positions) == 2
     assert {p.side for p in positions} == {"LONG", "SHORT"}
     assert all(p.exchange == "mt5" for p in positions)
+    assert [p.position_id for p in positions] == ["101", "202"]
 
 
 def test_order_validation_rejects_zero_volume(monkeypatch):
