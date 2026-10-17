@@ -32,7 +32,7 @@ else:
         or os.getenv("TESTNET_API_KEY")
         or os.getenv("BINANCE_API_KEY")
         or ""
-    ).strip().strip("'\\"")
+    ).strip().strip(chr(34) + chr(39))
     SECRET_KEY = (
         os.getenv("SECRET_KEY")
         or os.getenv("BINANCE_SECRET_KEY")
@@ -41,7 +41,7 @@ else:
         or os.getenv("BINANCE_API_SECRET")
         or os.getenv("BINANCE_SECRET")
         or ""
-    ).strip().strip("'\\"")
+    ).strip().strip(chr(34) + chr(39))
 
 # --- Gemini AI Configuration (from environment / .env file only) ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
