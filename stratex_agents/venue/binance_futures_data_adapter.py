@@ -24,12 +24,11 @@ class BinanceFuturesMarketDataAdapter:
         self.environment = "binance_demo" if self.venue_agent.demo_trading else "binance_testnet"
         self.client = client or self.venue_agent.create_public_client(futures=True)
         actual = getattr(self.client, "stratex_environment", None)
-        if actual is not None:
-            expected = "demo_trading_public" if self.venue_agent.demo_trading else "legacy_testnet_public"
-            if actual != expected:
-                raise BinanceMarketDataError(
-                    f"Market-data environment mismatch: expected {expected!r}, got {actual!r}"
-                )
+        expected = "demo_trading_public" if self.venue_agent.demo_trading else "legacy_testnet_public"
+        if actual != expected:
+            raise BinanceMarketDataError(
+                f"Market-data environment is unverified or mismatched: expected {expected!r}, got {actual!r}"
+            )
 
     def list_instruments(self, query: str = "", limit: int = 1000) -> list[dict[str, Any]]:
         bounded_limit = max(1, min(5000, int(limit)))
