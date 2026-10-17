@@ -31,6 +31,7 @@ class CCXTExchangeAdapter:
         secret: str | None = None,
         password: str | None = None,
         sandbox: bool = True,
+        demo_trading: bool | None = None,
         enable_rate_limit: bool = True,
         timeout_ms: int = 10000,
         exchange_options: dict[str, Any] | None = None,
@@ -44,6 +45,7 @@ class CCXTExchangeAdapter:
 
         self.exchange_id = exchange_id
         self.sandbox = sandbox
+        self.demo_trading = (os.getenv("BINANCE_DEMO_TRADING", "false").lower() in {"1", "true", "yes"}) if demo_trading is None else demo_trading
         self.enable_rate_limit = enable_rate_limit
         self.timeout_ms = timeout_ms
 
@@ -63,11 +65,15 @@ class CCXTExchangeAdapter:
 
         self.exchange = exchange_cls(config)
 
-        if sandbox and hasattr(self.exchange, "set_sandbox_mode"):
-            try:
-                self.exchange.set_sandbox_mode(True)
-            except Exception:
-                pass
+        if self.demo_trading:
+            # Binance unified Demo Trading replaces the legacy Futures sandbox.
+            # API keys from these environments are not interchangeable.
+            enable_demo = getattr(self.exchange, "enable_demo_trading", None)
+            if not callable(enable_demo):
+                raise RuntimeError("Installed CCXT lacks Binance Demo Trading support; upgrade to ccxt>=4.5.6.")
+            enable_demo(True)
+        elif sandbox and hasattr(self.exchange, "set_sandbox_mode"):
+            self.exchange.set_sandbox_mode(True)
 
         self._markets_cache: dict[str, dict] = {}
         self._last_market_load: float = 0.0
