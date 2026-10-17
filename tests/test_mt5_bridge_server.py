@@ -48,7 +48,7 @@ class FakeMT5:
         return volume * 1000.0
 
     def order_check(self, order):
-        return types.SimpleNamespace(retcode=0, comment="Done", margin=order["volume"] * 1000.0)
+        return types.SimpleNamespace(retcode=self.order_check_retcode, comment="Done" if self.order_check_retcode == 0 else "Rejected", margin=order["volume"] * 1000.0)
 
     def order_send(self, order):
         self.calls.append(order)
@@ -198,3 +198,55 @@ def test_symbols_endpoint_can_filter_to_market_watch_visible_symbols(bridge_clie
     )
     assert response.status_code == 200
     assert [item["symbol"] for item in response.json["data"]["symbols"]] == ["EURUSD"]
+
+
+def test_mt5_risk_sizer_uses_broker_pnl_and_margin(monkeypatch, bridge_client):
+    client, _ = bridge_client
+    response = client.post(
+        "/v1/risk/size",
+        json={"symbol": "EURUSD", "side": "BUY", "stop_loss": 1.09, "take_profit": 1.12},
+        headers={"Authorization": "Bearer test-bridge-token"},
+    )
+    assert response.status_code == 200
+    sizing = response.json["data"]
+    assert sizing["approved"] is True
+    assert sizing["environment"] == "mt5_demo"
+    assert sizing["recommended_volume"] == 0.2
+    assert sizing["risk_budget"] == 5.0
+    assert sizing["risk_amount"] == pytest.approx(2.04)
+    assert sizing["margin_required"] == pytest.approx(200.0)
+    assert sizing["account_currency"] == "USD"
+
+
+def test_mt5_risk_sizer_refuses_trade_below_broker_minimum_lot(bridge_client):
+    client, _ = bridge_client
+    response = client.post(
+        "/v1/risk/size",
+        json={"symbol": "EURUSD", "side": "BUY", "stop_loss": 0.5, "take_profit": 1.12},
+        headers={"Authorization": "Bearer test-bridge-token"},
+    )
+    assert response.status_code == 400
+    assert "No broker-valid MT5 volume" in response.json["error"]
+
+
+def test_mt5_entry_rejects_risk_or_margin_budget_breach_before_order_send(bridge_client):
+    client, mt5 = bridge_client
+    response = client.post(
+        "/v1/orders", json=_body(volume=0.5),
+        headers={"Authorization": "Bearer test-bridge-token"},
+    )
+    assert response.status_code == 400
+    assert "risk" in response.json["error"].lower() or "margin" in response.json["error"].lower()
+    assert mt5.calls == []
+
+
+def test_mt5_entry_requires_broker_order_check_success(bridge_client):
+    client, mt5 = bridge_client
+    mt5.order_check_retcode = 10019
+    response = client.post(
+        "/v1/orders", json=_body(),
+        headers={"Authorization": "Bearer test-bridge-token"},
+    )
+    assert response.status_code == 400
+    assert "order_check rejected" in response.json["error"]
+    assert mt5.calls == []
