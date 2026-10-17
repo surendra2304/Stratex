@@ -7,6 +7,9 @@ from .market_data import MarketDataAgent, MarketDataUnavailable
 from .risk_agent import DeterministicRiskAgent, RiskDecision
 from .portfolio_agent import PortfolioAgent, PortfolioSnapshotError
 from .reconciliation_agent import OrderReconciliationAgent
+from .portfolio_risk_gate import PortfolioRiskGate
+from .portfolio_risk_state import PortfolioRiskStateStore, PortfolioRiskStateError
+from .portfolio_risk_runtime import build_portfolio_risk_context
 
 __all__ = [
     "get_agent_catalog",
@@ -24,4 +27,8 @@ __all__ = [
     "PortfolioAgent",
     "PortfolioSnapshotError",
     "OrderReconciliationAgent",
+    "PortfolioRiskGate",
+    "PortfolioRiskStateStore",
+    "PortfolioRiskStateError",
+    "build_portfolio_risk_context",
 ]
