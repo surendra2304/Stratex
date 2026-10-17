@@ -99,6 +99,7 @@ class MT5BridgeAdapter(BaseExchange):
                 quantity=volume, entry_price=float(p.get("price_open", 0)),
                 mark_price=float(p.get("price_current", 0)), unrealized_pnl=float(p.get("profit", 0)),
                 leverage=float(p.get("leverage", 1)), exchange="mt5",
+                position_id=str(p.get("ticket", "")) or None,
             ))
             # MT5 position tickets remain part of the raw response/bridge ledger; never
             # merge hedge-mode positions solely by symbol.
