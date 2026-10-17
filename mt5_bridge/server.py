@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from functools import wraps
 from typing import Any
 
@@ -65,7 +66,9 @@ def _auth(fn):
             return jsonify(ok=False, error="unauthorized"), 401
         try:
             return fn(*args, **kwargs)
-        except (RuntimeError, ValueError, KeyError) as exc:
+        except (ValueError, KeyError) as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        except RuntimeError as exc:
             return jsonify(ok=False, error=str(exc)), 503
     return wrapped
 
@@ -174,8 +177,8 @@ def place_order():
     kind = str(body.get("type", "MARKET")).upper()
     client_order_id = str(body.get("client_order_id", "")).strip()
     volume = float(body.get("volume", 0))
-    if not client_order_id or len(client_order_id) > 36:
-        raise ValueError("client_order_id is required and must be 1-36 characters")
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,36}", client_order_id):
+        raise ValueError("client_order_id must contain 1-36 alphanumeric or . _ : - characters")
     if side not in {"BUY", "SELL"} or volume <= 0:
         raise ValueError("side must be BUY/SELL and volume must be positive")
     if kind not in {"MARKET", "LIMIT", "STOP", "STOP_LIMIT"}:
