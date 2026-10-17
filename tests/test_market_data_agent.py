@@ -115,6 +115,9 @@ def test_market_data_agent_normalizes_quote_and_candles_per_venue():
 
 def test_market_data_agent_reports_partial_provider_failures_explicitly():
     class BrokenProvider:
+        def get_symbols(self, **kwargs):
+            raise TimeoutError("offline")
+
         def list_instruments(self, **kwargs):
             raise TimeoutError("offline")
 
