@@ -105,8 +105,8 @@ class PortfolioRiskGate:
             )
         if min(equity, day_start, high_water) <= 0:
             return False, "PORTFOLIO_EQUITY_INVALID", "Equity baselines must be positive."
-        if candidate_notional < 0:
-            return False, "CANDIDATE_NOTIONAL_INVALID", "Candidate notional cannot be negative."
+        if candidate_notional <= 0:
+            return False, "CANDIDATE_NOTIONAL_INVALID", "A new entry requires positive candidate notional."
 
         # Broker-reported equity includes realized and unrealized account PnL.
         # The UTC-day baseline is persisted separately and is never inferred from
