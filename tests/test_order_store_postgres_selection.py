@@ -30,14 +30,18 @@ def test_explicit_sqlite_path_remains_available_for_isolated_tests(monkeypatch, 
 
 
 
-def test_production_oms_refuses_local_sqlite_fallback(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    "enabled_variable",
+    ["STRATEX_ORDER_MANAGER_ENABLED", "STRATEX_RECONCILIATION_ENABLED"],
+)
+def test_enabled_oms_or_reconciliation_refuses_local_sqlite_fallback(
+    monkeypatch, tmp_path, enabled_variable
+):
     monkeypatch.delenv("STRATEX_DATABASE_URL", raising=False)
-    monkeypatch.setenv("STRATEX_ENVIRONMENT", "production")
-    monkeypatch.setenv("STRATEX_ORDER_MANAGER_ENABLED", "true")
-    monkeypatch.delenv("STRATEX_RECONCILIATION_ENABLED", raising=False)
+    monkeypatch.delenv("STRATEX_ENVIRONMENT", raising=False)
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.setenv(enabled_variable, "true")
     monkeypatch.chdir(tmp_path)
-
-    import pytest
 
     with pytest.raises(RuntimeError, match="requires STRATEX_DATABASE_URL"):
         OrderIntentStore()
