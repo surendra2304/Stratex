@@ -78,6 +78,20 @@ class MT5BridgeAdapter(BaseExchange):
             raise MT5BridgeError("Refusing non-demo MT5 account; demo-only mode is enabled.")
         return data
 
+    def get_equity(self) -> dict[str, float]:
+        """Return verified MT5 account equity in the broker account currency."""
+        data = self._request("GET", "/v1/account")
+        if self.demo_only and not data.get("demo", False):
+            raise MT5BridgeError("Refusing non-demo MT5 account equity.")
+        currency = str(data.get("currency", "")).strip().upper()
+        try:
+            equity = float(data["equity"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise MT5BridgeError("MT5 account equity is missing or invalid.") from exc
+        if not currency or equity <= 0 or equity != equity or abs(equity) == float("inf"):
+            raise MT5BridgeError("MT5 account equity/currency is invalid.")
+        return {currency: equity}
+
     def get_balance(self) -> dict[str, UnifiedBalance]:
         data = self._request("GET", "/v1/account")
         if self.demo_only and not data.get("demo", False):
