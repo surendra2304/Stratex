@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
+from decimal import Decimal, ROUND_CEILING, ROUND_DOWN
 from functools import wraps
 from typing import Any
 
@@ -35,6 +37,191 @@ def _order_store() -> BridgeOrderStore:
         _ORDER_STORES[path] = BridgeOrderStore(path)
     return _ORDER_STORES[path]
 
+
+
+
+def _finite_number(value: Any, field: str) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field} must be numeric") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{field} must be finite")
+    return number
+
+
+def _mt5_risk_limits(account) -> dict[str, float]:
+    """Bound per-entry risk and margin from the demo account's actual equity/free margin."""
+    equity = _finite_number(getattr(account, "equity", 0), "account equity")
+    free_margin = _finite_number(getattr(account, "margin_free", 0), "free margin")
+    risk_fraction = _finite_number(os.getenv("MT5_MAX_RISK_PER_TRADE", "0.005"), "MT5_MAX_RISK_PER_TRADE")
+    margin_fraction = _finite_number(os.getenv("MT5_MAX_MARGIN_FRACTION", "0.20"), "MT5_MAX_MARGIN_FRACTION")
+    if equity <= 0 or free_margin <= 0:
+        raise ValueError("MT5 demo account equity and free margin must be positive")
+    if not 0 < risk_fraction <= 0.02:
+        raise ValueError("MT5_MAX_RISK_PER_TRADE must be greater than 0 and at most 0.02")
+    if not 0 < margin_fraction <= 0.35:
+        raise ValueError("MT5_MAX_MARGIN_FRACTION must be greater than 0 and at most 0.35")
+    risk_budget = equity * risk_fraction
+    margin_budget = min(equity * margin_fraction, free_margin * 0.5)
+    if risk_budget <= 0 or margin_budget <= 0:
+        raise ValueError("Calculated MT5 risk or margin budget is not positive")
+    return {
+        "equity": equity,
+        "free_margin": free_margin,
+        "risk_fraction": risk_fraction,
+        "margin_fraction": margin_fraction,
+        "risk_budget": risk_budget,
+        "margin_budget": margin_budget,
+    }
+
+
+def _validate_mt5_entry_symbol(mt5, symbol: str, side: str):
+    info = mt5.symbol_info(symbol)
+    tick = mt5.symbol_info_tick(symbol)
+    if info is None or tick is None:
+        raise ValueError(f"MT5 symbol {symbol!r} is not available in the connected demo account")
+    if not bool(getattr(info, "visible", False)):
+        raise ValueError(f"MT5 symbol {symbol!r} must be visible in Market Watch before trading")
+    trade_mode = int(getattr(info, "trade_mode", 0) or 0)
+    if trade_mode not in {1, 2, 4}:
+        raise ValueError(f"MT5 symbol {symbol!r} is disabled or close-only for new entries")
+    if side == "BUY" and trade_mode == 2:
+        raise ValueError(f"MT5 symbol {symbol!r} allows short-only trading")
+    if side == "SELL" and trade_mode == 1:
+        raise ValueError(f"MT5 symbol {symbol!r} allows long-only trading")
+    price = _finite_number(getattr(tick, "ask" if side == "BUY" else "bid", 0), "current entry price")
+    if price <= 0:
+        raise ValueError(f"MT5 has no valid current quote for {symbol!r}")
+    return info, tick, price
+
+
+def _mt5_entry_financials(
+    mt5, account, *, symbol: str, side: str, volume: float,
+    entry_price: float, stop_loss: float, take_profit: float,
+) -> dict[str, float]:
+    """Calculate stop risk and required margin in the account currency using MT5 itself."""
+    limits = _mt5_risk_limits(account)
+    qty = _finite_number(volume, "volume")
+    entry = _finite_number(entry_price, "entry_price")
+    stop = _finite_number(stop_loss, "stop_loss")
+    take = _finite_number(take_profit, "take_profit")
+    if qty <= 0 or entry <= 0 or stop <= 0 or take <= 0:
+        raise ValueError("volume, entry price, stop-loss and take-profit must be positive")
+    if side == "BUY" and not stop < entry < take:
+        raise ValueError("BUY entry requires stop_loss < entry price < take_profit")
+    if side == "SELL" and not take < entry < stop:
+        raise ValueError("SELL entry requires take_profit < entry price < stop_loss")
+    action = mt5.ORDER_TYPE_BUY if side == "BUY" else mt5.ORDER_TYPE_SELL
+    stop_pnl = mt5.order_calc_profit(action, symbol, qty, entry, stop)
+    take_pnl = mt5.order_calc_profit(action, symbol, qty, entry, take)
+    margin = mt5.order_calc_margin(action, symbol, qty, entry)
+    if stop_pnl is None or take_pnl is None or margin is None:
+        raise RuntimeError(f"MT5 could not calculate risk or margin for {symbol}: {mt5.last_error()}")
+    stop_pnl = _finite_number(stop_pnl, "calculated stop-loss PnL")
+    take_pnl = _finite_number(take_pnl, "calculated take-profit PnL")
+    margin = _finite_number(margin, "calculated margin")
+    if stop_pnl >= 0:
+        raise ValueError("MT5 calculator did not produce a loss at the requested stop-loss")
+    if take_pnl <= 0:
+        raise ValueError("MT5 calculator did not produce a profit at the requested take-profit")
+    if margin < 0:
+        raise ValueError("MT5 calculated a negative margin requirement")
+    risk_amount = abs(stop_pnl)
+    if risk_amount > limits["risk_budget"] + 1e-8:
+        raise ValueError(
+            f"MT5 stop-loss risk {risk_amount:.2f} {account.currency} exceeds "
+            f"the per-trade budget {limits['risk_budget']:.2f} {account.currency}"
+        )
+    if margin > limits["margin_budget"] + 1e-8:
+        raise ValueError(
+            f"MT5 required margin {margin:.2f} {account.currency} exceeds "
+            f"the allowed per-entry margin budget {limits['margin_budget']:.2f} {account.currency}"
+        )
+    return {
+        **limits,
+        "estimated_stop_loss": stop_pnl,
+        "estimated_take_profit": take_pnl,
+        "risk_amount": risk_amount,
+        "margin_required": margin,
+        "risk_reward_ratio": take_pnl / risk_amount,
+    }
+
+
+def _calculate_mt5_entry_size(mt5, account, *, symbol: str, side: str, stop_loss: float, take_profit: float) -> dict[str, Any]:
+    """Size lots from actual broker PnL/margin calculations; never infer Forex/CFD lots from crypto units."""
+    limits = _mt5_risk_limits(account)
+    info, _tick, entry = _validate_mt5_entry_symbol(mt5, symbol, side)
+    stop = _finite_number(stop_loss, "stop_loss")
+    take = _finite_number(take_profit, "take_profit")
+    if side == "BUY" and not stop < entry < take:
+        raise ValueError("BUY entry requires stop_loss < current ask < take_profit")
+    if side == "SELL" and not take < entry < stop:
+        raise ValueError("SELL entry requires take_profit < current bid < stop_loss")
+
+    action = mt5.ORDER_TYPE_BUY if side == "BUY" else mt5.ORDER_TYPE_SELL
+    one_lot_loss = mt5.order_calc_profit(action, symbol, 1.0, entry, stop)
+    if one_lot_loss is None:
+        raise RuntimeError(f"MT5 could not calculate one-lot stop risk for {symbol}: {mt5.last_error()}")
+    one_lot_loss = _finite_number(one_lot_loss, "one-lot stop-loss PnL")
+    if one_lot_loss >= 0:
+        raise ValueError("MT5 calculator did not produce a loss at the requested stop-loss")
+    loss_per_lot = abs(one_lot_loss)
+    risk_limited_volume = min(float(getattr(info, "volume_max", 0) or 0), limits["risk_budget"] / loss_per_lot)
+    volume_min = _finite_number(getattr(info, "volume_min", 0), "broker minimum volume")
+    volume_max = _finite_number(getattr(info, "volume_max", 0), "broker maximum volume")
+    volume_step = _finite_number(getattr(info, "volume_step", 0), "broker volume step")
+    if volume_min <= 0 or volume_max < volume_min or volume_step <= 0:
+        raise ValueError(f"MT5 broker volume rules are invalid for {symbol}")
+    step = Decimal(str(volume_step))
+    minimum_steps = int((Decimal(str(volume_min)) / step).to_integral_value(rounding=ROUND_CEILING))
+    maximum_steps = int((Decimal(str(min(volume_max, risk_limited_volume))) / step).to_integral_value(rounding=ROUND_DOWN))
+    if maximum_steps < minimum_steps:
+        raise ValueError("No broker-valid MT5 volume fits the configured per-trade risk budget")
+
+    # Binary-search valid volume steps using broker-calculated margin in account currency.
+    low = minimum_steps
+    high = maximum_steps
+    best_steps = 0
+    while low <= high:
+        middle = (low + high) // 2
+        candidate = float(step * middle)
+        margin = mt5.order_calc_margin(action, symbol, candidate, entry)
+        if margin is None:
+            raise RuntimeError(f"MT5 could not calculate margin for {symbol}: {mt5.last_error()}")
+        margin = _finite_number(margin, "candidate margin")
+        if margin <= limits["margin_budget"] + 1e-8:
+            best_steps = middle
+            low = middle + 1
+        else:
+            high = middle - 1
+    if best_steps < minimum_steps:
+        raise ValueError("No broker-valid MT5 volume fits the configured margin budget")
+
+    volume = float(step * best_steps)
+    financials = _mt5_entry_financials(
+        mt5, account, symbol=symbol, side=side, volume=volume,
+        entry_price=entry, stop_loss=stop, take_profit=take,
+    )
+    return {
+        "approved": True,
+        "venue": "mt5",
+        "environment": "mt5_demo",
+        "symbol": symbol,
+        "side": side,
+        "entry_price": entry,
+        "stop_loss": stop,
+        "take_profit": take,
+        "recommended_volume": volume,
+        "volume_min": volume_min,
+        "volume_max": volume_max,
+        "volume_step": volume_step,
+        "contract_size": float(getattr(info, "trade_contract_size", 0) or 0),
+        "tick_size": float(getattr(info, "trade_tick_size", 0) or 0),
+        "tick_value": float(getattr(info, "trade_tick_value", 0) or 0),
+        "account_currency": str(account.currency),
+        **financials,
+    }
 
 
 def _mt5():
