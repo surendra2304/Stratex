@@ -64,9 +64,10 @@ def build_portfolio_risk_context(
     reporting_currency = os.getenv("STRATEX_REPORTING_CURRENCY", "USD").strip().upper()
     account_key = os.getenv("STRATEX_PORTFOLIO_ACCOUNT_KEY", "stratex-demo").strip()
     fx_rates: dict[str, float] = {}
+    agent = portfolio_agent
     try:
         fx_rates = _fx_rates_from_environment()
-        agent = portfolio_agent or PortfolioAgent.from_environment(
+        agent = agent or PortfolioAgent.from_environment(
             currency_to_reporting_rate=fx_rates,
         )
         snapshot = agent.snapshot(reporting_currency=reporting_currency)
@@ -84,19 +85,38 @@ def build_portfolio_risk_context(
         }
 
     if "candidate_notional" not in context:
-        if intent.venue == "binance":
-            try:
+        try:
+            if intent.venue == "binance":
                 price = float(context["entry_price"])
-                quantity = float(intent.quantity)
-                if price <= 0 or price != price or abs(price) == float("inf"):
-                    raise ValueError("entry price is invalid")
-                raw_notional = price * quantity
                 raw_currency = str(context.get("candidate_notional_currency", "USDT")).strip().upper()
-                rate = 1.0 if raw_currency == reporting_currency else fx_rates.get(raw_currency)
-                if rate is None:
-                    raise ValueError(f"no explicit FX rate for candidate notional currency {raw_currency}")
-                context["candidate_notional"] = raw_notional * rate
-                context["candidate_notional_currency"] = reporting_currency
-            except Exception as exc:
-                context["candidate_notional_error"] = type(exc).__name__
+            elif intent.venue == "mt5":
+                adapter = getattr(agent, "venues", {}).get("mt5") if agent is not None else None
+                if adapter is None or not callable(getattr(adapter, "get_symbol_info", None)):
+                    raise ValueError("authenticated MT5 symbol metadata is unavailable")
+                info = adapter.get_symbol_info(intent.symbol)
+                calc_mode = int(info.get("calc_mode", -1))
+                # Known linear FX/CFD/stocks calculation modes only. Unknown/inverse
+                # contract types require a dedicated notional calculator.
+                if calc_mode not in {0, 1, 3, 4, 5, 32}:
+                    raise ValueError(f"unsupported MT5 contract calculation mode {calc_mode}")
+                contract_size = float(info.get("contract_size", 0))
+                price = float(adapter.get_ticker(intent.symbol).last)
+                raw_currency = str(info.get("profit_currency", "")).strip().upper()
+                if contract_size <= 0 or not raw_currency:
+                    raise ValueError("MT5 contract size/profit currency is unavailable")
+                context["candidate_notional"] = float(intent.quantity) * contract_size * price
+            else:
+                raise ValueError("unsupported venue for candidate notional")
+            if intent.venue == "binance":
+                context["candidate_notional"] = float(intent.quantity) * price
+            if price <= 0 or price != price or abs(price) == float("inf"):
+                raise ValueError("entry/mark price is invalid")
+            raw_notional = float(context["candidate_notional"])
+            rate = 1.0 if raw_currency == reporting_currency else fx_rates.get(raw_currency)
+            if rate is None:
+                raise ValueError(f"no explicit FX rate for candidate notional currency {raw_currency}")
+            context["candidate_notional"] = raw_notional * rate
+            context["candidate_notional_currency"] = reporting_currency
+        except Exception as exc:
+            context["candidate_notional_error"] = type(exc).__name__
     return context
