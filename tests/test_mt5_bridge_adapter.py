@@ -131,3 +131,45 @@ def test_mt5_adapter_requires_bracket_protection_for_entries(monkeypatch):
     )
     with pytest.raises(ValueError, match="stop_loss and take_profit"):
         adapter.place_order("EURUSD", "BUY", "MARKET", 0.1)
+
+
+
+def test_mt5_symbol_discovery_returns_contract_metadata(monkeypatch):
+    monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
+    session = FakeSession({"ok": True, "data": {
+        "count": 1, "returned": 1,
+        "symbols": [{
+            "symbol": "XAUUSD", "description": "Gold vs US Dollar", "path": "Metals\\Gold",
+            "visible": True, "base_currency": "XAU", "profit_currency": "USD",
+            "margin_currency": "USD", "digits": 2, "contract_size": 100,
+            "volume_min": 0.01, "volume_max": 50, "volume_step": 0.01,
+            "tick_size": 0.01, "tick_value": 1.0,
+        }],
+    }})
+    adapter = MT5BridgeAdapter(
+        base_url="http://100.64.0.2:8765", token="test-token", session=session
+    )
+    symbols = adapter.get_symbols(query="XAU", visible_only=False)
+    assert symbols[0]["symbol"] == "XAUUSD"
+    assert symbols[0]["contract_size"] == 100
+    assert symbols[0]["volume_step"] == 0.01
+    method, url, kwargs = session.calls[0]
+    assert method == "GET"
+    assert url.endswith("/v1/symbols")
+    assert kwargs["params"]["query"] == "XAU"
+
+
+def test_mt5_get_symbol_info_requires_exact_broker_symbol(monkeypatch):
+    monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
+    session = FakeSession({"ok": True, "data": {
+        "count": 2, "returned": 2,
+        "symbols": [
+            {"symbol": "XAUUSD.a", "contract_size": 100},
+            {"symbol": "XAUUSD.pro", "contract_size": 100},
+        ],
+    }})
+    adapter = MT5BridgeAdapter(
+        base_url="http://100.64.0.2:8765", token="test-token", session=session
+    )
+    with pytest.raises(MT5BridgeError, match="not found"):
+        adapter.get_symbol_info("XAUUSD")
