@@ -50,7 +50,7 @@ def test_portfolio_risk_gate_approves_healthy_small_demo_entry():
         ({"currency_conversion_complete": False}, "PORTFOLIO_CURRENCY_CONVERSION_INCOMPLETE"),
         ({"captured_at": 900.0}, "PORTFOLIO_SNAPSHOT_STALE"),
         ({"day_start_equity": 1000.0, "reporting_equity": 970.0}, "DAILY_LOSS_LIMIT_REACHED"),
-        ({"high_water_equity": 1000.0, "reporting_equity": 940.0}, "MAX_DRAWDOWN_REACHED"),
+        ({"day_start_equity": 900.0, "high_water_equity": 1000.0, "reporting_equity": 940.0}, "MAX_DRAWDOWN_REACHED"),
         ({"equity_basis": "balance_total_estimate"}, "PORTFOLIO_ACCOUNT_EQUITY_REQUIRED"),
         ({"positions": [{"notional_available": False}]}, "POSITION_NOTIONAL_UNAVAILABLE"),
     ],
