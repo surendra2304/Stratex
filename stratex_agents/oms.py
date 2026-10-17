@@ -67,25 +67,33 @@ class StratexOrderManager:
         self.kill_switch_check = kill_switch_check
 
     def _validate_environment(self, intent: TradeIntent) -> None:
-        mode = os.getenv("TRADING_MODE", "PAPER").strip().upper()
-        if _truthy(os.getenv("LIVE_TRADING_ENABLED")) or mode == "LIVE":
+        mode = os.getenv("STRATEX_EXECUTION_MODE", "DISABLED").strip().upper()
+        if _truthy(os.getenv("LIVE_TRADING_ENABLED")) or os.getenv("TRADING_MODE", "").strip().upper() == "LIVE":
             raise OrderBlockedError("Live-money execution is disabled by Stratex policy.")
-        if mode not in {"TESTNET", "FUTURES"}:
-            raise OrderBlockedError(f"Current TRADING_MODE={mode}; order submission is not enabled.")
+        if mode != "DEMO":
+            raise OrderBlockedError(
+                f"STRATEX_EXECUTION_MODE={mode}; select DEMO explicitly before demo order submission."
+            )
         if intent.venue not in self.venues:
             raise OrderBlockedError(f"Venue {intent.venue!r} is not registered in this runtime.")
-        allowed = {p.strip().lower() for p in os.getenv("STRATEX_ALLOWED_EXECUTION_VENUES", "binance").split(",") if p.strip()}
+        allowed = {
+            p.strip().lower()
+            for p in os.getenv("STRATEX_ALLOWED_EXECUTION_VENUES", "binance").split(",")
+            if p.strip()
+        }
         if intent.venue not in allowed:
             raise OrderBlockedError(f"Venue {intent.venue!r} is not in STRATEX_ALLOWED_EXECUTION_VENUES.")
         if intent.venue == "binance":
             demo = _truthy(os.getenv("BINANCE_DEMO_TRADING"))
             expected = "binance_demo" if demo else "binance_testnet"
             if intent.environment != expected:
-                raise OrderBlockedError(f"Intent environment {intent.environment!r} doesn't match selected Binance environment {expected!r}.")
+                raise OrderBlockedError(
+                    f"Intent environment {intent.environment!r} doesn't match selected Binance environment {expected!r}."
+                )
             if not _truthy(os.getenv("TESTNET_ENABLED", "true")):
                 raise OrderBlockedError("TESTNET_ENABLED is false.")
-            if intent.order_type == "MARKET" and mode not in {"TESTNET", "FUTURES"}:
-                raise OrderBlockedError("Binance market orders require TESTNET or FUTURES mode.")
+            if os.getenv("TRADING_MODE", "PAPER").strip().upper() not in {"TESTNET", "FUTURES"}:
+                raise OrderBlockedError("The existing Binance strategy runtime must be configured for TESTNET/FUTURES mode.")
         elif intent.venue == "mt5":
             if intent.environment != "mt5_demo":
                 raise OrderBlockedError("MT5 demo is the only supported MT5 environment.")
@@ -93,8 +101,6 @@ class StratexOrderManager:
                 raise OrderBlockedError("MT5 bridge is disabled or demo-only enforcement is disabled.")
             if not os.getenv("MT5_BRIDGE_URL", "").strip() or not os.getenv("MT5_BRIDGE_TOKEN", "").strip():
                 raise OrderBlockedError("MT5 bridge private URL and token must be configured.")
-            if mode != "FUTURES":
-                raise OrderBlockedError("Select the non-production FUTURES orchestration mode before enabling MT5 demo orders.")
 
     @staticmethod
     def _status_from_result(result: dict[str, Any]) -> str:
