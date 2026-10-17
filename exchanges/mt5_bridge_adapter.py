@@ -246,6 +246,40 @@ class MT5BridgeAdapter(BaseExchange):
             "client_order_id": intent.client_order_id,
         }
 
+    def reconcile_intent(self, stored: dict[str, Any]) -> dict[str, Any]:
+        """Read the persistent bridge record; UNKNOWN is never auto-resolved by assumption."""
+        payload = stored.get("payload") if isinstance(stored, dict) else None
+        if not isinstance(payload, dict) or payload.get("venue") != "mt5":
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "invalid_stored_intent"}
+        if payload.get("environment") != "mt5_demo":
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "environment_mismatch"}
+        client_order_id = str(stored.get("client_order_id") or payload.get("client_order_id") or "")
+        if not client_order_id:
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "missing_client_order_id"}
+        try:
+            record = self.get_order_by_client_id(client_order_id)
+        except MT5BridgeError:
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "bridge_order_record_not_confirmed"}
+        status = str(record.get("status", "UNKNOWN")).upper()
+        if record.get("manual_reconciliation_required") is True or status == "UNKNOWN":
+            return {
+                "confirmed": False,
+                "status": "UNKNOWN",
+                "evidence": "MT5 bridge flags ambiguous order state for manual reconciliation",
+            }
+        accepted = {"ACCEPTED", "PARTIALLY_FILLED", "FILLED", "CANCELLED", "REJECTED"}
+        if status not in accepted:
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "unsupported_bridge_order_status"}
+        response = record.get("response")
+        if response is not None and not isinstance(response, dict):
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "invalid_bridge_response"}
+        return {
+            "confirmed": True,
+            "status": status,
+            "result": response or {"status": status, "client_order_id": client_order_id, "venue": "mt5"},
+            "evidence": "Persistent MT5 bridge record confirmed order state",
+        }
+
     def get_order_by_client_id(self, client_order_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v1/orders/by-client-id/{client_order_id}")
 
