@@ -9,9 +9,10 @@ from stratex_agents.portfolio_risk_state import PortfolioRiskStateStore
 
 
 class FakePortfolioAgent:
-    def __init__(self, result):
+    def __init__(self, result, venues=None):
         self.result = result
         self.calls = []
+        self.venues = venues or {}
 
     def snapshot(self, reporting_currency="USD"):
         self.calls.append(reporting_currency)
@@ -103,3 +104,30 @@ def test_runtime_builder_rejects_stale_fx_rate(monkeypatch, tmp_path):
     assert context["portfolio"]["status"] == "degraded"
     assert "candidate_notional" not in context
     assert context["candidate_notional_error"] == "ValueError"
+
+
+
+class FakeMT5PortfolioAdapter:
+    def get_symbol_info(self, symbol):
+        assert symbol == "XAUUSD.a"
+        return {"calc_mode": 3, "contract_size": 100.0, "profit_currency": "USD"}
+
+    def get_ticker(self, symbol):
+        assert symbol == "XAUUSD.a"
+        return type("Ticker", (), {"last": 2300.0})()
+
+
+def test_runtime_builder_calculates_mt5_notional_from_broker_contract_metadata(monkeypatch, tmp_path):
+    monkeypatch.setenv("STRATEX_REPORTING_CURRENCY", "USD")
+    monkeypatch.delenv("STRATEX_FX_RATES_JSON", raising=False)
+    adapter = FakeMT5PortfolioAdapter()
+    agent = FakePortfolioAgent(healthy_snapshot(), venues={"mt5": adapter})
+    context = build_portfolio_risk_context(
+        demo_intent("mt5", quantity=0.1),
+        {},
+        portfolio_agent=agent,
+        state_store=PortfolioRiskStateStore(str(tmp_path / "risk.sqlite3")),
+    )
+    assert context["candidate_notional"] == 23000.0
+    assert context["candidate_notional_currency"] == "USD"
+    assert "candidate_notional_error" not in context
