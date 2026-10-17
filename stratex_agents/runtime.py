@@ -59,15 +59,16 @@ def build_order_manager(
             raise PermissionError("MT5 must be explicitly enabled and MT5_REQUIRE_DEMO must remain true.")
         if not os.getenv("MT5_BRIDGE_URL", "").strip() or not os.getenv("MT5_BRIDGE_TOKEN", "").strip():
             raise PermissionError("MT5 bridge URL/token are required in the private deployment environment.")
+        from .venue.mt5_agent import MT5VenueAgent
         if mt5_adapter is None:
             from exchanges.mt5_bridge_adapter import MT5BridgeAdapter
-            from .venue.mt5_agent import MT5VenueAgent
-            mt5_agent = MT5VenueAgent(MT5BridgeAdapter())
-            if check_mt5_health:
-                status = mt5_agent.health_check()
-                if status.get("status") != "healthy":
-                    raise ConnectionError("MT5 bridge did not pass its authenticated demo health check.")
-            mt5_adapter = mt5_agent.adapter
+            mt5_adapter = MT5BridgeAdapter()
+        # An injected adapter is not exempt from authenticated demo validation.
+        mt5_agent = MT5VenueAgent(mt5_adapter)
+        if check_mt5_health:
+            status = mt5_agent.health_check()
+            if status.get("status") != "healthy" or status.get("account_mode") != "demo":
+                raise ConnectionError("MT5 bridge did not pass its authenticated demo health check.")
         venues["mt5"] = mt5_adapter
 
     if not venues:
