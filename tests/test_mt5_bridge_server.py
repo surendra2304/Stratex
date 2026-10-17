@@ -129,3 +129,54 @@ def test_client_id_route_surfaces_unresolved_order(bridge_client):
     assert response.status_code == 200
     assert response.json["data"]["status"] == "UNKNOWN"
     assert response.json["data"]["manual_reconciliation_required"] is True
+
+
+def test_symbols_endpoint_returns_broker_contract_metadata_without_credentials(bridge_client, monkeypatch):
+    client, mt5 = bridge_client
+    mt5.symbols_get = lambda: [
+        types.SimpleNamespace(
+            name="EURUSD", description="Euro vs US Dollar", path="Forex\\Majors", visible=True,
+            trade_mode=4, trade_calc_mode=0, currency_base="EUR", currency_profit="USD",
+            currency_margin="USD", digits=5, point=0.00001, trade_contract_size=100000,
+            trade_tick_size=0.00001, trade_tick_value=1.0, volume_min=0.01,
+            volume_max=100.0, volume_step=0.01, trade_stops_level=10, spread=8,
+            swap_long=-5.0, swap_short=1.0, margin_initial=0, margin_maintenance=0,
+        ),
+        types.SimpleNamespace(
+            name="XAUUSD", description="Gold vs US Dollar", path="Metals\\Gold", visible=False,
+            trade_mode=4, trade_calc_mode=1, currency_base="XAU", currency_profit="USD",
+            currency_margin="USD", digits=2, point=0.01, trade_contract_size=100,
+            trade_tick_size=0.01, trade_tick_value=1.0, volume_min=0.01,
+            volume_max=50.0, volume_step=0.01, trade_stops_level=50, spread=25,
+            swap_long=-10.0, swap_short=2.0, margin_initial=0, margin_maintenance=0,
+        ),
+    ]
+    response = client.get(
+        "/v1/symbols?query=gold&visible_only=false&limit=10",
+        headers={"Authorization": "Bearer test-bridge-token"},
+    )
+    assert response.status_code == 200
+    payload = response.json["data"]
+    assert payload["count"] == 1
+    assert payload["returned"] == 1
+    symbol = payload["symbols"][0]
+    assert symbol["symbol"] == "XAUUSD"
+    assert symbol["contract_size"] == 100
+    assert symbol["volume_min"] == 0.01
+    assert symbol["volume_step"] == 0.01
+    assert symbol["profit_currency"] == "USD"
+    assert "test-bridge-token" not in str(payload)
+
+
+def test_symbols_endpoint_can_filter_to_market_watch_visible_symbols(bridge_client):
+    client, mt5 = bridge_client
+    mt5.symbols_get = lambda: [
+        types.SimpleNamespace(name="EURUSD", description="Euro Dollar", path="Forex", visible=True),
+        types.SimpleNamespace(name="XAUUSD", description="Gold", path="Metals", visible=False),
+    ]
+    response = client.get(
+        "/v1/symbols?visible_only=true",
+        headers={"Authorization": "Bearer test-bridge-token"},
+    )
+    assert response.status_code == 200
+    assert [item["symbol"] for item in response.json["data"]["symbols"]] == ["EURUSD"]
