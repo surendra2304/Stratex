@@ -27,6 +27,41 @@ class MT5VenueAgent:
             and os.getenv("MT5_REQUIRE_DEMO", "true").lower() not in {"0", "false", "no"}
         )
 
+    def evaluate_intent_risk(self, intent, context: dict[str, Any] | None = None) -> tuple[bool, str, str]:
+        """Use the demo terminal's broker-aware sizing before the OMS approves an MT5 intent."""
+        if getattr(intent, "venue", None) != "mt5" or getattr(intent, "environment", None) != "mt5_demo":
+            return False, "MT5_DEMO_INTENT_REQUIRED", "Only MT5 demo intents can reach this evaluator."
+        if not self.configured:
+            return False, "MT5_BRIDGE_NOT_CONFIGURED", "MT5 demo bridge configuration is incomplete."
+        try:
+            sizing = self.adapter.calculate_position_size(
+                intent.symbol, intent.side, intent.stop_loss, intent.take_profit
+            )
+            requested = float(intent.quantity)
+            recommended = float(sizing["recommended_volume"])
+            step = float(sizing["volume_step"])
+            minimum = float(sizing["volume_min"])
+            if requested < minimum:
+                return False, "MT5_VOLUME_BELOW_MINIMUM", f"Requested {requested} is below broker minimum {minimum}."
+            if step <= 0 or abs(round(requested / step) * step - requested) > 1e-8:
+                return False, "MT5_VOLUME_STEP_INVALID", "Requested volume is not aligned to the broker volume step."
+            if requested > recommended + 1e-9:
+                return False, "MT5_RISK_OR_MARGIN_LIMIT", (
+                    f"Requested volume {requested} exceeds broker-calculated safe volume {recommended}."
+                )
+            details = (
+                f"risk={sizing['risk_amount']:.2f} {sizing['account_currency']}; "
+                f"risk_budget={sizing['risk_budget']:.2f}; "
+                f"margin={sizing['margin_required']:.2f}; "
+                f"margin_budget={sizing['margin_budget']:.2f}; "
+                f"recommended_volume={recommended}"
+            )
+            return True, "MT5_BROKER_RISK_OK", details
+        except Exception as exc:
+            # A missing quote, calculator error, stale terminal or missing contract
+            # data is a denial, never a reason to use Binance-style lot arithmetic.
+            return False, "MT5_BROKER_RISK_UNAVAILABLE", type(exc).__name__
+
     def health_check(self) -> dict[str, Any]:
         """Run an authenticated health check; never report success on missing config."""
         if not self.configured:
