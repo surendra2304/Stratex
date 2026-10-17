@@ -121,7 +121,7 @@ def api_v1_portfolio_snapshot():
         raise RequestValidationError("currency", "must be a reporting currency code")
     try:
         snapshot = PortfolioAgent.from_environment().snapshot(currency.upper())
-        return jsonify({"status": "ok", **snapshot})
+        return jsonify({"status": "ok", "portfolio": snapshot})
     except Exception as exc:
         logger.warning("[PORTFOLIO] Snapshot failed (%s)", type(exc).__name__)
         return jsonify({"status": "error", "error": type(exc).__name__}), 503
