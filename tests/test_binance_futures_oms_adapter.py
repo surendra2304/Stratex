@@ -23,6 +23,9 @@ class FakeBinanceClient:
         self.cancelled_algos = []
         self.configuration_calls = []
         self.position_amount = "0"
+        self.reconcile_entry = {"status": "FILLED", "orderId": 111, "avgPrice": "100", "executedQty": "0.105"}
+        self.reconcile_algo_status = "NEW"
+        self.fail_reconcile_algo = False
 
     def futures_get_position_mode(self):
         return {"dualSidePosition": self.hedge_mode}
@@ -73,7 +76,18 @@ class FakeBinanceClient:
         return {"algoId": params["algoId"], "algoStatus": "CANCELED"}
 
     def futures_get_order(self, **params):
-        return {"status": "FILLED", "orderId": 111, "avgPrice": "100", "executedQty": "0.105"}
+        return dict(self.reconcile_entry)
+
+    def futures_get_algo_order(self, *, symbol, clientAlgoId):
+        if self.fail_reconcile_algo:
+            raise TimeoutError("algo lookup unavailable")
+        is_stop = clientAlgoId.endswith("-sl")
+        return {
+            "algoId": 501 if is_stop else 502,
+            "algoStatus": self.reconcile_algo_status,
+            "clientAlgoId": clientAlgoId,
+            "positionSide": "LONG",
+        }
 
 
 def make_intent(*, environment="binance_demo", side="BUY", stop=95.0, take=110.0):
@@ -173,3 +187,46 @@ def test_binance_adapter_refuses_entry_when_existing_position_needs_reconciliati
         adapter.submit_intent(make_intent())
     assert client.order_calls == []
     assert client.algo_calls == []
+
+
+def test_binance_reconciliation_requires_entry_and_both_protective_orders(monkeypatch):
+    set_demo_env(monkeypatch)
+    client = FakeBinanceClient()
+    adapter = BinanceFuturesOMSAdapter(client=client, venue_agent=FakeAgent())
+    stored = {
+        "client_order_id": "stx-binance-oms-001",
+        "status": "UNKNOWN",
+        "payload": {
+            "venue": "binance", "environment": "binance_demo", "symbol": "BTCUSDT",
+            "side": "BUY", "order_type": "MARKET", "quantity": 0.105,
+            "stop_loss": 95.0, "take_profit": 110.0,
+            "client_order_id": "stx-binance-oms-001",
+        },
+    }
+    result = adapter.reconcile_intent(stored)
+    assert result["confirmed"] is True
+    assert result["status"] == "FILLED"
+    assert result["result"]["protection_verified"] is True
+    assert result["result"]["stop_algo_id"] == 501
+    assert result["result"]["take_profit_algo_id"] == 502
+
+
+def test_binance_reconciliation_keeps_unknown_when_protection_cannot_be_verified(monkeypatch):
+    set_demo_env(monkeypatch)
+    client = FakeBinanceClient()
+    client.reconcile_algo_status = "CANCELED"
+    adapter = BinanceFuturesOMSAdapter(client=client, venue_agent=FakeAgent())
+    stored = {
+        "client_order_id": "stx-binance-oms-001",
+        "status": "UNKNOWN",
+        "payload": {
+            "venue": "binance", "environment": "binance_demo", "symbol": "BTCUSDT",
+            "side": "BUY", "order_type": "MARKET", "quantity": 0.105,
+            "stop_loss": 95.0, "take_profit": 110.0,
+            "client_order_id": "stx-binance-oms-001",
+        },
+    }
+    result = adapter.reconcile_intent(stored)
+    assert result["confirmed"] is False
+    assert result["status"] == "UNKNOWN"
+    assert "not both confirmed working" in result["evidence"]
