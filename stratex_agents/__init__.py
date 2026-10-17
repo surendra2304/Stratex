@@ -3,6 +3,7 @@ from .registry import get_agent_catalog
 from .order_intent import TradeIntent
 from .order_store import OrderIntentStore, IntentConflictError, IntentInFlightError
 from .oms import StratexOrderManager, OMSResult, OrderBlockedError
+from .market_data import MarketDataAgent, MarketDataUnavailable
 
 __all__ = [
     "get_agent_catalog",
@@ -13,4 +14,6 @@ __all__ = [
     "StratexOrderManager",
     "OMSResult",
     "OrderBlockedError",
+    "MarketDataAgent",
+    "MarketDataUnavailable",
 ]
