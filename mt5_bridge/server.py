@@ -217,3 +217,34 @@ def cancel_order(order_id: str):
 if __name__ == "__main__":
     # Keep loopback as the default; remote use must explicitly bind a private VPN IP.
     app.run(host=BIND_HOST, port=PORT, debug=False, threaded=True)
+
+
+@app.post("/v1/positions/<position_ticket>/close")
+@_auth
+def close_position(position_ticket: str):
+    """Close one hedge-mode position by its native ticket, never by symbol alone."""
+    mt5, _ = _mt5()
+    ticket = int(position_ticket)
+    matches = mt5.positions_get(ticket=ticket)
+    if matches is None or len(matches) != 1:
+        raise ValueError("position ticket not found or ambiguous")
+    position = matches[0]
+    tick = mt5.symbol_info_tick(position.symbol)
+    if tick is None:
+        raise RuntimeError("cannot close position because current tick is unavailable")
+    is_buy_position = int(position.type) == int(mt5.POSITION_TYPE_BUY)
+    close_request = {
+        "action": mt5.TRADE_ACTION_DEAL, "symbol": position.symbol,
+        "position": ticket, "volume": float(position.volume),
+        "type": mt5.ORDER_TYPE_SELL if is_buy_position else mt5.ORDER_TYPE_BUY,
+        "price": float(tick.bid if is_buy_position else tick.ask),
+        "deviation": int(os.getenv("MT5_DEVIATION_POINTS", "20")),
+        "magic": int(os.getenv("MT5_MAGIC_NUMBER", "260101")),
+        "comment": "Stratex demo close by ticket", "type_filling": mt5.symbol_info(position.symbol).filling_mode,
+    }
+    result = mt5.order_send(close_request)
+    if result is None:
+        raise RuntimeError(f"MT5 position close failed: {mt5.last_error()}")
+    return _data({"ticket": ticket, "closed": result.retcode in {
+        mt5.TRADE_RETCODE_DONE, getattr(mt5, "TRADE_RETCODE_DONE_PARTIAL", -1)},
+        "retcode": int(result.retcode), "comment": str(result.comment)})
