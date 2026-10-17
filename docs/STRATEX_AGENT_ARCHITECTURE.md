@@ -130,3 +130,8 @@ The state store establishes its daily baseline from the first healthy, verified 
 
 
 The shared `build_venue_aware_authorizer` factory can compose the existing Binance RiskGate, MT5 broker-aware evaluator, portfolio gate and a per-intent fresh-context provider into one callback for the shared OMS. It fails closed when the context provider raises or a venue-specific risk evaluator is missing.
+
+
+## Durable OMS audit trail
+
+The SQLite order store now appends an `INTENT_RESERVED` event, every state transition, and repeated valid duplicate requests to `order_audit_events` in the same transaction as the corresponding ledger change. SQLite triggers reject direct updates/deletes of audit rows. Event details use an allowlist of intent/result fields and omit arbitrary intent metadata and credential-like response fields. The store also enforces monotonic lifecycle transitions, so a partial fill cannot regress to an accepted/new state. Back up the OMS and portfolio-risk SQLite files together on a persistent volume.
