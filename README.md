@@ -180,17 +180,24 @@ Emergency risk control endpoints to immediately halt scanning, disallow new entr
 
 ## ⚙️ Environment Configuration
 
-Stratex reads environment variables from `.env`. A complete configuration template is provided in `.env.example`:
+Stratex reads environment variables from `.env`. A complete configuration template is provided in `.env.example`.
+
+The credential sets for legacy Binance Testnet and the current Demo Trading environment are not interchangeable. When `BINANCE_DEMO_TRADING=true`, the Binance venue agent requires the fresh `BINANCE_API_KEY` and `BINANCE_API_SECRET` values and pins execution to Demo endpoints. It does not fall back to legacy keys. Use `GET /api/agents` to inspect the safe agent catalog and configuration state.
+
 
 | Variable | Description | Default | Allowed Values |
 | :--- | :--- | :--- | :--- |
 | `PORT` | WSGI listening port | `8000` | Any valid TCP port |
-| `TRADING_MODE` | Trading execution mode | `TESTNET` | `TESTNET`, `PAPER`, `FUTURES` |
-| `TESTNET_ENABLED` | Enable Binance Testnet order placement | `True` | `True`, `False` |
-| `LIVE_TRADING_ENABLED` | Enable live real-money trading | `False` | Strictly `False` |
-| `ALLOWED_ORIGINS` | CORS origin whitelist | `https://friday-universe.duckdns.org,...` | Comma-delimited URLs |
-| `BINANCE_API_KEY` | Binance Spot/Futures Testnet API Key | `""` | User-provided secret |
-| `BINANCE_API_SECRET` | Binance Spot/Futures Testnet Secret | `""` | User-provided secret |
+| `TRADING_MODE` | Execution mode | `PAPER` | `PAPER`, `TESTNET`, `FUTURES` |
+| `TESTNET_ENABLED` | Allow the existing non-production execution path | `False` in the sample | `True`, `False` |
+| `LIVE_TRADING_ENABLED` | Live money trading | `False` | Must remain `False` |
+| `BINANCE_DEMO_TRADING` | Select current Binance Demo Trading endpoints | `false` | `true`, `false` |
+| `BINANCE_API_KEY` | Current Binance Demo Trading API key (when Demo Trading is selected) | Empty | Demo Trading key only |
+| `BINANCE_API_SECRET` | Current Binance Demo Trading API secret | Empty | Demo Trading secret only |
+| `API_KEY` / `SECRET_KEY` | Legacy Binance Testnet credentials (used only when Demo Trading is false) | Placeholder in sample | Legacy Testnet keys only |
+| `MT5_BRIDGE_ENABLED` | Enable the remote MT5 bridge adapter | `false` | `true`, `false` |
+| `MT5_BRIDGE_URL` | Private/VPN address for the Windows MT5 bridge | Empty | Private network URL only |
+| `MT5_BRIDGE_TOKEN` | Bearer token for the MT5 bridge | Empty | High-entropy secret |
 | `MAX_TESTNET_EXPOSURE` | Maximum portfolio capital exposure | `0.05` | Float (e.g. `0.05` = 5%) |
 | `MAX_DAILY_LOSS_PCT` | Maximum daily loss tolerance | `0.02` | Float (e.g. `0.02` = 2%) |
 | `MAX_TESTNET_DRAWDOWN_PCT` | Maximum drawdown circuit breaker | `0.05` | Float (e.g. `0.05` = 5%) |
