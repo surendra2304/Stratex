@@ -14,11 +14,16 @@ def _on(name: str, default: str = "false") -> bool:
     return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _configured_secret(name: str) -> bool:
+    value = os.getenv(name, "").strip()
+    return bool(value and not value.upper().startswith("YOUR_") and value.upper() not in {"CHANGEME", "REPLACE_ME"})
+
+
 def get_agent_catalog() -> list[dict[str, Any]]:
     demo_binance = _on("BINANCE_DEMO_TRADING")
-    has_demo_credentials = bool(os.getenv("BINANCE_API_KEY", "").strip() and os.getenv("BINANCE_API_SECRET", "").strip())
+    has_demo_credentials = _configured_secret("BINANCE_API_KEY") and _configured_secret("BINANCE_API_SECRET")
     mt5_enabled = _on("MT5_BRIDGE_ENABLED")
-    has_mt5_config = bool(os.getenv("MT5_BRIDGE_URL", "").strip() and os.getenv("MT5_BRIDGE_TOKEN", "").strip())
+    has_mt5_config = bool(os.getenv("MT5_BRIDGE_URL", "").strip()) and _configured_secret("MT5_BRIDGE_TOKEN")
     inference_on = _on("AI_UNIVERSE_ENABLED", "true")
     futuris_on = _on("FUTURIS_FORECAST_ENABLED")
     intelx_on = _on("INTELX_INTELLIGENCE_ENABLED")
