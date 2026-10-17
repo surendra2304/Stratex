@@ -21,6 +21,7 @@ class FakeBinanceClient:
         self.order_calls = []
         self.algo_calls = []
         self.cancelled_algos = []
+        self.configuration_calls = []
 
     def futures_get_position_mode(self):
         return {"dualSidePosition": self.hedge_mode}
@@ -31,11 +32,23 @@ class FakeBinanceClient:
             "filters": [
                 {"filterType": "LOT_SIZE", "stepSize": "0.001", "minQty": "0.001"},
                 {"filterType": "MIN_NOTIONAL", "notional": "5"},
+                {"filterType": "PRICE_FILTER", "tickSize": "0.1"},
             ],
         }]}
 
     def futures_symbol_ticker(self, symbol):
         return {"symbol": symbol, "price": "100.0"}
+
+    def futures_account(self):
+        return {"availableBalance": "10000"}
+
+    def futures_change_margin_type(self, symbol, marginType):
+        self.configuration_calls.append(("margin", symbol, marginType))
+        return {"symbol": symbol, "marginType": marginType}
+
+    def futures_change_leverage(self, symbol, leverage):
+        self.configuration_calls.append(("leverage", symbol, leverage))
+        return {"symbol": symbol, "leverage": leverage}
 
     def futures_create_order(self, **params):
         self.order_calls.append(params)
@@ -83,6 +96,8 @@ def test_binance_market_intent_adds_protective_stop_and_take_profit(monkeypatch)
     assert result["stop_algo_id"] == 1
     assert result["take_profit_algo_id"] == 2
     assert client.order_calls[0]["positionSide"] == "LONG"
+    assert ("margin", "BTCUSDT", "ISOLATED") in client.configuration_calls
+    assert ("leverage", "BTCUSDT", 5) in client.configuration_calls
     assert len(client.algo_calls) == 2
     assert client.algo_calls[0]["type"] == "STOP_MARKET"
     assert client.algo_calls[0]["triggerPrice"] == "95.0"
