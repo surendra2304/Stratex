@@ -4,6 +4,7 @@ from .order_intent import TradeIntent
 from .order_store import OrderIntentStore, IntentConflictError, IntentInFlightError
 from .oms import StratexOrderManager, OMSResult, OrderBlockedError
 from .market_data import MarketDataAgent, MarketDataUnavailable
+from .risk_agent import DeterministicRiskAgent, RiskDecision
 
 __all__ = [
     "get_agent_catalog",
@@ -16,4 +17,6 @@ __all__ = [
     "OrderBlockedError",
     "MarketDataAgent",
     "MarketDataUnavailable",
+    "DeterministicRiskAgent",
+    "RiskDecision",
 ]
