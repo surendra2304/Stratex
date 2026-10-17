@@ -92,9 +92,13 @@ class PortfolioAgent:
         venue_reports: dict[str, Any] = {}
         all_positions: list[dict[str, Any]] = []
         native_balance_totals: dict[str, float] = {}
+        balance_total_equity = 0.0
+        account_equity_total = 0.0
+        account_equity_complete = bool(self.venues)
+        account_equity_venues = 0
         reporting_equity = 0.0
         reporting_free_cash = 0.0
-        converted_equity_complete = True
+        converted_balance_total_complete = True
         converted_free_complete = True
 
         for venue_name, venue in sorted(self.venues.items()):
@@ -108,6 +112,31 @@ class PortfolioAgent:
             }
             balances_ok = False
             positions_ok = False
+
+            # Prefer broker-reported account equity (includes unrealized PnL).
+            # Never treat summed wallet balances as equivalent to margin equity.
+            get_equity = getattr(venue, "get_equity", None)
+            if not callable(get_equity):
+                account_equity_complete = False
+            else:
+                try:
+                    equity_rows = get_equity()
+                    if not isinstance(equity_rows, dict) or not equity_rows:
+                        raise PortfolioSnapshotError("venue account equity result is invalid")
+                    for currency, raw_equity in equity_rows.items():
+                        code = str(currency).upper()
+                        value = float(raw_equity)
+                        if not code or not value > 0 or value != value or abs(value) == float("inf"):
+                            raise PortfolioSnapshotError(f"invalid account equity for {code}")
+                        fx_rate = 1.0 if code == reporting_currency else self.fx.get(code)
+                        if fx_rate is None:
+                            account_equity_complete = False
+                        else:
+                            account_equity_total += value * fx_rate
+                    account_equity_venues += 1
+                except Exception:
+                    account_equity_complete = False
+
             try:
                 balances = venue.get_balance()
                 if not isinstance(balances, dict):
@@ -130,16 +159,16 @@ class PortfolioAgent:
 
                     fx_rate = 1.0 if code == reporting_currency else self.fx.get(code)
                     if fx_rate is None:
-                        converted_equity_complete = False
+                        converted_balance_total_complete = False
                         converted_free_complete = False
                     else:
-                        reporting_equity += total * fx_rate
+                        balance_total_equity += total * fx_rate
                         reporting_free_cash += free * fx_rate
                 report["balances"] = balance_rows
                 balances_ok = True
             except Exception as exc:
                 report["balance_error"] = type(exc).__name__
-                converted_equity_complete = False
+                converted_balance_total_complete = False
                 converted_free_complete = False
 
             try:
@@ -193,6 +222,15 @@ class PortfolioAgent:
             venue_reports[venue_name] = report
 
         total_native_open_positions = len(all_positions)
+        account_equity_available = bool(self.venues) and account_equity_complete and account_equity_venues == len(self.venues)
+        if account_equity_available:
+            reporting_equity = account_equity_total
+            equity_basis = "account_equity"
+            currency_conversion_complete = True
+        else:
+            reporting_equity = balance_total_equity if self.venues and converted_balance_total_complete else 0.0
+            equity_basis = "balance_total_estimate"
+            currency_conversion_complete = bool(self.venues) and converted_balance_total_complete
         return {
             "agent_id": self.agent_id,
             "captured_at": captured_at,
@@ -203,9 +241,12 @@ class PortfolioAgent:
                 else "degraded" if venue_reports
                 else "no_venues_configured"
             ),
-            "reporting_equity": round(reporting_equity, 8) if venue_reports and converted_equity_complete else None,
+            "reporting_equity": round(reporting_equity, 8) if venue_reports and (
+                account_equity_available or converted_balance_total_complete
+            ) else None,
+            "equity_basis": equity_basis if venue_reports else "unavailable",
             "reporting_free_cash": round(reporting_free_cash, 8) if venue_reports and converted_free_complete else None,
-            "currency_conversion_complete": bool(venue_reports) and converted_equity_complete and converted_free_complete,
+            "currency_conversion_complete": currency_conversion_complete,
             "native_balance_totals": {
                 key: round(value, 8) for key, value in sorted(native_balance_totals.items())
             },
