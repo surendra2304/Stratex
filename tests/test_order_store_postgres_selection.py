@@ -1,6 +1,6 @@
 """Configuration and adapter tests for PostgreSQL-backed OMS storage."""
 
-from pathlib import Path
+import pytest
 
 from stratex_agents.order_store import OrderIntentStore
 
@@ -29,7 +29,6 @@ def test_explicit_sqlite_path_remains_available_for_isolated_tests(monkeypatch, 
     assert path.exists()
 
 
-
 @pytest.mark.parametrize(
     "enabled_variable",
     ["STRATEX_ORDER_MANAGER_ENABLED", "STRATEX_RECONCILIATION_ENABLED"],
@@ -53,8 +52,6 @@ def test_invalid_configured_stratex_database_url_fails_closed(monkeypatch, tmp_p
     monkeypatch.delenv("STRATEX_ENVIRONMENT", raising=False)
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     monkeypatch.chdir(tmp_path)
-
-    import pytest
 
     with pytest.raises(RuntimeError, match="must use PostgreSQL"):
         OrderIntentStore()
