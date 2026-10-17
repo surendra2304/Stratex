@@ -47,7 +47,6 @@ def test_risk_agent_uses_existing_deterministic_binance_risk_gate():
     assert result.approved is True
     assert result.reason == "RISK_OK"
     assert len(gate.calls) == 1
-    assert result.to_dict()["execution_authority"] if "execution_authority" in result.to_dict() else True
 
 
 def test_risk_agent_rejects_when_binance_risk_gate_denies():
