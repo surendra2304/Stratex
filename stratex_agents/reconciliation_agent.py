@@ -37,6 +37,7 @@ class OrderReconciliationAgent:
         candidates = self.store.list_reconcilable(limit=limit)
         records: list[dict[str, Any]] = []
         resolved = 0
+        confirmed = 0
         pending = 0
         errors = 0
 
@@ -129,13 +130,22 @@ class OrderReconciliationAgent:
                         "reason": type(exc).__name__,
                     })
                     continue
-            resolved += 1
+            confirmed += 1
+            if status in {"ACCEPTED", "PARTIALLY_FILLED"}:
+                pending += 1
+                record_state = "pending"
+                record_reason = "venue_confirms_order_is_still_open_or_partially_filled"
+            else:
+                resolved += 1
+                record_state = "resolved"
+                record_reason = None
             records.append({
                 "client_order_id": client_order_id,
                 "venue": venue,
                 "previous_status": candidate["status"],
                 "status": status,
-                "state": "resolved",
+                "state": record_state,
+                "reason": record_reason,
                 "evidence": str(response.get("evidence", "venue_confirmation"))[:200],
             })
 
@@ -143,6 +153,7 @@ class OrderReconciliationAgent:
             "agent_id": self.agent_id,
             "execution_authority": False,
             "candidates": len(candidates),
+            "confirmed": confirmed,
             "resolved": resolved,
             "pending": pending,
             "errors": errors,
