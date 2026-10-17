@@ -102,3 +102,12 @@ The API returns normalized market values but does not imply a signal is approved
 The existing Futures strategy path now has an explicit, disabled-by-default integration point. `STRATEX_ORDER_MANAGER_ENABLED=false` preserves the legacy executor. When it is explicitly enabled, the Futures entry call requires the current RiskGate and risk context, creates a normalized `TradeIntent`, and sends it through the shared OMS. The OMS calls the same deterministic RiskGate again immediately before submit, checks the execution policy and kill switch, persists the order ID/status, and refuses blind retries for an ambiguous result. Successful protected fills are mirrored to the legacy active-trade store so the existing Futures monitor/trailing loops can see the protective Algo Order IDs.
 
 This flag is **not a production readiness toggle**. Keep `STRATEX_EXECUTION_MODE=DISABLED` and `STRATEX_ORDER_MANAGER_ENABLED=false` until CI is green, Demo Trading keys are installed privately, a Binance demo integration run verifies fills + both protective Algo orders + sibling-order cancellation, and restart/reconciliation tests have passed. MT5 routing remains allowlisted separately and requires its own demo bridge soak test.
+
+
+## MT5 CFD/Forex risk sizing and broker preflight
+
+The demo bridge now exposes `POST /v1/risk/size`. It uses the connected demo account's equity/free margin and the broker's native `order_calc_profit` / `order_calc_margin` calculations to size lots, rather than applying Binance's base-quantity formula to Forex or CFDs. Before an entry, the bridge rechecks the actual requested volume against the account-currency stop-loss budget and margin budget, then runs `order_check` before reserving/submitting the order. The broker order-check result is a preflight only; it does not guarantee a subsequent fill.
+
+Default environment limits are `MT5_MAX_RISK_PER_TRADE=0.005` (0.5% of equity, hard-capped by code at 2%) and `MT5_MAX_MARGIN_FRACTION=0.20` (20% of equity and never more than half of current free margin; hard-capped by code at 35%). These limits apply per new entry. This does not yet replace the shared portfolio-wide daily-loss/drawdown controller, and no LLM response is allowed to increase them.
+
+Official API references: [MetaTrader 5 `order_calc_profit`](https://www.mql5.com/en/docs/python_metatrader5/mt5ordercalcprofit_py), [`order_calc_margin`](https://www.mql5.com/en/docs/python_metatrader5/mt5ordercalcmargin_py), and [`order_check`](https://www.mql5.com/en/docs/python_metatrader5/mt5ordercheck_py).
