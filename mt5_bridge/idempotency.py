@@ -55,6 +55,10 @@ class BridgeOrderStore:
         conn = self._connect()
         try:
             yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             conn.close()
 
