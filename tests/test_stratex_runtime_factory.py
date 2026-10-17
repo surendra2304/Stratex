@@ -1,6 +1,7 @@
 import pytest
 
-from stratex_agents.runtime import build_order_manager
+from stratex_agents.runtime import build_order_manager, build_venue_aware_authorizer
+from stratex_agents.order_intent import TradeIntent
 
 
 class FakeVenue:
@@ -107,3 +108,42 @@ def test_runtime_factory_refuses_injected_mt5_adapter_without_demo_confirmation(
             mt5_adapter=adapter,
             check_mt5_health=True,
         )
+
+
+
+class FakeMT5RiskAgent:
+    def evaluate_intent_risk(self, intent, context):
+        assert intent.venue == "mt5"
+        assert context == {"fresh": True}
+        return True, "MT5_BROKER_RISK_OK", "demo sizing verified"
+
+
+def test_venue_aware_authorizer_uses_mt5_broker_risk_agent():
+    authorizer = build_venue_aware_authorizer(
+        execution_policy=lambda: (True, "DEMO_ALLOWED"),
+        context_provider=lambda _intent: {"fresh": True},
+        mt5_agent=FakeMT5RiskAgent(),
+    )
+    intent = TradeIntent(
+        venue="mt5", symbol="XAUUSD.a", side="BUY", order_type="MARKET",
+        quantity=0.1, environment="mt5_demo", stop_loss=2290, take_profit=2320,
+        strategy="authorizer-test", client_order_id="stx-auth-mt5-001",
+    )
+    allowed, reason = authorizer(intent)
+    assert allowed is True
+    assert reason == "MT5_BROKER_RISK_OK: demo sizing verified"
+
+
+def test_venue_aware_authorizer_fails_closed_when_context_provider_raises():
+    authorizer = build_venue_aware_authorizer(
+        execution_policy=lambda: (True, "DEMO_ALLOWED"),
+        context_provider=lambda _intent: (_ for _ in ()).throw(TimeoutError()),
+    )
+    intent = TradeIntent(
+        venue="mt5", symbol="XAUUSD.a", side="BUY", order_type="MARKET",
+        quantity=0.1, environment="mt5_demo", stop_loss=2290, take_profit=2320,
+        strategy="authorizer-test", client_order_id="stx-auth-mt5-002",
+    )
+    allowed, reason = authorizer(intent)
+    assert allowed is False
+    assert reason == "RISK_CONTEXT_PROVIDER_ERROR: TimeoutError"
