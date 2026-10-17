@@ -92,9 +92,10 @@ class BinanceFuturesAgent:
         self._assert_no_production_endpoints(client)
         return client
 
-    def create_public_client(self, *, futures: bool = True) -> Any:
+    def create_public_client(self, *, futures: bool = True, client_cls: Any = None) -> Any:
         """Create an unauthenticated market-data client pinned to demo/testnet."""
-        client = Client("", "", testnet=not self.demo_trading, ping=False)
+        client_type = client_cls or Client
+        client = client_type("", "", testnet=not self.demo_trading, ping=False)
         if self.demo_trading:
             client.API_URL = BINANCE_DEMO_SPOT_API_URL
             client.FUTURES_URL = BINANCE_DEMO_FUTURES_API_URL
