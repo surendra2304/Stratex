@@ -744,13 +744,25 @@ def _place_futures_market_order_via_oms(
         metadata={"leverage": int(leverage_value), "original_signal_id": original_client_id},
     )
 
+    portfolio_risk_gate = None
+    effective_risk_context = risk_context
+    if os.getenv("STRATEX_PORTFOLIO_RISK_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}:
+        from stratex_agents.portfolio_risk_gate import PortfolioRiskGate
+        from stratex_agents.portfolio_risk_runtime import build_portfolio_risk_context
+
+        portfolio_risk_gate = PortfolioRiskGate()
+        # Refresh broker equity/positions and persist UTC-day/high-water baselines
+        # immediately before authorization. Any missing data makes the gate deny.
+        effective_risk_context = build_portfolio_risk_context(trade_intent, risk_context)
+
     risk_agent = DeterministicRiskAgent(
         binance_risk_gate=risk_gate,
         execution_policy=ExecutionPolicy.can_place_order,
+        portfolio_risk_gate=portfolio_risk_gate,
     )
 
     def authorize_with_existing_risk_gate(trade_intent):
-        decision = risk_agent.authorize(trade_intent, risk_context)
+        decision = risk_agent.authorize(trade_intent, effective_risk_context)
         reason = decision.reason if not decision.details else f"{decision.reason}: {decision.details}"
         return decision.approved, reason
 
