@@ -43,24 +43,31 @@ class MarketScanner:
             
         self.testnet = testnet
         self.is_futures = is_futures
-        
-        try:
-            self.client = Client("", "", testnet=testnet, ping=False)
-        except Exception as client_err:
-            logger.warning(f"[SCANNER] Testnet client init failed ({client_err}), falling back to public client")
-            try:
-                self.client = Client("", "", testnet=False, ping=False)
-            except Exception:
-                class DummyClient:
-                    def ping(self): pass
-                    def get_klines(self, **kwargs): return []
-                    def futures_klines(self, **kwargs): return []
-                self.client = DummyClient()
+        from stratex_agents.venue.binance_futures_agent import BinanceFuturesAgent
+        self.venue_agent = BinanceFuturesAgent()
 
         try:
-            self.prod_client = Client("", "", testnet=False, ping=False)
-        except Exception:
+            if testnet:
+                self.client = self.venue_agent.create_public_client(
+                    futures=is_futures, client_cls=Client
+                )
+            else:
+                # A production public-data scanner is allowed only when explicitly requested;
+                # it is never used as a signed execution client.
+                self.client = Client("", "", testnet=False, ping=False)
+        except Exception as client_err:
+            logger.warning(f"[SCANNER] Venue-specific market-data client init failed: {client_err}")
+            self.client = None
+
+        # Demo Trading symbol metadata and current market reads must remain venue-consistent.
+        # Legacy testnet retains the existing optional public-history warm-seed behavior.
+        if self.venue_agent.demo_trading or not testnet:
             self.prod_client = None
+        else:
+            try:
+                self.prod_client = Client("", "", testnet=False, ping=False)
+            except Exception:
+                self.prod_client = None
 
         if twm is not None:
             self.twm = twm
@@ -122,7 +129,7 @@ class MarketScanner:
             if not klines:
                 logger.error(f"[SCANNER] No historical data for {symbol} ({tf})")
                 return
-            if len(klines) < TARGET_BARS:
+            if len(klines) < TARGET_BARS and not self.venue_agent.demo_trading:
                 # Binance TESTNET keeps only ~2-3 weeks of history — too short to
                 # warm EMA200/ADX. Seed older bars from PRODUCTION public klines
                 # (no credentials required). Only indicator warm-up uses these;
