@@ -162,9 +162,9 @@ class PortfolioAgent:
                 else "degraded" if venue_reports
                 else "no_venues_configured"
             ),
-            "reporting_equity": round(reporting_equity, 8) if converted_equity_complete else None,
-            "reporting_free_cash": round(reporting_free_cash, 8) if converted_free_complete else None,
-            "currency_conversion_complete": converted_equity_complete and converted_free_complete,
+            "reporting_equity": round(reporting_equity, 8) if venue_reports and converted_equity_complete else None,
+            "reporting_free_cash": round(reporting_free_cash, 8) if venue_reports and converted_free_complete else None,
+            "currency_conversion_complete": bool(venue_reports) and converted_equity_complete and converted_free_complete,
             "native_balance_totals": {
                 key: round(value, 8) for key, value in sorted(native_balance_totals.items())
             },
