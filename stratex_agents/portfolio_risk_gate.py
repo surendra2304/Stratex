@@ -98,6 +98,11 @@ class PortfolioRiskGate:
         currency = str(snapshot.get("reporting_currency", "")).strip().upper()
         if not currency:
             return False, "PORTFOLIO_REPORTING_CURRENCY_MISSING", "Reporting currency is required."
+        candidate_currency = str(context.get("candidate_notional_currency", "")).strip().upper()
+        if candidate_currency != currency:
+            return False, "CANDIDATE_NOTIONAL_CURRENCY_MISMATCH", (
+                "Candidate notional must be converted to the portfolio reporting currency using an explicit FX rate."
+            )
         if min(equity, day_start, high_water) <= 0:
             return False, "PORTFOLIO_EQUITY_INVALID", "Equity baselines must be positive."
         if candidate_notional < 0:
