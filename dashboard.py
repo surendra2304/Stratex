@@ -107,6 +107,26 @@ def api_stratex_agents():
         logger.exception("[AGENTS_API] Unable to load agent registry")
         return jsonify({"status": "error", "error": type(exc).__name__}), 500
 
+@app.route('/api/v1/portfolio/snapshot', methods=['GET'])
+@require_api_scope(scope=SCOPE_READ)
+def api_v1_portfolio_snapshot():
+    """Return a read-only multi-venue portfolio snapshot without invented FX conversion."""
+    from api.validation import RequestValidationError
+    from stratex_agents.portfolio_agent import PortfolioAgent
+    currency = query_text(
+        "currency", "USD", max_len=10,
+        pattern=re.compile(r"^[A-Za-z]{3,10}$"),
+    )
+    if not currency:
+        raise RequestValidationError("currency", "must be a reporting currency code")
+    try:
+        snapshot = PortfolioAgent.from_environment().snapshot(currency.upper())
+        return jsonify({"status": "ok", **snapshot})
+    except Exception as exc:
+        logger.warning("[PORTFOLIO] Snapshot failed (%s)", type(exc).__name__)
+        return jsonify({"status": "error", "error": type(exc).__name__}), 503
+
+
 @app.route('/api/v1/market/instruments', methods=['GET'])
 @require_api_scope(scope=SCOPE_READ)
 def api_v1_market_instruments():
