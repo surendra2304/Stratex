@@ -64,7 +64,7 @@ BINANCE_DEMO_TRADING = os.getenv("BINANCE_DEMO_TRADING", "false").strip().lower(
 BASE_URL = "https://demo-api.binance.com" if BINANCE_DEMO_TRADING else "https://testnet.binance.vision"
 WS_URL = "wss://ws-api.testnet.binance.vision/ws-api/v3"
 FUTURES_BASE_URL = "https://demo-fapi.binance.com" if BINANCE_DEMO_TRADING else "https://testnet.binancefuture.com"
-FUTURES_WS_URL = "wss://demo-fstream.binancefuture.com/ws" if BINANCE_DEMO_TRADING else "wss://stream.binancefuture.com/ws"
+FUTURES_WS_URL = "wss://demo-fstream.binance.com/ws" if BINANCE_DEMO_TRADING else "wss://stream.binancefuture.com/ws"
 
 # --- Futures Configuration ---
 FUTURES_LEVERAGE = int(os.getenv("FUTURES_LEVERAGE", "5"))  # Default 5x leverage for testnet testing
