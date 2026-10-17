@@ -227,8 +227,17 @@ class PortfolioAgent:
                                 parsed_notional = float(raw_notional)
                                 parsed_currency = str(raw_currency or "").strip().upper()
                                 if parsed_notional >= 0 and abs(parsed_notional) != float("inf") and parsed_currency:
-                                    notional = parsed_notional
-                                    notional_currency = parsed_currency
+                                    if parsed_currency == reporting_currency:
+                                        notional = parsed_notional
+                                        notional_currency = parsed_currency
+                                    else:
+                                        fx_rate = self.fx.get(parsed_currency)
+                                        if fx_rate is not None:
+                                            notional = parsed_notional * fx_rate
+                                            notional_currency = reporting_currency
+                                        else:
+                                            notional = parsed_notional
+                                            notional_currency = parsed_currency
                         except Exception:
                             notional = None
                             notional_currency = None
