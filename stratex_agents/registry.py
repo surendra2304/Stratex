@@ -91,9 +91,9 @@ def get_agent_catalog() -> list[dict[str, Any]]:
             "id": "portfolio",
             "name": "Portfolio & Exposure Agent",
             "kind": "portfolio",
-            "status": "available",
+            "status": "implemented_read_only_snapshot",
             "execution_authority": False,
-            "responsibility": "Aggregates per-venue balances and positions while maintaining account-specific risk boundaries.",
+            "responsibility": "Aggregates native-currency balances and broker-native positions; does not fabricate cross-currency notional.",
         },
         {
             "id": "order_management",
@@ -107,9 +107,9 @@ def get_agent_catalog() -> list[dict[str, Any]]:
             "id": "reconciliation",
             "name": "Order Reconciliation Agent",
             "kind": "operations",
-            "status": "foundation_available_runtime_integration_pending",
+            "status": "implemented_evidence_based_polling",
             "execution_authority": False,
-            "responsibility": "Reconciles intents, acknowledgements, fills, pending orders, positions and ledgers after errors/restarts.",
+            "responsibility": "Polls injected venue resolvers and updates persisted states only on explicit confirmation; never submits orders.",
         },
         {
             "id": "inference_advisor",
