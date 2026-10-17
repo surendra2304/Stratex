@@ -81,3 +81,17 @@ This is a durable OMS foundation with contract tests, not yet an assertion that 
 - Conditional Futures orders use `futures_create_algo_order`; conditional types moved to the algo API in recent Binance API changes. See [python-binance Futures Algo Order example](https://github.com/sammchardy/python-binance/blob/master/examples/futures_algo_order_examples.py) and [Binance USDⓈ-M Futures order documentation](https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/New-Algo-Order).
 
 This does not yet migrate every legacy `bot.py` entry, trailing stop, close and ledger path through the OMS. Do not treat the adapter foundation as production approval.
+
+
+## Venue-neutral market-data agent
+
+`stratex_agents.market_data.MarketDataAgent` normalizes instrument metadata, quotes and OHLCV candles from the explicitly selected venue. It preserves exact broker-native symbols (including IC Markets suffixes such as `XAUUSD.a`) and distinguishes Binance crypto perpetuals from MT5 Forex, commodity, index, equity and other CFD classifications based on broker metadata. It does not fabricate missing prices and never falls back to another venue's market data.
+
+The MT5 bridge's authenticated `GET /v1/symbols` endpoint returns broker-native names and contract details such as contract size, profit/margin currencies, digits, tick size/value, minimum/maximum/step volume, stop distance, swap and margin fields. Filter by query or Market Watch visibility when the terminal's full symbol catalogue is large. Market-data endpoints do not submit orders.
+
+Dashboard read-only endpoints (API read scope required):
+- `GET /api/v1/market/instruments?venue=all`
+- `GET /api/v1/market/quote?venue=mt5&symbol=EURUSD`
+- `GET /api/v1/market/candles?venue=mt5&symbol=EURUSD&timeframe=15m&limit=300`
+
+The API returns normalized market values but does not imply a signal is approved or an execution venue is enabled. Current MT5 availability still depends on a configured, authenticated, demo-only Windows bridge.
