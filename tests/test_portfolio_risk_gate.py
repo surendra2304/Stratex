@@ -18,11 +18,10 @@ def snapshot(**overrides):
         "captured_at": 1000.0,
         "reporting_currency": "USD",
         "currency_conversion_complete": True,
+        "equity_basis": "account_equity",
         "reporting_equity": 1000.0,
         "day_start_equity": 1000.0,
         "high_water_equity": 1000.0,
-        "realized_pnl_today": 0.0,
-        "unrealized_pnl": 0.0,
         "positions": [],
     }
     value.update(overrides)
@@ -50,8 +49,9 @@ def test_portfolio_risk_gate_approves_healthy_small_demo_entry():
         ({"status": "degraded"}, "PORTFOLIO_DEGRADED"),
         ({"currency_conversion_complete": False}, "PORTFOLIO_CURRENCY_CONVERSION_INCOMPLETE"),
         ({"captured_at": 900.0}, "PORTFOLIO_SNAPSHOT_STALE"),
-        ({"day_start_equity": 1000.0, "realized_pnl_today": -20.0}, "DAILY_LOSS_LIMIT_REACHED"),
+        ({"day_start_equity": 1000.0, "reporting_equity": 970.0}, "DAILY_LOSS_LIMIT_REACHED"),
         ({"high_water_equity": 1000.0, "reporting_equity": 940.0}, "MAX_DRAWDOWN_REACHED"),
+        ({"equity_basis": "balance_total_estimate"}, "PORTFOLIO_ACCOUNT_EQUITY_REQUIRED"),
         ({"positions": [{"notional_available": False}]}, "POSITION_NOTIONAL_UNAVAILABLE"),
     ],
 )
