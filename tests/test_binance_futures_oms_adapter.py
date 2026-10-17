@@ -81,7 +81,7 @@ class FakeBinanceClient:
     def futures_get_algo_order(self, *, symbol, clientAlgoId):
         if self.fail_reconcile_algo:
             raise TimeoutError("algo lookup unavailable")
-        is_stop = clientAlgoId.endswith("-sl")
+        is_stop = clientAlgoId.startswith("stxsl-")
         return {
             "algoId": 501 if is_stop else 502,
             "algoStatus": self.reconcile_algo_status,
