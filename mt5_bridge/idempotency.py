@@ -62,6 +62,26 @@ class BridgeOrderStore:
         finally:
             conn.close()
 
+    def lookup(self, client_order_id: str, request_hash: str) -> dict[str, Any] | None:
+        """Return a cached terminal result before dynamic broker checks; do not reserve new IDs."""
+        with self._managed_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM bridge_orders WHERE client_order_id=?", (client_order_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        if row["request_hash"] != request_hash:
+            raise DuplicateOrderIdConflict("client_order_id was already used for a different payload")
+        if row["status"] not in self.TERMINAL_STATES:
+            raise UnresolvedBridgeOrder(
+                f"order {client_order_id} is {row['status']}; do not resubmit until reconciled"
+            )
+        return {
+            "kind": "duplicate",
+            "status": row["status"],
+            "response": json.loads(row["response_json"]) if row["response_json"] else {},
+        }
+
     def reserve(self, client_order_id: str, request_hash: str, request: dict[str, Any]) -> dict[str, Any]:
         now = time.time()
         payload = json.dumps(request, sort_keys=True, separators=(",", ":"), allow_nan=False)
