@@ -49,6 +49,7 @@ def build_portfolio_risk_context(
     context = dict(base_context)
     reporting_currency = os.getenv("STRATEX_REPORTING_CURRENCY", "USD").strip().upper()
     account_key = os.getenv("STRATEX_PORTFOLIO_ACCOUNT_KEY", "stratex-demo").strip()
+    fx_rates: dict[str, float] = {}
     try:
         fx_rates = _fx_rates_from_environment()
         agent = portfolio_agent or PortfolioAgent.from_environment(
