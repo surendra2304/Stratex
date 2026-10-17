@@ -28,6 +28,12 @@ class BinanceFuturesPortfolioAdapter:
             legacy_api_key=os.getenv("API_KEY", ""),
             legacy_secret_key=os.getenv("SECRET_KEY", ""),
         )
+        expected = "demo_trading" if self.venue_agent.demo_trading else "legacy_futures_testnet"
+        actual = getattr(self.client, "stratex_environment", None)
+        if actual != expected:
+            raise BinancePortfolioReadOnlyError(
+                f"Binance account client environment is unverified or mismatched: expected {expected!r}, got {actual!r}"
+            )
 
     def get_balance(self) -> dict[str, UnifiedBalance]:
         """Read Futures wallet/available balances; an API error is not converted to zero."""
