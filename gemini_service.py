@@ -96,7 +96,6 @@ class GeminiService:
         return None
 
     def _set_cache(self, cache_key: str, data: dict[str, Any]):
-        global _AI_CACHE
         if len(_AI_CACHE) >= _MAX_CACHE_SIZE:
             # Simple eviction: drop oldest 20%
             keys_to_remove = list(_AI_CACHE.keys())[:int(_MAX_CACHE_SIZE * 0.2)]
