@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import os
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal, ROUND_CEILING, ROUND_DOWN, ROUND_FLOOR
 from typing import Any
 
 from stratex_agents.order_intent import TradeIntent
@@ -82,8 +82,12 @@ class BinanceFuturesOMSAdapter:
                     "step_size": Decimal(str(lot.get("stepSize", "0"))),
                     "min_qty": Decimal(str(lot.get("minQty", "0"))),
                     "min_notional": Decimal(str(
-                        (filters.get("MIN_NOTIONAL") or filters.get("NOTIONAL") or {}).get("notional", "0")
+                        (filters.get("MIN_NOTIONAL") or filters.get("NOTIONAL") or {}).get(
+                            "notional",
+                            (filters.get("MIN_NOTIONAL") or filters.get("NOTIONAL") or {}).get("minNotional", "0"),
+                        )
                     )),
+                    "tick_size": Decimal(str((filters.get("PRICE_FILTER") or {}).get("tickSize", "0"))),
                 }
         raise BinanceVenueError(f"Symbol {symbol!r} is not listed in the selected Binance Futures environment.")
 
@@ -93,6 +97,38 @@ class BinanceFuturesOMSAdapter:
         if step_size <= 0:
             return value
         return (value / step_size).to_integral_value(rounding=ROUND_DOWN) * step_size
+
+    @staticmethod
+    def _round_price(value: float, tick_size: Decimal, rounding) -> Decimal:
+        price = Decimal(str(value))
+        if tick_size <= 0:
+            return price
+        return (price / tick_size).to_integral_value(rounding=rounding) * tick_size
+
+    def _configure_margin_and_leverage(self, symbol: str, intent: TradeIntent) -> int:
+        raw_leverage = intent.metadata.get("leverage", os.getenv("FUTURES_LEVERAGE", "5"))
+        try:
+            leverage_float = float(raw_leverage)
+        except (TypeError, ValueError) as exc:
+            raise BinanceVenueError("Configured Futures leverage is invalid.") from exc
+        if not leverage_float.is_integer() or not 1 <= leverage_float <= 125:
+            raise BinanceVenueError("Futures leverage must be a whole number between 1 and 125.")
+        leverage = int(leverage_float)
+        margin_type = str(os.getenv("FUTURES_MARGIN_TYPE", "ISOLATED")).strip().upper()
+        if margin_type != "ISOLATED":
+            raise BinanceVenueError("The Stratex OMS adapter currently permits ISOLATED margin only.")
+        try:
+            self.client.futures_change_margin_type(symbol=symbol, marginType=margin_type)
+        except Exception as exc:
+            if "-4046" not in str(exc) and "No need to change margin type" not in str(exc):
+                raise BinanceVenueError(f"Could not set ISOLATED margin for {symbol}.") from exc
+        try:
+            result = self.client.futures_change_leverage(symbol=symbol, leverage=leverage)
+        except Exception as exc:
+            raise BinanceVenueError(f"Could not set Futures leverage for {symbol}.") from exc
+        if isinstance(result, dict) and int(result.get("leverage", leverage)) != leverage:
+            raise BinanceVenueError(f"Binance did not confirm requested leverage {leverage} for {symbol}.")
+        return leverage
 
     @staticmethod
     def _validate_bracket(is_long: bool, entry_price: float, stop_loss: float, take_profit: float) -> None:
@@ -171,9 +207,7 @@ class BinanceFuturesOMSAdapter:
             )
         if intent.order_type != "MARKET":
             raise BinanceVenueError("This Binance OMS adapter currently accepts MARKET entries only.")
-        if not _truthy(os.getenv("LIVE_TRADING_ENABLED", "false")):
-            pass
-        else:
+        if _truthy(os.getenv("LIVE_TRADING_ENABLED", "false")):
             raise BinanceVenueError("Live-money execution is disabled.")
 
         symbol = intent.symbol.replace("/", "")
@@ -195,6 +229,16 @@ class BinanceFuturesOMSAdapter:
             raise BinanceVenueError("Binance Futures market price is invalid.")
         if quantity * market_price < rules["min_notional"]:
             raise BinanceVenueError("Order notional is below Binance's minimum notional.")
+
+        leverage = self._configure_margin_and_leverage(symbol, intent)
+        try:
+            account = self.client.futures_account()
+            available_balance = Decimal(str(account.get("availableBalance", "0") or "0"))
+        except Exception as exc:
+            raise BinanceVenueError("Cannot verify available Futures margin; no order was submitted.") from exc
+        required_margin = (quantity * market_price) / Decimal(leverage)
+        if available_balance <= 0 or required_margin > available_balance:
+            raise BinanceVenueError("Insufficient verified available Futures margin for this demo order.")
 
         entry_params: dict[str, Any] = {
             "symbol": symbol, "side": side, "type": "MARKET",
@@ -234,11 +278,17 @@ class BinanceFuturesOMSAdapter:
 
         stop_response: dict[str, Any] | None = None
         take_response: dict[str, Any] | None = None
+        rounded_stop = self._round_price(
+            intent.stop_loss, rules["tick_size"], ROUND_CEILING if is_long else ROUND_FLOOR
+        )
+        rounded_take = self._round_price(
+            intent.take_profit, rules["tick_size"], ROUND_FLOOR if is_long else ROUND_CEILING
+        )
         try:
-            self._validate_bracket(is_long, avg_price, intent.stop_loss, intent.take_profit)
+            self._validate_bracket(is_long, avg_price, float(rounded_stop), float(rounded_take))
             stop_response, take_response = self._place_protection(
                 symbol=symbol, is_long=is_long, position_side=position_side,
-                stop_loss=intent.stop_loss, take_profit=intent.take_profit,
+                stop_loss=float(rounded_stop), take_profit=float(rounded_take),
                 client_order_id=intent.client_order_id,
             )
         except Exception as protection_error:
@@ -274,7 +324,7 @@ class BinanceFuturesOMSAdapter:
             "client_order_id": intent.client_order_id,
             "quantity": float(executed), "avg_price": avg_price,
             "position_side": position_side or "BOTH",
-            "stop_loss": intent.stop_loss, "stop_algo_id": stop_response.get("algoId"),
-            "take_profit": intent.take_profit, "take_profit_algo_id": take_response.get("algoId"),
+            "stop_loss": float(rounded_stop), "stop_algo_id": stop_response.get("algoId"),
+            "take_profit": float(rounded_take), "take_profit_algo_id": take_response.get("algoId"),
             "venue": "binance", "environment": expected_environment,
         }
