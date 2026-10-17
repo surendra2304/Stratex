@@ -27,6 +27,18 @@ class FakeSession:
         return FakeResponse(self.payload)
 
 
+class SequencedFakeSession:
+    def __init__(self, payloads):
+        self.payloads = list(payloads)
+        self.calls = []
+
+    def request(self, method, url, **kwargs):
+        self.calls.append((method, url, kwargs))
+        if not self.payloads:
+            raise AssertionError("Unexpected extra HTTP request from MT5 adapter")
+        return FakeResponse(self.payloads.pop(0))
+
+
 def test_adapter_disabled_by_default(monkeypatch):
     monkeypatch.delenv("MT5_BRIDGE_ENABLED", raising=False)
     adapter = MT5BridgeAdapter(base_url="http://127.0.0.1:8765", token="test-token")
@@ -107,10 +119,16 @@ def test_mt5_entry_adapter_sends_stop_loss_take_profit_and_client_id(monkeypatch
 
 def test_mt5_adapter_accepts_normalized_demo_intent(monkeypatch):
     monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
-    session = FakeSession({"ok": True, "data": {
-        "order": 777, "deal": 888, "status": "FILLED", "price": 1.1002,
-        "volume_filled": 0.1, "commission": 0.0,
-    }})
+    session = SequencedFakeSession([
+        {"ok": True, "data": {
+            "approved": True, "recommended_volume": 0.2, "volume_min": 0.01,
+            "volume_step": 0.01, "account_currency": "USD",
+        }},
+        {"ok": True, "data": {
+            "order": 777, "deal": 888, "status": "FILLED", "price": 1.1002,
+            "volume_filled": 0.1, "commission": 0.0,
+        }},
+    ])
     adapter = MT5BridgeAdapter(
         base_url="http://100.64.0.2:8765", token="test-token", session=session
     )
@@ -122,6 +140,9 @@ def test_mt5_adapter_accepts_normalized_demo_intent(monkeypatch):
     result = adapter.submit_intent(intent)
     assert result["status"] == "FILLED"
     assert result["client_order_id"] == "stx-mt5-oms-001"
+    assert len(session.calls) == 2
+    assert session.calls[0][1].endswith("/v1/risk/size")
+    assert session.calls[1][1].endswith("/v1/orders")
 
 
 def test_mt5_adapter_requires_bracket_protection_for_entries(monkeypatch):
