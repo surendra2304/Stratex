@@ -121,6 +121,19 @@ class OrderIntentStore:
         item.pop("payload_hash", None)
         return item
 
+    def list_reconcilable(self, limit: int = 100) -> list[dict[str, Any]]:
+        """List non-final or exchange-pending intents for periodic venue reconciliation."""
+        limit = min(1000, max(1, int(limit)))
+        with self._managed_connection() as conn:
+            rows = conn.execute(
+                "SELECT client_order_id,status,created_at,updated_at,error_text "
+                "FROM order_intents "
+                "WHERE status IN ('RESERVED','SUBMITTING','UNKNOWN','ACCEPTED','PARTIALLY_FILLED') "
+                "ORDER BY created_at ASC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def list_unresolved(self, limit: int = 100) -> list[dict[str, Any]]:
         limit = min(1000, max(1, int(limit)))
         with self._managed_connection() as conn:
