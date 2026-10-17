@@ -153,9 +153,15 @@ class BinanceFuturesOMSAdapter:
             if not isinstance(order, dict):
                 raise BinanceVenueError(f"Binance returned malformed open Algo Order metadata for {symbol}.")
             client_id = str(order.get("clientAlgoId") or order.get("clientOrderId") or "")
-            if client_id.startswith(("stxsl-", "stxtp-")):
+            order_type = str(order.get("orderType") or order.get("type") or "").upper()
+            close_position = str(order.get("closePosition", "false")).strip().lower() in {"1", "true", "yes"}
+            is_stratex_protection = client_id.startswith(("stxsl-", "stxtp-"))
+            is_close_position_protection = close_position and order_type in {
+                "STOP", "STOP_MARKET", "TAKE_PROFIT", "TAKE_PROFIT_MARKET", "TRAILING_STOP_MARKET"
+            }
+            if is_stratex_protection or is_close_position_protection:
                 raise BinanceVenueError(
-                    f"Outstanding Stratex protective Algo Order for {symbol} must be reconciled "
+                    f"Outstanding protective Algo Order for {symbol} must be reconciled "
                     "and its sibling canceled before another entry."
                 )
 
@@ -408,6 +414,23 @@ class BinanceFuturesOMSAdapter:
 
         status = str(entry.get("status", "UNKNOWN")).strip().upper()
         if status in {"REJECTED", "CANCELED", "CANCELLED", "EXPIRED"}:
+            try:
+                partial_fill_qty = float(entry.get("executedQty", 0) or 0)
+            except (TypeError, ValueError):
+                return {
+                    "confirmed": False,
+                    "status": "UNKNOWN",
+                    "evidence": "terminal_entry_has_invalid_executed_quantity",
+                }
+            if partial_fill_qty > 0:
+                # A cancelled/rejected order can still have partial fills. Those
+                # require position and protective-order reconciliation; do not
+                # falsely resolve the intent as having no exposure.
+                return {
+                    "confirmed": False,
+                    "status": "UNKNOWN",
+                    "evidence": "terminal_entry_has_partial_fill_requiring_protection_reconciliation",
+                }
             normalized = "CANCELLED" if status in {"CANCELED", "CANCELLED", "EXPIRED"} else "REJECTED"
             return {
                 "confirmed": True,
