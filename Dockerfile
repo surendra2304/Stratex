@@ -37,6 +37,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD curl 
 # Create dedicated non-root user and ensure ownership of /app
 RUN groupadd -g 1000 appuser && \
     useradd -u 1000 -g appuser -s /bin/bash -m appuser && \
+    mkdir -p /app/state && \
     chown -R appuser:appuser /app
 
 USER appuser
