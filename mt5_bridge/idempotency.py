@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import contextmanager
 import time
 from pathlib import Path
 from typing import Any
@@ -27,7 +28,7 @@ class BridgeOrderStore:
         self.path = path
         if path != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as conn:
+        with self._managed_connection() as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS bridge_orders (
@@ -48,10 +49,19 @@ class BridgeOrderStore:
         conn.execute("PRAGMA busy_timeout=10000")
         return conn
 
+    @contextmanager
+    def _managed_connection(self):
+        """Close SQLite connections reliably; Connection.__exit__ only commits/rolls back."""
+        conn = self._connect()
+        try:
+            yield conn
+        finally:
+            conn.close()
+
     def reserve(self, client_order_id: str, request_hash: str, request: dict[str, Any]) -> dict[str, Any]:
         now = time.time()
         payload = json.dumps(request, sort_keys=True, separators=(",", ":"), allow_nan=False)
-        with self._connect() as conn:
+        with self._managed_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 "SELECT * FROM bridge_orders WHERE client_order_id=?", (client_order_id,)
@@ -81,7 +91,7 @@ class BridgeOrderStore:
         if status not in {"ACCEPTED", "FILLED", "REJECTED", "CANCELLED", "UNKNOWN"}:
             raise ValueError(f"Invalid MT5 bridge order state: {status}")
         response_json = json.dumps(response, sort_keys=True, separators=(",", ":"), allow_nan=False) if response is not None else None
-        with self._connect() as conn:
+        with self._managed_connection() as conn:
             cur = conn.execute(
                 "UPDATE bridge_orders SET status=?, response_json=COALESCE(?,response_json), "
                 "error_text=?, updated_at=? WHERE client_order_id=?",
@@ -91,7 +101,7 @@ class BridgeOrderStore:
                 raise KeyError(f"Unknown MT5 client order id: {client_order_id}")
 
     def get(self, client_order_id: str) -> dict[str, Any] | None:
-        with self._connect() as conn:
+        with self._managed_connection() as conn:
             row = conn.execute("SELECT * FROM bridge_orders WHERE client_order_id=?", (client_order_id,)).fetchone()
         if row is None:
             return None
