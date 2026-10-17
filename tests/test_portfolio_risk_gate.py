@@ -29,7 +29,7 @@ def snapshot(**overrides):
 
 
 def context(portfolio=None, candidate_notional=10.0):
-    return {"portfolio": portfolio or snapshot(), "candidate_notional": candidate_notional}
+    return {"portfolio": portfolio or snapshot(), "candidate_notional": candidate_notional, "candidate_notional_currency": "USD"}
 
 
 def gate(**kwargs):
