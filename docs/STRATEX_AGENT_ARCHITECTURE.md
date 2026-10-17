@@ -54,3 +54,17 @@ The MT5 bridge currently provides a transport/API foundation. Before connecting 
 ## Secure credential handling
 
 Never commit or chat-post API keys, API secrets, MT5 passwords, bridge tokens or OCI credentials. Set them in the private deployment environment or secret manager. For Binance Demo Trading, use a newly generated Demo Trading key with the smallest permissions needed for demo account/order operations; withdrawals/transfers should remain disabled. MT5 credentials should be entered only into the MT5 terminal on its host.
+
+## Durable OMS foundation
+
+The repository now includes `stratex_agents.order_intent.TradeIntent`, `stratex_agents.order_store.OrderIntentStore` and `stratex_agents.oms.StratexOrderManager`. The manager:
+
+- requires `STRATEX_EXECUTION_MODE=DEMO` before any venue submission;
+- rejects live-money mode and enforces a venue allowlist;
+- applies an injected deterministic authorization/risk decision and the existing panic/kill-switch state;
+- persists an intent before it crosses the venue boundary;
+- reuses completed results for an identical client ID and rejects ID reuse with a different payload;
+- marks ambiguous submit outcomes `UNKNOWN` and refuses blind retry until reconciliation resolves them;
+- intentionally does not automatically fail over from one venue to another.
+
+This is a durable OMS foundation with contract tests, not yet an assertion that every legacy strategy uses the manager. Wiring the existing signal/trailing/protection lifecycle through this manager is a separate integration milestone.
