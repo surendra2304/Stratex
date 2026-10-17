@@ -107,9 +107,9 @@ def get_agent_catalog() -> list[dict[str, Any]]:
             "id": "reconciliation",
             "name": "Order Reconciliation Agent",
             "kind": "operations",
-            "status": "implemented_callable_runtime_integration_pending",
+            "status": "implemented_opt_in_read_only_worker_default_disabled",
             "execution_authority": False,
-            "responsibility": "Can poll evidence-based venue resolvers and update persisted state; periodic scheduling and service wiring remain pending.",
+            "responsibility": "Optional supervisor-managed polling worker; updates persisted order state only on explicit venue confirmation and never submits orders.",
         },
         {
             "id": "inference_advisor",
