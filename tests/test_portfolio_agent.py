@@ -66,7 +66,7 @@ def test_portfolio_agent_converts_only_with_explicit_currency_rates():
     agent = PortfolioAgent(
         {"mt5": venue},
         currency_to_reporting_rate={"EUR": 1.1},
-        notional_calculators={"mt5": lambda pos: pos.quantity * 100000 * pos.mark_price},
+        notional_calculators={"mt5": lambda pos: (pos.quantity * 100000 * pos.mark_price, "USD")},
     )
     snapshot = agent.snapshot("USD")
     assert snapshot["currency_conversion_complete"] is True
