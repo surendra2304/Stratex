@@ -106,6 +106,30 @@ class MT5BridgeAdapter(BaseExchange):
             # merge hedge-mode positions solely by symbol.
         return result
 
+    def calculate_position_size(
+        self,
+        symbol: str,
+        side: str,
+        stop_loss: float,
+        take_profit: float,
+    ) -> dict[str, Any]:
+        """Ask the MT5 demo terminal to size a lot using broker-calculated PnL and margin."""
+        result = self._request(
+            "POST", "/v1/risk/size",
+            json={
+                "symbol": symbol,
+                "side": side.upper(),
+                "stop_loss": float(stop_loss),
+                "take_profit": float(take_profit),
+            },
+        )
+        if not isinstance(result, dict) or result.get("approved") is not True:
+            raise MT5BridgeError("MT5 broker-aware risk sizing did not approve this intent.")
+        recommended = result.get("recommended_volume")
+        if not isinstance(recommended, (int, float)) or recommended <= 0:
+            raise MT5BridgeError("MT5 risk sizing returned an invalid recommended volume.")
+        return result
+
     def get_symbols(
         self,
         query: str = "",
@@ -190,6 +214,15 @@ class MT5BridgeAdapter(BaseExchange):
         """Submit a normalized Stratex TradeIntent with broker-native SL/TP protection."""
         if getattr(intent, "venue", None) != "mt5" or getattr(intent, "environment", None) != "mt5_demo":
             raise MT5BridgeError("MT5 adapter accepts only explicitly routed MT5 demo intents.")
+        sizing = self.calculate_position_size(
+            intent.symbol, intent.side, intent.stop_loss, intent.take_profit
+        )
+        recommended_volume = float(sizing["recommended_volume"])
+        requested_volume = float(intent.quantity)
+        if requested_volume > recommended_volume + 1e-9:
+            raise MT5BridgeError(
+                f"Requested MT5 volume {requested_volume} exceeds broker-aware safe volume {recommended_volume}."
+            )
         result = self.place_order(
             symbol=intent.symbol,
             side=intent.side,
