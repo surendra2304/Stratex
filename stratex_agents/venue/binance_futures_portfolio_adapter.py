@@ -23,13 +23,13 @@ class BinanceFuturesPortfolioAdapter:
     def __init__(self, client: Any | None = None, venue_agent: BinanceFuturesAgent | None = None):
         self.venue_agent = venue_agent or BinanceFuturesAgent()
         self.environment = "binance_demo" if self.venue_agent.demo_trading else "binance_testnet"
-        self.client = client or self.venue_agent.create_client(
+        self._client = client or self.venue_agent.create_client(
             mode="FUTURES",
             legacy_api_key=os.getenv("API_KEY", ""),
             legacy_secret_key=os.getenv("SECRET_KEY", ""),
         )
         expected = "demo_trading" if self.venue_agent.demo_trading else "legacy_futures_testnet"
-        actual = getattr(self.client, "stratex_environment", None)
+        actual = getattr(self._client, "stratex_environment", None)
         if actual != expected:
             raise BinancePortfolioReadOnlyError(
                 f"Binance account client environment is unverified or mismatched: expected {expected!r}, got {actual!r}"
@@ -38,7 +38,7 @@ class BinanceFuturesPortfolioAdapter:
     def get_balance(self) -> dict[str, UnifiedBalance]:
         """Read Futures wallet/available balances; an API error is not converted to zero."""
         try:
-            rows = self.client.futures_account_balance()
+            rows = self._client.futures_account_balance()
         except Exception as exc:
             raise BinancePortfolioReadOnlyError("Binance demo Futures balances are unavailable.") from exc
         if not isinstance(rows, list):
@@ -63,7 +63,7 @@ class BinanceFuturesPortfolioAdapter:
     def get_positions(self) -> list[UnifiedPosition]:
         """Read USD-M Futures positions, preserving native symbol and Hedge Mode side."""
         try:
-            rows = self.client.futures_position_information()
+            rows = self._client.futures_position_information()
         except Exception as exc:
             raise BinancePortfolioReadOnlyError("Binance demo Futures positions are unavailable.") from exc
         if not isinstance(rows, list):
