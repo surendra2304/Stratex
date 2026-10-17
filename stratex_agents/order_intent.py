@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -50,8 +51,8 @@ class TradeIntent:
             raise ValueError("MT5 venue is restricted to the demo environment")
         if not math.isfinite(float(self.quantity)) or float(self.quantity) <= 0:
             raise ValueError("quantity must be finite and positive")
-        if not self.client_order_id or len(self.client_order_id) > 36:
-            raise ValueError("client_order_id must be 1-36 characters")
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,36}", self.client_order_id):
+            raise ValueError("client_order_id must contain 1-36 alphanumeric or . _ : - characters")
         if not self.strategy.strip():
             raise ValueError("strategy is required")
         if not self.reduce_only:
