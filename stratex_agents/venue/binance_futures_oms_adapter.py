@@ -352,3 +352,115 @@ class BinanceFuturesOMSAdapter:
             "take_profit": float(rounded_take), "take_profit_algo_id": take_response.get("algoId"),
             "venue": "binance", "environment": expected_environment,
         }
+
+
+    def reconcile_intent(self, stored: dict[str, Any]) -> dict[str, Any]:
+        """Query entry and both protective Algo Orders; never mutate venue state."""
+        payload = stored.get("payload") if isinstance(stored, dict) else None
+        if not isinstance(payload, dict) or payload.get("venue") != "binance":
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "invalid_stored_intent"}
+        environment = "binance_demo" if self.venue_agent.demo_trading else "binance_testnet"
+        if payload.get("environment") != environment:
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "environment_mismatch"}
+
+        symbol = str(payload.get("symbol", "")).replace("/", "").strip().upper()
+        client_order_id = str(stored.get("client_order_id") or payload.get("client_order_id") or "")
+        if not symbol or not client_order_id:
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "missing_symbol_or_client_id"}
+
+        try:
+            entry = self.client.futures_get_order(symbol=symbol, origClientOrderId=client_order_id)
+        except Exception:
+            # "Not found" is not proof the entry never reached the exchange.
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "entry_lookup_not_confirmed"}
+
+        status = str(entry.get("status", "UNKNOWN")).strip().upper()
+        if status in {"REJECTED", "CANCELED", "CANCELLED", "EXPIRED"}:
+            normalized = "CANCELLED" if status in {"CANCELED", "CANCELLED", "EXPIRED"} else "REJECTED"
+            return {
+                "confirmed": True,
+                "status": normalized,
+                "result": {
+                    "status": normalized, "symbol": symbol, "client_order_id": client_order_id,
+                    "order_id": entry.get("orderId"), "venue": "binance",
+                    "environment": environment, "venue_status": status,
+                },
+                "evidence": "Binance entry order returned a terminal canceled/rejected state",
+            }
+        if status in {"NEW", "PENDING_NEW"}:
+            return {
+                "confirmed": True,
+                "status": "ACCEPTED",
+                "result": {
+                    "status": "ACCEPTED", "symbol": symbol, "client_order_id": client_order_id,
+                    "order_id": entry.get("orderId"), "venue": "binance",
+                    "environment": environment, "venue_status": status,
+                },
+                "evidence": "Binance confirmed the entry order is open",
+            }
+        if status != "FILLED":
+            return {
+                "confirmed": False,
+                "status": "UNKNOWN",
+                "evidence": f"entry status {status or 'missing'} needs deeper reconciliation",
+            }
+
+        try:
+            executed = float(entry.get("executedQty", 0) or 0)
+            avg_price = float(entry.get("avgPrice", 0) or 0)
+        except (TypeError, ValueError):
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "invalid_entry_fill_values"}
+        if executed <= 0 or avg_price <= 0:
+            return {"confirmed": False, "status": "UNKNOWN", "evidence": "missing_confirmed_entry_fill"}
+
+        sl_client_id = _algo_client_id(client_order_id, "sl")
+        tp_client_id = _algo_client_id(client_order_id, "tp")
+        try:
+            stop = self.client.futures_get_algo_order(symbol=symbol, clientAlgoId=sl_client_id)
+            take = self.client.futures_get_algo_order(symbol=symbol, clientAlgoId=tp_client_id)
+        except Exception:
+            # Entry filled but one or both protection records cannot be verified.
+            # Do not declare the trade fully protected.
+            return {
+                "confirmed": False,
+                "status": "UNKNOWN",
+                "evidence": "filled_entry_protection_state_not_confirmed",
+            }
+
+        stop_status = str(stop.get("algoStatus", stop.get("status", ""))).upper()
+        take_status = str(take.get("algoStatus", take.get("status", ""))).upper()
+        open_algo_states = {"NEW", "ACCEPTED", "WORKING"}
+        if stop_status not in open_algo_states or take_status not in open_algo_states:
+            return {
+                "confirmed": False,
+                "status": "UNKNOWN",
+                "evidence": (
+                    "filled entry but protective orders are not both confirmed working "
+                    f"(stop={stop_status or 'missing'}, take={take_status or 'missing'})"
+                ),
+            }
+
+        result = {
+            "status": "FILLED",
+            "symbol": symbol,
+            "side": str(payload.get("side", "")).upper(),
+            "order_type": str(payload.get("order_type", "MARKET")).upper(),
+            "order_id": str(entry.get("orderId", "")),
+            "client_order_id": client_order_id,
+            "quantity": executed,
+            "avg_price": avg_price,
+            "position_side": str(stop.get("positionSide", "BOTH")).upper(),
+            "stop_loss": float(payload.get("stop_loss", 0) or 0),
+            "stop_algo_id": stop.get("algoId"),
+            "take_profit": float(payload.get("take_profit", 0) or 0),
+            "take_profit_algo_id": take.get("algoId"),
+            "venue": "binance",
+            "environment": environment,
+            "protection_verified": True,
+        }
+        return {
+            "confirmed": True,
+            "status": "FILLED",
+            "result": result,
+            "evidence": "Binance confirmed entry fill and both protective Algo Orders working",
+        }
