@@ -153,8 +153,9 @@ class MarketDataAgent:
         is_tradeable = raw.get("tradeable")
         if is_tradeable is None:
             try:
-                # In MT5 SYMBOL_TRADE_MODE_DISABLED is 0.
-                is_tradeable = int(raw.get("trade_mode", 0)) != 0
+                # MT5 SYMBOL_TRADE_MODE: DISABLED=0, LONGONLY=1, SHORTONLY=2,
+                # CLOSEONLY=3, FULL=4. CLOSEONLY is not executable for new entries.
+                is_tradeable = int(raw.get("trade_mode", 0)) in {1, 2, 4}
             except (TypeError, ValueError):
                 is_tradeable = False
         known_fields = {
