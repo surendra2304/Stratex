@@ -83,3 +83,36 @@ def test_order_store_records_duplicate_request_without_changing_state(tmp_path):
     assert duplicate["kind"] == "duplicate"
     assert store.get(intent.client_order_id)["status"] == "FILLED"
     assert store.list_audit_events()[-1]["event_type"] == "DUPLICATE_REQUEST"
+
+
+
+def test_order_store_records_correction_as_new_event_without_rewriting_state(tmp_path):
+    store = OrderIntentStore(str(tmp_path / "orders.sqlite3"))
+    intent = make_intent()
+    store.reserve(intent.client_order_id, intent.payload_hash(), intent.to_dict())
+    store.transition(intent.client_order_id, "SUBMITTING")
+    store.transition(intent.client_order_id, "FILLED", result={"status": "FILLED"})
+    before = store.get(intent.client_order_id)
+    store.record_correction(
+        intent.client_order_id,
+        actor="operator",
+        reason="Broker statement confirms corrected commission",
+        correction={"field": "commission", "old_value": 0.0, "new_value": 0.2, "reference": "statement-001"},
+    )
+    after = store.get(intent.client_order_id)
+    events = store.list_audit_events(client_order_id=intent.client_order_id)
+    assert after["status"] == before["status"] == "FILLED"
+    assert after["result"] == before["result"]
+    assert events[-1]["event_type"] == "MANUAL_CORRECTION"
+    assert events[-1]["details"]["correction"]["new_value"] == 0.2
+
+
+def test_order_store_rejects_unbounded_correction_fields(tmp_path):
+    store = OrderIntentStore(str(tmp_path / "orders.sqlite3"))
+    intent = make_intent()
+    store.reserve(intent.client_order_id, intent.payload_hash(), intent.to_dict())
+    with pytest.raises(ValueError, match="only field"):
+        store.record_correction(
+            intent.client_order_id, actor="operator", reason="fix",
+            correction={"api_key": "must-not-be-recorded"},
+        )
