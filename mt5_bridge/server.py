@@ -107,6 +107,67 @@ def positions():
                    "leverage": 1.0} for p in rows])
 
 
+@app.get("/v1/symbols")
+@_auth
+def symbols():
+    """Return real broker symbol names and contract metadata from the demo MT5 terminal."""
+    mt5, _ = _mt5()  # must confirm the connected account is demo
+    query = str(request.args.get("query", "")).strip().casefold()
+    visible_only = str(request.args.get("visible_only", "false")).strip().lower() in {"1", "true", "yes", "on"}
+    try:
+        limit = max(1, min(5000, int(request.args.get("limit", "1000"))))
+    except (TypeError, ValueError):
+        raise ValueError("limit must be an integer from 1 to 5000")
+    rows = mt5.symbols_get()
+    if rows is None:
+        raise RuntimeError(f"symbols_get failed: {mt5.last_error()}")
+
+    def _num(info, name, default=0.0):
+        try:
+            value = float(getattr(info, name, default) or default)
+            return value if value == value and abs(value) != float("inf") else default
+        except (TypeError, ValueError):
+            return default
+
+    found = []
+    for info in rows:
+        name = str(getattr(info, "name", "") or "")
+        description = str(getattr(info, "description", "") or "")
+        path = str(getattr(info, "path", "") or "")
+        visible = bool(getattr(info, "visible", False))
+        if not name or (visible_only and not visible):
+            continue
+        if query and query not in " ".join((name, description, path)).casefold():
+            continue
+        found.append({
+            "symbol": name,
+            "description": description,
+            "path": path,
+            "visible": visible,
+            "trade_mode": int(getattr(info, "trade_mode", 0) or 0),
+            "calc_mode": int(getattr(info, "trade_calc_mode", 0) or 0),
+            "base_currency": str(getattr(info, "currency_base", "") or ""),
+            "profit_currency": str(getattr(info, "currency_profit", "") or ""),
+            "margin_currency": str(getattr(info, "currency_margin", "") or ""),
+            "digits": int(getattr(info, "digits", 0) or 0),
+            "point": _num(info, "point"),
+            "contract_size": _num(info, "trade_contract_size"),
+            "tick_size": _num(info, "trade_tick_size"),
+            "tick_value": _num(info, "trade_tick_value"),
+            "volume_min": _num(info, "volume_min"),
+            "volume_max": _num(info, "volume_max"),
+            "volume_step": _num(info, "volume_step"),
+            "stops_level_points": int(getattr(info, "trade_stops_level", 0) or 0),
+            "spread_points": int(getattr(info, "spread", 0) or 0),
+            "swap_long": _num(info, "swap_long"),
+            "swap_short": _num(info, "swap_short"),
+            "margin_initial": _num(info, "margin_initial"),
+            "margin_maintenance": _num(info, "margin_maintenance"),
+        })
+    found.sort(key=lambda item: (not item["visible"], item["symbol"].casefold()))
+    return _data({"count": len(found), "returned": min(len(found), limit), "symbols": found[:limit]})
+
+
 @app.get("/v1/ticker")
 @_auth
 def ticker():
