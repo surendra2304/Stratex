@@ -244,7 +244,39 @@ def test_binance_adapter_blocks_new_entry_when_stale_stratex_algo_order_remains(
         "algoStatus": "NEW",
     }]
     adapter = BinanceFuturesOMSAdapter(client=client, venue_agent=FakeAgent())
-    with pytest.raises(BinanceVenueError, match="Outstanding Stratex protective Algo Order"):
+    with pytest.raises(BinanceVenueError, match="Outstanding protective Algo Order"):
         adapter.submit_intent(make_intent())
     assert client.order_calls == []
     assert client.algo_calls == []
+
+def test_binance_adapter_blocks_generic_open_close_position_protection(monkeypatch):
+    set_demo_env(monkeypatch)
+    client = FakeBinanceClient(hedge_mode=False)
+    client.open_algo_orders = [{
+        "symbol": "BTCUSDT", "algoId": 2002,
+        "clientAlgoId": "manual-protection-123",
+        "orderType": "STOP_MARKET", "closePosition": "true", "algoStatus": "NEW",
+    }]
+    adapter = BinanceFuturesOMSAdapter(client=client, venue_agent=FakeAgent())
+    with pytest.raises(BinanceVenueError, match="Outstanding protective Algo Order"):
+        adapter.submit_intent(make_intent())
+    assert client.order_calls == []
+
+
+def test_binance_reconciliation_does_not_resolve_cancelled_entry_with_partial_fill(monkeypatch):
+    set_demo_env(monkeypatch)
+    client = FakeBinanceClient()
+    client.reconcile_entry = {"status": "CANCELED", "orderId": 111, "avgPrice": "100", "executedQty": "0.025"}
+    adapter = BinanceFuturesOMSAdapter(client=client, venue_agent=FakeAgent())
+    stored = {
+        "client_order_id": "stx-binance-oms-001", "status": "UNKNOWN",
+        "payload": {
+            "venue": "binance", "environment": "binance_demo", "symbol": "BTCUSDT",
+            "side": "BUY", "order_type": "MARKET", "quantity": 0.105,
+            "stop_loss": 95.0, "take_profit": 110.0, "client_order_id": "stx-binance-oms-001",
+        },
+    }
+    result = adapter.reconcile_intent(stored)
+    assert result["confirmed"] is False
+    assert result["status"] == "UNKNOWN"
+    assert "partial_fill_requiring_protection_reconciliation" in result["evidence"]
