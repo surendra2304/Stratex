@@ -73,3 +73,23 @@ def build_order_manager(
     if not venues:
         raise PermissionError("No execution venue is enabled in STRATEX_ALLOWED_EXECUTION_VENUES.")
     return StratexOrderManager(venues, authorize_intent, store=store)
+
+
+def build_reconciliation_agent(
+    venues: dict[str, object],
+    *,
+    store: OrderIntentStore | None = None,
+):
+    """Construct a read-only reconciler from explicit venue adapters.
+
+    Adapters without an evidence-based reconcile_intent method are omitted;
+    their pending intents remain pending instead of being guessed as cancelled.
+    """
+    from .reconciliation_agent import OrderReconciliationAgent
+
+    resolvers = {}
+    for venue_name, adapter in venues.items():
+        resolver = getattr(adapter, "reconcile_intent", None)
+        if callable(resolver):
+            resolvers[str(venue_name).strip().lower()] = resolver
+    return OrderReconciliationAgent(store or OrderIntentStore(), resolvers)
