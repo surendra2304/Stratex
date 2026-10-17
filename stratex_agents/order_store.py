@@ -231,6 +231,45 @@ class OrderIntentStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def record_correction(
+        self,
+        client_order_id: str,
+        *,
+        actor: str,
+        reason: str,
+        correction: dict[str, Any],
+    ) -> None:
+        """Append an explicit human/system correction note without rewriting history."""
+        actor_value = str(actor).strip()
+        reason_value = str(reason).strip()
+        if not actor_value or not reason_value:
+            raise ValueError("correction actor and reason are required")
+        if not isinstance(correction, dict) or not correction:
+            raise ValueError("correction must be a non-empty dictionary")
+        allowed_fields = {"field", "old_value", "new_value", "reference"}
+        if set(correction) - allowed_fields:
+            raise ValueError("correction may contain only field, old_value, new_value and reference")
+        now = time.time()
+        with self._managed_connection() as conn:
+            row = conn.execute(
+                "SELECT status FROM order_intents WHERE client_order_id=?", (client_order_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown order intent: {client_order_id}")
+            self._append_audit_event(
+                conn,
+                client_order_id=client_order_id,
+                event_type="MANUAL_CORRECTION",
+                previous_status=str(row["status"]),
+                new_status=str(row["status"]),
+                details={
+                    "actor": actor_value[:100],
+                    "reason": reason_value[:500],
+                    "correction": correction,
+                },
+                timestamp=now,
+            )
+
     def list_audit_events(
         self,
         *,
