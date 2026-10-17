@@ -16,6 +16,8 @@ class FakeMT5:
     ORDER_TYPE_SELL_STOP = 5
     ORDER_TYPE_BUY_STOP_LIMIT = 6
     ORDER_TYPE_SELL_STOP_LIMIT = 7
+    ORDER_TYPE_BUY = 0
+    ORDER_TYPE_SELL = 1
     ORDER_TIME_GTC = 0
     TRADE_RETCODE_DONE = 10009
     TRADE_RETCODE_PLACED = 10008
@@ -25,8 +27,9 @@ class FakeMT5:
         self.calls = []
         self.send_error = send_error
         self.info = types.SimpleNamespace(
-            visible=True, volume_step=0.01, volume_min=0.01, volume_max=100.0,
+            visible=True, trade_mode=4, volume_step=0.01, volume_min=0.01, volume_max=100.0,
             digits=5, point=0.00001, trade_stops_level=0, filling_mode=1,
+            trade_contract_size=100000, trade_tick_size=0.00001, trade_tick_value=1.0,
         )
         self.tick = types.SimpleNamespace(bid=1.1000, ask=1.1002, last=1.1001, volume=10)
 
@@ -35,6 +38,17 @@ class FakeMT5:
 
     def symbol_info_tick(self, symbol):
         return self.tick if symbol == "EURUSD" else None
+
+    def order_calc_profit(self, action, symbol, volume, price_open, price_close):
+        if action == self.ORDER_TYPE_BUY:
+            return (price_close - price_open) * volume * 1000.0
+        return (price_open - price_close) * volume * 1000.0
+
+    def order_calc_margin(self, action, symbol, volume, price):
+        return volume * 1000.0
+
+    def order_check(self, order):
+        return types.SimpleNamespace(retcode=0, comment="Done", margin=order["volume"] * 1000.0)
 
     def order_send(self, order):
         self.calls.append(order)
@@ -53,7 +67,11 @@ class FakeMT5:
 @pytest.fixture
 def bridge_client(monkeypatch, tmp_path):
     mt5 = FakeMT5()
-    monkeypatch.setattr(bridge, "_mt5", lambda: (mt5, types.SimpleNamespace(server="ICMarketsSC-Demo")))
+    account = types.SimpleNamespace(
+        server="ICMarketsSC-Demo", login=123456, currency="USD",
+        balance=1000.0, equity=1000.0, margin=0.0, margin_free=1000.0,
+    )
+    monkeypatch.setattr(bridge, "_mt5", lambda: (mt5, account))
     monkeypatch.setattr(bridge, "TOKEN", "test-bridge-token")
     monkeypatch.setenv("MT5_BRIDGE_IDEMPOTENCY_DB", str(tmp_path / "orders.sqlite3"))
     bridge._ORDER_STORES.clear()
