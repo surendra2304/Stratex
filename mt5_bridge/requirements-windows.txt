@@ -1,0 +1,4 @@
+# Install only on the Windows host that runs the MT5 terminal/bridge.
+# Keep this separate from Stratex Core requirements; MetaTrader5 is Windows-specific.
+-r ../requirements.txt
+MetaTrader5>=5.0.45
