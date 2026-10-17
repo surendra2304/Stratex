@@ -18,24 +18,30 @@ if '\ufeffAPI_KEY' in os.environ:
     os.environ['API_KEY'] = os.environ['\ufeffAPI_KEY']
     del os.environ['\ufeffAPI_KEY']
 
-# --- Binance API Credentials (from environment / .env file only) ---
-API_KEY = (
-    os.getenv("API_KEY")
-    or os.getenv("BINANCE_API_KEY")
-    or os.getenv("BINANCE_TESTNET_API_KEY")
-    or os.getenv("TESTNET_API_KEY")
-    or ""
-).strip().strip("'\"")
-
-SECRET_KEY = (
-    os.getenv("SECRET_KEY")
-    or os.getenv("BINANCE_SECRET_KEY")
-    or os.getenv("BINANCE_API_SECRET")
-    or os.getenv("BINANCE_SECRET")
-    or os.getenv("BINANCE_TESTNET_SECRET_KEY")
-    or os.getenv("TESTNET_SECRET_KEY")
-    or ""
-).strip().strip("'\"")
+# --- Binance environment and credentials ---
+# Current Demo Trading keys take precedence only when that environment is explicitly selected.
+# Credentials from the legacy Testnet must never be silently reused.
+BINANCE_DEMO_TRADING = os.getenv("BINANCE_DEMO_TRADING", "false").strip().lower() in {"1", "true", "yes", "on"}
+if BINANCE_DEMO_TRADING:
+    API_KEY = os.getenv("BINANCE_API_KEY", "").strip().strip("'\\"")
+    SECRET_KEY = os.getenv("BINANCE_API_SECRET", "").strip().strip("'\\"")
+else:
+    API_KEY = (
+        os.getenv("API_KEY")
+        or os.getenv("BINANCE_TESTNET_API_KEY")
+        or os.getenv("TESTNET_API_KEY")
+        or os.getenv("BINANCE_API_KEY")
+        or ""
+    ).strip().strip("'\\"")
+    SECRET_KEY = (
+        os.getenv("SECRET_KEY")
+        or os.getenv("BINANCE_SECRET_KEY")
+        or os.getenv("BINANCE_TESTNET_SECRET_KEY")
+        or os.getenv("TESTNET_SECRET_KEY")
+        or os.getenv("BINANCE_API_SECRET")
+        or os.getenv("BINANCE_SECRET")
+        or ""
+    ).strip().strip("'\\"")
 
 # --- Gemini AI Configuration (from environment / .env file only) ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -60,7 +66,6 @@ TESTNET_ADVISORY_SHADOW_MODE = os.getenv("TESTNET_ADVISORY_SHADOW_MODE", "True")
 TESTNET_ADVISORY_MAX_DRAWDOWN_PCT = float(os.getenv("TESTNET_ADVISORY_MAX_DRAWDOWN_PCT", "0.15"))  # 15% hard cutoff for AI advisory
 # BINANCE_DEMO_TRADING switches endpoints only when fresh Demo Trading credentials
 # are configured. Credentials are not inferred from the legacy testnet variables.
-BINANCE_DEMO_TRADING = os.getenv("BINANCE_DEMO_TRADING", "false").strip().lower() in {"1", "true", "yes", "on"}
 BASE_URL = "https://demo-api.binance.com" if BINANCE_DEMO_TRADING else "https://testnet.binance.vision"
 WS_URL = "wss://ws-api.testnet.binance.vision/ws-api/v3"
 FUTURES_BASE_URL = "https://demo-fapi.binance.com" if BINANCE_DEMO_TRADING else "https://testnet.binancefuture.com"
