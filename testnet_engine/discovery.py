@@ -2,24 +2,39 @@ import config
 from binance.client import Client
 
 from logger import get_logger
+from stratex_agents.venue.binance_futures_agent import BinanceFuturesAgent
 
 logger = get_logger("discovery_service")
+
 
 class SymbolDiscoveryService:
     def __init__(self, testnet=True):
         self.testnet = testnet
+        self.venue_agent = BinanceFuturesAgent()
+        is_futures = getattr(config, "TRADING_MODE", "TESTNET").upper() == "FUTURES"
         try:
-            self.client = Client("", "", testnet=testnet, ping=False)
             if testnet:
-                self.client.API_URL = "https://testnet.binance.vision/api"
-                self.client.FUTURES_URL = "https://testnet.binancefuture.com/fapi"
-        except Exception:
+                # Use the same endpoint policy as order execution. Do not let demo
+                # trading accidentally use legacy testnet URLs (or vice versa).
+                self.client = self.venue_agent.create_public_client(futures=is_futures)
+            else:
+                # Public-only production market data is explicitly requested only
+                # when the caller passes testnet=False; this client is never signed.
+                self.client = Client("", "", testnet=False, ping=False)
+        except Exception as exc:
+            logger.warning(f"[DISCOVERY] Unable to initialize market-data client: {exc}")
             self.client = None
-            
-        try:
-            self.prod_client = Client("", "", testnet=False, ping=False)
-        except Exception:
+
+        # Old testnet market metadata sometimes needs a public-data fallback. The
+        # newer Demo Trading environment must never silently mix in production
+        # metadata: broker filters/symbol availability are venue-specific.
+        if self.venue_agent.demo_trading or not testnet:
             self.prod_client = None
+        else:
+            try:
+                self.prod_client = Client("", "", testnet=False, ping=False)
+            except Exception:
+                self.prod_client = None
         
     def discover_eligible_symbols(self, min_quote_volume=1000, top_n=15):
         """
@@ -140,11 +155,14 @@ class SymbolDiscoveryService:
 
         except Exception as e:
             logger.error(f"[DISCOVERY] Error discovering symbols: {e}")
+            if self.venue_agent.demo_trading:
+                # Do not trade with stale/hard-coded symbol metadata in Demo Trading.
+                return {}
             fallback = {
                 "BTCUSDT": {"stepSize": 0.00001, "minNotional": 5.0, "tickSize": 0.01},
                 "ETHUSDT": {"stepSize": 0.0001, "minNotional": 5.0, "tickSize": 0.01}
             }
-            logger.info(f"[DISCOVERY] Falling back to {len(fallback)} major symbols.")
+            logger.info(f"[DISCOVERY] Falling back to {len(fallback)} legacy testnet major symbols.")
             return fallback
 
     def get_symbol_filters(self, symbols):
