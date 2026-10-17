@@ -58,3 +58,52 @@ def test_runtime_factory_requires_mt5_demo_config(monkeypatch):
     with pytest.raises(PermissionError, match="TRADING_MODE=FUTURES"):
         monkeypatch.setenv("TRADING_MODE", "TESTNET")
         build_order_manager(lambda _intent: (True, "approved"), mt5_adapter=FakeVenue())
+
+
+
+class FakeMT5Adapter(FakeVenue):
+    def __init__(self, demo=True):
+        self.enabled = True
+        self.base_url = "http://100.64.0.2:8765"
+        self.token = "private-test-token"
+        self.is_connected = False
+        self.demo = demo
+
+    def health(self):
+        return {
+            "demo": self.demo,
+            "server": "ICMarketsSC-Demo" if self.demo else "ICMarketsSC-Live",
+        }
+
+
+def configure_mt5_demo(monkeypatch):
+    monkeypatch.setenv("TRADING_MODE", "FUTURES")
+    monkeypatch.setenv("STRATEX_EXECUTION_MODE", "DEMO")
+    monkeypatch.setenv("STRATEX_ALLOWED_EXECUTION_VENUES", "mt5")
+    monkeypatch.setenv("LIVE_TRADING_ENABLED", "false")
+    monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
+    monkeypatch.setenv("MT5_REQUIRE_DEMO", "true")
+    monkeypatch.setenv("MT5_BRIDGE_URL", "http://100.64.0.2:8765")
+    monkeypatch.setenv("MT5_BRIDGE_TOKEN", "private-test-token")
+
+
+def test_runtime_factory_health_checks_even_an_injected_mt5_adapter(monkeypatch):
+    configure_mt5_demo(monkeypatch)
+    adapter = FakeMT5Adapter(demo=True)
+    manager = build_order_manager(
+        lambda _intent: (True, "approved"),
+        mt5_adapter=adapter,
+        check_mt5_health=True,
+    )
+    assert set(manager.venues) == {"mt5"}
+
+
+def test_runtime_factory_refuses_injected_mt5_adapter_without_demo_confirmation(monkeypatch):
+    configure_mt5_demo(monkeypatch)
+    adapter = FakeMT5Adapter(demo=False)
+    with pytest.raises(ConnectionError, match="authenticated demo health check"):
+        build_order_manager(
+            lambda _intent: (True, "approved"),
+            mt5_adapter=adapter,
+            check_mt5_health=True,
+        )
