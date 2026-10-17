@@ -57,8 +57,8 @@ class PortfolioAgent:
             try:
                 from .venue.binance_futures_portfolio_adapter import BinanceFuturesPortfolioAdapter
                 providers["binance"] = BinanceFuturesPortfolioAdapter()
-                notional_calculators["binance"] = lambda position: abs(
-                    float(position.quantity) * float(position.mark_price)
+                notional_calculators["binance"] = lambda position: (
+                    abs(float(position.quantity) * float(position.mark_price)), "USDT"
                 )
             except Exception as exc:
                 providers["binance"] = _UnavailablePortfolioVenue("binance", type(exc).__name__)
@@ -212,13 +212,26 @@ class PortfolioAgent:
                     ):
                         raise PortfolioSnapshotError(f"non-finite position values for {native_symbol}")
                     notional = None
+                    notional_currency = None
                     if calculator is not None:
                         try:
                             value = calculator(position)
-                            if value is not None and float(value) >= 0 and abs(float(value)) != float("inf"):
-                                notional = float(value)
+                            if isinstance(value, dict):
+                                raw_notional = value.get("value")
+                                raw_currency = value.get("currency")
+                            elif isinstance(value, (tuple, list)) and len(value) == 2:
+                                raw_notional, raw_currency = value
+                            else:
+                                raw_notional, raw_currency = value, None
+                            if raw_notional is not None:
+                                parsed_notional = float(raw_notional)
+                                parsed_currency = str(raw_currency or "").strip().upper()
+                                if parsed_notional >= 0 and abs(parsed_notional) != float("inf") and parsed_currency:
+                                    notional = parsed_notional
+                                    notional_currency = parsed_currency
                         except Exception:
                             notional = None
+                            notional_currency = None
                     row = {
                         "venue": venue_name,
                         "native_symbol": native_symbol,
@@ -229,7 +242,8 @@ class PortfolioAgent:
                         "mark_price": mark_price,
                         "unrealized_pnl": pnl,
                         "notional": notional,
-                        "notional_available": notional is not None,
+                        "notional_currency": notional_currency,
+                        "notional_available": notional is not None and notional_currency is not None,
                     }
                     position_rows.append(row)
                     all_positions.append(row)
