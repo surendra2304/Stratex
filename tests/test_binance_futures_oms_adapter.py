@@ -22,6 +22,7 @@ class FakeBinanceClient:
         self.algo_calls = []
         self.cancelled_algos = []
         self.configuration_calls = []
+        self.position_amount = "0"
 
     def futures_get_position_mode(self):
         return {"dualSidePosition": self.hedge_mode}
@@ -43,7 +44,7 @@ class FakeBinanceClient:
         return {"availableBalance": "10000"}
 
     def futures_position_information(self, symbol):
-        return [{"symbol": symbol, "positionSide": "BOTH", "positionAmt": "0"}]
+        return [{"symbol": symbol, "positionSide": "BOTH", "positionAmt": self.position_amount}]
 
     def futures_change_margin_type(self, symbol, marginType):
         self.configuration_calls.append(("margin", symbol, marginType))
@@ -161,3 +162,14 @@ def test_adapter_refuses_mismatched_intent_environment(monkeypatch):
     with pytest.raises(BinanceVenueError, match="does not match Binance environment"):
         adapter.submit_intent(make_intent(environment="binance_testnet"))
     assert client.order_calls == []
+
+
+def test_binance_adapter_refuses_entry_when_existing_position_needs_reconciliation(monkeypatch):
+    set_demo_env(monkeypatch)
+    client = FakeBinanceClient(hedge_mode=False)
+    client.position_amount = "0.025"
+    adapter = BinanceFuturesOMSAdapter(client=client, venue_agent=FakeAgent())
+    with pytest.raises(BinanceVenueError, match="Existing BOTH position"):
+        adapter.submit_intent(make_intent())
+    assert client.order_calls == []
+    assert client.algo_calls == []
