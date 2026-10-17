@@ -88,6 +88,24 @@ def api_v1_security_status():
     """Returns auth configuration, rate limit status, recent auth failures, and webhook verification status."""
     return jsonify(get_security_status_report())
 
+
+@app.route('/api/agents', methods=['GET'])
+def api_stratex_agents():
+    """Return the configured Stratex agent catalog without exposing credentials."""
+    try:
+        from stratex_agents import get_agent_catalog
+        agents = get_agent_catalog()
+        return jsonify({
+            "status": "ok",
+            "execution_mode": os.getenv("TRADING_MODE", "PAPER").upper(),
+            "live_trading_enabled": False,
+            "agents": agents,
+            "count": len(agents),
+        })
+    except Exception as exc:
+        logger.exception("[AGENTS_API] Unable to load agent registry")
+        return jsonify({"status": "error", "error": type(exc).__name__}), 500
+
 @app.route('/api/v1/futuris/forecast')
 def api_v1_futuris_forecast():
     """Returns latest Futuris market forecasts with confidence bands."""
