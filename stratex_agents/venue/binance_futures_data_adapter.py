@@ -27,7 +27,7 @@ class BinanceFuturesMarketDataAdapter:
         expected = "demo_trading_public" if self.venue_agent.demo_trading else "legacy_testnet_public"
         if actual != expected:
             raise BinanceMarketDataError(
-                f"Market-data environment is unverified or mismatched: expected {expected!r}, got {actual!r}"
+                f"Market-data environment mismatch or unverified client: expected {expected!r}, got {actual!r}"
             )
 
     def list_instruments(self, query: str = "", limit: int = 1000) -> list[dict[str, Any]]:
