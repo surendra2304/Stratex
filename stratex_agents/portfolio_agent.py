@@ -7,6 +7,7 @@ orders and never converts currencies without an explicit conversion rate.
 """
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, Callable
 
@@ -17,8 +18,48 @@ class PortfolioSnapshotError(RuntimeError):
     """Portfolio data was inconsistent or unavailable."""
 
 
+class _UnavailablePortfolioVenue:
+    """Placeholder preserving the venue's failure in portfolio health reporting."""
+
+    def __init__(self, venue: str, reason: str):
+        self.venue = venue
+        self.reason = reason
+
+    def get_balance(self):
+        raise PortfolioSnapshotError(f"{self.venue} account adapter unavailable ({self.reason})")
+
+    def get_positions(self):
+        raise PortfolioSnapshotError(f"{self.venue} account adapter unavailable ({self.reason})")
+
+
 class PortfolioAgent:
     agent_id = "portfolio"
+
+    @classmethod
+    def from_environment(
+        cls,
+        *,
+        currency_to_reporting_rate: dict[str, float] | None = None,
+        mt5_adapter: Any | None = None,
+    ) -> "PortfolioAgent":
+        """Construct only explicitly non-production account adapters."""
+        providers: dict[str, Any] = {}
+        try:
+            from .venue.binance_futures_portfolio_adapter import BinanceFuturesPortfolioAdapter
+            providers["binance"] = BinanceFuturesPortfolioAdapter()
+        except Exception as exc:
+            providers["binance"] = _UnavailablePortfolioVenue("binance", type(exc).__name__)
+
+        mt5_enabled = os.getenv("MT5_BRIDGE_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+        if mt5_enabled:
+            if mt5_adapter is None:
+                try:
+                    from exchanges.mt5_bridge_adapter import MT5BridgeAdapter
+                    mt5_adapter = MT5BridgeAdapter()
+                except Exception as exc:
+                    mt5_adapter = _UnavailablePortfolioVenue("mt5", type(exc).__name__)
+            providers["mt5"] = mt5_adapter
+        return cls(providers, currency_to_reporting_rate=currency_to_reporting_rate)
 
     def __init__(
         self,
