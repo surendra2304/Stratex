@@ -147,6 +147,11 @@ class MT5BridgeAdapter(BaseExchange):
     def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> list[dict[str, Any]]:
         return self._request("GET", "/v1/candles", params={"symbol": symbol, "timeframe": timeframe, "limit": limit})
 
+    def close_position(self, position_id: str) -> bool:
+        """Close exactly one MT5 position by native ticket (required for hedge mode)."""
+        data = self._request("POST", f"/v1/positions/{position_id}/close", json={})
+        return bool(data.get("closed", False))
+
     def get_fees(self, symbol: str) -> tuple[float, float]:
         data = self._request("GET", "/v1/fees", params={"symbol": symbol})
         return float(data.get("maker", 0)), float(data.get("taker", 0))
