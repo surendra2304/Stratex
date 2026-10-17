@@ -83,6 +83,22 @@ class ServiceSupervisor:
                 "[SUPERVISOR] Reconciliation worker requested but safety gates are not satisfied; not starting it."
             )
             return
+        allowed = {
+            item.strip().lower()
+            for item in os.getenv("STRATEX_ALLOWED_EXECUTION_VENUES", "binance").split(",")
+            if item.strip()
+        }
+        if "binance" in allowed and not self._truthy_env("TESTNET_ENABLED"):
+            logger.error("[SUPERVISOR] Reconciliation worker needs TESTNET_ENABLED=true for Binance demo/testnet.")
+            return
+        if "mt5" in allowed and (
+            not self._truthy_env("MT5_BRIDGE_ENABLED")
+            or not self._truthy_env("MT5_REQUIRE_DEMO")
+            or not os.getenv("MT5_BRIDGE_URL", "").strip()
+            or not os.getenv("MT5_BRIDGE_TOKEN", "").strip()
+        ):
+            logger.error("[SUPERVISOR] Reconciliation worker needs an explicitly enabled, configured MT5 demo bridge.")
+            return
 
         worker_script = os.path.join(repo_root, "scripts", "reconciliation_worker.py")
         env = os.environ.copy()
