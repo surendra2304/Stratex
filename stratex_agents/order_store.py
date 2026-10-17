@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from contextlib import contextmanager
 import time
 from pathlib import Path
 from typing import Any
@@ -33,8 +34,17 @@ class OrderIntentStore:
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
+    @contextmanager
+    def _managed_connection(self):
+        """Close SQLite connections reliably; Connection.__exit__ only commits/rolls back."""
+        conn = self._connect()
+        try:
+            yield conn
+        finally:
+            conn.close()
+
     def _initialize(self) -> None:
-        with self._connect() as conn:
+        with self._managed_connection() as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS order_intents (
@@ -54,7 +64,7 @@ class OrderIntentStore:
         """Atomically reserve an ID. Returns whether it is new or an existing intent."""
         now = time.time()
         payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
-        with self._connect() as conn:
+        with self._managed_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 "SELECT * FROM order_intents WHERE client_order_id = ?", (client_order_id,)
@@ -87,7 +97,7 @@ class OrderIntentStore:
             raise ValueError(f"Unsupported order state: {status}")
         now = time.time()
         result_json = json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False) if result is not None else None
-        with self._connect() as conn:
+        with self._managed_connection() as conn:
             cur = conn.execute(
                 "UPDATE order_intents SET status=?, result_json=COALESCE(?, result_json), "
                 "error_text=?, updated_at=? WHERE client_order_id=?",
@@ -97,7 +107,7 @@ class OrderIntentStore:
                 raise KeyError(f"Unknown order intent: {client_order_id}")
 
     def get(self, client_order_id: str) -> dict[str, Any] | None:
-        with self._connect() as conn:
+        with self._managed_connection() as conn:
             row = conn.execute("SELECT * FROM order_intents WHERE client_order_id=?", (client_order_id,)).fetchone()
         if row is None:
             return None
@@ -109,7 +119,7 @@ class OrderIntentStore:
 
     def list_unresolved(self, limit: int = 100) -> list[dict[str, Any]]:
         limit = min(1000, max(1, int(limit)))
-        with self._connect() as conn:
+        with self._managed_connection() as conn:
             rows = conn.execute(
                 "SELECT client_order_id,status,created_at,updated_at,error_text "
                 "FROM order_intents WHERE status IN ('RESERVED','SUBMITTING','UNKNOWN') "
