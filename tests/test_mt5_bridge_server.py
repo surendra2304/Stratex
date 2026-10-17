@@ -26,6 +26,7 @@ class FakeMT5:
     def __init__(self, send_error=None):
         self.calls = []
         self.send_error = send_error
+        self.order_check_retcode = 0
         self.info = types.SimpleNamespace(
             visible=True, trade_mode=4, volume_step=0.01, volume_min=0.01, volume_max=100.0,
             digits=5, point=0.00001, trade_stops_level=0, filling_mode=1,
