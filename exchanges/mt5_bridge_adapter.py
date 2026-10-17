@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import time
+import uuid
 from typing import Any
 
 import requests
@@ -117,8 +118,19 @@ class MT5BridgeAdapter(BaseExchange):
         data = self._request("GET", "/v1/orderbook", params={"symbol": symbol, "limit": limit})
         return {"bids": data.get("bids", []), "asks": data.get("asks", [])}
 
-    def place_order(self, symbol: str, side: str, order_type: str, quantity: float,
-                    price: float | None = None, stop_price: float | None = None) -> UnifiedOrderResult:
+    def place_order(
+        self,
+        symbol: str,
+        side: str,
+        order_type: str,
+        quantity: float,
+        price: float | None = None,
+        stop_price: float | None = None,
+        *,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
+        client_order_id: str | None = None,
+    ) -> UnifiedOrderResult:
         if quantity <= 0:
             raise ValueError("quantity must be positive")
         normalized_side = side.upper()
@@ -127,10 +139,13 @@ class MT5BridgeAdapter(BaseExchange):
         kind = order_type.upper()
         if kind not in {"MARKET", "LIMIT", "STOP", "STOP_LIMIT"}:
             raise ValueError("unsupported MT5 order type")
+        if stop_loss is None or take_profit is None:
+            raise ValueError("MT5 entry orders require stop_loss and take_profit")
         data = self._request("POST", "/v1/orders", json={
             "symbol": symbol, "side": "BUY" if normalized_side in {"BUY", "LONG"} else "SELL",
             "type": kind, "volume": quantity, "price": price, "stop_price": stop_price,
-            "client_order_id": None,
+            "stop_loss": stop_loss, "take_profit": take_profit,
+            "client_order_id": client_order_id or f"stx-{uuid.uuid4().hex[:28]}",
         })
         return UnifiedOrderResult(
             order_id=str(data.get("order", data.get("deal", ""))), symbol=symbol,
@@ -146,6 +161,36 @@ class MT5BridgeAdapter(BaseExchange):
 
     def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> list[dict[str, Any]]:
         return self._request("GET", "/v1/candles", params={"symbol": symbol, "timeframe": timeframe, "limit": limit})
+
+    def submit_intent(self, intent) -> dict[str, Any]:
+        """Submit a normalized Stratex TradeIntent with broker-native SL/TP protection."""
+        if getattr(intent, "venue", None) != "mt5" or getattr(intent, "environment", None) != "mt5_demo":
+            raise MT5BridgeError("MT5 adapter accepts only explicitly routed MT5 demo intents.")
+        result = self.place_order(
+            symbol=intent.symbol,
+            side=intent.side,
+            order_type=intent.order_type,
+            quantity=intent.quantity,
+            price=getattr(intent, "limit_price", None),
+            stop_loss=intent.stop_loss,
+            take_profit=intent.take_profit,
+            client_order_id=intent.client_order_id,
+        )
+        return {
+            "status": result.status,
+            "order_id": result.order_id,
+            "symbol": result.symbol,
+            "side": result.side,
+            "order_type": result.order_type,
+            "quantity": result.quantity,
+            "executed_qty": result.executed_qty,
+            "avg_price": result.avg_price,
+            "exchange": result.exchange,
+            "client_order_id": intent.client_order_id,
+        }
+
+    def get_order_by_client_id(self, client_order_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/v1/orders/by-client-id/{client_order_id}")
 
     def close_position(self, position_id: str) -> bool:
         """Close exactly one MT5 position by native ticket (required for hedge mode)."""
