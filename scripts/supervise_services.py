@@ -66,6 +66,9 @@ class ServiceSupervisor:
 
     def _start_reconciliation_worker(self):
         """Launch only when both opt-in flags and the demo-only runtime gates are valid."""
+        # A failed child may have left an exited Popen here. Clear it before evaluating
+        # the gates so changing config cannot create a tight restart loop.
+        self.reconciliation_proc = None
         if not (
             self._truthy_env("STRATEX_ORDER_MANAGER_ENABLED")
             and self._truthy_env("STRATEX_RECONCILIATION_ENABLED")
