@@ -21,7 +21,7 @@ class UnresolvedBridgeOrder(RuntimeError):
 
 
 class BridgeOrderStore:
-    TERMINAL_STATES = {"ACCEPTED", "FILLED", "REJECTED", "CANCELLED"}
+    TERMINAL_STATES = {"ACCEPTED", "PARTIALLY_FILLED", "FILLED", "REJECTED", "CANCELLED"}
 
     def __init__(self, path: str):
         self.path = path
