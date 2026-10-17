@@ -15,6 +15,9 @@ class FakeAgent:
 class FakeClient:
     stratex_environment = "demo_trading"
 
+    def futures_account(self):
+        return {"totalMarginBalance": "1210.5", "totalWalletBalance": "1200", "totalUnrealizedProfit": "10.5"}
+
     def futures_account_balance(self):
         return [
             {"asset": "USDT", "balance": "1200", "availableBalance": "1000"},
@@ -59,3 +62,23 @@ def test_binance_portfolio_adapter_refuses_unverified_client_environment():
         assert "unverified or mismatched" in str(exc)
     else:
         raise AssertionError("Unverified Binance client must be refused")
+
+
+
+def test_binance_portfolio_adapter_uses_broker_account_equity_including_unrealized_pnl():
+    adapter = BinanceFuturesPortfolioAdapter(client=FakeClient(), venue_agent=FakeAgent())
+    assert adapter.get_equity() == {"USDT": 1210.5}
+
+
+def test_binance_portfolio_adapter_fails_closed_when_equity_is_missing():
+    class MissingEquityClient(FakeClient):
+        def futures_account(self):
+            return {"totalWalletBalance": "1200"}
+
+    adapter = BinanceFuturesPortfolioAdapter(client=MissingEquityClient(), venue_agent=FakeAgent())
+    try:
+        adapter.get_equity()
+    except BinancePortfolioReadOnlyError as exc:
+        assert "omitted totalMarginBalance" in str(exc)
+    else:
+        raise AssertionError("Missing account equity must be refused")
