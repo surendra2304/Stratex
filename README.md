@@ -178,6 +178,13 @@ Emergency risk control endpoints to immediately halt scanning, disallow new entr
 
 ---
 
+## Agent and order-management environment
+
+- `STRATEX_EXECUTION_MODE=DISABLED` is the default. Set it to `DEMO` only after the selected venue's demo credentials and safety configuration have been verified.
+- `STRATEX_ALLOWED_EXECUTION_VENUES` explicitly allowlists eligible venues; MT5 is not allowed by default.
+- `STRATEX_ORDER_DB=state/stratex_orders.sqlite3` stores order intents and idempotency state. The state directory is persistent runtime data and must not be committed.
+- The new shared OMS package is a foundation for venue routing and duplicate protection; the legacy strategy engine must still be wired to it before this is end-to-end.
+
 ## ⚙️ Environment Configuration
 
 Stratex reads environment variables from `.env`. A complete configuration template is provided in `.env.example`.
