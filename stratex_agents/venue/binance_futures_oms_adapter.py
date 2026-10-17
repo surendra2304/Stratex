@@ -51,9 +51,11 @@ class BinanceFuturesOMSAdapter:
             legacy_secret_key=os.getenv("SECRET_KEY", ""),
         )
         expected = "demo_trading" if self.venue_agent.demo_trading else "legacy_futures_testnet"
-        actual = getattr(self.client, "stratex_environment", expected)
+        actual = getattr(self.client, "stratex_environment", None)
         if actual != expected:
-            raise BinanceVenueError(f"Binance client environment mismatch: expected {expected!r}, got {actual!r}")
+            raise BinanceVenueError(
+                f"Binance client environment is unverified or mismatched: expected {expected!r}, got {actual!r}"
+            )
         if _truthy(os.getenv("LIVE_TRADING_ENABLED")):
             raise BinanceVenueError("Live-money trading is blocked.")
 
