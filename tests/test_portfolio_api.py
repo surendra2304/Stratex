@@ -26,10 +26,10 @@ def test_portfolio_snapshot_endpoint_is_read_only_and_explicit_about_fx(monkeypa
     payload = response.get_json()
     assert response.status_code == 200
     assert payload["status"] == "ok"
-    assert payload["reporting_equity"] is None
-    assert payload["currency_conversion_complete"] is False
-    assert payload["native_balance_totals"] == {"USD": 1000, "USDT": 900}
-    assert payload["execution_authority"] is False
+    assert payload["portfolio"]["reporting_equity"] is None
+    assert payload["portfolio"]["currency_conversion_complete"] is False
+    assert payload["portfolio"]["native_balance_totals"] == {"USD": 1000, "USDT": 900}
+    assert payload["portfolio"]["execution_authority"] is False
 
 
 def test_portfolio_snapshot_endpoint_normalizes_reporting_currency(monkeypatch):
@@ -48,7 +48,7 @@ def test_portfolio_snapshot_endpoint_normalizes_reporting_currency(monkeypatch):
         response = app.make_response(api_v1_portfolio_snapshot.__wrapped__())
     assert response.status_code == 200
     assert observed["currency"] == "USD"
-    assert response.get_json()["reporting_currency"] == "USD"
+    assert response.get_json()["portfolio"]["reporting_currency"] == "USD"
 
 
 def test_portfolio_snapshot_endpoint_rejects_invalid_currency_codes():
