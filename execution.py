@@ -734,6 +734,7 @@ def _place_futures_market_order_via_oms(
     environment = "binance_demo" if demo else "binance_testnet"
 
     from stratex_agents.order_intent import TradeIntent
+    from stratex_agents.risk_agent import DeterministicRiskAgent
     from stratex_agents.runtime import build_order_manager
 
     intent = TradeIntent(
@@ -743,26 +744,15 @@ def _place_futures_market_order_via_oms(
         metadata={"leverage": int(leverage_value), "original_signal_id": original_client_id},
     )
 
+    risk_agent = DeterministicRiskAgent(
+        binance_risk_gate=risk_gate,
+        execution_policy=ExecutionPolicy.can_place_order,
+    )
+
     def authorize_with_existing_risk_gate(trade_intent):
-        equity = risk_context.get("current_equity")
-        positions = risk_context.get("active_positions")
-        entry_price = risk_context.get("entry_price")
-        data_health = risk_context.get("data_health_status")
-        if equity is None or positions is None or entry_price is None or data_health is None:
-            return False, "OMS_RISK_CONTEXT_INCOMPLETE"
-        try:
-            passed, reason, details = risk_gate.evaluate_risk(
-                trade_intent.symbol, trade_intent.side, equity, positions,
-                trade_intent.quantity, entry_price, data_health,
-            )
-            if not passed:
-                return False, f"{reason}: {details}"
-            permitted, policy_reason = ExecutionPolicy.can_place_order()
-            if not permitted:
-                return False, f"EXECUTION_POLICY_BLOCKED: {policy_reason}"
-            return True, "RISK_OK"
-        except Exception as exc:
-            return False, f"RISK_GATE_ERROR: {type(exc).__name__}"
+        decision = risk_agent.authorize(trade_intent, risk_context)
+        reason = decision.reason if not decision.details else f"{decision.reason}: {decision.details}"
+        return decision.approved, reason
 
     manager = build_order_manager(authorize_with_existing_risk_gate)
     outcome = manager.submit(intent)
