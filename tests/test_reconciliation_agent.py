@@ -63,7 +63,9 @@ def test_reconciliation_tracks_accepted_orders_for_future_polling(tmp_path):
         }},
     )
     first = agent.reconcile_once()
-    assert first["resolved"] == 1
+    assert first["confirmed"] == 1
+    assert first["resolved"] == 0
+    assert first["pending"] == 1
     assert store.get(intent.client_order_id)["status"] == "ACCEPTED"
 
     polls = []
