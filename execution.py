@@ -128,7 +128,7 @@ class ExecutionPolicy:
 # CLIENT INITIALIZATION (TESTNET ONLY)
 # ==============================================================================
 def get_exchange_client():
-    """Lazily evaluates ExecutionPolicy to construct and return the Binance Testnet Client."""
+    """Lazily applies ExecutionPolicy then delegates safe venue configuration to BinanceFuturesAgent."""
     mode, paper_safe, live_enabled, testnet_enabled = _resolve_execution_flags()
     if mode == "LIVE" or live_enabled:
         raise RuntimeError("SECURITY CRITICAL: LIVE trading is permanently disabled by design in this repository.")
@@ -151,11 +151,14 @@ def get_exchange_client():
         raise RuntimeError(f"CRITICAL ERROR: Client creation blocked. ({reason})")
 
     if mode in ["TESTNET", "FUTURES"]:
-        client = Client(API_KEY, SECRET_KEY, testnet=True, ping=False)
-        if mode == "TESTNET":
-            client.API_URL = "https://testnet.binance.vision/api"
-        if mode in ["TESTNET", "FUTURES"]:
-            client.FUTURES_URL = "https://testnet.binancefuture.com/fapi"
+        # The venue-specific credentials and endpoint selection live inside the
+        # Binance agent, not the strategy/risk/order lifecycle.
+        from stratex_agents.venue.binance_futures_agent import BinanceFuturesAgent
+        client = BinanceFuturesAgent().create_client(
+            mode=mode,
+            legacy_api_key=API_KEY,
+            legacy_secret_key=SECRET_KEY,
+        )
         try:
             local_before = int(time.time() * 1000)
             if mode == "FUTURES":
@@ -165,8 +168,10 @@ def get_exchange_client():
             local_after = int(time.time() * 1000)
             client.TIME_OFFSET = st - ((local_before + local_after) // 2)
         except Exception:
+            # Public time endpoint is only a best-effort clock-skew correction.
+            # Signed-order failures still propagate normally.
             pass
-            
+
         original_request = client._request
         def patched_request(method, uri, signed, force_params=False, **kwargs):
             if signed:
@@ -175,7 +180,7 @@ def get_exchange_client():
                 kwargs['data']['recvWindow'] = 60000
             return original_request(method, uri, signed, force_params, **kwargs)
         client._request = patched_request
-        
+
         return client
         
     return None
