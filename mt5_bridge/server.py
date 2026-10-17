@@ -522,7 +522,7 @@ def place_order():
             raise ValueError("stop_loss/take_profit violate broker minimum stop distance")
 
     # Broker-calculated PnL and margin are the final deterministic pre-trade risk check.
-    financials = _mt5_entry_financials(
+    _mt5_entry_financials(
         mt5, account_info, symbol=symbol, side=side, volume=volume,
         entry_price=price, stop_loss=stop_loss, take_profit=take_profit,
     )
