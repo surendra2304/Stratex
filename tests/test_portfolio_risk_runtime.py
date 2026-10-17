@@ -32,7 +32,7 @@ def demo_intent(venue="binance", quantity=0.01):
 def healthy_snapshot():
     return {
         "status": "healthy",
-        "captured_at": 1_800_000_000.0,
+        "captured_at": time.time(),
         "reporting_currency": "USD",
         "currency_conversion_complete": True,
         "equity_basis": "account_equity",
