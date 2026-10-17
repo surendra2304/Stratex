@@ -100,17 +100,32 @@ class MarketDataClient:
 
         if TRADING_MODE == "PAPER":
             self.__client = None
+            self.__prod_client = None
             self.data_source = "DATA_UNAVAILABLE"
         else:
-            try:
-                self.__client = Client("", "", testnet=True, ping=False)
-            except Exception:
-                self.__client = None
-            try:
-                self.__prod_client = Client("", "", testnet=False, ping=False)
-            except Exception:
+            from stratex_agents.venue.binance_futures_agent import BinanceFuturesAgent
+            venue_agent = BinanceFuturesAgent()
+            if venue_agent.demo_trading:
+                try:
+                    self.__client = venue_agent.create_public_client(
+                        futures=TRADING_MODE == "FUTURES", client_cls=Client
+                    )
+                except Exception as exc:
+                    logger.error(f"[DATA_CLIENT] Demo market-data client initialization failed: {exc}")
+                    self.__client = None
+                # Never silently fall back to production data in the selected Demo environment.
                 self.__prod_client = None
-            self.data_source = "BINANCE_TESTNET_READ_ONLY"
+                self.data_source = "BINANCE_DEMO_TRADING_READ_ONLY"
+            else:
+                try:
+                    self.__client = Client("", "", testnet=True, ping=False)
+                except Exception:
+                    self.__client = None
+                try:
+                    self.__prod_client = Client("", "", testnet=False, ping=False)
+                except Exception:
+                    self.__prod_client = None
+                self.data_source = "BINANCE_TESTNET_READ_ONLY"
 
     def is_available(self) -> bool:
         return self.__client is not None or getattr(self, "_MarketDataClient__prod_client", None) is not None
@@ -130,40 +145,55 @@ class MarketDataClient:
         return _execute_with_rate_limit_protection(self.__client.get_symbol_ticker, **kwargs)
 
     def get_klines(self, **kwargs):
-        """Kline/Candlestick data for a symbol."""
+        """Kline/Candlestick data for the configured venue environment."""
         if not self.is_available():
             return None
+        method_name = "futures_klines" if TRADING_MODE == "FUTURES" else "get_klines"
         if self.__client:
             try:
-                res = _execute_with_rate_limit_protection(self.__client.get_klines, **kwargs)
+                res = _execute_with_rate_limit_protection(getattr(self.__client, method_name), **kwargs)
                 if res:
                     return res
             except Exception:
-                pass
+                if self.__prod_client is None:
+                    return []
         if self.__prod_client:
             try:
-                return _execute_with_rate_limit_protection(self.__prod_client.get_klines, **kwargs)
+                return _execute_with_rate_limit_protection(getattr(self.__prod_client, method_name), **kwargs)
             except Exception:
                 pass
         return []
 
     def get_historical_klines(self, symbol, interval, start_str, end_str=None, **kwargs):
-        """Historical klines (candles) for a symbol."""
+        """Historical candles for the configured venue environment."""
         if not self.is_available():
             return None
+        method_name = "futures_historical_klines" if TRADING_MODE == "FUTURES" else "get_historical_klines"
         if self.__client:
             try:
-                res = _execute_with_rate_limit_protection(self.__client.get_historical_klines, symbol, interval, start_str, end_str, **kwargs)
+                res = _execute_with_rate_limit_protection(
+                    getattr(self.__client, method_name), symbol, interval, start_str, end_str, **kwargs
+                )
                 if res:
                     return res
             except Exception:
-                pass
+                if self.__prod_client is None:
+                    return []
         if self.__prod_client:
             try:
-                return _execute_with_rate_limit_protection(self.__prod_client.get_historical_klines, symbol, interval, start_str, end_str, **kwargs)
+                return _execute_with_rate_limit_protection(
+                    getattr(self.__prod_client, method_name), symbol, interval, start_str, end_str, **kwargs
+                )
             except Exception:
                 pass
         return []
+
+    def get_exchange_info(self, **kwargs):
+        """Current exchange trading rules for the configured venue environment."""
+        if not self.is_available():
+            return None
+        method_name = "futures_exchange_info" if TRADING_MODE == "FUTURES" else "get_exchange_info"
+        return _execute_with_rate_limit_protection(getattr(self.__client, method_name), **kwargs)
 
     def futures_funding_rate(self, **kwargs):
         """Get funding rate history."""
