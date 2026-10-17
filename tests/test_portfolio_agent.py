@@ -3,11 +3,17 @@ from stratex_agents.portfolio_agent import PortfolioAgent
 
 
 class FakePortfolioVenue:
-    def __init__(self, balances=None, positions=None, balance_error=None, position_error=None):
+    def __init__(self, balances=None, positions=None, balance_error=None, position_error=None, equity=None):
         self.balances = balances or {}
         self.positions = positions or []
         self.balance_error = balance_error
         self.position_error = position_error
+        self.equity = equity
+
+    def get_equity(self):
+        if self.equity is None:
+            raise RuntimeError("broker account equity unavailable")
+        return self.equity
 
     def get_balance(self):
         if self.balance_error:
@@ -89,3 +95,27 @@ def test_portfolio_agent_reports_no_venues_as_unavailable():
     assert snapshot["status"] == "no_venues_configured"
     assert snapshot["reporting_equity"] is None
     assert snapshot["execution_authority"] is False
+
+
+
+def test_portfolio_agent_prefers_broker_account_equity_when_available():
+    venue = FakePortfolioVenue(
+        balances={"USD": UnifiedBalance("USD", free=700, used=300, total=1000)},
+        positions=[position()],
+        equity={"USD": 975.0},
+    )
+    snapshot = PortfolioAgent({"mt5": venue}).snapshot("USD")
+    assert snapshot["status"] == "healthy"
+    assert snapshot["reporting_equity"] == 975.0
+    assert snapshot["equity_basis"] == "account_equity"
+    assert snapshot["currency_conversion_complete"] is True
+
+
+def test_portfolio_agent_does_not_call_wallet_balance_sum_verified_equity():
+    venue = FakePortfolioVenue(
+        balances={"USD": UnifiedBalance("USD", free=700, used=300, total=1000)},
+        positions=[],
+    )
+    snapshot = PortfolioAgent({"mt5": venue}).snapshot("USD")
+    assert snapshot["reporting_equity"] == 1000.0
+    assert snapshot["equity_basis"] == "balance_total_estimate"
