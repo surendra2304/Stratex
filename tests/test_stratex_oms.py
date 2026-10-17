@@ -144,3 +144,19 @@ def test_oms_blocked_kill_switch_never_calls_venue(monkeypatch, tmp_path):
     assert result.status == "REJECTED"
     assert "emergency stop" in result.reason
     assert venue.calls == []
+
+
+
+def test_binance_futures_oms_refuses_spot_testnet_mode(monkeypatch, tmp_path):
+    setup_binance_env(monkeypatch)
+    monkeypatch.setenv("TRADING_MODE", "TESTNET")
+    venue = FakeVenue()
+    oms = StratexOrderManager(
+        {"binance": venue}, authorize_intent=lambda _intent: (True, "approved"),
+        store=OrderIntentStore(str(tmp_path / "spot-mode.sqlite3")),
+        kill_switch_check=lambda: (False, ""),
+    )
+    result = oms.submit(intent("stx-no-spot-fallback-001"))
+    assert result.status == "REJECTED"
+    assert "TRADING_MODE must be FUTURES" in result.reason
+    assert venue.calls == []
