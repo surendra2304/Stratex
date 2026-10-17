@@ -106,6 +106,30 @@ class MT5BridgeAdapter(BaseExchange):
             # merge hedge-mode positions solely by symbol.
         return result
 
+    def get_symbols(
+        self,
+        query: str = "",
+        *,
+        visible_only: bool = False,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Discover broker-native symbols and actual contract rules from the MT5 terminal."""
+        bounded_limit = max(1, min(5000, int(limit)))
+        data = self._request(
+            "GET", "/v1/symbols",
+            params={"query": query, "visible_only": str(visible_only).lower(), "limit": bounded_limit},
+        )
+        if not isinstance(data, dict) or not isinstance(data.get("symbols"), list):
+            raise MT5BridgeError("MT5 symbol discovery returned an invalid payload.")
+        return data["symbols"]
+
+    def get_symbol_info(self, symbol: str) -> dict[str, Any]:
+        """Return exact symbol metadata; substring matches must not be mistaken for the requested symbol."""
+        for item in self.get_symbols(query=symbol, visible_only=False, limit=5000):
+            if str(item.get("symbol", "")).casefold() == symbol.casefold():
+                return item
+        raise MT5BridgeError(f"MT5 symbol {symbol!r} was not found in broker metadata.")
+
     def get_ticker(self, symbol: str) -> UnifiedTicker:
         data = self._request("GET", "/v1/ticker", params={"symbol": symbol})
         return UnifiedTicker(
