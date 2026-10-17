@@ -243,7 +243,7 @@ def validate_environment_safety():
 
 
 def validate_config():
-    global TRADING_MODE, PAPER_SAFE_MODE, ACTIVE_STRATEGY, TIMEFRAME
+    global TRADING_MODE, PAPER_SAFE_MODE
     if TRADING_MODE not in VALID_MODES:
         raise ValueError(f"Configuration Error: Invalid TRADING_MODE '{TRADING_MODE}'. Only {VALID_MODES} are supported.")
 
