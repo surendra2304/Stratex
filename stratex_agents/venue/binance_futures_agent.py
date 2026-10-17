@@ -78,12 +78,12 @@ class BinanceFuturesAgent:
             client.stratex_venue = "binance"
             client.stratex_environment = "demo_trading"
         else:
+            # Preserve the legacy public/testnet startup path even before credentials
+            # are entered. An anonymous Testnet client cannot authenticate order
+            # submissions, and it is pinned to Testnet URLs below. The current
+            # Demo Trading path above remains strict and requires its own fresh keys.
             api_key = (legacy_api_key or os.getenv("API_KEY", "")).strip()
             api_secret = (legacy_secret_key or os.getenv("SECRET_KEY", "")).strip()
-            if not _real_secret(api_key) or not _real_secret(api_secret):
-                raise RuntimeError(
-                    "Legacy Binance Testnet mode requires API_KEY/SECRET_KEY (or the legacy testnet aliases)."
-                )
             client = client_type(api_key, api_secret, testnet=True, ping=False)
             client.API_URL = BINANCE_LEGACY_SPOT_TESTNET_URL
             client.FUTURES_URL = BINANCE_LEGACY_FUTURES_TESTNET_URL
