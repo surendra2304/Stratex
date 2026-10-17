@@ -23,6 +23,13 @@ class OrderReconciliationAgent:
         "CANCELED": "CANCELLED",
         "EXPIRED": "CANCELLED",
     }
+    ALLOWED_PROGRESSIONS = {
+        "RESERVED": {"RESERVED", "SUBMITTING", "ACCEPTED", "PARTIALLY_FILLED", "FILLED", "CANCELLED", "REJECTED", "UNKNOWN"},
+        "SUBMITTING": {"SUBMITTING", "ACCEPTED", "PARTIALLY_FILLED", "FILLED", "CANCELLED", "REJECTED", "UNKNOWN"},
+        "UNKNOWN": {"UNKNOWN", "ACCEPTED", "PARTIALLY_FILLED", "FILLED", "CANCELLED", "REJECTED"},
+        "ACCEPTED": {"ACCEPTED", "PARTIALLY_FILLED", "FILLED", "CANCELLED", "REJECTED"},
+        "PARTIALLY_FILLED": {"PARTIALLY_FILLED", "FILLED", "CANCELLED"},
+    }
 
     def __init__(
         self,
@@ -102,6 +109,20 @@ class OrderReconciliationAgent:
                     "state": "pending",
                     "reason": "unsupported_or_nonfinal_venue_status",
                     "venue_status": raw_status or None,
+                })
+                continue
+
+            previous_status = str(candidate["status"]).upper()
+            allowed_next = self.ALLOWED_PROGRESSIONS.get(previous_status, set())
+            if status not in allowed_next:
+                pending += 1
+                records.append({
+                    "client_order_id": client_order_id,
+                    "venue": venue,
+                    "previous_status": previous_status,
+                    "state": "pending",
+                    "reason": "venue_status_would_regress_order_lifecycle",
+                    "venue_status": status,
                 })
                 continue
 
