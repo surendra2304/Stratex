@@ -111,3 +111,10 @@ The demo bridge now exposes `POST /v1/risk/size`. It uses the connected demo acc
 Default environment limits are `MT5_MAX_RISK_PER_TRADE=0.005` (0.5% of equity, hard-capped by code at 2%) and `MT5_MAX_MARGIN_FRACTION=0.20` (20% of equity and never more than half of current free margin; hard-capped by code at 35%). These limits apply per new entry. This does not yet replace the shared portfolio-wide daily-loss/drawdown controller, and no LLM response is allowed to increase them.
 
 Official API references: [MetaTrader 5 `order_calc_profit`](https://www.mql5.com/en/docs/python_metatrader5/mt5ordercalcprofit_py), [`order_calc_margin`](https://www.mql5.com/en/docs/python_metatrader5/mt5ordercalcmargin_py), and [`order_check`](https://www.mql5.com/en/docs/python_metatrader5/mt5ordercheck_py).
+
+
+## Opt-in reconciliation worker
+
+`scripts/reconciliation_worker.py` is supervised as a separate, **read-only** child process when both `STRATEX_ORDER_MANAGER_ENABLED=true` and `STRATEX_RECONCILIATION_ENABLED=true`, with `TRADING_MODE=FUTURES`, `STRATEX_EXECUTION_MODE=DEMO`, live-money trading disabled, and a valid venue allowlist. It reuses `STRATEX_ORDER_DB`, polls on `STRATEX_RECONCILIATION_INTERVAL_SECONDS` (default 30 seconds, clamped to 5–300), and records a state only when a venue explicitly confirms it. Confirmed open and partially-filled orders remain queued. Missing order lookups and ambiguous protection state stay unresolved; no automated cross-venue retry is attempted.
+
+The worker is not enabled by default. Leave both flags false until Binance Demo Trading and the MT5 Demo bridge are privately configured and the end-to-end order/protection/restart tests have passed.
