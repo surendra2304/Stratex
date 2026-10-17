@@ -25,11 +25,28 @@ class OrderIntentStore:
         # Prefer the agent's authoritative PostgreSQL database when configured.
         # Explicit paths remain useful for isolated SQLite unit tests and local dev.
         configured_dsn = (os.getenv("STRATEX_DATABASE_URL") or "").strip()
+        postgres_prefixes = ("postgresql://", "postgres://", "postgresql+psycopg://")
         if path is not None:
             self.path = path
-        elif configured_dsn.lower().startswith(("postgresql://", "postgres://", "postgresql+psycopg://")):
+        elif configured_dsn:
+            if not configured_dsn.lower().startswith(postgres_prefixes):
+                raise RuntimeError("STRATEX_DATABASE_URL must use PostgreSQL; refusing an implicit local-ledger fallback.")
             self.path = configured_dsn
         else:
+            environment = (
+                os.getenv("STRATEX_ENVIRONMENT") or os.getenv("ENVIRONMENT") or "development"
+            ).strip().lower()
+            oms_enabled = os.getenv("STRATEX_ORDER_MANAGER_ENABLED", "false").strip().lower() in {
+                "1", "true", "yes", "on"
+            }
+            reconciliation_enabled = os.getenv("STRATEX_RECONCILIATION_ENABLED", "false").strip().lower() in {
+                "1", "true", "yes", "on"
+            }
+            if environment == "production" and (oms_enabled or reconciliation_enabled):
+                raise RuntimeError(
+                    "Production Stratex OMS/reconciliation requires STRATEX_DATABASE_URL "
+                    "pointing to the isolated PostgreSQL stratex_db."
+                )
             self.path = os.getenv("STRATEX_ORDER_DB", "state/stratex_orders.sqlite3")
         self._use_postgres = self.path.lower().startswith(
             ("postgresql://", "postgres://", "postgresql+psycopg://")
