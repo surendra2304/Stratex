@@ -27,3 +27,31 @@ def test_explicit_sqlite_path_remains_available_for_isolated_tests(monkeypatch, 
     assert store._use_postgres is False
     assert store.path == str(path)
     assert path.exists()
+
+
+
+def test_production_oms_refuses_local_sqlite_fallback(monkeypatch, tmp_path):
+    monkeypatch.delenv("STRATEX_DATABASE_URL", raising=False)
+    monkeypatch.setenv("STRATEX_ENVIRONMENT", "production")
+    monkeypatch.setenv("STRATEX_ORDER_MANAGER_ENABLED", "true")
+    monkeypatch.delenv("STRATEX_RECONCILIATION_ENABLED", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    import pytest
+
+    with pytest.raises(RuntimeError, match="requires STRATEX_DATABASE_URL"):
+        OrderIntentStore()
+    assert not (tmp_path / "state" / "stratex_orders.sqlite3").exists()
+
+
+def test_invalid_configured_stratex_database_url_fails_closed(monkeypatch, tmp_path):
+    monkeypatch.setenv("STRATEX_DATABASE_URL", "sqlite:///do-not-use.db")
+    monkeypatch.delenv("STRATEX_ENVIRONMENT", raising=False)
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    import pytest
+
+    with pytest.raises(RuntimeError, match="must use PostgreSQL"):
+        OrderIntentStore()
+    assert not (tmp_path / "do-not-use.db").exists()
