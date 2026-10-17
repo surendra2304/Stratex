@@ -129,6 +129,7 @@ def test_risk_agent_runs_portfolio_gate_before_venue_risk_gate():
         "positions": [],
     }
     risk_context["candidate_notional"] = 10.0
+    risk_context["candidate_notional_currency"] = "USD"
     result = agent.authorize(binance_intent(), risk_context)
     assert result.approved is False
     assert result.reason == "DAILY_LOSS_LIMIT_REACHED"
