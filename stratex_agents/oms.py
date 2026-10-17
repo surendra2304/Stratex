@@ -84,7 +84,8 @@ class StratexOrderManager:
         if intent.venue not in allowed:
             raise OrderBlockedError(f"Venue {intent.venue!r} is not in STRATEX_ALLOWED_EXECUTION_VENUES.")
         if intent.venue == "binance":
-            if mode != "FUTURES":
+            trading_mode = os.getenv("TRADING_MODE", "PAPER").strip().upper()
+            if trading_mode != "FUTURES":
                 raise OrderBlockedError("The Binance OMS adapter in this release supports USDⓈ-M Futures only; TRADING_MODE must be FUTURES.")
             demo = _truthy(os.getenv("BINANCE_DEMO_TRADING"))
             expected = "binance_demo" if demo else "binance_testnet"
