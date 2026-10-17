@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any
 
 from .order_intent import TradeIntent
@@ -19,13 +20,26 @@ def _fx_rates_from_environment() -> dict[str, float]:
     except ValueError as exc:
         raise PortfolioRiskStateError("STRATEX_FX_RATES_JSON must be valid JSON") from exc
     if not isinstance(payload, dict):
-        raise PortfolioRiskStateError("STRATEX_FX_RATES_JSON must be a currency-to-rate object")
+        raise PortfolioRiskStateError("STRATEX_FX_RATES_JSON must map currencies to {rate,timestamp} objects")
+    max_age = float(os.getenv("STRATEX_FX_MAX_AGE_SECONDS", "300"))
+    if not 1 <= max_age <= 3600:
+        raise PortfolioRiskStateError("STRATEX_FX_MAX_AGE_SECONDS must be in [1, 3600]")
+    now = time.time()
     rates: dict[str, float] = {}
-    for currency, raw_rate in payload.items():
+    for currency, record in payload.items():
         code = str(currency).strip().upper()
-        rate = float(raw_rate)
-        if not code or rate <= 0 or rate != rate or abs(rate) == float("inf"):
-            raise PortfolioRiskStateError("FX rates must be positive finite numbers keyed by currency")
+        if not isinstance(record, dict) or "rate" not in record or "timestamp" not in record:
+            raise PortfolioRiskStateError(f"FX rate for {code} must include rate and timestamp")
+        try:
+            rate = float(record["rate"])
+            timestamp = float(record["timestamp"])
+        except (TypeError, ValueError) as exc:
+            raise PortfolioRiskStateError(f"FX rate/timestamp for {code} must be numeric") from exc
+        if not code or rate <= 0 or not all(map(lambda n: n == n and abs(n) != float("inf"), (rate, timestamp))):
+            raise PortfolioRiskStateError("FX rates and timestamps must be finite; rates must be positive")
+        age = now - timestamp
+        if age < -2 or age > max_age:
+            raise PortfolioRiskStateError(f"FX rate for {code} is stale or future-dated")
         rates[code] = rate
     return rates
 
