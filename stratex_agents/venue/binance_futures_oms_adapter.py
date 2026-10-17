@@ -130,6 +130,35 @@ class BinanceFuturesOMSAdapter:
                     f"Existing {side} position for {symbol} must be reconciled before a new OMS entry."
                 )
 
+    def _assert_no_stratex_algo_orders(self, symbol: str) -> None:
+        """Block new entries while any Stratex protective conditional order remains open.
+
+        A stop-loss or take-profit can close a position while its sibling order
+        remains open. Since both use closePosition semantics, allowing another
+        entry for the same symbol before reconciling/cancelling that sibling could
+        let a stale conditional order affect the new position. This guard is read-only
+        and fails closed if the venue cannot list open Algo Orders.
+        """
+        try:
+            orders = self.client.futures_get_open_algo_orders(symbol=symbol)
+        except Exception as exc:
+            raise BinanceVenueError(
+                f"Cannot verify open Futures Algo Orders for {symbol}; refusing a new entry."
+            ) from exc
+        if isinstance(orders, dict):
+            orders = orders.get("algoOrders")
+        if not isinstance(orders, list):
+            raise BinanceVenueError(f"Binance returned an invalid open Algo Order response for {symbol}.")
+        for order in orders:
+            if not isinstance(order, dict):
+                raise BinanceVenueError(f"Binance returned malformed open Algo Order metadata for {symbol}.")
+            client_id = str(order.get("clientAlgoId") or order.get("clientOrderId") or "")
+            if client_id.startswith(("stxsl-", "stxtp-")):
+                raise BinanceVenueError(
+                    f"Outstanding Stratex protective Algo Order for {symbol} must be reconciled "
+                    "and its sibling canceled before another entry."
+                )
+
     def _configure_margin_and_leverage(self, symbol: str, intent: TradeIntent) -> int:
         raw_leverage = intent.metadata.get("leverage", os.getenv("FUTURES_LEVERAGE", "5"))
         try:
@@ -256,6 +285,7 @@ class BinanceFuturesOMSAdapter:
             raise BinanceVenueError("Order notional is below Binance's minimum notional.")
 
         self._assert_symbol_flat(symbol)
+        self._assert_no_stratex_algo_orders(symbol)
         leverage = self._configure_margin_and_leverage(symbol, intent)
         try:
             account = self.client.futures_account()
