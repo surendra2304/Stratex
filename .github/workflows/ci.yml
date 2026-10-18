@@ -10,6 +10,20 @@ jobs:
   test-and-build:
     name: Test and Build Verification
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: stratex_test
+          POSTGRES_PASSWORD: stratex_test
+          POSTGRES_DB: stratex_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stratex_test -d stratex_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
       PORT: "8000"
       TRADING_MODE: "TESTNET"
@@ -43,6 +57,12 @@ jobs:
       - name: Run Pytest Test Suite
         run: |
           pytest -v --tb=short
+
+      - name: Run PostgreSQL OMS ledger integration tests
+        env:
+          STRATEX_TEST_POSTGRES_URL: postgresql://stratex_test:stratex_test@localhost:5432/stratex_test
+        run: |
+          pytest -v --tb=short tests/test_order_store_postgres_integration.py
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
