@@ -110,18 +110,25 @@ def build_portfolio_risk_context(
                 raw_currency = str(info.get("profit_currency", "")).strip().upper()
                 if contract_size <= 0 or not raw_currency:
                     raise ValueError("MT5 contract size/profit currency is unavailable")
-                context["candidate_notional"] = float(intent.quantity) * contract_size * price
+                raw_notional = float(intent.quantity) * contract_size * price
             else:
                 raise ValueError("unsupported venue for candidate notional")
             if intent.venue == "binance":
-                context["candidate_notional"] = float(intent.quantity) * price
+                raw_notional = float(intent.quantity) * price
             if price <= 0 or price != price or abs(price) == float("inf"):
                 raise ValueError("entry/mark price is invalid")
-            raw_notional = float(context["candidate_notional"])
+            if raw_notional <= 0 or raw_notional != raw_notional or abs(raw_notional) == float("inf"):
+                raise ValueError("candidate notional is invalid")
             rate = 1.0 if raw_currency == reporting_currency else fx_rates.get(raw_currency)
             if rate is None:
                 raise ValueError(f"no explicit FX rate for candidate notional currency {raw_currency}")
-            context["candidate_notional"] = raw_notional * rate
+            converted_notional = raw_notional * rate
+            if converted_notional <= 0 or converted_notional != converted_notional or abs(converted_notional) == float("inf"):
+                raise ValueError("converted candidate notional is invalid")
+            # Publish candidate_notional only after the full currency conversion
+            # has passed validation. A failed FX check must never leave a usable
+            # unconverted notional in the risk context.
+            context["candidate_notional"] = converted_notional
             context["candidate_notional_currency"] = reporting_currency
         except Exception as exc:
             context["candidate_notional_error"] = type(exc).__name__
