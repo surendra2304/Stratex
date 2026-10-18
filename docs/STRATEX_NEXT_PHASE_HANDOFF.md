@@ -197,3 +197,45 @@ Start by reading this document and the current repository `main`, then:
   - https://www.mql5.com/en/docs/python_metatrader5/mt5ordercalcprofit_py
   - https://www.mql5.com/en/docs/python_metatrader5/mt5ordercalcmargin_py
   - https://www.mql5.com/en/docs/python_metatrader5/mt5ordercheck_py
+
+
+---
+
+## 8. Continuation checkpoint update — 18 October 2026, later session
+
+This section supersedes any earlier assumption that the feature branch contains unmerged implementation code.
+
+### Pull request and branch reality
+
+- The feature implementation branch `feat/stratex-agent-orchestration` is now **behind `main` with no unique commits**. The implementation that was reviewed in this session is already visible on `main`; do not open a duplicate code PR from that branch.
+- PR #4 is closed/merged and should be treated as historical implementation work.
+- PR #9 is the current open documentation PR: https://github.com/surendra2304/Stratex/pull/9. This handoff update belongs to that documentation PR.
+- At the last status check, CI run `39097438524` for commit `ca5672a867cede0630e0530481a7ba44fd6c7e1c` was still **in progress**. Linting passed; pytest, PostgreSQL OMS integration, and Docker build stages had not yet reported final results. An earlier run at `8c34f04299b3b95a617f013e995cb1ee750eb496` was successful. Re-check current checks before treating the latest code as validated.
+
+### Additional code paths present on current main
+
+- `stratex_agents/risk_agent.py`: deterministic wrapper around the existing Binance risk gate; missing context/policy denies. MT5 denies unless an explicit broker-aware evaluator is configured.
+- `stratex_agents/portfolio_agent.py`: read-only cross-venue snapshot; retains native currency and position identity, marks missing FX conversions unavailable, and surfaces venue failures as degraded.
+- `stratex_agents/reconciliation_agent.py`: evidence-based reconciliation engine. It can update persisted intent status only when an injected venue resolver explicitly confirms state; it has no order-submission authority.
+- `stratex_agents/venue/binance_futures_oms_adapter.py`: includes a read-only reconciliation path that checks entry state and verifies both protective Algo Orders before considering a fill fully protected.
+- `exchanges/mt5_bridge_adapter.py`: includes a read-only reconciliation path based on the persistent bridge client-order record.
+- `stratex_agents/runtime.py`: exposes a reconciliation-agent factory from adapters that implement `reconcile_intent`; it does not yet mean a supervised recurring worker is deployed.
+- `mt5_bridge/server.py`: includes broker-calculated MT5 lot sizing and per-entry risk/margin preflight using terminal APIs, plus `order_check` before submission.
+- Tests for risk agent, portfolio, reconciliation, MT5 broker sizing, MT5 adapter/agent, Binance protective-order reconciliation and injected MT5 demo health are present. Confirm all test names and run outcomes from the live tree and latest CI.
+
+### Important status wording
+
+These are **implementation foundations**, not proof of a finished live trading lifecycle. In particular, the portfolio/reconciliation agents are not automatically scheduled simply because their classes exist. Binance Demo and IC Markets Demo need real, authenticated end-to-end validation. No OCI deployment or demo soak test is claimed. Keep new entries disabled until the complete lifecycle and recovery matrix passes.
+
+### Immediate next work
+
+1. Refresh main and check latest CI status/result.
+2. Create a file-by-file integration matrix for current strategy entries, exits, trailing stops, closes, protective-order changes and trade ledger. Identify direct legacy exchange calls.
+3. Route the existing strategy runner through a single OMS path under a default-off feature flag. Avoid duplicate legacy and OMS execution.
+4. Wire a supervised reconciliation worker with explicit lifecycle/health controls and safe scheduling; verify terminal-state transitions against `OrderIntentStore`.
+5. Finish Binance USDⓈ-M Futures Demo order lifecycle (partial fills, conditional Algo Order semantics, sibling cancellation, position reconciliation and restart recovery).
+6. Finish MT5 ticket-aware lifecycle (hedge mode, pending orders, modifications, close-by-ticket, history/deals, commission/swap and restart recovery).
+7. Add shared portfolio risk, daily loss/drawdown limits, global kill switch and per-venue circuit breakers.
+8. Only then integrate FRIDAY/Inference/Memora/IntelX/Futuris/Sentinel contracts and deploy through OCI after a demo soak test.
+
+**Do not merge PR #9 as though it implements the remaining code.** It is a documentation/handoff PR. The next implementation PR must be based on current main, include focused tests, and keep execution disabled by default.
