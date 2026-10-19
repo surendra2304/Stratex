@@ -25,9 +25,8 @@ def postgres_store():
     if not dsn:
         pytest.skip("STRATEX_TEST_POSTGRES_URL is only supplied by the PostgreSQL integration job")
     store = OrderIntentStore(dsn)
-    # This test database is dedicated to the job. Clear state between test cases.
-    with store._managed_connection() as conn:
-        conn.execute("DELETE FROM order_intents")
+    # Use unique IDs per test. The audit ledger is append-only, so the fixture
+    # must not delete parent rows or historical audit events between cases.
     return store
 
 
@@ -91,9 +90,13 @@ def test_postgres_ledger_lists_reconcilable_intents_and_bounds_limit(postgres_st
     postgres_store.transition(third, "REJECTED", error="risk gate rejected")
 
     unresolved = {row["client_order_id"] for row in postgres_store.list_unresolved(limit=100)}
-    assert unresolved == {first}
+    assert first in unresolved
+    assert second not in unresolved
+    assert third not in unresolved
 
     reconcilable = {row["client_order_id"] for row in postgres_store.list_reconcilable(limit=100)}
-    assert reconcilable == {first, second}
+    assert first in reconcilable
+    assert second in reconcilable
+    assert third not in reconcilable
 
     assert len(postgres_store.list_reconcilable(limit=5000)) <= 1000
