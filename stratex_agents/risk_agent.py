@@ -41,10 +41,12 @@ class DeterministicRiskAgent:
         binance_risk_gate: Any | None = None,
         execution_policy: Callable[[], tuple[bool, str]] | None = None,
         mt5_risk_evaluator: Callable[[TradeIntent, dict[str, Any]], tuple[bool, str, str]] | None = None,
+        portfolio_risk_gate: Any | None = None,
     ):
         self.binance_risk_gate = binance_risk_gate
         self.execution_policy = execution_policy
         self.mt5_risk_evaluator = mt5_risk_evaluator
+        self.portfolio_risk_gate = portfolio_risk_gate
 
     def authorize(self, intent: TradeIntent, context: dict[str, Any]) -> RiskDecision:
         """Return an explicit allow/deny decision. Missing inputs always mean deny."""
@@ -64,6 +66,24 @@ class DeterministicRiskAgent:
                 False, intent.venue, intent.client_order_id,
                 "EXECUTION_POLICY_BLOCKED", str(policy_reason),
             )
+
+        # Portfolio-wide limits are an additional gate, never a replacement for
+        # venue-specific sizing or the existing exchange RiskGate.
+        if self.portfolio_risk_gate is not None:
+            try:
+                portfolio_allowed, portfolio_reason, portfolio_details = self.portfolio_risk_gate.evaluate(
+                    intent, context
+                )
+            except Exception as exc:
+                return RiskDecision(
+                    False, intent.venue, intent.client_order_id,
+                    "PORTFOLIO_RISK_GATE_ERROR", type(exc).__name__,
+                )
+            if not portfolio_allowed:
+                return RiskDecision(
+                    False, intent.venue, intent.client_order_id,
+                    str(portfolio_reason), str(portfolio_details or ""),
+                )
 
         if intent.venue == "binance":
             if self.binance_risk_gate is None:
@@ -114,6 +134,7 @@ class DeterministicRiskAgent:
             "status": "ready" if self.execution_policy is not None else "policy_configuration_required",
             "binance_risk_gate_available": self.binance_risk_gate is not None,
             "mt5_risk_evaluator_available": self.mt5_risk_evaluator is not None,
+            "portfolio_risk_gate_available": self.portfolio_risk_gate is not None,
             "execution_authority": False,
             "can_deny_execution": True,
         }

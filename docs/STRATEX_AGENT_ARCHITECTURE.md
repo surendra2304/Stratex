@@ -118,3 +118,20 @@ Official API references: [MetaTrader 5 `order_calc_profit`](https://www.mql5.com
 `scripts/reconciliation_worker.py` is supervised as a separate, **read-only** child process when both `STRATEX_ORDER_MANAGER_ENABLED=true` and `STRATEX_RECONCILIATION_ENABLED=true`, with `TRADING_MODE=FUTURES`, `STRATEX_EXECUTION_MODE=DEMO`, live-money trading disabled, and a valid venue allowlist. It reuses `STRATEX_ORDER_DB`, polls on `STRATEX_RECONCILIATION_INTERVAL_SECONDS` (default 30 seconds, clamped to 5–300), and records a state only when a venue explicitly confirms it. Confirmed open and partially-filled orders remain queued. Missing order lookups and ambiguous protection state stay unresolved; no automated cross-venue retry is attempted.
 
 The worker is not enabled by default. Leave both flags false until Binance Demo Trading and the MT5 Demo bridge are privately configured and the end-to-end order/protection/restart tests have passed.
+
+
+## Portfolio-wide risk gate and persisted equity state
+
+The existing strategy-to-OMS path can opt into a second deterministic risk gate with `STRATEX_PORTFOLIO_RISK_ENABLED=true`. Immediately before authorization it refreshes a read-only portfolio snapshot, requires broker-reported account equity for every enabled venue, persists a UTC-day starting equity and high-water mark in `STRATEX_PORTFOLIO_RISK_DB`, and checks daily equity loss, drawdown, open-position count, gross exposure and snapshot freshness. The gate is composed with—not substituted for—the existing Binance risk gate and MT5 broker-native lot/margin evaluator.
+
+The gate fails closed if any venue is degraded, account equity is unavailable, a position has no verified notional, a currency conversion is missing, the candidate's notional is not in the reporting currency, or the snapshot is stale. Binance Futures reports account equity in USDT; when the reporting currency is USD, configure an explicit, timestamped rate in `STRATEX_FX_RATES_JSON`, e.g. `{"USDT":{"rate":1.0,"timestamp":<current Unix epoch seconds>}}`. The rate must be within `STRATEX_FX_MAX_AGE_SECONDS` (default 300 seconds). A value of 1.0 is only an operator-supplied demo assumption, not a live FX quote. MT5 candidate notional must be computed using broker contract metadata and passed in the reporting currency; the system deliberately does not treat a lot as a crypto quantity.
+
+The state store establishes its daily baseline from the first healthy, verified account-equity snapshot for that UTC day. It does not automatically adjust the baseline for deposits/withdrawals or account changes. Use dedicated demo accounts and reset the baseline deliberately if account equity is changed outside trading. The feature remains disabled by default and is not a certification of production/live readiness.
+
+
+The shared `build_venue_aware_authorizer` factory can compose the existing Binance RiskGate, MT5 broker-aware evaluator, portfolio gate and a per-intent fresh-context provider into one callback for the shared OMS. It fails closed when the context provider raises or a venue-specific risk evaluator is missing.
+
+
+## Durable OMS audit trail
+
+The SQLite order store now appends an `INTENT_RESERVED` event, every state transition, and repeated valid duplicate requests to `order_audit_events` in the same transaction as the corresponding ledger change. SQLite triggers reject direct updates/deletes of audit rows. Event details use an allowlist of intent/result fields and omit arbitrary intent metadata and credential-like response fields. `record_correction` appends a constrained `MANUAL_CORRECTION` event without changing the original result/status. The store also enforces monotonic lifecycle transitions, so a partial fill cannot regress to an accepted/new state. Back up the OMS and portfolio-risk SQLite files together on a persistent volume.

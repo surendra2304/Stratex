@@ -1,5 +1,6 @@
 from stratex_agents.order_intent import TradeIntent
 from stratex_agents.risk_agent import DeterministicRiskAgent
+from stratex_agents.portfolio_risk_gate import PortfolioRiskGate
 
 
 class FakeRiskGate:
@@ -103,3 +104,32 @@ def test_risk_agent_can_use_explicit_broker_aware_mt5_evaluator():
     assert result.approved is True
     assert result.reason == "MT5_RISK_OK"
     assert result.details == "broker sizing confirmed"
+
+
+
+def test_risk_agent_runs_portfolio_gate_before_venue_risk_gate():
+    gate = FakeRiskGate()
+    portfolio_gate = PortfolioRiskGate(clock=lambda: 1000.0)
+    agent = DeterministicRiskAgent(
+        binance_risk_gate=gate,
+        execution_policy=lambda: (True, "ALLOWED_FUTURES"),
+        portfolio_risk_gate=portfolio_gate,
+    )
+    risk_context = context()
+    risk_context["portfolio"] = {
+        "status": "healthy",
+        "captured_at": 1000.0,
+        "reporting_currency": "USD",
+        "currency_conversion_complete": True,
+        "equity_basis": "account_equity",
+        "reporting_equity": 960.0,
+        "day_start_equity": 1000.0,
+        "high_water_equity": 1000.0,
+        "positions": [],
+    }
+    risk_context["candidate_notional"] = 10.0
+    risk_context["candidate_notional_currency"] = "USD"
+    result = agent.authorize(binance_intent(), risk_context)
+    assert result.approved is False
+    assert result.reason == "DAILY_LOSS_LIMIT_REACHED"
+    assert gate.calls == []

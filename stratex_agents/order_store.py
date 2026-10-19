@@ -93,13 +93,9 @@ class OrderIntentStore:
             if self._use_postgres:
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS order_intents (
-                        client_order_id TEXT PRIMARY KEY,
-                        payload_hash TEXT NOT NULL,
-                        payload_json TEXT NOT NULL,
-                        status TEXT NOT NULL,
-                        result_json TEXT,
-                        error_text TEXT,
-                        created_at DOUBLE PRECISION NOT NULL,
+                        client_order_id TEXT PRIMARY KEY, payload_hash TEXT NOT NULL,
+                        payload_json TEXT NOT NULL, status TEXT NOT NULL, result_json TEXT,
+                        error_text TEXT, created_at DOUBLE PRECISION NOT NULL,
                         updated_at DOUBLE PRECISION NOT NULL
                     )
                 """)
@@ -107,36 +103,103 @@ class OrderIntentStore:
                 conn.execute("PRAGMA journal_mode=WAL")
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS order_intents (
-                        client_order_id TEXT PRIMARY KEY,
-                        payload_hash TEXT NOT NULL,
-                        payload_json TEXT NOT NULL,
-                        status TEXT NOT NULL,
-                        result_json TEXT,
-                        error_text TEXT,
-                        created_at REAL NOT NULL,
-                        updated_at REAL NOT NULL
+                        client_order_id TEXT PRIMARY KEY, payload_hash TEXT NOT NULL,
+                        payload_json TEXT NOT NULL, status TEXT NOT NULL, result_json TEXT,
+                        error_text TEXT, created_at REAL NOT NULL, updated_at REAL NOT NULL
                     )
                 """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_order_intents_status ON order_intents(status)")
+            if self._use_postgres:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS order_audit_events (
+                        event_id BIGSERIAL PRIMARY KEY, client_order_id TEXT NOT NULL,
+                        event_type TEXT NOT NULL, previous_status TEXT, new_status TEXT,
+                        details_json TEXT NOT NULL, created_at DOUBLE PRECISION NOT NULL,
+                        FOREIGN KEY(client_order_id) REFERENCES order_intents(client_order_id)
+                    )
+                """)
+            else:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS order_audit_events (
+                        event_id INTEGER PRIMARY KEY AUTOINCREMENT, client_order_id TEXT NOT NULL,
+                        event_type TEXT NOT NULL, previous_status TEXT, new_status TEXT,
+                        details_json TEXT NOT NULL, created_at REAL NOT NULL,
+                        FOREIGN KEY(client_order_id) REFERENCES order_intents(client_order_id)
+                    )
+                """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_order_audit_client_time ON order_audit_events(client_order_id, created_at)")
+            if self._use_postgres:
+                conn.execute("""
+                    CREATE OR REPLACE FUNCTION stratex_order_audit_immutable()
+                    RETURNS TRIGGER AS $$
+                    BEGIN
+                        RAISE EXCEPTION 'audit events are append-only';
+                    END;
+                    $$ LANGUAGE plpgsql
+                """)
+                conn.execute("DROP TRIGGER IF EXISTS order_audit_no_update ON order_audit_events")
+                conn.execute("DROP TRIGGER IF EXISTS order_audit_no_delete ON order_audit_events")
+                conn.execute("""
+                    CREATE TRIGGER order_audit_no_update BEFORE UPDATE ON order_audit_events
+                    FOR EACH ROW EXECUTE FUNCTION stratex_order_audit_immutable()
+                """)
+                conn.execute("""
+                    CREATE TRIGGER order_audit_no_delete BEFORE DELETE ON order_audit_events
+                    FOR EACH ROW EXECUTE FUNCTION stratex_order_audit_immutable()
+                """)
+            else:
+                conn.execute("""
+                    CREATE TRIGGER IF NOT EXISTS order_audit_no_update BEFORE UPDATE ON order_audit_events
+                    BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END
+                """)
+                conn.execute("""
+                    CREATE TRIGGER IF NOT EXISTS order_audit_no_delete BEFORE DELETE ON order_audit_events
+                    BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END
+                """)
+
+    def _append_audit_event(self, conn, *, client_order_id: str, event_type: str,
+                            previous_status: str | None, new_status: str | None,
+                            details: dict[str, Any], timestamp: float) -> None:
+        details_json = json.dumps(details, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        conn.execute(self._sql(
+            "INSERT INTO order_audit_events "
+            "(client_order_id,event_type,previous_status,new_status,details_json,created_at) "
+            "VALUES (?,?,?,?,?,?)"
+        ), (client_order_id, event_type, previous_status, new_status, details_json, timestamp))
+
+    @staticmethod
+    def _result_summary(result: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not isinstance(result, dict):
+            return None
+        allowed = (
+            "status", "order_id", "deal", "avg_price", "price", "quantity",
+            "volume_filled", "venue", "environment", "protection_verified",
+            "stop_algo_id", "take_profit_algo_id", "reason",
+        )
+        summary = {key: result[key] for key in allowed if key in result}
+        return summary
 
     def reserve(self, client_order_id: str, payload_hash: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Atomically reserve an ID. Returns whether it is new or an existing intent."""
         now = time.time()
         payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        safe_payload = {key: payload.get(key) for key in
+                        ("venue", "symbol", "side", "environment", "quantity", "strategy") if key in payload}
         with self._managed_connection() as conn:
             if self._use_postgres:
                 inserted = conn.execute(
                     "INSERT INTO order_intents "
                     "(client_order_id,payload_hash,payload_json,status,created_at,updated_at) "
-                    "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (client_order_id) DO NOTHING "
-                    "RETURNING client_order_id",
+                    "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (client_order_id) DO NOTHING RETURNING client_order_id",
                     (client_order_id, payload_hash, payload_json, "RESERVED", now, now),
                 ).fetchone()
                 if inserted is not None:
+                    self._append_audit_event(conn, client_order_id=client_order_id, event_type="INTENT_RESERVED",
+                                              previous_status=None, new_status="RESERVED",
+                                              details={"payload_hash": payload_hash, **safe_payload}, timestamp=now)
                     return {"kind": "new", "status": "RESERVED"}
                 row = conn.execute(
-                    "SELECT * FROM order_intents WHERE client_order_id = %s FOR UPDATE",
-                    (client_order_id,),
+                    "SELECT * FROM order_intents WHERE client_order_id = %s FOR UPDATE", (client_order_id,)
                 ).fetchone()
             else:
                 conn.execute("BEGIN IMMEDIATE")
@@ -150,6 +213,9 @@ class OrderIntentStore:
                         "VALUES (?,?,?,?,?,?)",
                         (client_order_id, payload_hash, payload_json, "RESERVED", now, now),
                     )
+                    self._append_audit_event(conn, client_order_id=client_order_id, event_type="INTENT_RESERVED",
+                                              previous_status=None, new_status="RESERVED",
+                                              details={"payload_hash": payload_hash, **safe_payload}, timestamp=now)
                     return {"kind": "new", "status": "RESERVED"}
             if row is None:
                 raise RuntimeError("Order intent conflict resolved but existing row was not found")
@@ -159,12 +225,12 @@ class OrderIntentStore:
                 raise IntentInFlightError(
                     f"Intent {client_order_id} has unresolved status {row['status']}; reconcile before retrying"
                 )
-            return {
-                "kind": "duplicate",
-                "status": row["status"],
-                "result": json.loads(row["result_json"]) if row["result_json"] else None,
-                "error": row["error_text"],
-            }
+            self._append_audit_event(conn, client_order_id=client_order_id, event_type="DUPLICATE_REQUEST",
+                                      previous_status=row["status"], new_status=row["status"],
+                                      details={"payload_hash": payload_hash}, timestamp=now)
+            return {"kind": "duplicate", "status": row["status"],
+                    "result": json.loads(row["result_json"]) if row["result_json"] else None,
+                    "error": row["error_text"]}
 
     def transition(self, client_order_id: str, status: str, *,
                    result: dict[str, Any] | None = None, error: str | None = None) -> None:
@@ -174,22 +240,43 @@ class OrderIntentStore:
         now = time.time()
         result_json = json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False) if result is not None else None
         with self._managed_connection() as conn:
-            cur = conn.execute(
-                self._sql(
-                    "UPDATE order_intents SET status=?, result_json=COALESCE(?, result_json), "
-                    "error_text=?, updated_at=? WHERE client_order_id=?"
-                ),
-                (status, result_json, error, now, client_order_id),
-            )
+            row = conn.execute(self._sql("SELECT status FROM order_intents WHERE client_order_id=?"),
+                                (client_order_id,)).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown order intent: {client_order_id}")
+            previous_status = str(row["status"]).upper()
+            progressions = {
+                "RESERVED": {"RESERVED", "SUBMITTING", "ACCEPTED", "PARTIALLY_FILLED", "FILLED", "CANCELLED", "REJECTED", "UNKNOWN"},
+                "SUBMITTING": {"SUBMITTING", "ACCEPTED", "PARTIALLY_FILLED", "FILLED", "CANCELLED", "REJECTED", "UNKNOWN"},
+                "UNKNOWN": {"UNKNOWN", "ACCEPTED", "PARTIALLY_FILLED", "FILLED", "CANCELLED", "REJECTED"},
+                "ACCEPTED": {"ACCEPTED", "PARTIALLY_FILLED", "FILLED", "CANCELLED", "REJECTED"},
+                "PARTIALLY_FILLED": {"PARTIALLY_FILLED", "FILLED", "CANCELLED"},
+                "FILLED": {"FILLED"},
+                "CANCELLED": {"CANCELLED"},
+                "REJECTED": {"REJECTED"},
+            }
+            if status not in progressions.get(previous_status, set()):
+                raise ValueError(f"Invalid order lifecycle transition: {previous_status} -> {status}")
+            cur = conn.execute(self._sql(
+                "UPDATE order_intents SET status=?, result_json=COALESCE(?, result_json), "
+                "error_text=?, updated_at=? WHERE client_order_id=?"
+            ), (status, result_json, error, now, client_order_id))
             if cur.rowcount != 1:
                 raise KeyError(f"Unknown order intent: {client_order_id}")
+            self._append_audit_event(
+                conn, client_order_id=client_order_id, event_type="ORDER_STATE_TRANSITION",
+                previous_status=previous_status, new_status=status,
+                details={
+                    "result": self._result_summary(result),
+                    "error": str(error)[:300] if error else None,
+                },
+                timestamp=now,
+            )
 
     def get(self, client_order_id: str) -> dict[str, Any] | None:
         with self._managed_connection() as conn:
-            row = conn.execute(
-                self._sql("SELECT * FROM order_intents WHERE client_order_id=?"),
-                (client_order_id,),
-            ).fetchone()
+            row = conn.execute(self._sql("SELECT * FROM order_intents WHERE client_order_id=?"),
+                                (client_order_id,)).fetchone()
         if row is None:
             return None
         item = dict(row)
@@ -202,25 +289,82 @@ class OrderIntentStore:
         """List non-final or exchange-pending intents for periodic venue reconciliation."""
         limit = min(1000, max(1, int(limit)))
         with self._managed_connection() as conn:
-            rows = conn.execute(
-                self._sql(
-                    "SELECT client_order_id,status,created_at,updated_at,error_text "
-                    "FROM order_intents "
-                    "WHERE status IN ('RESERVED','SUBMITTING','UNKNOWN','ACCEPTED','PARTIALLY_FILLED') "
-                    "ORDER BY created_at ASC LIMIT ?"
-                ),
-                (limit,),
-            ).fetchall()
+            rows = conn.execute(self._sql(
+                "SELECT client_order_id,status,created_at,updated_at,error_text "
+                "FROM order_intents "
+                "WHERE status IN ('RESERVED','SUBMITTING','UNKNOWN','ACCEPTED','PARTIALLY_FILLED') "
+                "ORDER BY created_at ASC LIMIT ?"
+            ), (limit,)).fetchall()
         return [dict(row) for row in rows]
+
+    def record_correction(
+        self,
+        client_order_id: str,
+        *,
+        actor: str,
+        reason: str,
+        correction: dict[str, Any],
+    ) -> None:
+        """Append an explicit human/system correction note without rewriting history."""
+        actor_value = str(actor).strip()
+        reason_value = str(reason).strip()
+        if not actor_value or not reason_value:
+            raise ValueError("correction actor and reason are required")
+        if not isinstance(correction, dict) or not correction:
+            raise ValueError("correction must be a non-empty dictionary")
+        allowed_fields = {"field", "old_value", "new_value", "reference"}
+        if set(correction) - allowed_fields:
+            raise ValueError("correction may contain only field, old_value, new_value and reference")
+        now = time.time()
+        with self._managed_connection() as conn:
+            row = conn.execute(self._sql("SELECT status FROM order_intents WHERE client_order_id=?"),
+                                (client_order_id,)).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown order intent: {client_order_id}")
+            self._append_audit_event(
+                conn,
+                client_order_id=client_order_id,
+                event_type="MANUAL_CORRECTION",
+                previous_status=str(row["status"]),
+                new_status=str(row["status"]),
+                details={
+                    "actor": actor_value[:100],
+                    "reason": reason_value[:500],
+                    "correction": correction,
+                },
+                timestamp=now,
+            )
+
+    def list_audit_events(
+        self,
+        *,
+        client_order_id: str | None = None,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Read append-only audit events in chronological order."""
+        bounded_limit = min(10000, max(1, int(limit)))
+        with self._managed_connection() as conn:
+            if client_order_id:
+                rows = conn.execute(self._sql(
+                    "SELECT * FROM order_audit_events WHERE client_order_id=? ORDER BY event_id ASC LIMIT ?"
+                ), (client_order_id, bounded_limit)).fetchall()
+            else:
+                rows = conn.execute(self._sql(
+                    "SELECT * FROM order_audit_events ORDER BY event_id ASC LIMIT ?"
+                ), (bounded_limit,)).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["details"] = json.loads(item.pop("details_json"))
+            result.append(item)
+        return result
 
     def list_unresolved(self, limit: int = 100) -> list[dict[str, Any]]:
         limit = min(1000, max(1, int(limit)))
         with self._managed_connection() as conn:
-            rows = conn.execute(
-                self._sql(
-                    "SELECT client_order_id,status,created_at,updated_at,error_text "
-                    "FROM order_intents WHERE status IN ('RESERVED','SUBMITTING','UNKNOWN') "
-                    "ORDER BY created_at ASC LIMIT ?"
-                ), (limit,)
-            ).fetchall()
+            rows = conn.execute(self._sql(
+                "SELECT client_order_id,status,created_at,updated_at,error_text "
+                "FROM order_intents WHERE status IN ('RESERVED','SUBMITTING','UNKNOWN') "
+                "ORDER BY created_at ASC LIMIT ?"
+            ), (limit,)).fetchall()
         return [dict(row) for row in rows]

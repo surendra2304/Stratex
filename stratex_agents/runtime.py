@@ -94,3 +94,43 @@ def build_reconciliation_agent(
         if callable(resolver):
             resolvers[str(venue_name).strip().lower()] = resolver
     return OrderReconciliationAgent(store or OrderIntentStore(), resolvers)
+
+def build_venue_aware_authorizer(
+    *,
+    execution_policy: Callable[[], tuple[bool, str]],
+    context_provider: Callable[[TradeIntent], dict],
+    binance_risk_gate=None,
+    mt5_agent=None,
+    portfolio_risk_gate=None,
+):
+    """Build a shared deterministic authorizer for any OMS venue.
+
+    The context provider must return fresh risk data for the specific intent. A
+    Binance intent requires the existing Binance RiskGate; an MT5 intent requires
+    an MT5VenueAgent so broker-native lot/margin calculations are not skipped.
+    """
+    if not callable(execution_policy):
+        raise TypeError("execution_policy must be a deterministic policy callback")
+    if not callable(context_provider):
+        raise TypeError("context_provider must supply fresh risk context for each intent")
+
+    from .risk_agent import DeterministicRiskAgent
+
+    mt5_evaluator = getattr(mt5_agent, "evaluate_intent_risk", None)
+    risk_agent = DeterministicRiskAgent(
+        binance_risk_gate=binance_risk_gate,
+        execution_policy=execution_policy,
+        mt5_risk_evaluator=mt5_evaluator if callable(mt5_evaluator) else None,
+        portfolio_risk_gate=portfolio_risk_gate,
+    )
+
+    def authorize(intent: TradeIntent) -> tuple[bool, str]:
+        try:
+            context = context_provider(intent)
+            decision = risk_agent.authorize(intent, context)
+        except Exception as exc:
+            return False, f"RISK_CONTEXT_PROVIDER_ERROR: {type(exc).__name__}"
+        reason = decision.reason if not decision.details else f"{decision.reason}: {decision.details}"
+        return decision.approved, reason
+
+    return authorize

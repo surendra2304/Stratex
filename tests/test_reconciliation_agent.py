@@ -98,3 +98,19 @@ def test_reconciliation_isolates_resolver_exceptions(tmp_path):
     assert result["errors"] == 1
     assert result["records"][0]["reason"] == "TimeoutError"
     assert store.get(intent.client_order_id)["status"] == "SUBMITTING"
+
+
+
+def test_reconciliation_does_not_regress_partially_filled_order_to_accepted(tmp_path):
+    store, intent = reserved_store(tmp_path, status="PARTIALLY_FILLED")
+    agent = OrderReconciliationAgent(
+        store,
+        {"binance": lambda _stored: {
+            "confirmed": True, "status": "NEW",
+            "result": {"status": "NEW", "order_id": "demo-789"},
+        }},
+    )
+    result = agent.reconcile_once()
+    assert result["pending"] == 1
+    assert result["records"][0]["reason"] == "venue_status_would_regress_order_lifecycle"
+    assert store.get(intent.client_order_id)["status"] == "PARTIALLY_FILLED"

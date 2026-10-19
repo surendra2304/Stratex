@@ -24,6 +24,7 @@ def get_agent_catalog() -> list[dict[str, Any]]:
     has_demo_credentials = _configured_secret("BINANCE_API_KEY") and _configured_secret("BINANCE_API_SECRET")
     mt5_enabled = _on("MT5_BRIDGE_ENABLED")
     has_mt5_config = bool(os.getenv("MT5_BRIDGE_URL", "").strip()) and _configured_secret("MT5_BRIDGE_TOKEN")
+    portfolio_risk_on = _on("STRATEX_PORTFOLIO_RISK_ENABLED")
     inference_on = _on("AI_UNIVERSE_ENABLED", "true")
     futuris_on = _on("FUTURIS_FORECAST_ENABLED")
     intelx_on = _on("INTELX_INTELLIGENCE_ENABLED")
@@ -59,9 +60,9 @@ def get_agent_catalog() -> list[dict[str, Any]]:
             "id": "risk_guard",
             "name": "Risk & Authorization Agent",
             "kind": "risk",
-            "status": "ready",
+            "status": "optional_portfolio_gate_default_disabled",
             "execution_authority": False,
-            "responsibility": "Enforces deterministic pre-trade limits, environment isolation, authorization and kill-switch policy.",
+            "responsibility": "Enforces venue-specific risk and kill-switch policy; optional portfolio-wide equity loss, drawdown, exposure and freshness gate is opt-in.",
         },
         {
             "id": "binance_futures",
@@ -146,6 +147,8 @@ def get_agent_catalog() -> list[dict[str, Any]]:
     ]
     # Safe-mode information is diagnostic only; ExecutionPolicy remains the authority.
     for agent in agents:
+        if agent["id"] == "risk_guard":
+            agent["portfolio_risk_gate_enabled"] = portfolio_risk_on
         agent["trading_mode"] = trading_mode
         agent["live_trading_enabled"] = False
         agent["safe_mode_configured"] = safe_mode

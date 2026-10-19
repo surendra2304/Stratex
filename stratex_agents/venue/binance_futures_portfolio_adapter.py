@@ -35,6 +35,26 @@ class BinanceFuturesPortfolioAdapter:
                 f"Binance account client environment is unverified or mismatched: expected {expected!r}, got {actual!r}"
             )
 
+    def get_equity(self) -> dict[str, float]:
+        """Return exchange-reported USDⓈ-M Futures account equity, including unrealized PnL."""
+        try:
+            account = self._client.futures_account()
+        except Exception as exc:
+            raise BinancePortfolioReadOnlyError("Binance demo Futures equity is unavailable.") from exc
+        if not isinstance(account, dict):
+            raise BinancePortfolioReadOnlyError("Binance returned an invalid Futures account payload.")
+        raw = account.get("totalMarginBalance")
+        if raw is None:
+            raise BinancePortfolioReadOnlyError("Binance account payload omitted totalMarginBalance.")
+        try:
+            equity = float(raw)
+        except (TypeError, ValueError) as exc:
+            raise BinancePortfolioReadOnlyError("Binance account equity is invalid.") from exc
+        if equity <= 0 or equity != equity or abs(equity) == float("inf"):
+            raise BinancePortfolioReadOnlyError("Binance account equity must be finite and positive.")
+        # Binance USDⓈ-M account equity is denominated in USDⓈ-M margin units (USDT).
+        return {"USDT": equity}
+
     def get_balance(self) -> dict[str, UnifiedBalance]:
         """Read Futures wallet/available balances; an API error is not converted to zero."""
         try:
