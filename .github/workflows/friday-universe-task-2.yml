@@ -1,10 +1,6 @@
 name: FRIDAY Universe Task 2 — Stratex
 run-name: "Task 2 — Stratex engineering"
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/friday-universe-task-2.yml
   schedule:
     - cron: '50 * * * *'
   workflow_dispatch:
