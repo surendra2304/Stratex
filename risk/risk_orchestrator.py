@@ -36,7 +36,7 @@ from typing import Any
 
 import numpy as np
 
-from atomic_io import append_jsonl, read_jsonl
+from atomic_io import JsonlReadResult, append_jsonl, read_jsonl
 from logger import get_logger
 from numeric_safety import finite_float, finite_values, positive_float
 from risk.circuit_breakers import CircuitBreakerEngine
@@ -241,6 +241,25 @@ def _equity_value(record: dict[str, Any]) -> float | None:
     return None
 
 
+def _recent_equity_records(
+    history: JsonlReadResult, max_points: int
+) -> tuple[list[Any], bool]:
+    records = history.records[-max_points:]
+    line_numbers = history.record_line_numbers[-max_points:]
+    if not line_numbers:
+        return records, len(records) == 0
+    truncated_tail_line = (
+        history.skipped_line_numbers[-1]
+        if history.truncated_tail and history.skipped_line_numbers
+        else None
+    )
+    has_gap = any(
+        line >= line_numbers[0] and line != truncated_tail_line
+        for line in history.skipped_line_numbers
+    )
+    return records, not has_gap
+
+
 def build_measured_snapshot(
     equity_history_path: str,
     active_trades_path: str,
@@ -253,11 +272,19 @@ def build_measured_snapshot(
     * Drawdown: replay of the equity series through :class:`DrawdownController`.
     * Heat: from active trades' stop distance × quantity relative to the latest
       equity, with the correlation factor reported as an assumption.
+    * A single malformed, unterminated final JSONL line is treated as an
+      interrupted append and excluded. Skipped records before the selected
+      recent window do not invalidate it; gaps inside that window do.
 
     Every metric that cannot be measured is ``None`` with a reason.
     """
     history = read_jsonl(equity_history_path)
-    equities = [e for e in (_equity_value(r) for r in history.records[-max_points:]) if e is not None]
+    recent_records, history_has_no_gaps = _recent_equity_records(history, max_points)
+    parsed_equities = [_equity_value(record) for record in recent_records]
+    equities = [equity for equity in parsed_equities if equity is not None]
+    equity_history_complete = (
+        history_has_no_gaps and len(equities) == len(recent_records)
+    )
     reasons: dict[str, str] = {}
     snapshot: dict[str, Any] = {
         "equity_points": len(equities),
@@ -271,7 +298,14 @@ def build_measured_snapshot(
     }
     reasons["correlation_matrix"] = "No per-symbol return feed is wired into this endpoint."
 
-    if len(equities) >= 2:
+    if not equity_history_complete:
+        incomplete_reason = (
+            "Equity history contains skipped lines or invalid equity records; "
+            "returns and drawdown are not measured."
+        )
+        reasons["var_95_pct"] = incomplete_reason
+        reasons["drawdown_metrics"] = incomplete_reason
+    elif len(equities) >= 2:
         returns = [(b - a) / a * 100.0 for a, b in zip(equities, equities[1:], strict=False)]
         var_95, cvar_95 = RiskOrchestrator.calculate_var_and_cvar(returns)
         snapshot["var_95_pct"], snapshot["cvar_95_pct"] = var_95, cvar_95
@@ -292,40 +326,61 @@ def build_measured_snapshot(
         reasons["var_95_pct"] = "Fewer than 2 recorded equity snapshots."
         reasons["drawdown_metrics"] = "Fewer than 2 recorded equity snapshots."
 
-    latest_equity = equities[-1] if equities else None
+    latest_equity = equities[-1] if equities and equity_history_complete else None
     try:
         with open(active_trades_path, encoding="utf-8") as fh:
             trades = json.load(fh)
     except FileNotFoundError:
-        trades = []
+        trades = None
+        reasons["portfolio_heat_pct"] = "Active trades file not found."
     except (OSError, ValueError) as exc:
         trades = None
         reasons["portfolio_heat_pct"] = f"Active trades file unreadable: {exc}"
 
     if trades is not None:
         if latest_equity is None:
-            reasons["portfolio_heat_pct"] = "No recorded equity to normalise position risk."
+            if equity_history_complete:
+                reasons["portfolio_heat_pct"] = "No recorded equity to normalise position risk."
+            else:
+                reasons["portfolio_heat_pct"] = "Latest equity cannot be established from incomplete equity history."
         elif not isinstance(trades, list):
             reasons["portfolio_heat_pct"] = "Active trades file is not a list."
         else:
             positions = []
-            for trade in trades:
+            malformed_reason = None
+            for row_number, trade in enumerate(trades, start=1):
                 if not isinstance(trade, dict):
+                    malformed_reason = f"Active trades row {row_number} is not an object."
                     continue
                 qty = positive_float(trade.get("quantity"))
+                if qty is None:
+                    malformed_reason = f"Active trades row {row_number} has invalid or missing quantity."
+                    continue
                 entry = positive_float(trade.get("entry_price"))
+                if entry is None:
+                    malformed_reason = f"Active trades row {row_number} has invalid or missing entry_price."
+                    continue
                 stop = positive_float(trade.get("sl_price"))
-                if qty is None or entry is None:
+                raw_stop = trade.get("sl_price")
+                if raw_stop is not None and stop is None and finite_float(raw_stop) != 0.0:
+                    malformed_reason = f"Active trades row {row_number} has invalid sl_price."
                     continue
                 if stop is None:
                     # An unprotected position risks its full notional.
                     risk_value = qty * entry
                 else:
                     risk_value = qty * abs(entry - stop)
-                positions.append({"symbol": trade.get("symbol"), "risk_pct": risk_value / latest_equity * 100.0})
+                risk_pct = finite_float(risk_value / latest_equity * 100.0)
+                if risk_pct is None:
+                    malformed_reason = f"Active trades row {row_number} has unmeasurable risk."
+                    continue
+                positions.append({"symbol": trade.get("symbol"), "risk_pct": risk_pct})
             snapshot["open_positions_measured"] = len(positions)
-            snapshot["portfolio_heat_pct"] = RiskOrchestrator.calculate_portfolio_heat(positions)
-            snapshot["correlation_assumption"] = DEFAULT_CORRELATION_ASSUMPTION
+            if malformed_reason is None:
+                snapshot["portfolio_heat_pct"] = RiskOrchestrator.calculate_portfolio_heat(positions)
+                snapshot["correlation_assumption"] = DEFAULT_CORRELATION_ASSUMPTION
+            else:
+                reasons["portfolio_heat_pct"] = malformed_reason
 
     snapshot["unmeasured_reasons"] = reasons
     return snapshot

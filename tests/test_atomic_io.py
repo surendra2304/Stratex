@@ -183,12 +183,61 @@ class TestLoadJsonState:
 
 
 class TestJsonl:
+    def test_large_file_is_read_line_by_line_with_physical_line_metadata(
+        self, tmp_path, monkeypatch
+    ):
+        p = tmp_path / "large.jsonl"
+        line_count = 10_000
+        p.write_text(
+            "".join(f'{{"i": {i}}}\n' for i in range(line_count - 1))
+            + '{"i":'
+        )
+        real_open = open
+        iterated_lines = 0
+
+        class IterationOnlyFile:
+            def __init__(self, handle):
+                self.handle = handle
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                self.handle.close()
+
+            def __iter__(self):
+                nonlocal iterated_lines
+                for line in self.handle:
+                    iterated_lines += 1
+                    yield line
+
+            def read(self, *args, **kwargs):
+                raise AssertionError("read_jsonl must not load the full file")
+
+        monkeypatch.setattr(
+            atomic_io,
+            "open",
+            lambda *args, **kwargs: IterationOnlyFile(real_open(*args, **kwargs)),
+            raising=False,
+        )
+
+        result = read_jsonl(p)
+
+        assert len(result.records) == line_count - 1
+        assert result.records[0] == {"i": 0}
+        assert result.records[-1] == {"i": line_count - 2}
+        assert result.record_line_numbers == list(range(1, line_count))
+        assert result.skipped_line_numbers == [line_count]
+        assert result.skipped == 1 and result.truncated_tail
+        assert iterated_lines == line_count
+
     def test_append_and_read_round_trip(self, tmp_path):
         p = tmp_path / "log.jsonl"
         for i in range(5):
             append_jsonl(p, {"i": i})
         result = read_jsonl(p)
         assert [r["i"] for r in result.records] == list(range(5))
+        assert result.record_line_numbers == [1, 2, 3, 4, 5]
         assert result.clean
 
     def test_torn_tail_is_skipped_and_next_append_starts_a_new_line(self, tmp_path):
@@ -198,6 +247,8 @@ class TestJsonl:
             fh.write('{"i": 1, "trunc')  # crash mid-append
         before = read_jsonl(p)
         assert [r["i"] for r in before.records] == [0]
+        assert before.record_line_numbers == [1]
+        assert before.skipped_line_numbers == [2]
         assert before.skipped == 1 and before.truncated_tail
         append_jsonl(p, {"i": 2})
         after = read_jsonl(p)
@@ -209,6 +260,8 @@ class TestJsonl:
         p.write_text('{"a": 1}\nnot json\n[1, 2]\n\n{"b": NaN}\n{"c": 3}\n')
         result = read_jsonl(p)
         assert result.records == [{"a": 1}, {"c": 3}]
+        assert result.record_line_numbers == [1, 6]
+        assert result.skipped_line_numbers == [2, 3, 5]
         assert result.skipped == 3
         assert len(result.errors) == 3
 

@@ -39,6 +39,18 @@ def pf(x):
     return g / gl if gl else 99.0
 
 
+def filter_trades_by_window(trades, start=None, end=None):
+    """Select trades in a half-open [start, end) timestamp window."""
+    start_ts = np.datetime64(start) if start is not None else None
+    end_ts = np.datetime64(end) if end is not None else None
+    return [
+        (timestamp, pnl)
+        for timestamp, pnl in trades
+        if (start_ts is None or timestamp >= start_ts)
+        and (end_ts is None or timestamp < end_ts)
+    ]
+
+
 def main():
     btc = load("BTCUSDT", "4h")
     regime_ts, regime = btc["ts"], btc["c"] > btc["e200"]
@@ -55,10 +67,8 @@ def main():
             d = data[s]
             m = rmask(d["ts"])
             allt = run(d, adx_th, sl_m, tp_m, m, mode="retest" if retest else "crossover",
-                       retest_bars=10)
-            for t, p in allt:
-                if (lo is None or t >= np.datetime64(lo)) and (hi is None or t < np.datetime64(hi)):
-                    out.append(p)
+                       retest_bars=10, start=lo, end=hi)
+            out.extend(p for _, p in filter_trades_by_window(allt, lo, hi))
         return out
 
     report = {"folds": [], "live_config": "ADX20 SL3.0 TP3.0 retest=True (V2-spot rev3)"}

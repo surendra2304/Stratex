@@ -21,13 +21,15 @@ Verifies:
    - API latency (> 2.0s median).
 """
 
+import json
 import tempfile
 
 import numpy as np
+import pytest
 
 from risk.circuit_breakers import CircuitBreakerEngine
 from risk.drawdown_controller import DrawdownController
-from risk.risk_orchestrator import RiskOrchestrator
+from risk.risk_orchestrator import RiskOrchestrator, build_measured_snapshot
 from risk.strategy_coordinator import StrategyCoordinator
 
 
@@ -150,3 +152,212 @@ def test_risk_orchestrator_heat_and_gating():
         assert allow is False
         assert size == 0.0
         assert "HEAT_EXCEEDED" in reason
+
+
+def test_measured_snapshot_does_not_treat_missing_active_trades_as_zero_heat(tmp_path):
+    equity_history = tmp_path / "equity.jsonl"
+    equity_history.write_text('{"equity": 5000.0}\n', encoding="utf-8")
+
+    snapshot = build_measured_snapshot(
+        str(equity_history),
+        str(tmp_path / "missing-active-trades.json"),
+    )
+
+    assert snapshot["portfolio_heat_pct"] is None
+    assert snapshot["open_positions_measured"] == 0
+    assert snapshot["unmeasured_reasons"]["portfolio_heat_pct"] == "Active trades file not found."
+
+
+def test_measured_snapshot_keeps_heat_unknown_when_any_trade_is_malformed(tmp_path):
+    equity_history = tmp_path / "equity.jsonl"
+    equity_history.write_text('{"equity": 5000.0}\n', encoding="utf-8")
+    active_trades = tmp_path / "active-trades.json"
+    active_trades.write_text(
+        '[{"quantity": 0.01, "entry_price": 50000.0, "sl_price": 49000.0},'
+        '{"symbol": "ETHUSDT", "entry_price": 3000.0}]',
+        encoding="utf-8",
+    )
+
+    snapshot = build_measured_snapshot(str(equity_history), str(active_trades))
+
+    assert snapshot["portfolio_heat_pct"] is None
+    assert snapshot["open_positions_measured"] == 1
+    assert snapshot["unmeasured_reasons"]["portfolio_heat_pct"] == (
+        "Active trades row 2 has invalid or missing quantity."
+    )
+
+
+def test_measured_snapshot_treats_an_empty_trade_list_as_zero_heat(tmp_path):
+    equity_history = tmp_path / "equity.jsonl"
+    equity_history.write_text('{"equity": 5000.0}\n', encoding="utf-8")
+    active_trades = tmp_path / "active-trades.json"
+    active_trades.write_text("[]", encoding="utf-8")
+
+    snapshot = build_measured_snapshot(str(equity_history), str(active_trades))
+
+    assert snapshot["portfolio_heat_pct"] == 0.0
+    assert snapshot["open_positions_measured"] == 0
+    assert "portfolio_heat_pct" not in snapshot["unmeasured_reasons"]
+
+
+@pytest.mark.parametrize(
+    ("trade_row", "expected_reason"),
+    [
+        (
+            {"quantity": 1, "sl_price": 90},
+            "Active trades row 1 has invalid or missing entry_price.",
+        ),
+        (
+            {"quantity": 1, "entry_price": "invalid"},
+            "Active trades row 1 has invalid or missing entry_price.",
+        ),
+        (
+            {"quantity": 1, "entry_price": 100, "sl_price": "invalid"},
+            "Active trades row 1 has invalid sl_price.",
+        ),
+        (None, "Active trades row 1 is not an object."),
+    ],
+)
+def test_measured_snapshot_fails_closed_for_malformed_trade_rows(
+    tmp_path, trade_row, expected_reason
+):
+    equity_history = tmp_path / "equity.jsonl"
+    equity_history.write_text('{"equity": 5000.0}\n', encoding="utf-8")
+    active_trades = tmp_path / "active-trades.json"
+    active_trades.write_text(json.dumps([trade_row]), encoding="utf-8")
+
+    snapshot = build_measured_snapshot(str(equity_history), str(active_trades))
+
+    assert snapshot["portfolio_heat_pct"] is None
+    assert snapshot["open_positions_measured"] == 0
+    assert snapshot["unmeasured_reasons"]["portfolio_heat_pct"] == expected_reason
+
+
+@pytest.mark.parametrize("stop", [None, 0])
+def test_measured_snapshot_uses_full_notional_for_unprotected_positions(tmp_path, stop):
+    equity_history = tmp_path / "equity.jsonl"
+    equity_history.write_text('{"equity": 5000.0}\n', encoding="utf-8")
+    active_trades = tmp_path / "active-trades.json"
+    active_trades.write_text(
+        json.dumps([{"quantity": 1, "entry_price": 100, "sl_price": stop}]),
+        encoding="utf-8",
+    )
+
+    snapshot = build_measured_snapshot(str(equity_history), str(active_trades))
+
+    assert snapshot["open_positions_measured"] == 1
+    assert snapshot["portfolio_heat_pct"] == 18.4
+
+
+@pytest.mark.parametrize(
+    ("bad_record", "expected_skipped"),
+    [("corrupt", 1), ('{"equity": 0}', 0), ('{"balance": "invalid"}', 0)],
+)
+def test_measured_snapshot_does_not_bridge_invalid_equity_history_records(
+    tmp_path, bad_record, expected_skipped
+):
+    equity_history = tmp_path / "equity.jsonl"
+    equity_history.write_text(
+        f'{{"equity": 10000}}\n{{"equity": 20000}}\n{bad_record}\n{{"equity": 10000}}\n',
+        encoding="utf-8",
+    )
+    active_trades = tmp_path / "active-trades.json"
+    active_trades.write_text("[]", encoding="utf-8")
+
+    snapshot = build_measured_snapshot(str(equity_history), str(active_trades))
+
+    assert snapshot["equity_history_skipped_lines"] == expected_skipped
+    assert snapshot["var_95_pct"] is None
+    assert snapshot["cvar_95_pct"] is None
+    assert snapshot["drawdown_metrics"] is None
+    assert snapshot["unmeasured_reasons"]["var_95_pct"] == (
+        "Equity history contains skipped lines or invalid equity records; returns and drawdown are not measured."
+    )
+    assert snapshot["unmeasured_reasons"]["drawdown_metrics"] == (
+        "Equity history contains skipped lines or invalid equity records; returns and drawdown are not measured."
+    )
+
+
+@pytest.mark.parametrize(
+    ("tail", "terminated", "expected_measured"),
+    [("{torn", False, True), ("{corrupt}", True, False)],
+)
+def test_measured_snapshot_only_recovers_unterminated_corrupt_tail(
+    tmp_path, tail, terminated, expected_measured
+):
+    history = tmp_path / "equity.jsonl"
+    records = [json.dumps({"equity": 10000 - i * 5}) for i in range(15)]
+    history.write_text(
+        "\n".join(records + [tail]) + ("\n" if terminated else ""),
+        encoding="utf-8",
+    )
+    active_trades = tmp_path / "active-trades.json"
+    active_trades.write_text("[]", encoding="utf-8")
+
+    snapshot = build_measured_snapshot(str(history), str(active_trades))
+
+    assert snapshot["equity_history_skipped_lines"] == 1
+    assert (snapshot["var_95_pct"] is not None) is expected_measured
+    assert (snapshot["cvar_95_pct"] is not None) is expected_measured
+    assert (snapshot["drawdown_metrics"] is not None) is expected_measured
+    assert snapshot["portfolio_heat_pct"] == (0.0 if expected_measured else None)
+
+
+def test_measured_snapshot_does_not_recover_interior_corruption_with_torn_tail(tmp_path):
+    history = tmp_path / "equity.jsonl"
+    records = [json.dumps({"equity": 10000 - i * 5}) for i in range(15)]
+    records.insert(5, "{interior corruption}")
+    history.write_text("\n".join(records + ["{torn tail}"]), encoding="utf-8")
+    active_trades = tmp_path / "active-trades.json"
+    active_trades.write_text("[]", encoding="utf-8")
+
+    snapshot = build_measured_snapshot(str(history), str(active_trades))
+
+    assert snapshot["equity_history_skipped_lines"] == 2
+    assert snapshot["var_95_pct"] is None
+    assert snapshot["cvar_95_pct"] is None
+    assert snapshot["drawdown_metrics"] is None
+    assert snapshot["portfolio_heat_pct"] is None
+
+
+def test_measured_snapshot_ignores_corruption_before_selected_recent_window(tmp_path):
+    history = tmp_path / "equity.jsonl"
+    records = [json.dumps({"equity": value}) for value in (10000, 9900)]
+    records.extend(
+        ["{old corruption}"]
+        + [json.dumps({"equity": value}) for value in (9800, 9700, 9600, 9500, 9400)]
+    )
+    history.write_text("\n".join(records) + "\n", encoding="utf-8")
+    active_trades = tmp_path / "active-trades.json"
+    active_trades.write_text("[]", encoding="utf-8")
+
+    snapshot = build_measured_snapshot(
+        str(history), str(active_trades), max_points=3
+    )
+
+    assert snapshot["equity_points"] == 3
+    assert snapshot["equity_history_skipped_lines"] == 1
+    assert snapshot["drawdown_metrics"] is not None
+    assert snapshot["portfolio_heat_pct"] == 0.0
+
+
+def test_measured_snapshot_rejects_corruption_inside_selected_recent_window(tmp_path):
+    history = tmp_path / "equity.jsonl"
+    records = [json.dumps({"equity": value}) for value in (10000, 9900, 9800)]
+    records.extend(
+        ["{recent corruption}"]
+        + [json.dumps({"equity": value}) for value in (9700, 9600)]
+    )
+    history.write_text("\n".join(records) + "\n", encoding="utf-8")
+    active_trades = tmp_path / "active-trades.json"
+    active_trades.write_text("[]", encoding="utf-8")
+
+    snapshot = build_measured_snapshot(
+        str(history), str(active_trades), max_points=3
+    )
+
+    assert snapshot["equity_history_skipped_lines"] == 1
+    assert snapshot["var_95_pct"] is None
+    assert snapshot["cvar_95_pct"] is None
+    assert snapshot["drawdown_metrics"] is None
+    assert snapshot["portfolio_heat_pct"] is None

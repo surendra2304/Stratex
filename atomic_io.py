@@ -473,6 +473,8 @@ class JsonlReadResult:
     skipped: int = 0
     errors: list[str] = field(default_factory=list)
     truncated_tail: bool = False
+    record_line_numbers: list[int] = field(default_factory=list)
+    skipped_line_numbers: list[int] = field(default_factory=list)
 
     @property
     def clean(self) -> bool:
@@ -497,30 +499,32 @@ def read_jsonl(
     source = os.fspath(path)
     try:
         with open(source, encoding="utf-8", errors="replace") as handle:
-            content = handle.read()
+            for index, raw in enumerate(handle, start=1):
+                if not raw.strip():
+                    continue
+                try:
+                    record = parse_json_strict(raw)
+                except (ValueError, RecursionError) as exc:
+                    result.skipped += 1
+                    result.skipped_line_numbers.append(index)
+                    if not raw.endswith("\n"):
+                        result.truncated_tail = True
+                    if len(result.errors) < max_errors_reported:
+                        result.errors.append(f"line {index}: {exc}")
+                    continue
+                if not isinstance(record, expected_type):
+                    result.skipped += 1
+                    result.skipped_line_numbers.append(index)
+                    if len(result.errors) < max_errors_reported:
+                        result.errors.append(
+                            f"line {index}: expected {_type_names(expected_type)}, "
+                            f"got {type(record).__name__}"
+                        )
+                    continue
+                result.records.append(record)
+                result.record_line_numbers.append(index)
     except FileNotFoundError:
         return result
-    lines = content.split("\n")
-    ends_with_newline = content.endswith("\n")
-    for index, raw in enumerate(lines):
-        if not raw.strip():
-            continue
-        try:
-            record = parse_json_strict(raw)
-        except (ValueError, RecursionError) as exc:
-            result.skipped += 1
-            is_last = index == len(lines) - 1 and not ends_with_newline
-            if is_last:
-                result.truncated_tail = True
-            if len(result.errors) < max_errors_reported:
-                result.errors.append(f"line {index + 1}: {exc}")
-            continue
-        if not isinstance(record, expected_type):
-            result.skipped += 1
-            if len(result.errors) < max_errors_reported:
-                result.errors.append(f"line {index + 1}: expected {_type_names(expected_type)}, got {type(record).__name__}")
-            continue
-        result.records.append(record)
     if result.skipped:
         logger.warning("Skipped %d unreadable line(s) in %s: %s", result.skipped, source, result.errors[:3])
     return result

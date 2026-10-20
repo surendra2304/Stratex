@@ -46,21 +46,28 @@ def load_regime(iv):
     btc = load("BTCUSDT", iv)
     return btc["ts"], btc["c"] > btc["e200"]
 
-def run(d, adx_th, sl_m, tp_m, regime, mode="crossover", retest_bars=6):
+def run(d, adx_th, sl_m, tp_m, regime, mode="crossover", retest_bars=6,
+        start=None, end=None):
     """mode: 'crossover' (V2) or 'retest' (enter on first EMA20 touch after a
     qualified crossover within retest_bars bars — adds entries without the V1
-    pullback's always-on bleed)."""
+    pullback's always-on bleed). Optional [start, end) bounds reset position
+    state at start while retaining the precomputed causal indicator history."""
     o, h, l, c = d["o"], d["h"], d["l"], d["c"]
     e20, e50, e200, atr, adx = d["e20"], d["e50"], d["e200"], d["atr"], d["adx"]
     ts = d["ts"]
-    n = len(c); trades = []; pos = None; i = 200
+    n = len(c)
+    start_index = max(200, np.searchsorted(ts, np.datetime64(start), side="left")
+                      if start is not None else 200)
+    end_index = np.searchsorted(ts, np.datetime64(end), side="left") if end is not None else n
+    stop_index = min(n - 1, end_index)
+    trades = []; pos = None; i = start_index
     pending = None  # retest state: bars remaining after qualified cross
-    while i < n - 1:
+    while i < stop_index:
         if pos is None:
             cu = e20[i] > e50[i] and e20[i-1] <= e50[i-1]
             qualified = cu and c[i] > e200[i] and adx[i] > adx_th and atr[i] > 0
             if qualified and regime[i]:
-                if mode == "crossover":
+                if mode == "crossover" and i + 1 < end_index:
                     entry = o[i+1] * (1 + SLIP); sd = sl_m * atr[i]; td = tp_m * atr[i]
                     pos = {"e": entry, "sl": entry - sd, "tp": entry + td}
                     i += 2; continue
@@ -72,7 +79,8 @@ def run(d, adx_th, sl_m, tp_m, regime, mode="crossover", retest_bars=6):
                 else:
                     pending["left"] -= 1
                     # retest: low touches EMA20 and bar closes bullish above EMA20
-                    if l[i] <= e20[i] * 1.002 and c[i] > o[i] and c[i] >= e20[i]:
+                    if (l[i] <= e20[i] * 1.002 and c[i] > o[i] and c[i] >= e20[i]
+                            and i + 1 < end_index):
                         entry = o[i+1] * (1 + SLIP)
                         sd = sl_m * pending["atr"]; td = tp_m * pending["atr"]
                         pos = {"e": entry, "sl": entry - sd, "tp": entry + td}

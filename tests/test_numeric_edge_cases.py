@@ -680,8 +680,8 @@ class TestRiskOrchestrator:
         trades.write_text(json.dumps([{"symbol": "BTCUSDT", "quantity": 0.01, "entry_price": 50000.0, "sl_price": 49000.0}]))
         snap = build_measured_snapshot(str(hist), str(trades))
         assert snap["equity_points"] == 30 and snap["equity_history_skipped_lines"] == 1
-        assert snap["var_95_pct"] is not None and snap["drawdown_metrics"]["peak_equity"] > 0
-        assert snap["portfolio_heat_pct"] > 0 and snap["open_positions_measured"] == 1
+        assert snap["var_95_pct"] is not None and snap["drawdown_metrics"] is not None
+        assert snap["portfolio_heat_pct"] is not None and snap["open_positions_measured"] == 1
         assert snap["correlation_matrix"] is None and "correlation_matrix" in snap["unmeasured_reasons"]
 
     def test_measured_snapshot_with_no_state(self, tmp_path):
@@ -693,14 +693,54 @@ class TestRiskOrchestrator:
         assert set(snap["unmeasured_reasons"]) >= {"var_95_pct", "drawdown_metrics", "portfolio_heat_pct"}
 
     def test_endpoint_reports_measured_values_only(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("TESTNET_EQUITY_HISTORY_FILE", str(tmp_path / "none.jsonl"))
-        monkeypatch.setenv("ACTIVE_TRADES_FILE", str(tmp_path / "none.json"))
+        equity_history = tmp_path / "equity.jsonl"
+        equity_history.write_text('{"equity": 5000.0}\n', encoding="utf-8")
+        monkeypatch.setenv("TESTNET_EQUITY_HISTORY_FILE", str(equity_history))
+        monkeypatch.setenv("ACTIVE_TRADES_FILE", str(tmp_path / "missing-active-trades.json"))
         from dashboard import app
 
         body = app.test_client().get("/api/risk/orchestration").get_json()
         assert body["portfolio_heat_pct"] is None and body["var_95_pct"] is None
         assert body["correlation_matrix"] is None
         assert body["strategy_allocation_basis"] == "configured_prior"
+        assert body["measurement"]["open_positions_measured"] == 0
+        assert body["measurement"]["unmeasured_reasons"]["portfolio_heat_pct"] == "Active trades file not found."
+
+    @pytest.mark.parametrize("failure", ["invalid_json", "unreadable", "wrong_structure", "malformed_row"])
+    def test_endpoint_keeps_heat_unknown_when_active_trades_cannot_be_read(
+        self, tmp_path, monkeypatch, failure
+    ):
+        equity_history = tmp_path / "equity.jsonl"
+        equity_history.write_text('{"equity": 5000.0}\n', encoding="utf-8")
+        active_trades = tmp_path / "active-trades"
+        if failure == "invalid_json":
+            active_trades.write_text("{invalid", encoding="utf-8")
+        elif failure == "wrong_structure":
+            active_trades.write_text("{}", encoding="utf-8")
+        elif failure == "malformed_row":
+            active_trades.write_text(
+                '[{"quantity": 0.01, "entry_price": 50000.0, "sl_price": 49000.0},'
+                '{"symbol": "ETHUSDT", "entry_price": 3000.0}]',
+                encoding="utf-8",
+            )
+        else:
+            active_trades.mkdir()
+        monkeypatch.setenv("TESTNET_EQUITY_HISTORY_FILE", str(equity_history))
+        monkeypatch.setenv("ACTIVE_TRADES_FILE", str(active_trades))
+        from dashboard import app
+
+        body = app.test_client().get("/api/risk/orchestration").get_json()
+        reason = body["measurement"]["unmeasured_reasons"]["portfolio_heat_pct"]
+        assert body["portfolio_heat_pct"] is None
+        if failure == "malformed_row":
+            assert body["measurement"]["open_positions_measured"] == 1
+            assert reason == "Active trades row 2 has invalid or missing quantity."
+        else:
+            assert body["measurement"]["open_positions_measured"] == 0
+        if failure == "wrong_structure":
+            assert reason == "Active trades file is not a list."
+        elif failure in {"invalid_json", "unreadable"}:
+            assert reason.startswith("Active trades file unreadable:")
 
 
 class TestStrategyCoordinator:

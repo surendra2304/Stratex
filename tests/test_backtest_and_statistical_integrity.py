@@ -8,6 +8,8 @@ import pytest
 import metrics
 import strategy_adx_ema
 from backtest_engine import BacktestEngine, DataValidator
+from research.upgrade_2026_08.expansion_study import run as run_expansion_study
+from research.upgrade_2026_08.walk_forward_validation import filter_trades_by_window
 
 
 @pytest.fixture
@@ -95,3 +97,57 @@ def test_metrics_statistical_formulas():
     assert m["expectancy"] == (600.0 / 5.0) # 120.0
     assert m["sharpe"] > 0
     assert m["sortino"] > 0
+
+
+def test_walk_forward_windows_exclude_validation_start_from_training():
+    boundary = np.datetime64("2023-01-01")
+    trades = [
+        (np.datetime64("2022-12-31T23:59:59"), 1.0),
+        (boundary, 2.0),
+    ]
+
+    training = filter_trades_by_window(trades, "2021-01-01", "2023-01-01")
+    validation = filter_trades_by_window(trades, "2023-01-01", "2024-01-01")
+
+    assert training == [trades[0]]
+    assert validation == [trades[1]]
+
+
+def test_walk_forward_does_not_count_pre_window_entry_that_exits_in_validation():
+    timestamps = np.arange(
+        np.datetime64("2023-01-01"),
+        np.datetime64("2023-01-01") + np.timedelta64(204 * 4, "h"),
+        np.timedelta64(4, "h"),
+    )
+    values = np.full(204, 100.0)
+    d = {
+        "ts": timestamps,
+        "o": values.copy(),
+        "h": values + 1,
+        "l": values - 1,
+        "c": values.copy(),
+        "e20": np.full(204, 2.0),
+        "e50": np.full(204, 1.0),
+        "e200": np.full(204, 1.0),
+        "atr": np.ones(204),
+        "adx": np.full(204, 30.0),
+    }
+    d["e20"][199] = 0.5
+    d["l"][202] = 97.0
+    regime = np.ones(204, dtype=bool)
+    validation_start = timestamps[202]
+
+    unbounded = run_expansion_study(d, 20, 2.0, 3.0, regime, mode="crossover")
+    validation = run_expansion_study(
+        d, 20, 2.0, 3.0, regime, mode="crossover", start=validation_start
+    )
+
+    assert len(unbounded) == 1
+    assert timestamps[201] < validation_start
+    assert unbounded[0][0] >= validation_start
+    assert filter_trades_by_window(unbounded, validation_start) == unbounded
+    assert validation == []
+    assert run_expansion_study(
+        d, 20, 2.0, 3.0, regime, mode="crossover",
+        start=timestamps[200], end=validation_start,
+    ) == []
