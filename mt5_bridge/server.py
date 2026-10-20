@@ -63,7 +63,7 @@ def _mt5_risk_limits(account) -> dict[str, float]:
     if not 0 < margin_fraction <= 0.35:
         raise ValueError("MT5_MAX_MARGIN_FRACTION must be greater than 0 and at most 0.35")
     risk_budget = equity * risk_fraction
-    margin_budget = min(equity * margin_fraction, free_margin * 0.5)
+    margin_budget = min(equity * margin_fraction, free_margin * 0.5, 1000.0)  # Invariant: max margin $1,000
     if risk_budget <= 0 or margin_budget <= 0:
         raise ValueError("Calculated MT5 risk or margin budget is not positive")
     return {
@@ -137,6 +137,10 @@ def _mt5_entry_financials(
         raise ValueError(
             f"MT5 required margin {margin:.2f} {account.currency} exceeds "
             f"the allowed per-entry margin budget {limits['margin_budget']:.2f} {account.currency}"
+        )
+    if margin > 1000.0 + 1e-8:
+        raise ValueError(
+            f"MT5 required margin {margin:.2f} {account.currency} exceeds hard stop limit of 1,000.00"
         )
     return {
         **limits,
@@ -433,6 +437,98 @@ def fees():
     maker = float(os.getenv("MT5_ESTIMATED_MAKER_FEE", "0"))
     taker = float(os.getenv("MT5_ESTIMATED_TAKER_FEE", "0"))
     return _data({"maker": maker, "taker": taker, "source": "operator_configured_estimate"})
+
+
+
+@app.post("/v1/orders/check")
+@_auth
+def order_check_preflight():
+    """Preflight check for an MT5 order without reserving or submitting it."""
+    mt5, account_info = _mt5()
+    body = request.get_json(silent=True) or {}
+    symbol = str(body.get("symbol", "")).strip()
+    side = str(body.get("side", "")).upper()
+    kind = str(body.get("type", "MARKET")).upper()
+    client_order_id = str(body.get("client_order_id", "stx-preflight")).strip()
+    volume = float(body.get("volume", 0))
+
+    if side not in {"BUY", "SELL"} or volume <= 0:
+        raise ValueError("side must be BUY/SELL and volume must be positive")
+    if kind not in {"MARKET", "LIMIT", "STOP", "STOP_LIMIT"}:
+        raise ValueError("unsupported order type")
+
+    info = mt5.symbol_info(symbol)
+    tick = mt5.symbol_info_tick(symbol)
+    if info is None or tick is None or not info.visible:
+        raise ValueError("symbol is not available in MT5 Market Watch")
+    trade_mode = int(getattr(info, "trade_mode", 0) or 0)
+    if trade_mode not in {1, 2, 4}:
+        raise ValueError("MT5 symbol is disabled or close-only for new entries")
+    if side == "BUY" and trade_mode == 2:
+        raise ValueError("MT5 symbol only permits short entries")
+    if side == "SELL" and trade_mode == 1:
+        raise ValueError("MT5 symbol only permits long entries")
+
+    is_buy = side == "BUY"
+    if kind == "MARKET":
+        request_type = mt5.ORDER_TYPE_BUY if is_buy else mt5.ORDER_TYPE_SELL
+        price = float(tick.ask if is_buy else tick.bid)
+        action = mt5.TRADE_ACTION_DEAL
+    else:
+        order_types = {
+            ("LIMIT", True): mt5.ORDER_TYPE_BUY_LIMIT, ("LIMIT", False): mt5.ORDER_TYPE_SELL_LIMIT,
+            ("STOP", True): mt5.ORDER_TYPE_BUY_STOP, ("STOP", False): mt5.ORDER_TYPE_SELL_STOP,
+            ("STOP_LIMIT", True): mt5.ORDER_TYPE_BUY_STOP_LIMIT, ("STOP_LIMIT", False): mt5.ORDER_TYPE_SELL_STOP_LIMIT,
+        }
+        request_type = order_types[(kind, is_buy)]
+        price = float(body.get("price") or 0)
+        if price <= 0:
+            raise ValueError("pending orders require a positive price")
+        action = mt5.TRADE_ACTION_PENDING
+
+    stop_loss = float(body.get("stop_loss") or 0)
+    take_profit = float(body.get("take_profit") or 0)
+    if stop_loss <= 0 or take_profit <= 0:
+        raise ValueError("new MT5 entries require both stop_loss and take_profit")
+
+    digits = int(info.digits)
+    price = round(price, digits)
+    stop_loss = round(stop_loss, digits)
+    take_profit = round(take_profit, digits)
+
+    financials = _mt5_entry_financials(
+        mt5, account_info, symbol=symbol, side=side, volume=volume,
+        entry_price=price, stop_loss=stop_loss, take_profit=take_profit,
+    )
+
+    order = {
+        "action": action, "symbol": symbol, "volume": volume, "type": request_type,
+        "price": price, "sl": stop_loss, "tp": take_profit,
+        "deviation": int(os.getenv("MT5_DEVIATION_POINTS", "20")),
+        "magic": int(os.getenv("MT5_MAGIC_NUMBER", "260101")),
+        "comment": f"STX:{client_order_id[:24]}",
+        "type_time": mt5.ORDER_TIME_GTC, "type_filling": info.filling_mode,
+    }
+    check = mt5.order_check(order)
+    if check is None:
+        raise RuntimeError(f"MT5 order_check failed: {mt5.last_error()}")
+    check_retcode = int(getattr(check, "retcode", -1))
+    if check_retcode != 0:
+        raise ValueError(
+            f"MT5 order_check rejected the request (retcode={check_retcode}, "
+            f"comment={getattr(check, 'comment', '')})"
+        )
+
+    return _data({
+        "approved": True,
+        "retcode": check_retcode,
+        "comment": str(getattr(check, "comment", "Done")),
+        "margin": float(getattr(check, "margin", financials.get("margin_required", 0))),
+        "symbol": symbol,
+        "side": side,
+        "volume": volume,
+        **financials,
+    })
 
 
 @app.post("/v1/orders")

@@ -1,10 +1,11 @@
 """Binance USDⓈ-M Futures venue submitter for Stratex's demo-only OMS.
 
-The adapter intentionally supports MARKET entry intents only in this first slice.
-It places both broker-native protective conditional orders before reporting success.
-If full protection cannot be established, it attempts to close the demo position;
-ambiguous venue outcomes are raised so the shared OMS records UNKNOWN and blocks
-blind retries. This module does not enable production endpoints.
+The adapter supports MARKET and LIMIT entry intents.
+It places both broker-native protective conditional orders (Stop-Loss and Take-Profit)
+before reporting success. If full protection cannot be established, it attempts to
+cancel pending limit orders or close demo positions; ambiguous venue outcomes are
+raised so the shared OMS records UNKNOWN and blocks blind retries. This module
+does not enable production endpoints.
 """
 from __future__ import annotations
 
@@ -171,8 +172,8 @@ class BinanceFuturesOMSAdapter:
             leverage_float = float(raw_leverage)
         except (TypeError, ValueError) as exc:
             raise BinanceVenueError("Configured Futures leverage is invalid.") from exc
-        if not leverage_float.is_integer() or not 1 <= leverage_float <= 125:
-            raise BinanceVenueError("Futures leverage must be a whole number between 1 and 125.")
+        if not leverage_float.is_integer() or not 1 <= leverage_float <= 5:
+            raise BinanceVenueError("Futures leverage must be a whole number between 1 and 5 (max 5x leverage invariant).")
         leverage = int(leverage_float)
         margin_type = str(os.getenv("FUTURES_MARGIN_TYPE", "ISOLATED")).strip().upper()
         if margin_type != "ISOLATED":
@@ -265,8 +266,8 @@ class BinanceFuturesOMSAdapter:
             raise BinanceVenueError(
                 f"Intent environment {intent.environment!r} does not match Binance environment {expected_environment!r}."
             )
-        if intent.order_type != "MARKET":
-            raise BinanceVenueError("This Binance OMS adapter currently accepts MARKET entries only.")
+        if intent.order_type not in {"MARKET", "LIMIT"}:
+            raise BinanceVenueError("This Binance OMS adapter accepts MARKET and LIMIT entries only.")
         if _truthy(os.getenv("LIVE_TRADING_ENABLED", "false")):
             raise BinanceVenueError("Live-money execution is disabled.")
 
@@ -287,7 +288,25 @@ class BinanceFuturesOMSAdapter:
             raise BinanceVenueError("Unable to validate Binance Futures market price.") from exc
         if market_price <= 0:
             raise BinanceVenueError("Binance Futures market price is invalid.")
-        if quantity * market_price < rules["min_notional"]:
+
+        rounded_limit_price: Decimal | None = None
+        if intent.order_type == "LIMIT":
+            if intent.limit_price is None or float(intent.limit_price) <= 0:
+                raise BinanceVenueError("LIMIT entry intents require a positive limit_price.")
+            rounded_limit_price = self._round_price(
+                intent.limit_price, rules["tick_size"], ROUND_DOWN if is_long else ROUND_CEILING
+            )
+            if is_long:
+                if not intent.stop_loss < float(rounded_limit_price) < intent.take_profit:
+                    raise BinanceVenueError("For a long LIMIT entry, stop_loss < limit_price < take_profit is required.")
+            else:
+                if not intent.take_profit < float(rounded_limit_price) < intent.stop_loss:
+                    raise BinanceVenueError("For a short LIMIT entry, take_profit < limit_price < stop_loss is required.")
+            effective_price = rounded_limit_price
+        else:
+            effective_price = market_price
+
+        if quantity * effective_price < rules["min_notional"]:
             raise BinanceVenueError("Order notional is below Binance's minimum notional.")
 
         self._assert_symbol_flat(symbol)
@@ -298,15 +317,22 @@ class BinanceFuturesOMSAdapter:
             available_balance = Decimal(str(account.get("availableBalance", "0") or "0"))
         except Exception as exc:
             raise BinanceVenueError("Cannot verify available Futures margin; no order was submitted.") from exc
-        required_margin = (quantity * market_price) / Decimal(leverage)
+        required_margin = (quantity * effective_price) / Decimal(leverage)
+        if required_margin > Decimal("1000.0"):
+            raise BinanceVenueError(
+                f"Required margin ${required_margin:.2f} exceeds deterministic hard limit of $1,000."
+            )
         if available_balance <= 0 or required_margin > available_balance:
             raise BinanceVenueError("Insufficient verified available Futures margin for this demo order.")
 
         entry_params: dict[str, Any] = {
-            "symbol": symbol, "side": side, "type": "MARKET",
+            "symbol": symbol, "side": side, "type": intent.order_type,
             "quantity": str(quantity), "newClientOrderId": intent.client_order_id,
             "newOrderRespType": "RESULT",
         }
+        if intent.order_type == "LIMIT":
+            entry_params["price"] = str(rounded_limit_price)
+            entry_params["timeInForce"] = "GTC"
         if position_side:
             entry_params["positionSide"] = position_side
 
@@ -316,6 +342,54 @@ class BinanceFuturesOMSAdapter:
         status = str(entry.get("status", "UNKNOWN")).upper()
         executed = Decimal(str(entry.get("executedQty", "0") or "0"))
         avg_price = float(entry.get("avgPrice", 0) or 0)
+
+        rounded_stop = self._round_price(
+            intent.stop_loss, rules["tick_size"], ROUND_CEILING if is_long else ROUND_FLOOR
+        )
+        rounded_take = self._round_price(
+            intent.take_profit, rules["tick_size"], ROUND_FLOOR if is_long else ROUND_CEILING
+        )
+
+        # For resting LIMIT entries, pair immediately with working Stop-Loss and Take-Profit Algo Orders
+        if intent.order_type == "LIMIT" and status in {"NEW", "PENDING_NEW", "ACCEPTED"} and executed == 0:
+            stop_response: dict[str, Any] | None = None
+            take_response: dict[str, Any] | None = None
+            try:
+                self._validate_bracket(is_long, float(rounded_limit_price), float(rounded_stop), float(rounded_take))
+                stop_response, take_response = self._place_protection(
+                    symbol=symbol, is_long=is_long, position_side=position_side,
+                    stop_loss=float(rounded_stop), take_profit=float(rounded_take),
+                    client_order_id=intent.client_order_id,
+                )
+            except Exception as protection_error:
+                if isinstance(protection_error, BinanceProtectionError):
+                    stop_response = protection_error.stop_response
+                try:
+                    self.client.futures_cancel_order(symbol=symbol, origClientOrderId=intent.client_order_id)
+                    if stop_response:
+                        self._cancel_algo(symbol, stop_response)
+                except Exception as cancel_error:
+                    raise BinanceVenueError(
+                        f"Protection setup failed ({type(protection_error).__name__}); cancelling pending limit order failed."
+                    ) from cancel_error
+                return {
+                    "status": "REJECTED",
+                    "symbol": symbol, "side": side, "order_id": entry.get("orderId"),
+                    "client_order_id": intent.client_order_id,
+                    "reason": "Protection setup failed; pending limit order was cancelled as a safety abort.",
+                }
+
+            return {
+                "status": "ACCEPTED",
+                "symbol": symbol, "side": side, "order_type": "LIMIT",
+                "order_id": str(entry.get("orderId", "")),
+                "client_order_id": intent.client_order_id,
+                "quantity": float(quantity), "price": float(rounded_limit_price),
+                "position_side": position_side or "BOTH",
+                "stop_loss": float(rounded_stop), "stop_algo_id": stop_response.get("algoId"),
+                "take_profit": float(rounded_take), "take_profit_algo_id": take_response.get("algoId"),
+                "venue": "binance", "environment": expected_environment,
+            }
 
         if status != "FILLED" or executed <= 0 or avg_price <= 0:
             try:
@@ -340,12 +414,6 @@ class BinanceFuturesOMSAdapter:
 
         stop_response: dict[str, Any] | None = None
         take_response: dict[str, Any] | None = None
-        rounded_stop = self._round_price(
-            intent.stop_loss, rules["tick_size"], ROUND_CEILING if is_long else ROUND_FLOOR
-        )
-        rounded_take = self._round_price(
-            intent.take_profit, rules["tick_size"], ROUND_FLOOR if is_long else ROUND_CEILING
-        )
         try:
             self._validate_bracket(is_long, avg_price, float(rounded_stop), float(rounded_take))
             stop_response, take_response = self._place_protection(
@@ -381,7 +449,7 @@ class BinanceFuturesOMSAdapter:
 
         return {
             "status": "FILLED",
-            "symbol": symbol, "side": side, "order_type": "MARKET",
+            "symbol": symbol, "side": side, "order_type": intent.order_type,
             "order_id": str(entry.get("orderId", "")),
             "client_order_id": intent.client_order_id,
             "quantity": float(executed), "avg_price": avg_price,

@@ -114,3 +114,92 @@ def test_reconciliation_does_not_regress_partially_filled_order_to_accepted(tmp_
     assert result["pending"] == 1
     assert result["records"][0]["reason"] == "venue_status_would_regress_order_lifecycle"
     assert store.get(intent.client_order_id)["status"] == "PARTIALLY_FILLED"
+
+
+def test_reconciliation_agent_persists_multi_venue_equity_baseline(tmp_path):
+    from stratex_agents.portfolio_risk_state import PortfolioRiskStateStore
+    store = OrderIntentStore(str(tmp_path / "orders.sqlite3"))
+    risk_store = PortfolioRiskStateStore(str(tmp_path / "risk.sqlite3"))
+    agent = OrderReconciliationAgent(store, {}, portfolio_state_store=risk_store)
+
+    class FakePortfolioAgent:
+        def snapshot(self, reporting_currency="USD"):
+            return {
+                "status": "healthy",
+                "reporting_currency": reporting_currency,
+                "currency_conversion_complete": True,
+                "equity_basis": "account_equity",
+                "reporting_equity": 12500.0,
+                "captured_at": 1700000000.0,
+            }
+
+    result = agent.reconcile_portfolio_equity(FakePortfolioAgent(), account_key="stratex-demo")
+    assert result["confirmed"] is True
+    assert result["day_start_equity"] == 12500.0
+    assert result["high_water_equity"] == 12500.0
+    assert result["reporting_equity"] == 12500.0
+
+    # Verify baseline persisted in store
+    baseline = risk_store.get_baseline(account_key="stratex-demo", reporting_currency="USD", utc_day="2023-11-14")
+    assert baseline is not None
+    assert baseline["day_start_equity"] == 12500.0
+
+
+def test_reconciliation_agent_refuses_degraded_equity_baseline(tmp_path):
+    from stratex_agents.portfolio_risk_state import PortfolioRiskStateStore
+    store = OrderIntentStore(str(tmp_path / "orders.sqlite3"))
+    risk_store = PortfolioRiskStateStore(str(tmp_path / "risk.sqlite3"))
+    agent = OrderReconciliationAgent(store, {}, portfolio_state_store=risk_store)
+
+    class DegradedPortfolioAgent:
+        def snapshot(self, reporting_currency="USD"):
+            return {"status": "degraded", "reason": "venue_unreachable"}
+
+    result = agent.reconcile_portfolio_equity(DegradedPortfolioAgent())
+    assert result["confirmed"] is False
+    assert result["reason"] == "portfolio_degraded"
+
+
+def test_reconciliation_handles_invalid_result_format(tmp_path):
+    store, intent = reserved_store(tmp_path, status="SUBMITTING")
+    agent = OrderReconciliationAgent(
+        store,
+        {"binance": lambda _stored: {
+            "confirmed": True, "status": "FILLED",
+            "result": "not-a-dict",  # invalid result format
+        }},
+    )
+    result = agent.reconcile_once()
+    assert result["errors"] == 1
+    assert result["records"][0]["reason"] == "venue_result_invalid"
+
+
+def test_reconciliation_unsupported_or_nonfinal_status(tmp_path):
+    store, intent = reserved_store(tmp_path, status="SUBMITTING")
+    agent = OrderReconciliationAgent(
+        store,
+        {"binance": lambda _stored: {
+            "confirmed": True, "status": "WEIRD_CUSTOM_STATUS",
+        }},
+    )
+    result = agent.reconcile_once()
+    assert result["pending"] == 1
+    assert result["records"][0]["reason"] == "unsupported_or_nonfinal_venue_status"
+
+
+def test_reconciliation_handles_store_transition_exception(tmp_path, monkeypatch):
+    store, intent = reserved_store(tmp_path, status="SUBMITTING")
+    def faulty_transition(client_order_id, status, result=None):
+        raise RuntimeError("database write failed")
+    monkeypatch.setattr(store, "transition", faulty_transition)
+
+    agent = OrderReconciliationAgent(
+        store,
+        {"binance": lambda _stored: {
+            "confirmed": True, "status": "FILLED",
+            "result": {"status": "FILLED"},
+        }},
+    )
+    result = agent.reconcile_once()
+    assert result["errors"] == 1
+    assert result["records"][0]["reason"] == "RuntimeError"

@@ -232,3 +232,97 @@ def test_mt5_reconciliation_keeps_ambiguous_bridge_record_unresolved(monkeypatch
     assert result["confirmed"] is False
     assert result["status"] == "UNKNOWN"
     assert "manual reconciliation" in result["evidence"]
+
+def test_mt5_adapter_order_check_method(monkeypatch):
+    monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
+    session = FakeSession({"ok": True, "data": {
+        "approved": True, "retcode": 0, "comment": "Done", "margin": 100.0,
+        "symbol": "EURUSD", "side": "BUY", "volume": 0.1,
+    }})
+    adapter = MT5BridgeAdapter(
+        base_url="http://100.64.0.2:8765", token="test-token", session=session
+    )
+    res = adapter.order_check("EURUSD", "BUY", "MARKET", 0.1, stop_loss=1.09, take_profit=1.12)
+    assert res["approved"] is True
+    assert res["margin"] == 100.0
+    assert session.calls[0][1].endswith("/v1/orders/check")
+
+
+def test_mt5_adapter_submit_intent_with_preflight_flag(monkeypatch):
+    monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
+    monkeypatch.setenv("MT5_PREFLIGHT_CHECK", "true")
+    session = SequencedFakeSession([
+        # 1. /v1/risk/size
+        {"ok": True, "data": {
+            "approved": True, "recommended_volume": 0.1, "volume_min": 0.01,
+            "volume_max": 100.0, "volume_step": 0.01, "risk_budget": 5.0,
+            "risk_amount": 2.0, "margin_required": 100.0, "margin_budget": 200.0,
+            "account_currency": "USD",
+        }},
+        # 2. /v1/orders/check
+        {"ok": True, "data": {
+            "approved": True, "retcode": 0, "comment": "Done", "margin": 100.0,
+        }},
+        # 3. /v1/orders
+        {"ok": True, "data": {
+            "order": 12345, "deal": 67890, "status": "FILLED",
+            "price": 1.1001, "volume_filled": 0.1, "commission": 0.0,
+        }},
+    ])
+    adapter = MT5BridgeAdapter(
+        base_url="http://100.64.0.2:8765", token="test-token", session=session
+    )
+    intent = TradeIntent(
+        venue="mt5", symbol="EURUSD", side="BUY", order_type="MARKET", quantity=0.1,
+        environment="mt5_demo", stop_loss=1.09, take_profit=1.12,
+        strategy="demo-test", client_order_id="stx-mt5-preflight-001",
+    )
+    result = adapter.submit_intent(intent)
+    assert result["status"] == "FILLED"
+    assert len(session.calls) == 3
+    assert session.calls[0][1].endswith("/v1/risk/size")
+    assert session.calls[1][1].endswith("/v1/orders/check")
+    assert session.calls[2][1].endswith("/v1/orders")
+
+
+def test_mt5_get_equity_and_balance_success(monkeypatch):
+    monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
+    session = FakeSession({"ok": True, "data": {
+        "demo": True, "currency": "USD", "balance": 10000.0, "equity": 10250.0, "margin": 250.0
+    }})
+    adapter = MT5BridgeAdapter(base_url="http://100.64.0.2:8765", token="test-token", session=session)
+    eq = adapter.get_equity()
+    assert eq == {"USD": 10250.0}
+
+    bal = adapter.get_balance()
+    assert "USD" in bal
+    assert bal["USD"].total == 10250.0
+    assert bal["USD"].used == 250.0
+    assert bal["USD"].free == 10000.0
+
+
+def test_mt5_get_equity_refuses_non_demo(monkeypatch):
+    monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
+    session = FakeSession({"ok": True, "data": {
+        "demo": False, "currency": "USD", "balance": 10000.0, "equity": 10250.0
+    }})
+    adapter = MT5BridgeAdapter(base_url="http://100.64.0.2:8765", token="test-token", session=session)
+    with pytest.raises(MT5BridgeError, match="Refusing non-demo MT5 account equity"):
+        adapter.get_equity()
+
+    with pytest.raises(MT5BridgeError, match="Refusing non-demo MT5 account"):
+        adapter.get_balance()
+
+
+def test_mt5_bridge_request_failure_handling(monkeypatch):
+    monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
+
+    # Missing URL / token
+    with pytest.raises(MT5BridgeError, match="must be configured"):
+        MT5BridgeAdapter(base_url="", token="", session=FakeSession({})).health()
+
+    # Bridge error response
+    err_session = FakeSession({"ok": False, "error": "custom broker rejection"})
+    adapter = MT5BridgeAdapter(base_url="http://127.0.0.1:8765", token="token", session=err_session)
+    with pytest.raises(MT5BridgeError, match="custom broker rejection"):
+        adapter.health()

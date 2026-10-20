@@ -60,3 +60,25 @@ def test_risk_state_enriches_verified_snapshot(tmp_path):
     assert result["day_start_equity"] == 1000
     assert result["high_water_equity"] == 1000
     assert result["reporting_equity"] == 1000
+
+
+def test_risk_state_get_baseline(tmp_path):
+    store = PortfolioRiskStateStore(str(tmp_path / "risk.sqlite3"))
+    store.observe(account_key="test-acc", reporting_currency="USD", equity=5000.0, timestamp=1700000000.0)
+    baseline = store.get_baseline(account_key="test-acc", reporting_currency="USD", utc_day="2023-11-14")
+    assert baseline is not None
+    assert baseline["day_start_equity"] == 5000.0
+    assert baseline["high_water_equity"] == 5000.0
+    assert baseline["reporting_currency"] == "USD"
+
+
+def test_risk_state_postgres_url_selection(monkeypatch, tmp_path):
+    dsn = "postgresql://stratex_user:placeholder@dokploy-postgres:5432/stratex_db"
+    monkeypatch.setenv("STRATEX_DATABASE_URL", dsn)
+    monkeypatch.setattr(PortfolioRiskStateStore, "_initialize", lambda self: None)
+    monkeypatch.chdir(tmp_path)
+    store = PortfolioRiskStateStore()
+
+    assert store._use_postgres is True
+    assert store._dsn == dsn
+    assert not (tmp_path / "state" / "portfolio_risk.sqlite3").exists()

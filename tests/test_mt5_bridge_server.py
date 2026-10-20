@@ -16,12 +16,15 @@ class FakeMT5:
     ORDER_TYPE_SELL_STOP = 5
     ORDER_TYPE_BUY_STOP_LIMIT = 6
     ORDER_TYPE_SELL_STOP_LIMIT = 7
-    ORDER_TYPE_BUY = 0
-    ORDER_TYPE_SELL = 1
     ORDER_TIME_GTC = 0
+    POSITION_TYPE_BUY = 0
+    POSITION_TYPE_SELL = 1
     TRADE_RETCODE_DONE = 10009
     TRADE_RETCODE_PLACED = 10008
     TRADE_RETCODE_DONE_PARTIAL = 10010
+
+    def terminal_info(self):
+        return types.SimpleNamespace(connected=True)
 
     def __init__(self, send_error=None):
         self.calls = []
@@ -251,3 +254,116 @@ def test_mt5_entry_requires_broker_order_check_success(bridge_client):
     assert response.status_code == 400
     assert "order_check rejected" in response.json["error"]
     assert mt5.calls == []
+
+def test_mt5_order_check_endpoint_preflight_success(bridge_client):
+    client, mt5 = bridge_client
+    response = client.post(
+        "/v1/orders/check",
+        json=_body(),
+        headers={"Authorization": "Bearer test-bridge-token"},
+    )
+    assert response.status_code == 200
+    data = response.json["data"]
+    assert data["approved"] is True
+    assert data["retcode"] == 0
+    assert data["comment"] == "Done"
+    assert data["margin"] == pytest.approx(100.0)
+    # Crucial: order_send was NOT called during preflight check
+    assert len(mt5.calls) == 0
+
+
+def test_mt5_order_check_endpoint_rejection(bridge_client):
+    client, mt5 = bridge_client
+    mt5.order_check_retcode = 10019
+    response = client.post(
+        "/v1/orders/check",
+        json=_body(),
+        headers={"Authorization": "Bearer test-bridge-token"},
+    )
+    assert response.status_code == 400
+    assert "order_check rejected" in response.json["error"]
+    assert len(mt5.calls) == 0
+
+
+def test_mt5_hard_margin_cap_enforced_at_1000(bridge_client):
+    client, mt5 = bridge_client
+    # Very tight SL (0.15 USD risk) so risk budget passes, but margin is 1500.0 > 1000.0 hard cap
+    response = client.post(
+        "/v1/orders/check",
+        json=_body(volume=1.5, stop_loss=1.1001, take_profit=1.11),
+        headers={"Authorization": "Bearer test-bridge-token"},
+    )
+    assert response.status_code == 400
+    assert "margin" in response.json["error"].lower()
+    assert len(mt5.calls) == 0
+
+
+def test_bridge_health_and_account_endpoints(bridge_client):
+    client, _ = bridge_client
+    # Health endpoint
+    res = client.get("/v1/health", headers={"Authorization": "Bearer test-bridge-token"})
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["ok"] is True
+    assert data["data"]["demo"] is True
+
+    # Account endpoint
+    res_acc = client.get("/v1/account", headers={"Authorization": "Bearer test-bridge-token"})
+    assert res_acc.status_code == 200
+    acc_data = res_acc.get_json()
+    assert acc_data["ok"] is True
+    assert acc_data["data"]["currency"] == "USD"
+
+
+def test_bridge_positions_and_close_endpoints(bridge_client):
+    client, mt5 = bridge_client
+    mt5.positions_get = lambda **kwargs: [
+        types.SimpleNamespace(
+            ticket=101, symbol="EURUSD", type=0, volume=0.1,
+            price_open=1.08, price_current=1.09, profit=1.0, sl=1.07, tp=1.11,
+            time=1700000000, comment="test pos",
+        )
+    ]
+    # GET positions
+    res = client.get("/v1/positions", headers={"Authorization": "Bearer test-bridge-token"})
+    assert res.status_code == 200
+    pos_data = res.get_json()
+    assert pos_data["ok"] is True
+    assert len(pos_data["data"]) == 1
+    assert pos_data["data"][0]["ticket"] == 101
+
+    # POST close position
+    res_close = client.post("/v1/positions/101/close", headers={"Authorization": "Bearer test-bridge-token"})
+    assert res_close.status_code == 200
+    close_data = res_close.get_json()
+    assert close_data["ok"] is True
+    assert close_data["data"]["closed"] is True
+    assert close_data["data"]["ticket"] == 101
+
+
+def test_bridge_auth_failure_handling(bridge_client):
+    client, _ = bridge_client
+    # Missing auth header
+    res_unauth = client.get("/v1/health")
+    assert res_unauth.status_code == 401
+    assert res_unauth.get_json()["error"] == "unauthorized"
+
+    # Wrong token
+    res_wrong = client.get("/v1/health", headers={"Authorization": "Bearer wrong-token"})
+    assert res_wrong.status_code == 401
+
+
+def test_bridge_pending_limit_order(bridge_client):
+    client, mt5 = bridge_client
+    body = _body(
+        client_order_id="stx-limit-server-001",
+        type="LIMIT",
+        price=1.0950,
+        stop_loss=1.0900,
+        take_profit=1.1100,
+    )
+    res = client.post("/v1/orders", json=body, headers={"Authorization": "Bearer test-bridge-token"})
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["ok"] is True
+    assert data["data"]["status"] == "FILLED"

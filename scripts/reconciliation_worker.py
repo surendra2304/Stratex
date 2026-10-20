@@ -100,6 +100,11 @@ def run_worker(stop_event: threading.Event | None = None) -> int:
         logger.warning("[RECONCILIATION] Invalid interval; using 30 seconds")
 
     store = OrderIntentStore()
+    from stratex_agents.portfolio_risk_state import PortfolioRiskStateStore
+    from stratex_agents.portfolio_agent import PortfolioAgent
+    risk_store = PortfolioRiskStateStore()
+    portfolio_agent = None
+
     logger.info(
         "[RECONCILIATION] Starting read-only worker; interval=%ss; ledger=%s",
         interval, os.getenv("STRATEX_ORDER_DB", "state/stratex_orders.sqlite3"),
@@ -112,12 +117,18 @@ def run_worker(stop_event: threading.Event | None = None) -> int:
                 resolvers = _build_resolvers()
                 if not resolvers:
                     raise RuntimeError("no venue resolvers are available")
-                agent = OrderReconciliationAgent(store, resolvers)
+                agent = OrderReconciliationAgent(store, resolvers, portfolio_state_store=risk_store)
             except Exception as exc:
                 # Retry later if configuration or a private bridge is temporarily unavailable.
                 logger.error("[RECONCILIATION] Cannot initialize venue resolvers (%s).", type(exc).__name__)
                 event.wait(interval)
                 continue
+
+        if portfolio_agent is None:
+            try:
+                portfolio_agent = PortfolioAgent.from_environment()
+            except Exception as exc:
+                logger.warning("[RECONCILIATION] PortfolioAgent unavailable (%s); will retry", type(exc).__name__)
 
         try:
             result = agent.reconcile_once(limit=100)
@@ -129,6 +140,18 @@ def run_worker(stop_event: threading.Event | None = None) -> int:
         except Exception as exc:
             # Do not log request headers, API secrets, bridge tokens or raw HTTP objects.
             logger.error("[RECONCILIATION] Cycle failed (%s); unresolved intents remain persisted.", type(exc).__name__)
+
+        if portfolio_agent is not None:
+            try:
+                equity_res = agent.reconcile_portfolio_equity(portfolio_agent)
+                if equity_res.get("confirmed"):
+                    logger.info(
+                        "[RECONCILIATION] Equity baseline: equity=%s day_start=%s high_water=%s",
+                        equity_res.get("reporting_equity"), equity_res.get("day_start_equity"), equity_res.get("high_water_equity"),
+                    )
+            except Exception as exc:
+                logger.warning("[RECONCILIATION] Equity baseline persistence failed (%s)", type(exc).__name__)
+
         event.wait(interval)
 
     logger.info("[RECONCILIATION] Worker stopped.")
