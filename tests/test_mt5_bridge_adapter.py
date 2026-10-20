@@ -283,3 +283,46 @@ def test_mt5_adapter_submit_intent_with_preflight_flag(monkeypatch):
     assert session.calls[0][1].endswith("/v1/risk/size")
     assert session.calls[1][1].endswith("/v1/orders/check")
     assert session.calls[2][1].endswith("/v1/orders")
+
+
+def test_mt5_get_equity_and_balance_success(monkeypatch):
+    monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
+    session = FakeSession({"ok": True, "data": {
+        "demo": True, "currency": "USD", "balance": 10000.0, "equity": 10250.0, "margin": 250.0
+    }})
+    adapter = MT5BridgeAdapter(base_url="http://100.64.0.2:8765", token="test-token", session=session)
+    eq = adapter.get_equity()
+    assert eq == {"USD": 10250.0}
+
+    bal = adapter.get_balance()
+    assert "USD" in bal
+    assert bal["USD"].total == 10250.0
+    assert bal["USD"].used == 250.0
+    assert bal["USD"].free == 10000.0
+
+
+def test_mt5_get_equity_refuses_non_demo(monkeypatch):
+    monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
+    session = FakeSession({"ok": True, "data": {
+        "demo": False, "currency": "USD", "balance": 10000.0, "equity": 10250.0
+    }})
+    adapter = MT5BridgeAdapter(base_url="http://100.64.0.2:8765", token="test-token", session=session)
+    with pytest.raises(MT5BridgeError, match="Refusing non-demo MT5 account equity"):
+        adapter.get_equity()
+
+    with pytest.raises(MT5BridgeError, match="Refusing non-demo MT5 account"):
+        adapter.get_balance()
+
+
+def test_mt5_bridge_request_failure_handling(monkeypatch):
+    monkeypatch.setenv("MT5_BRIDGE_ENABLED", "true")
+
+    # Missing URL / token
+    with pytest.raises(MT5BridgeError, match="must be configured"):
+        MT5BridgeAdapter(base_url="", token="", session=FakeSession({})).health()
+
+    # Bridge error response
+    err_session = FakeSession({"ok": False, "error": "custom broker rejection"})
+    adapter = MT5BridgeAdapter(base_url="http://127.0.0.1:8765", token="token", session=err_session)
+    with pytest.raises(MT5BridgeError, match="custom broker rejection"):
+        adapter.health()
