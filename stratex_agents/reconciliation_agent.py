@@ -35,9 +35,12 @@ class OrderReconciliationAgent:
         self,
         store: OrderIntentStore,
         resolvers: dict[str, Callable[[dict[str, Any]], dict[str, Any]]],
+        *,
+        portfolio_state_store: Any | None = None,
     ):
         self.store = store
         self.resolvers = {key.strip().lower(): value for key, value in resolvers.items()}
+        self.portfolio_state_store = portfolio_state_store
 
     def reconcile_once(self, limit: int = 100) -> dict[str, Any]:
         """Query pending orders and update the durable ledger only on confirmed venue evidence."""
@@ -141,6 +144,12 @@ class OrderReconciliationAgent:
             if status != candidate["status"] or result:
                 try:
                     self.store.transition(client_order_id, status, result=result)
+                    if status in {"FILLED", "CANCELLED", "REJECTED"}:
+                        try:
+                            from autonomy.memora_audit import publish_trade_intent_audit
+                            publish_trade_intent_audit(stored.get("payload") or stored, status, result=result)
+                        except Exception:
+                            pass
                 except Exception as exc:
                     errors += 1
                     records.append({
@@ -180,6 +189,48 @@ class OrderReconciliationAgent:
             "errors": errors,
             "records": records,
         }
+
+    def reconcile_portfolio_equity(
+        self,
+        portfolio_agent: Any,
+        *,
+        account_key: str = "stratex-demo",
+        reporting_currency: str = "USD",
+    ) -> dict[str, Any]:
+        """Snapshot multi-venue equity and persist the UTC-day baseline to portfolio_equity_state."""
+        if portfolio_agent is None:
+            return {"confirmed": False, "reason": "portfolio_agent_unavailable"}
+        store = self.portfolio_state_store
+        if store is None:
+            from .portfolio_risk_state import PortfolioRiskStateStore
+            store = PortfolioRiskStateStore()
+            self.portfolio_state_store = store
+        try:
+            snapshot = portfolio_agent.snapshot(reporting_currency=reporting_currency)
+        except Exception as exc:
+            return {"confirmed": False, "reason": f"snapshot_error:{type(exc).__name__}"}
+
+        if not isinstance(snapshot, dict) or snapshot.get("status") != "healthy":
+            return {"confirmed": False, "reason": "portfolio_degraded", "snapshot": snapshot}
+        if snapshot.get("currency_conversion_complete") is not True:
+            return {"confirmed": False, "reason": "currency_conversion_incomplete"}
+        if snapshot.get("equity_basis") != "account_equity":
+            return {"confirmed": False, "reason": "account_equity_not_verified"}
+
+        try:
+            enriched = store.enrich_snapshot(snapshot, account_key=account_key)
+            return {
+                "confirmed": True,
+                "account_key": account_key,
+                "reporting_currency": reporting_currency,
+                "reporting_equity": enriched.get("reporting_equity"),
+                "day_start_equity": enriched.get("day_start_equity"),
+                "high_water_equity": enriched.get("high_water_equity"),
+                "captured_at": enriched.get("captured_at"),
+                "utc_day": enriched.get("utc_day"),
+            }
+        except Exception as exc:
+            return {"confirmed": False, "reason": f"persistence_error:{type(exc).__name__}"}
 
     def health(self) -> dict[str, Any]:
         return {

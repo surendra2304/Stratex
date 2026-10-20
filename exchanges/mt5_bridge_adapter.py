@@ -224,6 +224,34 @@ class MT5BridgeAdapter(BaseExchange):
     def get_historical_data(self, symbol: str, timeframe: str = "15m", limit: int = 100) -> list[dict[str, Any]]:
         return self._request("GET", "/v1/candles", params={"symbol": symbol, "timeframe": timeframe, "limit": limit})
 
+    def order_check(
+        self,
+        symbol: str,
+        side: str,
+        order_type: str,
+        quantity: float,
+        price: float | None = None,
+        *,
+        stop_loss: float,
+        take_profit: float,
+        client_order_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Perform preflight validation of an MT5 order without submitting it."""
+        normalized_side = side.upper()
+        return self._request(
+            "POST", "/v1/orders/check",
+            json={
+                "symbol": symbol,
+                "side": "BUY" if normalized_side in {"BUY", "LONG"} else "SELL",
+                "type": order_type.upper(),
+                "volume": float(quantity),
+                "price": price,
+                "stop_loss": float(stop_loss),
+                "take_profit": float(take_profit),
+                "client_order_id": client_order_id or f"stx-check-{uuid.uuid4().hex[:20]}",
+            },
+        )
+
     def submit_intent(self, intent) -> dict[str, Any]:
         """Submit a normalized Stratex TradeIntent with broker-native SL/TP protection."""
         if getattr(intent, "venue", None) != "mt5" or getattr(intent, "environment", None) != "mt5_demo":
@@ -236,6 +264,17 @@ class MT5BridgeAdapter(BaseExchange):
         if requested_volume > recommended_volume + 1e-9:
             raise MT5BridgeError(
                 f"Requested MT5 volume {requested_volume} exceeds broker-aware safe volume {recommended_volume}."
+            )
+        if os.getenv("MT5_PREFLIGHT_CHECK", "false").lower() in {"1", "true", "yes"}:
+            self.order_check(
+                symbol=intent.symbol,
+                side=intent.side,
+                order_type=intent.order_type,
+                quantity=intent.quantity,
+                price=getattr(intent, "limit_price", None),
+                stop_loss=intent.stop_loss,
+                take_profit=intent.take_profit,
+                client_order_id=intent.client_order_id,
             )
         result = self.place_order(
             symbol=intent.symbol,

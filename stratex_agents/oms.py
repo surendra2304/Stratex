@@ -135,6 +135,11 @@ class StratexOrderManager:
             approved, risk_reason = self.authorize_intent(intent)
             if not approved:
                 self.store.transition(intent.client_order_id, "REJECTED", result={"status": "REJECTED"}, error=risk_reason)
+                try:
+                    from autonomy.memora_audit import publish_risk_rejection_audit
+                    publish_risk_rejection_audit(intent, risk_reason)
+                except Exception:
+                    pass
                 return OMSResult(intent.client_order_id, intent.venue, "REJECTED", reason=risk_reason)
             self.store.transition(intent.client_order_id, "SUBMITTING")
             # Deliberately no automatic failover. Network exceptions are ambiguous.
@@ -143,9 +148,20 @@ class StratexOrderManager:
                 raise RuntimeError("Venue adapter returned an invalid non-dictionary result.")
             status = self._status_from_result(result)
             self.store.transition(intent.client_order_id, status, result=result)
+            if status in {"ACCEPTED", "FILLED", "CANCELLED", "REJECTED"}:
+                try:
+                    from autonomy.memora_audit import publish_trade_intent_audit
+                    publish_trade_intent_audit(intent, status, result=result)
+                except Exception:
+                    pass
             return OMSResult(intent.client_order_id, intent.venue, status, result=result)
         except OrderBlockedError as exc:
             self.store.transition(intent.client_order_id, "REJECTED", result={"status": "REJECTED"}, error=str(exc))
+            try:
+                from autonomy.memora_audit import publish_risk_rejection_audit
+                publish_risk_rejection_audit(intent, str(exc))
+            except Exception:
+                pass
             return OMSResult(intent.client_order_id, intent.venue, "REJECTED", reason=str(exc))
         except (IntentConflictError, IntentInFlightError):
             raise

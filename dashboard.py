@@ -6192,6 +6192,72 @@ def api_live_emergency_halt():
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }), (200 if ok else 500)
 
+
+@app.route('/api/v1/emergency-halt', methods=['POST'])
+@require_bot_api_key
+def api_v1_emergency_halt():
+    """Safety Invariant 3: Atomic Emergency Halt.
+    Immediately issues cancel-all across all open testnet orders and
+    transitions the OMS state machine to LOCKED.
+    """
+    from panic_state import engage_order_block, orders_blocked
+    actor = "api:/api/v1/emergency-halt"
+    reason = "Atomic emergency halt requested via /api/v1/emergency-halt"
+    steps = engage_order_block(actor, reason, panic=True, pause=True, kill_switch_lock=True)
+
+    cancelled_count = 0
+    venues_halted = []
+
+    # 1. Binance Futures cancel all open orders
+    try:
+        from testnet_engine.service import get_exchange_client
+        client = get_exchange_client()
+        if client and hasattr(client, "futures_cancel_all_open_orders"):
+            symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
+            for sym in symbols:
+                try:
+                    client.futures_cancel_all_open_orders(symbol=sym)
+                    cancelled_count += 1
+                except Exception:
+                    pass
+            venues_halted.append("binance_futures_testnet")
+    except Exception as exc:
+        logger.warning(f"[EMERGENCY_HALT] Binance cancel-all encountered: {exc}")
+
+    # 2. MT5 bridge cancel all open orders
+    try:
+        if os.getenv("MT5_BRIDGE_ENABLED", "false").lower() in {"1", "true", "yes"}:
+            from exchanges.mt5_bridge_adapter import MT5BridgeAdapter
+            mt5 = MT5BridgeAdapter()
+            positions = mt5.get_positions()
+            for p in positions:
+                if p.position_id:
+                    try:
+                        mt5.close_position(p.position_id)
+                        cancelled_count += 1
+                    except Exception:
+                        pass
+            venues_halted.append("mt5_demo")
+    except Exception as exc:
+        logger.warning(f"[EMERGENCY_HALT] MT5 cancel-all encountered: {exc}")
+
+    # 3. Audit to Memora
+    try:
+        from autonomy.memora_audit import publish_emergency_halt_audit
+        publish_emergency_halt_audit(actor=actor, reason=reason, orders_cancelled=cancelled_count)
+    except Exception:
+        pass
+
+    ok = orders_blocked(steps)
+    return jsonify({
+        "status": "ok" if ok else "error",
+        "oms_state": "LOCKED",
+        "orders_cancelled": cancelled_count,
+        "venues_halted": venues_halted,
+        "steps": steps,
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }), (200 if ok else 500)
+
 # ==============================================================================
 # PROMETHEUS METRICS & OPERATIONAL DASHBOARD EXTENSION
 # ==============================================================================

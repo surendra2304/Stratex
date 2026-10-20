@@ -201,12 +201,6 @@ class MarketDataClient:
             return None
         return _execute_with_rate_limit_protection(self.__client.futures_funding_rate, **kwargs)
 
-    def get_exchange_info(self, **kwargs):
-        """Current exchange trading rules and symbol information."""
-        if not self.is_available():
-            return None
-        return _execute_with_rate_limit_protection(self.__client.get_exchange_info, **kwargs)
-
     def futures_klines(self, **kwargs):
         """Futures klines/candlestick data for a symbol (/fapi/v1/klines)."""
         if not self.is_available():

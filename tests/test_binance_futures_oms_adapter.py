@@ -280,3 +280,84 @@ def test_binance_reconciliation_does_not_resolve_cancelled_entry_with_partial_fi
     assert result["confirmed"] is False
     assert result["status"] == "UNKNOWN"
     assert "partial_fill_requiring_protection_reconciliation" in result["evidence"]
+
+def test_binance_limit_intent_pairs_with_working_sl_tp_algo_orders(monkeypatch):
+    set_demo_env(monkeypatch)
+    client = FakeBinanceClient(hedge_mode=True)
+    # Simulate a resting limit order on the book
+    client.futures_create_order = lambda **params: {
+        "status": "NEW", "orderId": 777, "avgPrice": "0", "executedQty": "0",
+        **params
+    }
+    client.futures_cancel_order = lambda **params: {"status": "CANCELED"}
+    adapter = BinanceFuturesOMSAdapter(client=client, venue_agent=FakeAgent())
+
+    intent = TradeIntent(
+        venue="binance", symbol="BTCUSDT", side="BUY", order_type="LIMIT",
+        quantity=0.105, limit_price=99.0, environment="binance_demo",
+        stop_loss=95.0, take_profit=110.0, strategy="adapter-test",
+        client_order_id="stx-limit-001",
+    )
+    result = adapter.submit_intent(intent)
+    assert result["status"] == "ACCEPTED"
+    assert result["order_type"] == "LIMIT"
+    assert result["price"] == 99.0
+    assert result["stop_algo_id"] == 1
+    assert result["take_profit_algo_id"] == 2
+    assert len(client.algo_calls) == 2
+    assert client.algo_calls[0]["type"] == "STOP_MARKET"
+    assert client.algo_calls[0]["triggerPrice"] == "95.0"
+    assert client.algo_calls[1]["type"] == "TAKE_PROFIT_MARKET"
+    assert client.algo_calls[1]["triggerPrice"] == "110.0"
+
+
+def test_binance_limit_protection_failure_cancels_pending_limit_order(monkeypatch):
+    set_demo_env(monkeypatch)
+    client = FakeBinanceClient(hedge_mode=True, fail_take_profit=True)
+    cancelled_orders = []
+    client.futures_create_order = lambda **params: {
+        "status": "NEW", "orderId": 777, "avgPrice": "0", "executedQty": "0",
+        **params
+    }
+    client.futures_cancel_order = lambda **params: cancelled_orders.append(params) or {"status": "CANCELED"}
+    adapter = BinanceFuturesOMSAdapter(client=client, venue_agent=FakeAgent())
+
+    intent = TradeIntent(
+        venue="binance", symbol="BTCUSDT", side="BUY", order_type="LIMIT",
+        quantity=0.105, limit_price=99.0, environment="binance_demo",
+        stop_loss=95.0, take_profit=110.0, strategy="adapter-test",
+        client_order_id="stx-limit-fail-001",
+    )
+    result = adapter.submit_intent(intent)
+    assert result["status"] == "REJECTED"
+    assert "pending limit order was cancelled" in result["reason"]
+    assert len(cancelled_orders) == 1
+    assert cancelled_orders[0]["origClientOrderId"] == "stx-limit-fail-001"
+    assert client.cancelled_algos == [{"symbol": "BTCUSDT", "algoId": 1}]
+
+
+def test_hard_risk_limits_enforced_leverage_and_margin(monkeypatch):
+    set_demo_env(monkeypatch)
+    client = FakeBinanceClient()
+    adapter = BinanceFuturesOMSAdapter(client=client, venue_agent=FakeAgent())
+
+    # 1. Leverage > 5 rejected
+    intent_high_lev = TradeIntent(
+        venue="binance", symbol="BTCUSDT", side="BUY", order_type="MARKET",
+        quantity=0.105, environment="binance_demo", stop_loss=95.0, take_profit=110.0,
+        strategy="adapter-test", client_order_id="stx-risk-001",
+        metadata={"leverage": "10"},
+    )
+    with pytest.raises(BinanceVenueError, match="max 5x leverage invariant"):
+        adapter.submit_intent(intent_high_lev)
+
+    # 2. Required margin > $1,000 rejected
+    # quantity = 60 BTC @ 100 USDT = $6,000 / 5 = $1,200 margin > $1,000
+    intent_high_margin = TradeIntent(
+        venue="binance", symbol="BTCUSDT", side="BUY", order_type="MARKET",
+        quantity=60.0, environment="binance_demo", stop_loss=95.0, take_profit=110.0,
+        strategy="adapter-test", client_order_id="stx-risk-002",
+        metadata={"leverage": "5"},
+    )
+    with pytest.raises(BinanceVenueError, match=r"exceeds deterministic hard limit of \$1,000"):
+        adapter.submit_intent(intent_high_margin)

@@ -251,3 +251,45 @@ def test_mt5_entry_requires_broker_order_check_success(bridge_client):
     assert response.status_code == 400
     assert "order_check rejected" in response.json["error"]
     assert mt5.calls == []
+
+def test_mt5_order_check_endpoint_preflight_success(bridge_client):
+    client, mt5 = bridge_client
+    response = client.post(
+        "/v1/orders/check",
+        json=_body(),
+        headers={"Authorization": "Bearer test-bridge-token"},
+    )
+    assert response.status_code == 200
+    data = response.json["data"]
+    assert data["approved"] is True
+    assert data["retcode"] == 0
+    assert data["comment"] == "Done"
+    assert data["margin"] == pytest.approx(100.0)
+    # Crucial: order_send was NOT called during preflight check
+    assert len(mt5.calls) == 0
+
+
+def test_mt5_order_check_endpoint_rejection(bridge_client):
+    client, mt5 = bridge_client
+    mt5.order_check_retcode = 10019
+    response = client.post(
+        "/v1/orders/check",
+        json=_body(),
+        headers={"Authorization": "Bearer test-bridge-token"},
+    )
+    assert response.status_code == 400
+    assert "order_check rejected" in response.json["error"]
+    assert len(mt5.calls) == 0
+
+
+def test_mt5_hard_margin_cap_enforced_at_1000(bridge_client):
+    client, mt5 = bridge_client
+    # Very tight SL (0.15 USD risk) so risk budget passes, but margin is 1500.0 > 1000.0 hard cap
+    response = client.post(
+        "/v1/orders/check",
+        json=_body(volume=1.5, stop_loss=1.1001, take_profit=1.11),
+        headers={"Authorization": "Bearer test-bridge-token"},
+    )
+    assert response.status_code == 400
+    assert "margin" in response.json["error"].lower()
+    assert len(mt5.calls) == 0
