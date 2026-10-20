@@ -158,3 +158,48 @@ def test_reconciliation_agent_refuses_degraded_equity_baseline(tmp_path):
     result = agent.reconcile_portfolio_equity(DegradedPortfolioAgent())
     assert result["confirmed"] is False
     assert result["reason"] == "portfolio_degraded"
+
+
+def test_reconciliation_handles_invalid_result_format(tmp_path):
+    store, intent = reserved_store(tmp_path, status="SUBMITTING")
+    agent = OrderReconciliationAgent(
+        store,
+        {"binance": lambda _stored: {
+            "confirmed": True, "status": "FILLED",
+            "result": "not-a-dict",  # invalid result format
+        }},
+    )
+    result = agent.reconcile_once()
+    assert result["errors"] == 1
+    assert result["records"][0]["reason"] == "venue_result_invalid"
+
+
+def test_reconciliation_unsupported_or_nonfinal_status(tmp_path):
+    store, intent = reserved_store(tmp_path, status="SUBMITTING")
+    agent = OrderReconciliationAgent(
+        store,
+        {"binance": lambda _stored: {
+            "confirmed": True, "status": "WEIRD_CUSTOM_STATUS",
+        }},
+    )
+    result = agent.reconcile_once()
+    assert result["pending"] == 1
+    assert result["records"][0]["reason"] == "unsupported_or_nonfinal_venue_status"
+
+
+def test_reconciliation_handles_store_transition_exception(tmp_path, monkeypatch):
+    store, intent = reserved_store(tmp_path, status="SUBMITTING")
+    def faulty_transition(client_order_id, status, result=None):
+        raise RuntimeError("database write failed")
+    monkeypatch.setattr(store, "transition", faulty_transition)
+
+    agent = OrderReconciliationAgent(
+        store,
+        {"binance": lambda _stored: {
+            "confirmed": True, "status": "FILLED",
+            "result": {"status": "FILLED"},
+        }},
+    )
+    result = agent.reconcile_once()
+    assert result["errors"] == 1
+    assert result["records"][0]["reason"] == "RuntimeError"
