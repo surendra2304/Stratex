@@ -215,12 +215,15 @@ class AdvisoryScheduler:
 
         return None
 
-    def _worker_loop(self) -> None:
+    def _worker_loop(self, check_interval_sec: float = 60.0) -> None:
         """Main loop running inside the background daemon thread."""
+        if isinstance(check_interval_sec, bool) or not isinstance(check_interval_sec, Real):
+            raise ValueError("check_interval_sec must be a finite positive number")
+        check_interval_sec = float(check_interval_sec)
+        if not math.isfinite(check_interval_sec) or check_interval_sec <= 0.0:
+            raise ValueError("check_interval_sec must be a finite positive number")
+
         logger.info(f"[ADVISORY_SCHEDULER] Background worker thread started (interval={self.interval_hours}h).")
-        
-        # Initial scheduled run check
-        check_interval_sec = 60  # Poll every 60 seconds
 
         while not self._stop_event.is_set():
             try:
@@ -272,8 +275,10 @@ class AdvisoryScheduler:
                     exc_info=True,
                 )
 
-            # Sleep with interruptibility
-            self._stop_event.wait(timeout=check_interval_sec)
+            # Sleep with interruptibility, but never sleep past the next backoff deadline.
+            retry_remaining = self._retry_delay_remaining()
+            sleep_for = min(check_interval_sec, retry_remaining) if retry_remaining > 0.0 else check_interval_sec
+            self._stop_event.wait(timeout=sleep_for)
 
         logger.info("[ADVISORY_SCHEDULER] Worker thread terminated cleanly.")
 
