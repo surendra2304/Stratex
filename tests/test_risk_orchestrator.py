@@ -155,7 +155,6 @@ def test_risk_orchestrator_heat_and_gating():
 
 def test_measured_snapshot_fails_closed_for_malformed_active_trade_rows(tmp_path):
     from risk.risk_orchestrator import build_measured_snapshot
-
     history = tmp_path / "equity.jsonl"
     history.write_text('{"equity": 10000}\n', encoding="utf-8")
     active = tmp_path / "active.json"
@@ -169,24 +168,18 @@ def test_measured_snapshot_fails_closed_for_malformed_active_trade_rows(tmp_path
 
 def test_measured_snapshot_ignores_old_corruption_but_rejects_gap_in_window(tmp_path):
     from risk.risk_orchestrator import build_measured_snapshot
-
     history = tmp_path / "equity.jsonl"
     active = tmp_path / "active.json"
     active.write_text("[]", encoding="utf-8")
     history.write_text(
         '{"equity": 10000}\n{"equity": 9900}\n{old-corrupt}\n'
-        '{"equity": 9800}\n{"equity": 9700}\n{"equity": 9600}\n',
-        encoding="utf-8",
-    )
+        '{"equity": 9800}\n{"equity": 9700}\n{"equity": 9600}\n', encoding="utf-8")
     recent = build_measured_snapshot(str(history), str(active), max_points=3)
     assert recent["drawdown_metrics"] is not None
     assert recent["portfolio_heat_pct"] == 0.0
-
     history.write_text(
         '{"equity": 10000}\n{"equity": 9900}\n{"equity": 9800}\n'
-        '{recent-corrupt}\n{"equity": 9700}\n{"equity": 9600}\n',
-        encoding="utf-8",
-    )
+        '{recent-corrupt}\n{"equity": 9700}\n{"equity": 9600}\n', encoding="utf-8")
     gapped = build_measured_snapshot(str(history), str(active), max_points=3)
     assert gapped["drawdown_metrics"] is None
     assert gapped["portfolio_heat_pct"] is None
