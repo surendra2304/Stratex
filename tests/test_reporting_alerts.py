@@ -50,8 +50,12 @@ def test_voice_summaries_generation():
 def test_advisory_impact_attribution():
     analyzer = AdvisoryImpactAnalyzer()
     attr = analyzer.evaluate_decision_impact("DEC_001", "stop_loss_pct", "supertrend", pre_trades_pnl=1.0, post_trades_pnl=1.4)
-    assert attr.estimated_alpha_pct == 0.4
+    assert attr.observed_pnl_delta == pytest.approx(0.4)
+    assert attr.estimated_alpha_pct is None
+    assert attr.pre_change_win_rate is None
+    assert attr.post_change_win_rate is None
     assert attr.status == "POSITIVE_CONTRIBUTION"
+    assert attr.evidence_status == "CALLER_SUPPLIED_PRE_POST_PNL"
 
 
 def test_daily_and_periodic_reports():
