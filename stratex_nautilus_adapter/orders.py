@@ -31,7 +31,10 @@ def _validated_float(value: object, field_name: str, *, allow_zero: bool = False
     """Convert a finite real scalar after validating its risk-relevant bounds."""
     if isinstance(value, bool) or not isinstance(value, Real):
         raise ValueError(f"{field_name} must be a finite number")
-    number = float(value)
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{field_name} must be a finite number") from exc
     if not math.isfinite(number):
         raise ValueError(f"{field_name} must be a finite number")
     if number < 0.0 or (not allow_zero and number == 0.0):
