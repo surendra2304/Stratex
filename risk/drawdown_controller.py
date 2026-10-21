@@ -103,14 +103,16 @@ class DrawdownController:
         self.last_critical_event_time: float | None = None
 
     def _enter_critical(self) -> None:
+        # A repeated reading in the same critical state is one continuous event.
+        # A renewed breach during recovery starts a fresh validation window.
+        is_new_critical_event = self.status.level != "CRITICAL_12PCT"
         self.status.level = "CRITICAL_12PCT"
         self.status.position_size_multiplier = 0.0
         self.status.allow_new_entries = False
-        if not self.status.in_recovery_mode:
+        if is_new_critical_event:
             self.status.clean_paper_hours_accumulated = 0.0
-        self.status.in_recovery_mode = True
-        if self.last_critical_event_time is None:
             self.last_critical_event_time = time.time()
+        self.status.in_recovery_mode = True
 
     def update_equity(self, current_equity: float) -> DrawdownStatus:
         """Calculates current peak-to-trough drawdown and assigns risk level."""
