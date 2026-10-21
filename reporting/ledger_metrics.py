@@ -235,12 +235,21 @@ def compute_period_metrics(
             if not _is_closed_trade(row):
                 continue
             stamp = _trade_timestamp(row)
-            pnl = _trade_pnl(row)
-            if stamp is None or pnl is None:
+            if stamp is None:
+                # Without a close timestamp, the row cannot be assigned safely
+                # to or excluded from the requested reporting period.
                 invalid_closed += 1
                 continue
-            if start <= stamp < end:
-                closed_rows.append((stamp, pnl, row))
+            if not start <= stamp < end:
+                # An invalid historical row with a valid timestamp must not
+                # poison every later report forever; only rows in this period
+                # contribute to or invalidate these aggregates.
+                continue
+            pnl = _trade_pnl(row)
+            if pnl is None:
+                invalid_closed += 1
+                continue
+            closed_rows.append((stamp, pnl, row))
         if invalid_closed:
             ledger_status = "INCOMPLETE_CLOSED_TRADES"
 
