@@ -200,7 +200,12 @@ class TestC2NoFabricatedResearchResults:
         assert "STRATEGY_MODULE_UNAVAILABLE" in (job.error or ""), job.error
 
         payload = json.loads((tmp_path / "experiment_jobs.json").read_text(encoding="utf-8"))
-        assert "1.42" not in json.dumps(payload), "Fabricated profit_factor reached the durable store"
+        stored_job = payload[job_id]
+        assert stored_job["status"] == "FAILED"
+        assert stored_job["result"] is None, (
+            "An unmeasurable job must not persist fabricated backtest metrics"
+        )
+        assert "STRATEGY_MODULE_UNAVAILABLE" in (stored_job.get("error") or "")
 
     def test_anonymous_research_job_submission_is_refused(self, tmp_path, monkeypatch):
         from dashboard import app
