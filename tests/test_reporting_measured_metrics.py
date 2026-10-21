@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from reporting.daily_report import DailyReportGenerator
 from reporting.ledger_metrics import compute_period_metrics
@@ -202,3 +202,47 @@ def test_periodic_report_rejects_invalid_calendar_tags(tmp_path, monkeypatch):
             pass
         else:
             raise AssertionError(f"Invalid calendar month was accepted: {month_tag}")
+
+
+
+def test_invalid_closed_trade_outside_period_does_not_poison_current_metrics(tmp_path):
+    ledger = tmp_path / "trades.jsonl"
+    start = datetime(2026, 9, 7, tzinfo=timezone.utc)
+    end = datetime(2026, 9, 14, tzinfo=timezone.utc)
+    _write_jsonl(ledger, [
+        {"status": "CLOSED", "exit_timestamp": "2026-08-01T00:00:00Z", "net_pnl": None},
+        {"status": "CLOSED", "exit_timestamp": "2026-09-10T00:00:00Z", "net_pnl": 5.0},
+    ])
+
+    result = compute_period_metrics(
+        start,
+        end,
+        ledger_path=ledger,
+        equity_path=tmp_path / "missing-equity.jsonl",
+        mode="TESTNET",
+    )
+
+    assert result["evidence_status"] == "MEASURED"
+    assert result["closed_trade_count"] == 1
+    assert result["net_pnl_dollars"] == 5.0
+    assert result["invalid_closed_trade_rows"] == 0
+
+
+def test_current_period_reports_end_at_observation_time(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRADING_MODE", "TESTNET")
+    monkeypatch.setenv("TESTNET_LEDGER_FILE", str(tmp_path / "missing-trades.jsonl"))
+    monkeypatch.setenv("TESTNET_EQUITY_HISTORY_FILE", str(tmp_path / "missing-equity.jsonl"))
+    now = datetime.now(timezone.utc)
+
+    daily = DailyReportGenerator(reports_dir=str(tmp_path / "daily")).generate_daily_report()
+    weekly = PeriodicReportGenerator(base_reports_dir=str(tmp_path / "periodic")).generate_weekly_report()
+    monthly = PeriodicReportGenerator(base_reports_dir=str(tmp_path / "periodic")).generate_monthly_report()
+
+    for result, period in (
+        (daily["data_quality"], "daily"),
+        (weekly, "weekly"),
+        (monthly, "monthly"),
+    ):
+        observed_end = datetime.fromisoformat(result["period_end_utc"].replace("Z", "+00:00"))
+        assert observed_end <= now + timedelta(seconds=2), period
+        assert observed_end > datetime.fromisoformat(result["period_start_utc"].replace("Z", "+00:00")), period
