@@ -18,7 +18,12 @@ from logger import get_logger
 
 logger = get_logger("ai_advisor")
 
-GEMINI_PRIMARY_MODELS = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.8-flash"]
+GEMINI_PRIMARY_MODELS = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.7-flash",
+    "gemini-3.8-flash",
+]
 
 
 @dataclass(frozen=True)
