@@ -63,11 +63,15 @@ class DailyReportGenerator:
         equity history. Missing, corrupt, or ambiguous input is reported as
         unavailable instead of being replaced by example performance numbers.
         """
-        target_date = date_str or datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+        now = datetime.datetime.now(datetime.timezone.utc)
+        target_date = date_str or now.date().isoformat()
         if not isinstance(target_date, str) or len(target_date) != 10:
             raise ValueError(f"report date must be YYYY-MM-DD, got {target_date!r}")
         target_day = datetime.date.fromisoformat(target_date)
-        start, end = utc_period_for_day(target_day)
+        start, calendar_end = utc_period_for_day(target_day)
+        # A report for the current UTC day covers elapsed time through the
+        # latest report instant; completed historical days use their full day.
+        end = min(calendar_end, now) if start <= now < calendar_end else calendar_end
         measured = compute_period_metrics(start, end)
 
         overrides: dict[str, Any] = {}
