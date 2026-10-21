@@ -7,16 +7,103 @@ recent trades, risk states, and regime classifications for AI-Universe analysis.
 
 import datetime
 import json
+import math
 import os
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 import config
 from advisory_params import get_advisory_overlay
+from atomic_io import read_jsonl
 from logger import get_logger
 
 logger = get_logger("advisory_telemetry")
+
+_CLOSED_TRADE_STATUSES = {"CLOSED", "EXIT_FILLED", "CLOSE_FILLED", "CLOSED_FILLED"}
+_CLOSED_TIME_FIELDS = ("closed_at", "exit_timestamp", "exit_time", "close_timestamp", "timestamp")
+_CLOSED_PNL_FIELDS = ("net_pnl", "pnl", "realized_pnl")
+_REQUIRED_ADVISORY_TRADES = 10
+_MAX_PORTFOLIO_AGE_SECONDS = 300.0
+
+
+def _finite_number(value: Any) -> float | None:
+    """Accept finite numbers only; booleans and overflow are not measurements."""
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _parse_timestamp(value: Any) -> datetime.datetime | None:
+    """Parse a timezone-aware UTC instant without inventing a fallback time."""
+    try:
+        if isinstance(value, bool) or value is None:
+            return None
+        if isinstance(value, (int, float)):
+            number = _finite_number(value)
+            if number is None:
+                return None
+            if abs(number) >= 100_000_000_000:
+                number /= 1000.0
+            return datetime.datetime.fromtimestamp(number, tz=datetime.timezone.utc)
+        if not isinstance(value, str) or not value.strip():
+            return None
+        parsed = datetime.datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+        return parsed.astimezone(datetime.timezone.utc)
+    except (ValueError, TypeError, OverflowError, OSError):
+        return None
+
+
+def _closed_trade(row: dict[str, Any]) -> bool:
+    if row.get("synthetic") is True or row.get("census_synthetic") is True:
+        return False
+    status = row.get("status")
+    status = status.strip().upper() if isinstance(status, str) else ""
+    if status in _CLOSED_TRADE_STATUSES:
+        return True
+    if any(row.get(key) is not None for key in _CLOSED_TIME_FIELDS[:-1]):
+        return True
+    action = row.get("action")
+    return isinstance(action, str) and "CLOSE" in action.upper()
+
+
+def _load_closed_ledger(path_value: str | None) -> tuple[list[tuple[dict[str, Any], float, datetime.datetime]], str, int]:
+    """Load complete JSONL ledger evidence; never compute from a partial file."""
+    if not path_value:
+        return [], "UNSUPPORTED_MODE", 0
+    path = Path(path_value)
+    if not path.is_file():
+        return [], "MISSING", 0
+    try:
+        result = read_jsonl(path, expected_type=dict)
+    except (OSError, UnicodeError, ValueError):
+        return [], "UNREADABLE", 0
+    if not result.clean:
+        return [], "INCOMPLETE", result.skipped
+    output: list[tuple[dict[str, Any], float, datetime.datetime]] = []
+    invalid_closed_rows = 0
+    for row in result.records:
+        if not _closed_trade(row):
+            continue
+        pnl_value = next((row[key] for key in _CLOSED_PNL_FIELDS if key in row), None)
+        pnl = _finite_number(pnl_value)
+        stamp = next((_parse_timestamp(row.get(key)) for key in _CLOSED_TIME_FIELDS if _parse_timestamp(row.get(key)) is not None), None)
+        if pnl is None or stamp is None:
+            invalid_closed_rows += 1
+            continue
+        output.append((row, pnl, stamp))
+    if invalid_closed_rows:
+        return [], "INCOMPLETE_CLOSED_TRADES", invalid_closed_rows
+    output.sort(key=lambda item: item[2])
+    return output, "COMPLETE" if result.records else "EMPTY", 0
+
 
 
 def _read_recent_trades_from_ledger(ledger_file: str, limit: int = 15) -> list[dict[str, Any]]:
