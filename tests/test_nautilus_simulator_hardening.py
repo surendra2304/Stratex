@@ -143,7 +143,7 @@ def test_out_of_order_market_data_is_rejected_without_filling_open_orders():
     "tick,quantity,expected_error",
     [
         (_tick(price=1e308, ts_event=1, trade_id="huge-notional"), 1e308, "fill notional must be finite"),
-        (_tick(price=100.0, ts_event=2, trade_id="huge-position"), 1e308, "updated position quantity overflowed"),
+        (_tick(price=1.0, ts_event=2, trade_id="huge-position"), 1e308, "updated position quantity overflowed"),
     ],
 )
 def test_overflowing_fill_inputs_do_not_mutate_order_or_fill_ledger(tick, quantity, expected_error):
