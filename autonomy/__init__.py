@@ -2,6 +2,7 @@
 from autonomy.agent_contracts import (
     AdvisoryEvaluation,
     AgentAdvisorySupervisor,
+    FridayGatewayClient,
     FuturisContractClient,
     FuturisForecast,
     InferenceContractClient,
@@ -24,6 +25,7 @@ from autonomy.async_pipeline import (
 __all__ = [
     "FuturisForecast",
     "FuturisContractClient",
+    "FridayGatewayClient",
     "IntelXResearch",
     "IntelXContractClient",
     "InferenceExplanation",

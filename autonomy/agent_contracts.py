@@ -587,3 +587,61 @@ class AgentAdvisorySupervisor:
                 "evaluated_at": _utc_now_iso(),
             },
         )
+
+
+# ==============================================================================
+# 7. FRIDAY CORE GATEWAY CONTRACT
+# ==============================================================================
+
+class FridayGatewayClient:
+    """
+    Client for broadcasting Stratex strategic actions and telemetry
+    to the central FRIDAY Core Gateway (voice assistant & master orchestrator).
+    """
+
+    def __init__(
+        self,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        timeout: float = 4.0,
+    ):
+        self.base_url = (base_url or os.getenv("FRIDAY_URL", "http://friday:10000")).rstrip("/")
+        self.api_key = api_key or os.getenv("FRIDAY_API_KEY", "")
+        self.timeout = timeout
+
+    def broadcast_trade_event(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+        scope: str = "Universal",
+    ) -> bool:
+        """
+        Broadcast a strategic trading decision or status event to the central FRIDAY Gateway.
+        Fails soft without disrupting trading operations.
+        """
+        url = f"{self.base_url}/v1/events"
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-Agent-Name": "stratex",
+        }
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        envelope = {
+            "source": "stratex",
+            "event_type": event_type,
+            "scope": scope,
+            "timestamp": _utc_now_iso(),
+            "payload": payload,
+        }
+
+        try:
+            req_data = json.dumps(envelope).encode("utf-8")
+            req = urllib.request.Request(url, data=req_data, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                return resp.status in {200, 201, 202}
+        except Exception as exc:
+            logger.debug(f"[FRIDAY_GATEWAY] Broadcast failed: {type(exc).__name__}")
+            return False
+
