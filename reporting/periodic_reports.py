@@ -88,7 +88,10 @@ class PeriodicReportGenerator:
     def generate_weekly_report(self, week_str: str | None = None) -> dict[str, Any]:
         now = datetime.datetime.now(datetime.timezone.utc)
         week_tag = week_str or now.strftime("%G-W%V")
-        start, end = self._weekly_bounds(week_tag)
+        start, calendar_end = self._weekly_bounds(week_tag)
+        # For the current week, report the elapsed period through now instead
+        # of comparing current equity to a boundary that is still in the future.
+        end = min(calendar_end, now) if start <= now < calendar_end else calendar_end
         measured = compute_period_metrics(start, end)
         metrics = {
             "weekly_return_pct": measured["period_return_pct"],
@@ -126,7 +129,10 @@ class PeriodicReportGenerator:
     def generate_monthly_report(self, month_str: str | None = None) -> dict[str, Any]:
         now = datetime.datetime.now(datetime.timezone.utc)
         month_tag = month_str or now.strftime("%Y-%m")
-        start, end = self._monthly_bounds(month_tag)
+        start, calendar_end = self._monthly_bounds(month_tag)
+        # A current-month report uses evidence through now; historical months
+        # retain their full calendar-month boundary.
+        end = min(calendar_end, now) if start <= now < calendar_end else calendar_end
         measured = compute_period_metrics(start, end)
         metrics = {
             "monthly_return_pct": measured["period_return_pct"],
