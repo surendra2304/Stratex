@@ -14,8 +14,11 @@ ZERO DOWNTIME TOLERANCE: All exceptions are caught, logged, and NEVER propagate 
 """
 
 import datetime
+import math
 import os
 import threading
+import time
+from numbers import Real
 from typing import Any
 
 import config
@@ -40,7 +43,9 @@ class AdvisoryScheduler:
         gate: AdvisoryGate | None = None,
         trading_mode: str | None = None,
         shadow_mode: bool | None = None,
-        interval_hours: float | None = None
+        interval_hours: float | None = None,
+        retry_backoff_base_seconds: float = 60.0,
+        retry_backoff_max_seconds: float = 1800.0,
     ) -> None:
         base_url = getattr(config, "INFERENCE_URL", os.getenv("INFERENCE_URL", getattr(config, "AI_UNIVERSE_BASE_URL", os.getenv("AI_UNIVERSE_URL", "https://friday-universe.duckdns.org/inference"))))
         timeout = int(getattr(config, "ADVISORY_TIMEOUT_SECONDS", os.getenv("ADVISORY_TIMEOUT_SECONDS", "120")))
@@ -58,6 +63,23 @@ class AdvisoryScheduler:
             interval_hours if interval_hours is not None
             else getattr(config, "ADVISORY_INTERVAL_HOURS", os.getenv("ADVISORY_INTERVAL_HOURS", "4.0"))
         )
+        if not math.isfinite(self.interval_hours) or self.interval_hours <= 0.0:
+            raise ValueError("interval_hours must be a finite positive number")
+
+        for name, value in (
+            ("retry_backoff_base_seconds", retry_backoff_base_seconds),
+            ("retry_backoff_max_seconds", retry_backoff_max_seconds),
+        ):
+            if isinstance(value, bool) or not isinstance(value, Real):
+                raise ValueError(f"{name} must be a finite positive number")
+            if not math.isfinite(float(value)) or float(value) <= 0.0:
+                raise ValueError(f"{name} must be a finite positive number")
+        if retry_backoff_max_seconds < retry_backoff_base_seconds:
+            raise ValueError("retry_backoff_max_seconds must be >= retry_backoff_base_seconds")
+        self.retry_backoff_base_seconds = float(retry_backoff_base_seconds)
+        self.retry_backoff_max_seconds = float(retry_backoff_max_seconds)
+        self._consecutive_failures = 0
+        self._next_attempt_monotonic = 0.0
 
         self._running = False
         self._stop_event = threading.Event()
@@ -65,6 +87,32 @@ class AdvisoryScheduler:
         self._last_consultation_time: datetime.datetime | None = None
         self._last_consecutive_losses_alerted: int = 0
         self._lock = threading.Lock()
+
+    def _schedule_retry(self, now_monotonic: float | None = None) -> float:
+        """Schedule capped exponential backoff after an unsuccessful cycle."""
+        now = time.monotonic() if now_monotonic is None else float(now_monotonic)
+        if not math.isfinite(now) or now < 0.0:
+            raise ValueError("now_monotonic must be a finite non-negative number")
+        self._consecutive_failures += 1
+        exponent = min(self._consecutive_failures - 1, 60)
+        delay = min(
+            self.retry_backoff_base_seconds * (2 ** exponent),
+            self.retry_backoff_max_seconds,
+        )
+        self._next_attempt_monotonic = now + delay
+        return delay
+
+    def _clear_retry_backoff(self) -> None:
+        """Reset retry state after a consultation cycle has been recorded."""
+        self._consecutive_failures = 0
+        self._next_attempt_monotonic = 0.0
+
+    def _retry_delay_remaining(self, now_monotonic: float | None = None) -> float:
+        """Return the non-negative time until another consultation is permitted."""
+        now = time.monotonic() if now_monotonic is None else float(now_monotonic)
+        if not math.isfinite(now) or now < 0.0:
+            raise ValueError("now_monotonic must be a finite non-negative number")
+        return max(0.0, self._next_attempt_monotonic - now)
 
     def run_consultation_cycle(self, reason: str = "SCHEDULED") -> dict[str, Any] | None:
         """
@@ -167,15 +215,23 @@ class AdvisoryScheduler:
 
         return None
 
-    def _worker_loop(self) -> None:
+    def _worker_loop(self, check_interval_sec: float = 60.0) -> None:
         """Main loop running inside the background daemon thread."""
+        if isinstance(check_interval_sec, bool) or not isinstance(check_interval_sec, Real):
+            raise ValueError("check_interval_sec must be a finite positive number")
+        check_interval_sec = float(check_interval_sec)
+        if not math.isfinite(check_interval_sec) or check_interval_sec <= 0.0:
+            raise ValueError("check_interval_sec must be a finite positive number")
+
         logger.info(f"[ADVISORY_SCHEDULER] Background worker thread started (interval={self.interval_hours}h).")
-        
-        # Initial scheduled run check
-        check_interval_sec = 60  # Poll every 60 seconds
 
         while not self._stop_event.is_set():
             try:
+                retry_remaining = self._retry_delay_remaining()
+                if retry_remaining > 0.0:
+                    self._stop_event.wait(timeout=min(check_interval_sec, retry_remaining))
+                    continue
+
                 now = datetime.datetime.utcnow()
                 should_run = False
                 reason = "SCHEDULED"
@@ -198,13 +254,31 @@ class AdvisoryScheduler:
                         reason = event_reason
 
                 if should_run:
-                    self.run_consultation_cycle(reason=reason)
+                    cycle_result = self.run_consultation_cycle(reason=reason)
+                    if cycle_result is None:
+                        delay = self._schedule_retry()
+                        logger.warning(
+                            "[ADVISORY_SCHEDULER] Consultation failed; retrying in %.1f seconds "
+                            "(consecutive failures=%s).",
+                            delay,
+                            self._consecutive_failures,
+                        )
+                    else:
+                        self._clear_retry_backoff()
 
             except Exception as e:
-                logger.error(f"[ADVISORY_SCHEDULER] Unexpected error in worker loop: {e}")
+                delay = self._schedule_retry()
+                logger.error(
+                    "[ADVISORY_SCHEDULER] Unexpected error in worker loop; retrying in %.1f seconds: %s",
+                    delay,
+                    e,
+                    exc_info=True,
+                )
 
-            # Sleep with interruptibility
-            self._stop_event.wait(timeout=check_interval_sec)
+            # Sleep with interruptibility, but never sleep past the next backoff deadline.
+            retry_remaining = self._retry_delay_remaining()
+            sleep_for = min(check_interval_sec, retry_remaining) if retry_remaining > 0.0 else check_interval_sec
+            self._stop_event.wait(timeout=sleep_for)
 
         logger.info("[ADVISORY_SCHEDULER] Worker thread terminated cleanly.")
 
