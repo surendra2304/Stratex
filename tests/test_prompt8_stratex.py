@@ -237,7 +237,12 @@ def test_standardized_trading_consult_contract():
     assert "telemetry_freshness" in std
     assert "exchange_status" in std
     assert "positions" in std
-    assert std["telemetry_freshness"]["max_staleness_seconds"] == 60.0
+    assert std["telemetry_freshness"]["max_staleness_seconds"] is None
+    assert std["telemetry_freshness"]["status"] == "UNKNOWN"
+    assert std["exchange_status"]["connectivity"] == "UNKNOWN"
+    assert std["exchange_status"]["latency_ms"] is None
+    assert std["positions"]["reconciliation_status"] == "UNKNOWN"
+    assert std["positions"]["open_count"] is None
 
 
 # ==============================================================================
