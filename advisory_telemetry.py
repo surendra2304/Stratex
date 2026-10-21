@@ -107,29 +107,13 @@ def _load_closed_ledger(path_value: str | None) -> tuple[list[tuple[dict[str, An
 
 
 def _read_recent_trades_from_ledger(ledger_file: str, limit: int = 15) -> list[dict[str, Any]]:
-    """Reads the last N closed trades from a JSONL trade ledger."""
-    if not os.path.exists(ledger_file):
+    """Return recent validated closed trades only when the source ledger is complete."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+        raise ValueError("limit must be a positive integer")
+    trades, status, _ = _load_closed_ledger(ledger_file)
+    if status not in {"COMPLETE", "EMPTY"}:
         return []
-
-    trades = []
-    try:
-        with open(ledger_file, "r", encoding="utf-8") as f:
-            for line in f:
-                line_str = line.strip()
-                if not line_str:
-                    continue
-                try:
-                    rec = json.loads(line_str)
-                    # Filter for closed trades or trades with net_pnl
-                    if rec.get("status") in ["CLOSED", "EXIT_FILLED"] or "net_pnl" in rec or "pnl" in rec:
-                        trades.append(rec)
-                except Exception:
-                    continue
-    except Exception as e:
-        logger.warning(f"[ADVISORY_TELEMETRY] Error reading trades from {ledger_file}: {e}")
-        return []
-
-    return trades[-limit:]
+    return [row for row, _, _ in trades[-limit:]]
 
 
 def build_telemetry_payload(
@@ -340,9 +324,8 @@ def build_telemetry_payload(
     if unrealized_pnl is None:
         portfolio_missing_fields.append("unrealized_pnl")
     portfolio_missing_fields = sorted(set(portfolio_missing_fields))
-    portfolio_status = "MEASURED" if not portfolio_missing_fields and portfolio_file else (
-        "UNSUPPORTED_MODE" if not mode_supported else "INCOMPLETE"
-    )
+    if portfolio_status not in {"UNSUPPORTED_MODE", "MISSING", "UNREADABLE", "INVALID"}:
+        portfolio_status = "MEASURED" if not portfolio_missing_fields and portfolio_file else "INCOMPLETE"
     if snapshot_dt is not None:
         snapshot_age_sec = (now - snapshot_dt).total_seconds()
     else:
