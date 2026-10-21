@@ -153,6 +153,7 @@ def build_telemetry_payload(
     realized_pnl = None
     unrealized_pnl = None
     max_drawdown = None
+    max_drawdown_pct = None
     open_positions_count = None
     portfolio_raw: dict[str, Any] = {}
     portfolio_file = (
@@ -209,12 +210,8 @@ def build_telemetry_payload(
                 snapshot_dt = _parse_timestamp(timestamp_raw)
                 if snapshot_dt is None:
                     portfolio_missing_fields.append("snapshot_timestamp")
-                if realized_pnl is None:
-                    portfolio_missing_fields.append("realized_pnl")
                 if unrealized_pnl is None:
                     portfolio_missing_fields.append("unrealized_pnl")
-                if cash is None:
-                    portfolio_missing_fields.append("cash")
                 portfolio_status = "MEASURED" if not portfolio_missing_fields else "INCOMPLETE"
         except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
             portfolio_status = "UNREADABLE"
@@ -269,20 +266,24 @@ def build_telemetry_payload(
         else "UNKNOWN"
     )
     recent_closed_trades = [row for row, _, _ in closed_trades[-15:]] if ledger_complete else []
-    # 3. Market Regime Analysis
-    regime_data = {"regime": "RANGE", "volatility_state": "LOW_VOL"}
+    # 3. Market Regime Analysis. Unknown is materially different from RANGE/LOW_VOL.
+    regime_data = {"regime": "UNKNOWN", "volatility_state": "UNKNOWN"}
+    regime_status = "UNAVAILABLE"
     if current_df is not None and not current_df.empty:
         try:
             from regime import classify_regimes
             classified = classify_regimes(current_df)
             if classified is not None and not classified.empty:
                 last_row = classified.iloc[-1]
-                regime_data = {
-                    "regime": str(last_row.get("regime", "RANGE")),
-                    "volatility_state": str(last_row.get("volatility_state", "LOW_VOL"))
-                }
+                regime = last_row.get("regime")
+                volatility = last_row.get("volatility_state")
+                if isinstance(regime, str) and regime.strip() and isinstance(volatility, str) and volatility.strip():
+                    regime_data = {"regime": regime.strip(), "volatility_state": volatility.strip()}
+                    regime_status = "MEASURED"
+                else:
+                    regime_status = "INVALID"
         except Exception as e:
-            logger.warning(f"[ADVISORY_TELEMETRY] Regime classification error: {e}")
+            logger.warning(f"[ADVISORY_TELEMETRY] Regime classification unavailable ({type(e).__name__})")
 
     # 4. Strategy Parameters Snapshot
     overlay = get_advisory_overlay()
@@ -316,7 +317,9 @@ def build_telemetry_payload(
                 reg = get_metrics_registry()
                 reg.futuris_context_included_consultations_total += 1
                 acc_info = futuris.get_accuracy_metrics()
-                reg.forecast_accuracy_pct = float(acc_info.get("accuracy_pct", 100.0))
+                accuracy = _finite_number(acc_info.get("accuracy_pct")) if isinstance(acc_info, dict) else None
+                if accuracy is not None and 0.0 <= accuracy <= 100.0:
+                    reg.forecast_accuracy_pct = accuracy
             except Exception:
                 pass
     except Exception as e:
@@ -328,44 +331,157 @@ def build_telemetry_payload(
     if "STARTUP" in reason_clean or reason_clean not in valid_reasons:
         reason_clean = "SCHEDULED"
 
-    # 7. Normalize trading mode to PAPER or TESTNET
-    normalized_mode = "TESTNET" if mode in ["TESTNET", "FUTURES"] else "PAPER"
+    # 7. Build evidence and readiness status before producing the compatible payload.
+    if realized_pnl is None and ledger_status in {"COMPLETE", "EMPTY"}:
+        realized_pnl = sum(pnl for _, pnl, _ in closed_trades)
 
-    # 8. Assemble Payload adhering strictly to TradingConsultRequest schema with backward-compatible aliases
+    if realized_pnl is None:
+        portfolio_missing_fields.append("realized_pnl")
+    if unrealized_pnl is None:
+        portfolio_missing_fields.append("unrealized_pnl")
+    portfolio_missing_fields = sorted(set(portfolio_missing_fields))
+    portfolio_status = "MEASURED" if not portfolio_missing_fields and portfolio_file else (
+        "UNSUPPORTED_MODE" if not mode_supported else "INCOMPLETE"
+    )
+    if snapshot_dt is not None:
+        snapshot_age_sec = (now - snapshot_dt).total_seconds()
+    else:
+        snapshot_age_sec = None
+    freshness_status = (
+        "FRESH"
+        if snapshot_age_sec is not None and 0.0 <= snapshot_age_sec <= _MAX_PORTFOLIO_AGE_SECONDS
+        else "STALE"
+        if snapshot_age_sec is not None and snapshot_age_sec > _MAX_PORTFOLIO_AGE_SECONDS
+        else "UNKNOWN"
+    )
+
+    win_rate_fraction = win_rate
+    win_rate_pct = win_rate_fraction * 100.0 if win_rate_fraction is not None else None
+    normalized_mode = "TESTNET" if mode in {"TESTNET", "FUTURES"} else "PAPER" if mode == "PAPER" else "UNKNOWN"
+
+    unavailable_fields: list[str] = []
+    if not mode_supported:
+        unavailable_fields.append("trading_mode")
+    if portfolio_status != "MEASURED":
+        unavailable_fields.append("complete_portfolio_snapshot")
+    if freshness_status != "FRESH":
+        unavailable_fields.append("fresh_portfolio_snapshot")
+    if ledger_status != "COMPLETE":
+        unavailable_fields.append("complete_trade_ledger")
+    if total_trades is None or total_trades < _REQUIRED_ADVISORY_TRADES:
+        unavailable_fields.append("sufficient_closed_trade_history")
+    for field_name, field_value in (
+        ("equity", equity),
+        ("realized_pnl", realized_pnl),
+        ("unrealized_pnl", unrealized_pnl),
+        ("max_drawdown_pct", max_drawdown_pct),
+        ("win_rate", win_rate_fraction),
+        ("profit_factor", profit_factor),
+    ):
+        if field_value is None:
+            unavailable_fields.append(field_name)
+    advisory_ready = (
+        mode_supported
+        and portfolio_status == "MEASURED"
+        and freshness_status == "FRESH"
+        and ledger_status == "COMPLETE"
+        and total_trades is not None
+        and total_trades >= _REQUIRED_ADVISORY_TRADES
+        and all(value is not None for value in (equity, realized_pnl, unrealized_pnl, max_drawdown_pct, win_rate_fraction, profit_factor))
+    )
+    telemetry_quality = {
+        "schema_version": 1,
+        "advisory_ready": advisory_ready,
+        "blocking_reasons": sorted(set(unavailable_fields)),
+        "trading_mode_status": "SUPPORTED" if mode_supported else "UNSUPPORTED",
+        "portfolio_status": portfolio_status,
+        "portfolio_missing_fields": portfolio_missing_fields,
+        "portfolio_file": os.path.basename(portfolio_file) if portfolio_file else None,
+        "portfolio_snapshot_age_seconds": round(snapshot_age_sec, 3) if snapshot_age_sec is not None else None,
+        "portfolio_freshness_status": freshness_status,
+        "ledger_status": ledger_status,
+        "ledger_file": os.path.basename(ledger_file) if ledger_file else None,
+        "ledger_skipped_rows": ledger_issues,
+        "closed_trade_count": total_trades,
+        "required_closed_trade_count": _REQUIRED_ADVISORY_TRADES,
+        "win_rate_status": "MEASURED" if win_rate_fraction is not None else "UNAVAILABLE",
+        "profit_factor_status": "MEASURED" if profit_factor is not None else "UNAVAILABLE_OR_ZERO_GROSS_LOSS",
+        "market_regime_status": regime_status,
+        "testnet_context_status": "MEASURED" if normalized_mode == "TESTNET" and isinstance(portfolio_raw.get("daily_loss"), (int, float)) and isinstance(portfolio_raw.get("margin_level"), (int, float)) else "UNAVAILABLE",
+    }
+
+    # Required schema values stay absent when evidence is absent. The scheduler
+    # refuses the consultation unless all required model-facing metrics are present.
     telemetry_stats = {
-        "equity": round(equity, 2),
-        "unrealized_pnl": round(unrealized_pnl, 2),
-        "realized_pnl": round(realized_pnl, 2),
-        "win_rate": round(min(max(win_rate / 100.0 if win_rate > 1.0 else win_rate, 0.0), 1.0), 4),
-        "profit_factor": round(max(profit_factor, 0.0), 2),
-        "max_drawdown_pct": round(max_drawdown * 100 if max_drawdown <= 1.0 else max_drawdown, 2),
-        "consecutive_losses": int(max(consecutive_losses, 0)),
-        "total_trades": int(max(total_trades, 0)),
-        "sharpe_ratio": None
+        "equity": round(equity, 2) if equity is not None else None,
+        "unrealized_pnl": round(unrealized_pnl, 2) if unrealized_pnl is not None else None,
+        "realized_pnl": round(realized_pnl, 2) if realized_pnl is not None else None,
+        "win_rate": round(win_rate_fraction, 4) if win_rate_fraction is not None else None,
+        "profit_factor": round(profit_factor, 2) if profit_factor is not None else None,
+        "max_drawdown_pct": round(max_drawdown_pct, 2) if max_drawdown_pct is not None else None,
+        "consecutive_losses": consecutive_losses,
+        "total_trades": total_trades,
+        "sharpe_ratio": None,
     }
-
     portfolio_compat = {
-        "equity": round(equity, 2),
-        "cash": round(cash, 2),
-        "realized_pnl": round(realized_pnl, 2),
-        "unrealized_pnl": round(unrealized_pnl, 2),
-        "max_drawdown_pct": round(max_drawdown * 100 if max_drawdown <= 1.0 else max_drawdown, 2),
-        "open_positions": open_positions_count
+        "equity": round(equity, 2) if equity is not None else None,
+        "cash": round(cash, 2) if cash is not None else None,
+        "realized_pnl": round(realized_pnl, 2) if realized_pnl is not None else None,
+        "unrealized_pnl": round(unrealized_pnl, 2) if unrealized_pnl is not None else None,
+        "max_drawdown_pct": round(max_drawdown_pct, 2) if max_drawdown_pct is not None else None,
+        "open_positions": open_positions_count,
+        "snapshot_timestamp": snapshot_dt.isoformat().replace("+00:00", "Z") if snapshot_dt else None,
     }
-
     performance_metrics_compat = {
-        "total_trades": int(max(total_trades, 0)),
-        "win_rate": round(win_rate, 2),
-        "profit_factor": round(max(profit_factor, 0.0), 2),
-        "winning_trades": int(winning_trades),
-        "losing_trades": int(losing_trades),
-        "consecutive_losses": int(max(consecutive_losses, 0))
+        "total_trades": total_trades,
+        "win_rate": round(win_rate_pct, 2) if win_rate_pct is not None else None,
+        "profit_factor": round(profit_factor, 2) if profit_factor is not None else None,
+        "winning_trades": winning_trades,
+        "losing_trades": losing_trades,
+        "consecutive_losses": consecutive_losses,
     }
 
+    testnet_daily_loss = _finite_number(portfolio_raw.get("daily_loss", portfolio_raw.get("daily_realized_pnl")))
+    testnet_margin_level = _finite_number(portfolio_raw.get("margin_level"))
+    testnet_context_complete = (
+        normalized_mode == "TESTNET"
+        and equity is not None
+        and max_drawdown_pct is not None
+        and open_positions_count is not None
+        and testnet_daily_loss is not None
+        and testnet_margin_level is not None
+    )
+    testnet_specific = {
+        "testnet_equity": round(equity, 2),
+        "testnet_drawdown_pct": round(max_drawdown_pct, 2),
+        "testnet_daily_loss": round(testnet_daily_loss, 2),
+        "testnet_open_positions": open_positions_count,
+        "testnet_margin_level": round(testnet_margin_level, 2),
+    } if testnet_context_complete else None
+
+    snapshot_iso = snapshot_dt.isoformat().replace("+00:00", "Z") if snapshot_dt else None
     payload = {
         "bot_id": "stratex_bot_01",
         "trading_mode": normalized_mode,
         "consultation_reason": reason_clean,
+        "timestamp": now_iso,
+        "telemetry_quality": telemetry_quality,
+        "telemetry_freshness": {
+            "timestamp": snapshot_iso,
+            "max_staleness_seconds": _MAX_PORTFOLIO_AGE_SECONDS,
+            "clock_skew_ms": round(abs(snapshot_age_sec) * 1000.0, 3) if snapshot_age_sec is not None else None,
+            "status": freshness_status,
+        },
+        "exchange_status": {
+            "connectivity": "UNKNOWN",
+            "exchange": "binance_testnet" if normalized_mode == "TESTNET" else "paper_simulator",
+            "latency_ms": None,
+        },
+        "positions": {
+            "open_count": open_positions_count,
+            "reconciliation_status": "UNKNOWN",
+            "active_symbols": [],
+        },
         "telemetry": telemetry_stats,
         "portfolio": portfolio_compat,
         "performance_metrics": performance_metrics_compat,
@@ -375,27 +491,21 @@ def build_telemetry_payload(
         "strategy_performance": [
             {
                 "strategy_name": current_strategy,
-                "trade_count": int(max(total_trades, 0)),
-                "win_rate": round(min(max(win_rate / 100.0 if win_rate > 1.0 else win_rate, 0.0), 1.0), 4),
-                "profit_factor": round(max(profit_factor, 0.0), 2),
-                "net_pnl": round(realized_pnl, 2),
-                "avg_win": round(gross_profit / max(winning_trades, 1), 2),
-                "avg_loss": round(gross_loss / max(losing_trades, 1), 2),
-                "consecutive_losses": int(max(consecutive_losses, 0))
+                "trade_count": total_trades,
+                "win_rate": round(win_rate_fraction, 4) if win_rate_fraction is not None else None,
+                "profit_factor": round(profit_factor, 2) if profit_factor is not None else None,
+                "net_pnl": round(realized_pnl, 2) if realized_pnl is not None else None,
+                "avg_win": round(gross_profit / len(winning_pnls), 2) if winning_pnls and gross_profit is not None else None,
+                "avg_loss": round(gross_loss / len(losing_pnls), 2) if losing_pnls and gross_loss is not None else None,
+                "consecutive_losses": consecutive_losses,
             }
-        ],
+        ] if ledger_complete and closed_trades else [],
         "current_parameters": {
             current_strategy: current_params if isinstance(current_params, dict) else {}
         },
         "regime_data": regime_data,
-        "recent_trades": recent_closed_trades,
-        "testnet_specific": {
-            "testnet_equity": round(equity, 2),
-            "testnet_drawdown_pct": round(max_drawdown * 100 if max_drawdown <= 1.0 else max_drawdown, 2),
-            "testnet_daily_loss": 0.0,
-            "testnet_open_positions": open_positions_count,
-            "testnet_margin_level": 100.0
-        } if normalized_mode == "TESTNET" else None
+        "recent_trades": recent_closed_trades if ledger_complete else None,
+        "testnet_specific": testnet_specific,
     }
 
     return payload
