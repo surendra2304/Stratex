@@ -15,6 +15,7 @@ def base_env(monkeypatch):
     monkeypatch.setenv("STRATEX_ALLOWED_EXECUTION_VENUES", "binance")
     monkeypatch.setenv("BINANCE_DEMO_TRADING", "true")
     monkeypatch.setenv("LIVE_TRADING_ENABLED", "false")
+    monkeypatch.delenv("STRATEX_DATABASE_URL", raising=False)
 
 
 def test_runtime_factory_requires_explicit_demo_mode(monkeypatch):
@@ -86,6 +87,7 @@ def configure_mt5_demo(monkeypatch):
     monkeypatch.setenv("MT5_REQUIRE_DEMO", "true")
     monkeypatch.setenv("MT5_BRIDGE_URL", "http://100.64.0.2:8765")
     monkeypatch.setenv("MT5_BRIDGE_TOKEN", "private-test-token")
+    monkeypatch.delenv("STRATEX_DATABASE_URL", raising=False)
 
 
 def test_runtime_factory_health_checks_even_an_injected_mt5_adapter(monkeypatch):

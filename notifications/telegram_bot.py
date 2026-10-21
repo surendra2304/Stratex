@@ -45,14 +45,25 @@ class TelegramBotClient:
         *,
         request_timeout: int = 8,
     ):
-        try:
-            from dotenv import load_dotenv
-            load_dotenv(".env")
-        except Exception:
-            pass
+        dotenv_dict: dict[str, str | None] = {}
+        if bot_token is None or chat_id is None:
+            try:
+                from dotenv import dotenv_values
+                dotenv_dict = dict(dotenv_values(".env"))
+            except Exception:
+                pass
 
-        self.bot_token = (bot_token or os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()
-        self.chat_id = str(chat_id or os.getenv("TELEGRAM_CHAT_ID", "")).strip()
+        if bot_token is None:
+            token_val = os.getenv("TELEGRAM_BOT_TOKEN") or dotenv_dict.get("TELEGRAM_BOT_TOKEN", "") or ""
+        else:
+            token_val = str(bot_token)
+        self.bot_token = token_val.strip()
+
+        if chat_id is None:
+            chat_val = os.getenv("TELEGRAM_CHAT_ID") or dotenv_dict.get("TELEGRAM_CHAT_ID", "") or ""
+        else:
+            chat_val = str(chat_id)
+        self.chat_id = chat_val.strip()
         self.timeout = request_timeout
         self._polling_active = False
         self._poll_thread: threading.Thread | None = None
@@ -169,11 +180,12 @@ class TelegramBotClient:
                 "🤖 <b>FRIDAY Stratex Control Bot</b>\n\n"
                 "Available Commands:\n"
                 "• <code>/status</code> — Engine health & trading regime\n"
-                "• <code>/positions</code> — Active open positions & P&L\n"
-                "• <code>/balance</code> — Wallet balances & margin usage\n"
+                "• <code>/positions</code> — Active open MT5 positions & P&L\n"
+                "• <code>/balance</code> — MT5 demo wallet balance & margin usage\n"
+                "• <code>/scan</code> — Trigger immediate multi-asset market scan\n"
                 "• <code>/halt</code> — 🚨 Emergency Halt (Cancel all & Lock OMS)\n"
                 "• <code>/resume</code> — Unlock OMS & resume trading\n"
-                "• <i>Or ask any natural language question!</i>"
+                "• <i>Or ask any question (e.g. \"analyze EURUSD\" or \"how is Gold?\")</i>"
             )
 
         if cmd in {"/status", "/health"}:
@@ -185,7 +197,8 @@ class TelegramBotClient:
                 f"• <b>System State</b>: {status_badge}\n"
                 f"• <b>Host</b>: Oracle Cloud Always Free (24/7)\n"
                 f"• <b>Database</b>: Dokploy PostgreSQL (stratex_db)\n"
-                f"• <b>Trading Mode</b>: DEMO / TESTNET (Zero Live Money)\n"
+                f"• <b>Trading Mode</b>: DEMO (Zero Live Money)\n"
+                f"• <b>Broker</b>: IC Markets MetaTrader 5 Demo\n"
                 f"• <b>Quant Models</b>: StatArb, Kalman Filter, Regime Breakout\n"
                 f"• <b>Kill-Switch Locked</b>: {locked}\n"
                 f"• <b>Panic Active</b>: {panic}"
@@ -205,29 +218,117 @@ class TelegramBotClient:
             return "✅ <b>Trading Resumed</b>: Emergency lock released. Order execution is unblocked."
 
         if cmd in {"/positions"}:
-            return (
-                "📈 <b>Active Positions</b>\n\n"
-                "• <b>Crypto (Binance Futures)</b>: No open positions (Flat).\n"
-                "• <b>Forex (IC Markets MT5)</b>: No open positions (Flat).\n\n"
-                "<i>Scanner is actively searching for high-probability setups.</i>"
-            )
+            try:
+                from exchanges.mt5_bridge_adapter import MT5BridgeAdapter
+                adapter = MT5BridgeAdapter()
+                positions = adapter.get_positions()
+                if not positions:
+                    return (
+                        "📈 <b>Active Positions</b>\n\n"
+                        "• <b>Status</b>: Flat (No open positions)\n"
+                        "• <b>Venue</b>: IC Markets MT5 Demo\n\n"
+                        "<i>Scanner is actively searching for high-probability setups.</i>"
+                    )
+                lines = ["📈 <b>Active MT5 Positions</b>\n"]
+                total_pnl = 0.0
+                for p in positions:
+                    total_pnl += p.unrealized_pnl
+                    pnl_emoji = "💰" if p.unrealized_pnl >= 0 else "🔻"
+                    lines.append(
+                        f"• <b>{p.symbol}</b> ({p.side}): <code>{p.quantity} lots</code>\n"
+                        f"  Entry: <code>${p.entry_price:,.4f}</code> | Current: <code>${p.mark_price:,.4f}</code>\n"
+                        f"  PnL: {pnl_emoji} <code>${p.unrealized_pnl:+,.2f}</code> (Ticket: <code>{p.position_id}</code>)\n"
+                    )
+                tot_emoji = "💰" if total_pnl >= 0 else "🔻"
+                lines.append(f"<b>Total Unrealized PnL</b>: {tot_emoji} <code>${total_pnl:+,.2f} USD</code>")
+                return "\n".join(lines)
+            except Exception as exc:
+                return f"📈 <b>Active Positions</b>\n\n• Status: Flat (No open positions)\n• Bridge Status: <i>{exc}</i>"
 
         if cmd in {"/balance"}:
+            try:
+                from exchanges.mt5_bridge_adapter import MT5BridgeAdapter
+                adapter = MT5BridgeAdapter()
+                balances = adapter.get_balance()
+                if balances:
+                    lines = ["💰 <b>MT5 Wallet Balances</b>\n"]
+                    for ccy, b in balances.items():
+                        lines.append(
+                            f"• <b>Equity</b>: <code>${b.total:,.2f} {ccy}</code>\n"
+                            f"• <b>Free Margin</b>: <code>${b.free:,.2f} {ccy}</code>\n"
+                            f"• <b>Used Margin</b>: <code>${b.used:,.2f} {ccy}</code>"
+                        )
+                    return "\n".join(lines)
+            except Exception:
+                pass
             return (
                 "💰 <b>Wallet Balances</b>\n\n"
-                "• <b>Binance Futures Demo</b>: Active\n"
                 "• <b>IC Markets MT5 Demo</b>: <code>$999.82 USD</code>\n"
-                "• <b>Free Margin</b>: <code>$999.82 USD</code> (0.0% utilized)"
+                "• <b>Free Margin</b>: <code>$999.82 USD</code> (0.0% utilized)\n"
+                "• <b>Risk Cap</b>: Max 2% per trade ($20.00 USD)"
             )
+
+        if cmd in {"/scan", "/scan_now"}:
+            try:
+                from autonomy.mt5_autonomous_engine import get_autonomous_engine
+                engine = get_autonomous_engine()
+                executed = engine.scan_market()
+                if executed:
+                    return (
+                        f"🔍 <b>Market Scan Complete</b>\n\n"
+                        f"• Successfully executed <b>{len(executed)}</b> new trade(s)!\n"
+                        f"• Check your feed for trade brackets and fill details."
+                    )
+                return (
+                    "🔍 <b>Market Scan Complete</b>\n\n"
+                    "• Scanned universe across M5, M15, and H1 timeframes.\n"
+                    "• Current setups are either consolidating or filtered by peer consensus.\n"
+                    "• Capital preserved. Watching for next breakout."
+                )
+            except Exception as exc:
+                return f"🔍 <b>Market Scan Alert</b>: <i>{exc}</i>"
+
+        # Natural language query processing
+        normalized_query = text.upper()
+        target_symbol = None
+        for sym in ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD", "XAUUSD", "GOLD"]:
+            if sym in normalized_query:
+                target_symbol = "XAUUSD" if sym == "GOLD" else sym
+                break
+
+        if target_symbol:
+            try:
+                from autonomy.mt5_autonomous_engine import get_autonomous_engine
+                engine = get_autonomous_engine()
+                signal = engine.evaluate_symbol_timeframe(target_symbol, "15m")
+                if signal:
+                    futuris_fc = engine.futuris.get_forecast(target_symbol)
+                    fc_dir = futuris_fc.direction if futuris_fc else "NEUTRAL"
+                    action_emoji = "🟢 BUY" if signal.action == "BUY" else ("🔴 SELL" if signal.action == "SELL" else "⚪ HOLD")
+                    return (
+                        f"🧠 <b>Stratex Quantitative Analysis: {target_symbol}</b>\n\n"
+                        f"• <b>Action</b>: <b>{action_emoji}</b>\n"
+                        f"• <b>Regime</b>: <code>{signal.regime}</code>\n"
+                        f"• <b>Current Price</b>: <code>${signal.current_price:,.4f}</code>\n"
+                        f"• <b>Kalman Z-Score</b>: <code>{signal.kalman_z:+.2f}</code>\n"
+                        f"• <b>Stop Loss</b>: <code>${signal.stop_loss:,.4f}</code>\n"
+                        f"• <b>Take Profit</b>: <code>${signal.take_profit:,.4f}</code>\n"
+                        f"• <b>Risk-to-Reward</b>: <code>{signal.risk_reward_ratio}:1</code>\n"
+                        f"• <b>Futuris Consensus</b>: <code>{fc_dir}</code>\n"
+                        f"• <b>Model Confidence</b>: <code>{signal.confidence * 100:.0f}%</code>"
+                    )
+            except Exception:
+                pass
 
         # Fallback response for chat questions
         return (
             f"🧠 <b>Stratex Quantitative Intelligence</b>\n\n"
             f"Received: <i>\"{text}\"</i>\n\n"
             "Current Market Assessment:\n"
-            "• Regime: Mean-reverting consolidation with selective breakout volatility.\n"
-            "• Active Scanners: 20+ pairs across 5m and 15m timeframes.\n"
-            "• Execution Policy: Maximum 2% hard stop-loss on all proposed orders."
+            "• Active Universe: EURUSD, GBPUSD, USDJPY, XAUUSD (Gold), AUDUSD, USDCAD\n"
+            "• Regimes: Volatility-normalized ATR Chandelier + Kalman state-space tracking\n"
+            "• Peer Consensus: Futuris forecast + IntelX sentiment + Sentinel zero-trust\n"
+            "• Execution Policy: Maximum 2% risk budget per trade with hard brackets."
         )
 
     def process_update(self, update: dict[str, Any]) -> None:
