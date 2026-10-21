@@ -47,6 +47,7 @@ def test_report_counts_closed_ledger_rows_and_uses_observed_equity(tmp_path, mon
         {"decision": "ACCEPTED", "expected_gross_return": 0.04, "expected_net_return": 0.03},
         {"decision": "REJECTED", "expected_gross_return": 0.10, "expected_net_return": 0.01},
         {"decision": "ACCEPTED"},
+        {"decision": "NOT_ACCEPTED", "expected_gross_return": 0.10, "expected_net_return": 0.01},
     ])
     _write_jsonl(ledger, [
         {
@@ -86,9 +87,9 @@ def test_report_counts_closed_ledger_rows_and_uses_observed_equity(tmp_path, mon
     observed_equity = report["equity"]
 
     assert signals["evidence_status"] == "MEASURED"
-    assert signals["signals_evaluated"] == 3
+    assert signals["signals_evaluated"] == 4
     assert signals["signals_accepted"] == 2
-    assert signals["signals_rejected"] == 1
+    assert signals["signals_rejected"] == 2
     assert signals["accepted_without_return_metrics"] == 1
     assert signals["avg_expected_gross_return"] == 0.04
     assert signals["avg_expected_net_return"] == 0.03
