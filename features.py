@@ -11,7 +11,7 @@ def add_features(df):
     df = df.copy()
     
     # --- Price Features ---
-    df['returns'] = df['close'].pct_change()
+    df['returns'] = df['close'].pct_change(fill_method=None)
     df['log_returns'] = np.log(df['close'] / df['close'].shift(1))
     df['body_size'] = abs(df['close'] - df['open']) / df['open']
     

@@ -13,6 +13,13 @@ from autonomy.agent_contracts import (
     SentinelContractClient,
     SentinelPolicyResult,
 )
+from autonomy.async_pipeline import (
+    AsyncMarketDataEngine,
+    AsyncSignalPipeline,
+    CircuitBreaker,
+    CircuitBreakerOpenError,
+    CircuitBreakerState,
+)
 
 __all__ = [
     "FuturisForecast",
@@ -27,4 +34,9 @@ __all__ = [
     "MemoraScopedClient",
     "AdvisoryEvaluation",
     "AgentAdvisorySupervisor",
+    "AsyncMarketDataEngine",
+    "AsyncSignalPipeline",
+    "CircuitBreaker",
+    "CircuitBreakerOpenError",
+    "CircuitBreakerState",
 ]

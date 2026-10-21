@@ -1150,11 +1150,27 @@ def health_readiness():
     """Engine readiness based on its observed heartbeat, distinct from process liveness.
 
     Readiness requires a live engine AND the demonstrated ability to act on it.
-    A process that is up but has loaded zero executable strategies is not ready
-    to trade, so it must not pass this gate.
+    A process that is up but has loaded zero executable strategies or is locked by
+    an active panic kill switch is not ready to trade, so it must not pass this gate.
     """
     payload = _health_payload("engine_readiness")
-    ready = payload["engine_healthy"] and payload.get("engine_trading_capable", False)
+    try:
+        from panic_state import is_kill_switch_locked, is_panic_active
+        panic = is_panic_active()
+        locked = is_kill_switch_locked()
+    except Exception:
+        panic = False
+        locked = False
+
+    payload["panic_active"] = panic
+    payload["kill_switch_locked"] = locked
+
+    ready = (
+        payload["engine_healthy"]
+        and payload.get("engine_trading_capable", False)
+        and not panic
+        and not locked
+    )
     payload["status"] = "ready" if ready else "not_ready"
     return jsonify(payload), 200 if ready else 503
 
