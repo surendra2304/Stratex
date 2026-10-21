@@ -10,11 +10,12 @@ from ai_universe_client import AIUniverseClient
 
 
 def _scheduler(**kwargs):
+    options = {"interval_hours": 4.0}
+    options.update(kwargs)
     return AdvisoryScheduler(
         client=MagicMock(spec=AIUniverseClient),
         shadow_mode=True,
-        interval_hours=4.0,
-        **kwargs,
+        **options,
     )
 
 
@@ -94,5 +95,5 @@ def test_worker_respects_retry_backoff_before_repeating_failed_startup_consultat
 
     assert second_attempt_finished.is_set()
     assert len(calls) == 2
-    assert calls == ["SCHEDULED", "SCHEDULED"]
+    assert calls == ["STARTUP_SCHEDULED", "STARTUP_SCHEDULED"]
     assert scheduler._consecutive_failures == 2
