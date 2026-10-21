@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from reporting.daily_report import DailyReportGenerator
 from reporting.ledger_metrics import compute_period_metrics
 from reporting.periodic_reports import PeriodicReportGenerator
+from reporting.voice_summaries import generate_daily_voice_summary
 
 
 def _write_jsonl(path, rows):
@@ -246,3 +247,16 @@ def test_current_period_reports_end_at_observation_time(tmp_path, monkeypatch):
         observed_end = datetime.fromisoformat(result["period_end_utc"].replace("Z", "+00:00"))
         assert observed_end <= now + timedelta(seconds=2), period
         assert observed_end > datetime.fromisoformat(result["period_start_utc"].replace("Z", "+00:00")), period
+
+
+def test_voice_summary_does_not_turn_no_trades_into_zero_pnl_performance():
+    voice = generate_daily_voice_summary(
+        net_pnl_pct=None,
+        net_pnl_dollars=0.0,
+        best_strategy=None,
+        trades_count=0,
+        risk_headroom_pct=None,
+    )
+    assert "unavailable" in voice.lower()
+    assert "net profit of $0.00" not in voice.lower()
+    assert "No single strategy could be confirmed" in voice
