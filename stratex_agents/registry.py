@@ -57,6 +57,14 @@ def get_agent_catalog() -> list[dict[str, Any]]:
             "responsibility": "Loads existing Stratex strategy registry; unvalidated strategies remain non-executable.",
         },
         {
+            "id": "quant_engine",
+            "name": "Quantitative Alpha & Regime Engine",
+            "kind": "strategy",
+            "status": "ready",
+            "execution_authority": False,
+            "responsibility": "Evaluates Statistical Arbitrage, Kalman Filter Mean Reversion, and Volatility Regime Breakout models.",
+        },
+        {
             "id": "risk_guard",
             "name": "Risk & Authorization Agent",
             "kind": "risk",
