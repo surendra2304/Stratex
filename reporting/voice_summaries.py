@@ -32,7 +32,7 @@ def generate_daily_voice_summary(
 
     if best_strategy:
         clean_strat = best_strategy.replace("strategy_", "").title()
-        strat_line = f"{clean_strat} had the highest measured net PnL. "
+        strat_line = f"{clean_strat} was your strongest measured strategy by net PnL. "
     else:
         strat_line = "No strongest strategy could be confirmed from measured results. "
 
