@@ -79,6 +79,17 @@ class AdvisoryScheduler:
                 consultation_reason=reason
             )
 
+            # Never send missing, stale, corrupt, or insufficient telemetry to the
+            # model. This check is intentionally before network I/O and before a
+            # recommendation can reach the parameter gate.
+            quality = telemetry.get("telemetry_quality")
+            if not isinstance(quality, dict) or quality.get("advisory_ready") is not True:
+                reasons = quality.get("blocking_reasons", ["telemetry_quality_missing"]) if isinstance(quality, dict) else ["telemetry_quality_missing"]
+                logger.warning("[ADVISORY_SCHEDULER] Consultation withheld: telemetry evidence is not ready (%s)", ", ".join(str(r) for r in reasons))
+                with self._lock:
+                    self._last_consultation_time = datetime.datetime.utcnow()
+                return None
+
             # 2. Consult AI-Universe
             decision = self.client.consult(telemetry)
             if not decision:
@@ -148,6 +159,9 @@ class AdvisoryScheduler:
         """
         try:
             telemetry = build_telemetry_payload(trading_mode=self.trading_mode)
+            quality = telemetry.get("telemetry_quality")
+            if not isinstance(quality, dict) or quality.get("advisory_ready") is not True:
+                return None
             perf = telemetry.get("performance_metrics", {})
             port = telemetry.get("portfolio", {})
 
