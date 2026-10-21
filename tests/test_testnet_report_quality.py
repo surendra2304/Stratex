@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 from testnet_engine.report_quality import build_report, render_report
 
@@ -171,3 +175,31 @@ def test_complete_empty_ledgers_report_zero_signal_or_closed_trade_counts(tmp_pa
     assert report["closed_trades"]["net_pnl"] is None
     assert report["equity"]["evidence_status"] == "NO_EQUITY_SAMPLES"
     assert report["equity"]["current_equity"] is None
+
+
+
+def test_report_cli_runs_directly_from_a_different_working_directory(tmp_path):
+    repository_root = Path(__file__).resolve().parents[1]
+    script = repository_root / "testnet_engine" / "report_quality.py"
+    environment = os.environ.copy()
+    environment.update({
+        "TRADING_MODE": "TESTNET",
+        "TESTNET_OPPORTUNITY_LOG": str(tmp_path / "missing-opportunities.jsonl"),
+        "TESTNET_LEDGER_FILE": str(tmp_path / "missing-trades.jsonl"),
+        "TESTNET_EQUITY_HISTORY_FILE": str(tmp_path / "missing-equity.jsonl"),
+    })
+
+    process = subprocess.run(
+        [sys.executable, str(script)],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert process.returncode == 0, process.stderr
+    assert "Opportunity evidence: MISSING" in process.stdout
+    assert "Trade-ledger evidence: MISSING" in process.stdout
+    assert "Current equity: Unavailable" in process.stdout
