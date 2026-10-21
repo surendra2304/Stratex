@@ -9,17 +9,35 @@ Generates conversational, spoken-language text for audio synthesis:
 
 
 def generate_daily_voice_summary(
-    net_pnl_pct: float,
+    net_pnl_pct: float | None,
     best_strategy: str | None,
     trades_count: int,
-    risk_headroom_pct: float
+    risk_headroom_pct: float,
+    net_pnl_dollars: float | None = None,
 ) -> str:
     """Produces a conversational spoken summary of daily trading performance.
 
     best_strategy may be None when no strategy can be determined from real
     data — the summary then says so instead of naming a fabricated winner.
     """
-    pnl_text = f"gained {abs(net_pnl_pct):.1f} percent" if net_pnl_pct >= 0 else f"lost {abs(net_pnl_pct):.1f} percent"
+    if net_pnl_pct is not None:
+        pnl_text = (
+            f"gained {abs(net_pnl_pct):.1f} percent"
+            if net_pnl_pct >= 0
+            else f"lost {abs(net_pnl_pct):.1f} percent"
+        )
+        performance_line = f"Today you {pnl_text} across {trades_count} trades. "
+    elif net_pnl_dollars is not None:
+        pnl_text = (
+            f"a net profit of ${abs(net_pnl_dollars):,.2f}"
+            if net_pnl_dollars >= 0
+            else f"a net loss of ${abs(net_pnl_dollars):,.2f}"
+        )
+        performance_line = f"Today your net PnL was {pnl_text} across {trades_count} trades. "
+    else:
+        performance_line = (
+            f"Today performance percentage was unavailable across {trades_count} trades. "
+        )
 
     if best_strategy:
         clean_strat = best_strategy.replace("strategy_", "").title()
@@ -28,7 +46,7 @@ def generate_daily_voice_summary(
         strat_line = "No single strategy could be confirmed as today's strongest. "
 
     summary = (
-        f"Today you {pnl_text} across {trades_count} trades. "
+        f"{performance_line}"
         f"{strat_line}"
         f"Your risk budget for tomorrow is {risk_headroom_pct:.0f} percent available."
     )
