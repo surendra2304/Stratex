@@ -94,6 +94,12 @@ class TelegramBotClient:
             resp = requests.post(url, json=payload, timeout=self.timeout)
             data = resp.json()
             if not data.get("ok"):
+                # If HTML parse error, retry gracefully as plain text
+                if parse_mode:
+                    payload.pop("parse_mode", None)
+                    retry_resp = requests.post(url, json=payload, timeout=self.timeout)
+                    if retry_resp.json().get("ok"):
+                        return True
                 logger.warning("[TELEGRAM] SendMessage failed: %s", data.get("description"))
                 return False
             return True
@@ -140,6 +146,11 @@ class TelegramBotClient:
         if pnl is not None:
             pnl_emoji = "💰" if pnl >= 0 else "🔻"
             lines.append(f"• <b>Realized PnL</b>: {pnl_emoji} <code>${pnl:+,.2f}</code>")
+
+        meta = getattr(intent, "metadata", {}) or {}
+        ai_thesis = meta.get("ai_thesis")
+        if ai_thesis:
+            lines.append(f"• <b>AI Thesis</b>: <i>{ai_thesis}</i>")
 
         lines.append(f"• <b>Order ID</b>: <code>{cid}</code>")
         return self.send_message("\n".join(lines))
@@ -320,15 +331,37 @@ class TelegramBotClient:
             except Exception:
                 pass
 
-        # Fallback response for chat questions
+        # Call AI Advisor for real-time generative conversational intelligence
+        try:
+            from autonomy.ai_advisor import get_ai_advisor
+            advisor = get_ai_advisor()
+            reply = advisor.generate_chat_response(
+                text,
+                context={
+                    "agent": "Stratex (Agent 4)",
+                    "venue": "ICMarketsSC-Demo",
+                    "universe": ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"],
+                    "strategy": "hybrid_breakout_kalman",
+                },
+            )
+            if reply:
+                header = "🧠 <b>Stratex Quantitative Intelligence</b>"
+                if header not in reply:
+                    reply = f"{header}\n\n• <b>Regime</b>: ATR Chandelier + Kalman filter.\n{reply}"
+                elif "Regime" not in reply:
+                    reply = f"{reply}\n\n• <b>Regime</b>: ATR Chandelier + Kalman filter."
+                return reply
+        except Exception as exc:
+            logger.debug(f"[TELEGRAM] AI advisor chat failed: {exc}")
+
+        # Static fallback only if AI provider is completely unavailable
         return (
             f"🧠 <b>Stratex Quantitative Intelligence</b>\n\n"
             f"Received: <i>\"{text}\"</i>\n\n"
-            "Current Market Assessment:\n"
-            "• Active Universe: EURUSD, GBPUSD, USDJPY, XAUUSD (Gold), AUDUSD, USDCAD\n"
-            "• Regimes: Volatility-normalized ATR Chandelier + Kalman state-space tracking\n"
-            "• Peer Consensus: Futuris forecast + IntelX sentiment + Sentinel zero-trust\n"
-            "• Execution Policy: Maximum 2% risk budget per trade with hard brackets."
+            "• <b>Status</b>: Active & Monitoring MetaTrader 5 markets.\n"
+            "• <b>Universe</b>: EURUSD, GBPUSD, USDJPY, XAUUSD (Gold), AUDUSD, USDCAD.\n"
+            "• <b>Regimes</b>: ATR Chandelier brackets + Kalman state-space tracking.\n"
+            "• <b>Risk Policy</b>: Max 2% risk budget per trade with hard brackets."
         )
 
     def process_update(self, update: dict[str, Any]) -> None:

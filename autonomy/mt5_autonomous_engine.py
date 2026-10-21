@@ -43,6 +43,7 @@ from autonomy.agent_contracts import (
     MemoraScopedClient,
     SentinelContractClient,
 )
+from autonomy.ai_advisor import StratexAIAdvisor, get_ai_advisor
 from exchanges.mt5_bridge_adapter import MT5BridgeAdapter, MT5BridgeError
 from logger import get_logger
 from notifications.telegram_bot import TelegramBotClient, get_telegram_bot
@@ -105,6 +106,7 @@ class ConsensusDecision:
     futuris_direction: str | None
     intelx_sentiment: float | None
     reasons: tuple[str, ...]
+    ai_thesis: str | None = None
     evaluated_at: str = field(default_factory=_utc_now_iso)
 
 
@@ -127,6 +129,7 @@ class MT5AutonomousEngine:
         memora_client: MemoraScopedClient | None = None,
         friday_client: FridayGatewayClient | None = None,
         telegram_bot: TelegramBotClient | None = None,
+        ai_advisor: StratexAIAdvisor | None = None,
     ):
         self.adapter = adapter or MT5BridgeAdapter()
         self.symbols = list(symbols or DEFAULT_SYMBOLS)
@@ -148,6 +151,7 @@ class MT5AutonomousEngine:
             intelx_client=self.intelx,
         )
         self.telegram = telegram_bot or get_telegram_bot()
+        self.ai_advisor = ai_advisor or get_ai_advisor()
 
         # Quantitative Models
         self.breakout_model = VolatilityRegimeBreakoutModel(atr_period=14, chandelier_mult=2.5, lookback=40)
@@ -318,14 +322,49 @@ class MT5AutonomousEngine:
                 reasons=tuple(reasons or ["Advisory supervisor recommended SKIP"]),
             )
 
-        verdict = "DAMPENED" if advisory.size_multiplier < 1.0 else "APPROVED"
+        # 3. AI Strategic Evaluator Review (Gemini 2.5 Flash / Inference Mesh)
+        ai_verdict = self.ai_advisor.evaluate_trade_candidate(
+            symbol=signal.symbol,
+            timeframe=signal.timeframe,
+            action=signal.action,
+            current_price=signal.current_price,
+            stop_loss=signal.stop_loss,
+            take_profit=signal.take_profit,
+            risk_reward_ratio=signal.risk_reward_ratio,
+            indicators={
+                "regime": signal.regime,
+                "atr": signal.atr,
+                "kalman_z": signal.kalman_z,
+                "confidence": signal.confidence,
+                "futuris_forecast": fut_dir,
+                "intelx_sentiment": ix_sent,
+            },
+        )
+        if not ai_verdict.approved or ai_verdict.verdict == "REJECTED":
+            return ConsensusDecision(
+                approved=False,
+                verdict="REJECTED",
+                size_multiplier=0.0,
+                sentinel_approved=True,
+                futuris_direction=fut_dir,
+                intelx_sentiment=ix_sent,
+                ai_thesis=ai_verdict.thesis,
+                reasons=tuple(reasons + [f"AI Advisor rejected: {ai_verdict.thesis}"]),
+            )
+
+        final_multiplier = advisory.size_multiplier
+        if ai_verdict.verdict == "DAMPENED":
+            final_multiplier = min(final_multiplier, 0.7)
+
+        verdict = "DAMPENED" if final_multiplier < 1.0 else "APPROVED"
         return ConsensusDecision(
             approved=True,
             verdict=verdict,
-            size_multiplier=advisory.size_multiplier,
+            size_multiplier=final_multiplier,
             sentinel_approved=True,
             futuris_direction=fut_dir,
             intelx_sentiment=ix_sent,
+            ai_thesis=ai_verdict.thesis,
             reasons=tuple(reasons),
         )
 
@@ -402,6 +441,7 @@ class MT5AutonomousEngine:
                 "kalman_z": signal.kalman_z,
                 "risk_reward_ratio": signal.risk_reward_ratio,
                 "consensus_verdict": decision.verdict,
+                "ai_thesis": decision.ai_thesis,
             },
         )
 
