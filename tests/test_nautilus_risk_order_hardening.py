@@ -248,3 +248,31 @@ def test_order_manager_rejects_order_types_without_a_complete_simulation(order_t
         manager.create_order("BTCUSDT", OrderSide.BUY, order_type, 1.0, **kwargs)
 
     assert manager.list_orders() == []
+
+def test_oto_child_orders_are_not_ready_until_the_entry_is_filled():
+    manager = NautilusOrderManager()
+    bracket = manager.create_bracket_order(
+        symbol="BTCUSDT",
+        side=OrderSide.BUY,
+        quantity=1.0,
+        entry_price=100.0,
+        take_profit_price=110.0,
+        stop_loss_price=90.0,
+    )
+
+    assert manager.is_order_ready_for_matching(bracket.entry_order.client_order_id) is True
+    assert manager.is_order_ready_for_matching(bracket.take_profit_order.client_order_id) is False
+    assert manager.is_order_ready_for_matching(bracket.stop_loss_order.client_order_id) is False
+
+    manager.update_order_state(bracket.entry_order.client_order_id, OrderState.ACCEPTED)
+    manager.update_order_state(
+        bracket.entry_order.client_order_id,
+        OrderState.FILLED,
+        fill_qty=1.0,
+        fill_price=100.0,
+    )
+
+    assert manager.get_order(bracket.take_profit_order.client_order_id).state is OrderState.ACCEPTED
+    assert manager.get_order(bracket.stop_loss_order.client_order_id).state is OrderState.ACCEPTED
+    assert manager.is_order_ready_for_matching(bracket.take_profit_order.client_order_id) is True
+    assert manager.is_order_ready_for_matching(bracket.stop_loss_order.client_order_id) is True
