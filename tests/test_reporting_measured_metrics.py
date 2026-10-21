@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from reporting.daily_report import DailyReportGenerator
-from reporting.ledger_metrics import compute_period_metrics, utc_period_for_day
+from reporting.ledger_metrics import compute_period_metrics
 from reporting.periodic_reports import PeriodicReportGenerator
 
 
@@ -180,3 +180,25 @@ def test_periodic_reports_do_not_assert_unmeasured_profit_or_capital_tier(tmp_pa
     assert monthly["metrics"]["capital_tier_status"] == "NOT_ASSESSED"
     assert monthly["advisory_cumulative_alpha_pct"] is None
     assert "8.92" not in monthly["voice_summary"]
+
+
+
+def test_periodic_report_rejects_invalid_calendar_tags(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRADING_MODE", "TESTNET")
+    generator = PeriodicReportGenerator(base_reports_dir=str(tmp_path / "reports"))
+
+    for week_tag in ("2026-W00", "2026-W99", "../2026-W36", "2026-W3"):
+        try:
+            generator.generate_weekly_report(week_tag)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Invalid ISO week was accepted: {week_tag}")
+
+    for month_tag in ("2026-00", "2026-13", "../2026-09", "2026-9"):
+        try:
+            generator.generate_monthly_report(month_tag)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Invalid calendar month was accepted: {month_tag}")
