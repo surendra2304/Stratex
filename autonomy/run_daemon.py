@@ -31,11 +31,11 @@ def main() -> None:
         telegram.start_polling_in_background()
         telegram.send_message(
             "🚀 <b>Stratex Strategic Core v2.2 Online</b>\n\n"
-            "• <b>AI Intelligence</b>: Google Gemini 2.5 Flash Active\n"
-            "• <b>Execution Venue</b>: MetaTrader 5 (Demo Safe)\n"
-            "• <b>Scanning Universe</b>: EURUSD, GBPUSD, USDJPY, XAUUSD (Gold), AUDUSD, USDCAD\n"
-            "• <b>Mesh Consensus</b>: Sentinel (Risk), Futuris (Forecast), IntelX (Sentiment)\n"
-            "• <i>Ready. Send any question or command to interact.</i>"
+            "• <b>AI Intelligence</b>: Google Gemini 3.5 Flash Active\n"
+            "• <b>Execution Mode</b>: 24/7 Cloud Autonomous Demo (Zero Laptop Dependency)\n"
+            "• <b>Scanning Universe</b>: Universal Coverage (34+ Assets: Forex Majors/Crosses, Gold, Silver, Oil, Indices, Crypto)\n"
+            "• <b>Mesh Consensus</b>: Sentinel (Zero-Trust), Futuris (Forecasts), IntelX (Intelligence)\n"
+            "• <i>Ready. Send any question or command (/status, /positions, /balance, /scan) to interact.</i>"
         )
 
     scan_interval = float(os.getenv("SCAN_INTERVAL_SECONDS", "30"))

@@ -107,6 +107,58 @@ class TestStratexAIAdvisor:
         assert "Stratex Quantitative Intelligence" in reply
         assert "Monitoring MetaTrader 5 markets" in reply
 
+    @patch("requests.post")
+    def test_call_llm_inference_mesh_success(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "Inference Response"}}]
+        }
+        mock_post.return_value = mock_resp
+
+        advisor = StratexAIAdvisor(gemini_api_key="", inference_url="https://friday-universe.duckdns.org/inference", inference_key="inf-test-key")
+        res = advisor._call_inference_mesh("sys", "user")
+        assert res == "Inference Response"
+        mock_post.assert_called_once()
+        args, kwargs = mock_post.call_args
+        assert "Bearer inf-test-key" in kwargs["headers"]["Authorization"]
+
+    @patch.object(StratexAIAdvisor, "_call_llm")
+    def test_evaluate_trade_candidate_dampened_and_rejected(self, mock_call):
+        advisor = StratexAIAdvisor()
+
+        # Dampened
+        mock_call.return_value = json.dumps({
+            "approved": True,
+            "verdict": "DAMPENED",
+            "confidence": 0.65,
+            "thesis": "High volatility dampens position size.",
+            "risk_factors": ["Event risk ahead"],
+        })
+        v1 = advisor.evaluate_trade_candidate(
+            symbol="EURUSD", timeframe="15m", action="BUY",
+            current_price=1.1050, stop_loss=1.1000, take_profit=1.1150,
+            risk_reward_ratio=2.0, indicators={},
+        )
+        assert v1.approved is True
+        assert v1.verdict == "DAMPENED"
+
+        # Rejected
+        mock_call.return_value = json.dumps({
+            "approved": False,
+            "verdict": "REJECTED",
+            "confidence": 0.35,
+            "thesis": "Unfavorable distribution and macro headwind.",
+            "risk_factors": ["Fed rate announcement"],
+        })
+        v2 = advisor.evaluate_trade_candidate(
+            symbol="EURUSD", timeframe="15m", action="BUY",
+            current_price=1.1050, stop_loss=1.1000, take_profit=1.1150,
+            risk_reward_ratio=2.0, indicators={},
+        )
+        assert v2.approved is False
+        assert v2.verdict == "REJECTED"
+
     def test_singleton_accessor(self):
         a1 = get_ai_advisor()
         a2 = get_ai_advisor()

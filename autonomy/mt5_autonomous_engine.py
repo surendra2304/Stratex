@@ -44,6 +44,7 @@ from autonomy.agent_contracts import (
     SentinelContractClient,
 )
 from autonomy.ai_advisor import StratexAIAdvisor, get_ai_advisor
+from autonomy.cloud_data_feed import CloudMarketDataFeed, get_cloud_data_feed
 from exchanges.mt5_bridge_adapter import MT5BridgeAdapter, MT5BridgeError
 from logger import get_logger
 from notifications.telegram_bot import TelegramBotClient, get_telegram_bot
@@ -58,6 +59,7 @@ from strategies.quantitative_engine import (
 logger = get_logger("mt5_autonomous_engine")
 
 DEFAULT_SYMBOLS = [
+    # Forex Majors
     "EURUSD",
     "GBPUSD",
     "USDJPY",
@@ -65,7 +67,45 @@ DEFAULT_SYMBOLS = [
     "AUDUSD",
     "USDCAD",
     "NZDUSD",
+    # Euro Crosses
+    "EURGBP",
+    "EURJPY",
+    "EURAUD",
+    "EURCAD",
+    "EURCHF",
+    "EURNZD",
+    # Pound Crosses
+    "GBPJPY",
+    "GBPAUD",
+    "GBPCAD",
+    "GBPCHF",
+    "GBPNZD",
+    # Yen Crosses
+    "AUDJPY",
+    "CADJPY",
+    "CHFJPY",
+    "NZDJPY",
+    # Commodity Pairs
+    "AUDCAD",
+    "AUDCHF",
+    "AUDNZD",
+    "CADCHF",
+    "NZDCAD",
+    "NZDCHF",
+    # Commodities & Precious Metals
     "XAUUSD",
+    "XAGUSD",
+    "WTI",
+    "BRENT",
+    # Global Indices
+    "US30",
+    "US500",
+    "USTEC",
+    "GER40",
+    # Crypto CFDs
+    "BTCUSD",
+    "ETHUSD",
+    "SOLUSD",
 ]
 
 DEFAULT_TIMEFRAMES = ["5m", "15m", "1h"]
@@ -73,6 +113,40 @@ DEFAULT_TIMEFRAMES = ["5m", "15m", "1h"]
 
 def _utc_now_iso() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _get_contract_multiplier(symbol: str) -> float:
+    """Returns pip / point contract valuation multiplier for risk and PnL calculation."""
+    sym = symbol.upper().replace("/", "")
+    if "XAU" in sym or "GOLD" in sym:
+        return 100.0  # 100 oz per standard lot
+    if "XAG" in sym or "SILVER" in sym:
+        return 5000.0  # 5,000 oz
+    if "WTI" in sym or "BRENT" in sym or "OIL" in sym:
+        return 1000.0  # 1,000 barrels
+    if any(k in sym for k in ["BTC", "ETH", "SOL", "US30", "US500", "USTEC", "GER40"]):
+        return 1.0
+    if "JPY" in sym:
+        return 1000.0  # Scaled for 2-decimal JPY currency
+    return 100000.0  # Standard Forex 100,000 units
+
+
+@dataclass
+class CloudPosition:
+    """Active open position managed autonomously in the cloud without client dependencies."""
+
+    position_id: str
+    symbol: str
+    side: str  # "BUY" or "SELL"
+    quantity: float
+    entry_price: float
+    stop_loss: float
+    take_profit: float
+    mark_price: float
+    unrealized_pnl: float
+    opened_at: str
+    strategy: str
+    ai_thesis: str | None = None
 
 
 @dataclass(frozen=True)
@@ -130,6 +204,8 @@ class MT5AutonomousEngine:
         friday_client: FridayGatewayClient | None = None,
         telegram_bot: TelegramBotClient | None = None,
         ai_advisor: StratexAIAdvisor | None = None,
+        cloud_feed: CloudMarketDataFeed | None = None,
+        initial_balance: float = 1000.0,
     ):
         self.adapter = adapter or MT5BridgeAdapter()
         self.symbols = list(symbols or DEFAULT_SYMBOLS)
@@ -152,6 +228,11 @@ class MT5AutonomousEngine:
         )
         self.telegram = telegram_bot or get_telegram_bot()
         self.ai_advisor = ai_advisor or get_ai_advisor()
+        self.cloud_feed = cloud_feed or get_cloud_data_feed()
+
+        # Zero-Laptop Autonomous Cloud Portfolio Tracking
+        self.cloud_positions: dict[str, CloudPosition] = {}
+        self.cloud_balance: float = float(os.getenv("STRATEX_INITIAL_BALANCE", str(initial_balance)))
 
         # Quantitative Models
         self.breakout_model = VolatilityRegimeBreakoutModel(atr_period=14, chandelier_mult=2.5, lookback=40)
@@ -167,12 +248,22 @@ class MT5AutonomousEngine:
         candles: list[dict[str, Any]] | None = None,
     ) -> OpportunitySignal | None:
         """Process candles for a single symbol and timeframe through quantitative models."""
-        try:
-            if candles is None:
-                candles = self.adapter.get_historical_data(symbol, timeframe=timeframe, limit=80)
-        except Exception as exc:
-            logger.debug(f"[MT5_ENGINE] Failed fetching candles for {symbol} ({timeframe}): {exc}")
-            return None
+        if candles is None:
+            # 1. Try adapter if enabled and connected
+            if getattr(self.adapter, "enabled", False):
+                try:
+                    candles = self.adapter.get_historical_data(symbol, timeframe=timeframe, limit=80)
+                except Exception as exc:
+                    logger.debug(f"[MT5_ENGINE] Bridge failed fetching candles for {symbol} ({timeframe}): {exc}")
+                    candles = None
+
+            # 2. Resilient Zero-Laptop Cloud Market Feed
+            if not candles:
+                try:
+                    candles = self.cloud_feed.get_candles(symbol, timeframe=timeframe, limit=80)
+                except Exception as exc:
+                    logger.debug(f"[MT5_ENGINE] Cloud feed failed fetching candles for {symbol} ({timeframe}): {exc}")
+                    return None
 
         if not candles or len(candles) < 30:
             return None
@@ -474,32 +565,63 @@ class MT5AutonomousEngine:
                 "price": signal.current_price,
             }
         else:
-            try:
-                # Preflight check
-                if os.getenv("MT5_PREFLIGHT_CHECK", "true").lower() in {"1", "true", "yes"}:
-                    self.adapter.order_check(
-                        symbol=intent.symbol,
-                        side=intent.side,
-                        order_type=intent.order_type,
-                        quantity=intent.quantity,
-                        stop_loss=intent.stop_loss,
-                        take_profit=intent.take_profit,
-                        client_order_id=intent.client_order_id,
-                    )
+            executed_on_bridge = False
+            if getattr(self.adapter, "enabled", False):
+                try:
+                    # Preflight check
+                    if os.getenv("MT5_PREFLIGHT_CHECK", "true").lower() in {"1", "true", "yes"}:
+                        self.adapter.order_check(
+                            symbol=intent.symbol,
+                            side=intent.side,
+                            order_type=intent.order_type,
+                            quantity=intent.quantity,
+                            stop_loss=intent.stop_loss,
+                            take_profit=intent.take_profit,
+                            client_order_id=intent.client_order_id,
+                        )
 
-                submit_res = self.adapter.submit_intent(intent)
+                    submit_res = self.adapter.submit_intent(intent)
+                    result = {
+                        "status": submit_res.get("status", "FILLED"),
+                        "order_id": str(submit_res.get("order_id", f"mt5-{int(time.time())}")),
+                        "symbol": signal.symbol,
+                        "side": signal.action,
+                        "quantity": volume,
+                        "price": float(submit_res.get("avg_price", signal.current_price)),
+                    }
+                    executed_on_bridge = True
+                except Exception as exc:
+                    logger.error(f"[MT5_ENGINE] Execution failed for {signal.symbol}: {exc}")
+                    self.telegram.notify_risk_rejection(intent, f"Execution failed: {exc}")
+                    return {"status": "FAILED", "error": str(exc), "symbol": signal.symbol}
+
+            if not executed_on_bridge:
+                # 24/7 Autonomous Cloud Demo Execution (Zero Laptop Dependency)
+                ticket = f"stx-cld-{int(time.time() * 1000)}"
                 result = {
-                    "status": submit_res.get("status", "FILLED"),
-                    "order_id": submit_res.get("order_id", ""),
+                    "status": "FILLED",
+                    "order_id": ticket,
                     "symbol": signal.symbol,
                     "side": signal.action,
                     "quantity": volume,
-                    "price": submit_res.get("avg_price", signal.current_price),
+                    "price": signal.current_price,
+                    "mode": "cloud_autonomous",
                 }
-            except Exception as exc:
-                logger.error(f"[MT5_ENGINE] Execution failed for {signal.symbol}: {exc}")
-                self.telegram.notify_risk_rejection(intent, f"Execution failed: {exc}")
-                return {"status": "FAILED", "error": str(exc), "symbol": signal.symbol}
+                new_pos = CloudPosition(
+                    position_id=ticket,
+                    symbol=signal.symbol,
+                    side=signal.action,
+                    quantity=volume,
+                    entry_price=signal.current_price,
+                    stop_loss=signal.stop_loss,
+                    take_profit=signal.take_profit,
+                    mark_price=signal.current_price,
+                    unrealized_pnl=0.0,
+                    opened_at=_utc_now_iso(),
+                    strategy=signal.strategy_source,
+                    ai_thesis=decision.ai_thesis,
+                )
+                self.cloud_positions[signal.symbol] = new_pos
 
         # Telegram Fill Alert
         self.telegram.notify_trade_intent(
@@ -546,23 +668,154 @@ class MT5AutonomousEngine:
 
         return result
 
+    def manage_cloud_positions(self) -> list[dict[str, Any]]:
+        """Monitor active cloud positions, update unrealized PnL, and execute Take-Profit / Stop-Loss exits."""
+        closed_events: list[dict[str, Any]] = []
+        if not self.cloud_positions:
+            return closed_events
+
+        symbols_to_remove: list[str] = []
+        mult_map = {"BUY": 1.0, "SELL": -1.0}
+
+        for symbol, pos in list(self.cloud_positions.items()):
+            current_price = self.cloud_feed.get_current_price(symbol)
+            if current_price is None or current_price <= 0:
+                continue
+
+            pos.mark_price = current_price
+            contract_multiplier = _get_contract_multiplier(symbol)
+            direction = mult_map.get(pos.side, 1.0)
+            pnl = (current_price - pos.entry_price) * direction * pos.quantity * contract_multiplier
+            pos.unrealized_pnl = round(pnl, 2)
+
+            # Check Take Profit
+            tp_hit = (pos.side == "BUY" and current_price >= pos.take_profit) or (pos.side == "SELL" and current_price <= pos.take_profit)
+            # Check Stop Loss
+            sl_hit = (pos.side == "BUY" and current_price <= pos.stop_loss) or (pos.side == "SELL" and current_price >= pos.stop_loss)
+
+            if tp_hit or sl_hit:
+                exit_type = "TAKE_PROFIT" if tp_hit else "STOP_LOSS"
+                realized_pnl = pos.unrealized_pnl
+                self.cloud_balance = round(self.cloud_balance + realized_pnl, 2)
+                symbols_to_remove.append(symbol)
+
+                # Telegram Notification
+                status_emoji = "🎉 TAKE PROFIT HIT" if tp_hit else "🛡️ STOP LOSS HIT"
+                pnl_emoji = "💰" if realized_pnl >= 0 else "🔻"
+                msg = (
+                    f"<b>{status_emoji}</b>\n\n"
+                    f"• <b>Symbol</b>: <code>{pos.symbol}</code>\n"
+                    f"• <b>Side</b>: <code>{pos.side}</code>\n"
+                    f"• <b>Quantity</b>: <code>{pos.quantity} lots</code>\n"
+                    f"• <b>Entry Price</b>: <code>${pos.entry_price:,.4f}</code>\n"
+                    f"• <b>Exit Price</b>: <code>${current_price:,.4f}</code>\n"
+                    f"• <b>Realized PnL</b>: {pnl_emoji} <code>${realized_pnl:+,.2f} USD</code>\n"
+                    f"• <b>Updated Balance</b>: <code>${self.cloud_balance:,.2f} USD</code>\n"
+                    f"• <b>Ticket</b>: <code>{pos.position_id}</code>"
+                )
+                self.telegram.send_message(msg)
+
+                # Memora Audit
+                self.memora.record_scoped_event(
+                    event_type=f"MT5_{exit_type}_TRIGGERED",
+                    scope="Universal",
+                    summary=f"Stratex closed {pos.symbol} {pos.side} at ${current_price:,.4f} ({exit_type}) | PnL: ${realized_pnl:+,.2f}",
+                    details={
+                        "symbol": pos.symbol,
+                        "side": pos.side,
+                        "ticket": pos.position_id,
+                        "entry_price": pos.entry_price,
+                        "exit_price": current_price,
+                        "realized_pnl": realized_pnl,
+                        "exit_type": exit_type,
+                        "new_balance": self.cloud_balance,
+                    },
+                    tags=["trading", "exit", exit_type.lower(), pos.symbol.lower()],
+                )
+
+                # Broadcast to FRIDAY Core Gateway
+                self.friday.broadcast_trade_event(
+                    event_type="STRATEX_TRADE_CLOSED",
+                    payload={
+                        "ticket": pos.position_id,
+                        "symbol": pos.symbol,
+                        "exit_price": current_price,
+                        "realized_pnl": realized_pnl,
+                        "exit_type": exit_type,
+                        "balance": self.cloud_balance,
+                    },
+                )
+
+                closed_events.append({
+                    "ticket": pos.position_id,
+                    "symbol": pos.symbol,
+                    "exit_type": exit_type,
+                    "exit_price": current_price,
+                    "realized_pnl": realized_pnl,
+                })
+
+        for sym in symbols_to_remove:
+            self.cloud_positions.pop(sym, None)
+
+        return closed_events
+
+    def get_active_positions(self) -> list[Any]:
+        """Return active open positions from bridge adapter or cloud portfolio."""
+        if getattr(self.adapter, "enabled", False):
+            try:
+                positions = self.adapter.get_positions()
+                if positions:
+                    return positions
+            except Exception:
+                pass
+        return list(self.cloud_positions.values())
+
+    def get_account_balance(self) -> dict[str, Any]:
+        """Return live account balances and margin metrics."""
+        if getattr(self.adapter, "enabled", False):
+            try:
+                balances = self.adapter.get_balance()
+                if balances:
+                    return balances
+            except Exception:
+                pass
+        used_margin = sum(p.quantity * 100.0 for p in self.cloud_positions.values())
+        unrealized_sum = sum(p.unrealized_pnl for p in self.cloud_positions.values())
+        equity = self.cloud_balance + unrealized_sum
+        free_margin = max(0.0, equity - used_margin)
+        return {
+            "USD": {
+                "total": round(self.cloud_balance, 2),
+                "equity": round(equity, 2),
+                "free": round(free_margin, 2),
+                "used": round(used_margin, 2),
+            }
+        }
+
     def scan_market(self) -> list[dict[str, Any]]:
         """Run a full scan across the asset universe and multiple timeframes."""
         if is_panic_active() or is_kill_switch_locked():
             logger.warning("[MT5_ENGINE] Emergency halt or kill-switch is active. Scan aborted.")
             return []
 
-        # Check existing positions to respect max_active_positions
+        # 1. Manage active cloud positions (bracket checks & realized PnL)
+        self.manage_cloud_positions()
+
+        # 2. Check existing positions to respect max_active_positions
+        active_symbols = set()
         try:
             active_positions = self.adapter.get_positions()
-            if len(active_positions) >= self.max_active_positions:
-                logger.info(
-                    f"[MT5_ENGINE] Max active positions reached ({len(active_positions)}/{self.max_active_positions}). Holding."
-                )
-                return []
-            active_symbols = {p.symbol for p in active_positions}
+            if active_positions:
+                active_symbols.update(p.symbol for p in active_positions)
         except Exception:
-            active_symbols = set()
+            pass
+        active_symbols.update(self.cloud_positions.keys())
+
+        if len(active_symbols) >= self.max_active_positions:
+            logger.info(
+                f"[MT5_ENGINE] Max active positions reached ({len(active_symbols)}/{self.max_active_positions}). Holding."
+            )
+            return []
 
         executed: list[dict[str, Any]] = []
 

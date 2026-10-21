@@ -14,6 +14,7 @@ from autonomy.agent_contracts import (
     SentinelPolicyResult,
 )
 from autonomy.mt5_autonomous_engine import (
+    CloudPosition,
     ConsensusDecision,
     MT5AutonomousEngine,
     OpportunitySignal,
@@ -627,3 +628,149 @@ class TestTelegramBotInteractiveCommands:
             assert "BUY" in reply
             assert "LOW_VOL_TRENDING" in reply
             assert "$1.1050" in reply
+
+
+class TestMT5AutonomousCloudExecution:
+    def test_execute_signal_cloud_autonomous_mode(self, engine):
+        # Set adapter disabled (simulating laptop off / no Windows VPS)
+        engine.adapter.enabled = False
+        signal = OpportunitySignal(
+            symbol="XAUUSD",
+            timeframe="15m",
+            action="BUY",
+            regime=MarketRegime.LOW_VOL_TRENDING,
+            current_price=2650.0,
+            stop_loss=2640.0,
+            take_profit=2670.0,
+            risk_reward_ratio=2.0,
+            confidence=0.85,
+            kalman_z=0.1,
+            atr=5.0,
+            strategy_source="volatility_regime_breakout",
+        )
+        decision = ConsensusDecision(
+            approved=True,
+            verdict="APPROVED",
+            size_multiplier=1.0,
+            sentinel_approved=True,
+            futuris_direction="BULLISH",
+            intelx_sentiment=0.3,
+            reasons=(),
+            ai_thesis="Breakout above key institutional liquidity zone",
+        )
+
+        result = engine.execute_signal(signal, decision)
+        assert result["status"] == "FILLED"
+        assert result["mode"] == "cloud_autonomous"
+        assert "stx-cld-" in result["order_id"]
+        assert "XAUUSD" in engine.cloud_positions
+
+        pos = engine.cloud_positions["XAUUSD"]
+        assert pos.symbol == "XAUUSD"
+        assert pos.side == "BUY"
+        assert pos.entry_price == 2650.0
+        assert pos.stop_loss == 2640.0
+        assert pos.take_profit == 2670.0
+        assert pos.ai_thesis == "Breakout above key institutional liquidity zone"
+
+    def test_manage_cloud_positions_take_profit_hit(self, engine):
+        # Simulate active open BUY on XAUUSD
+        engine.cloud_positions["XAUUSD"] = CloudPosition(
+            position_id="test-tp-1",
+            symbol="XAUUSD",
+            side="BUY",
+            quantity=0.02,
+            entry_price=2650.0,
+            stop_loss=2640.0,
+            take_profit=2670.0,
+            mark_price=2650.0,
+            unrealized_pnl=0.0,
+            opened_at="2026-10-21T12:00:00Z",
+            strategy="volatility_regime_breakout",
+        )
+        engine.cloud_balance = 1000.0
+
+        # Market price hits take-profit (2672.0 >= 2670.0)
+        with patch.object(engine.cloud_feed, "get_current_price", return_value=2672.0):
+            closed = engine.manage_cloud_positions()
+            assert len(closed) == 1
+            assert closed[0]["exit_type"] == "TAKE_PROFIT"
+            assert closed[0]["symbol"] == "XAUUSD"
+            assert "XAUUSD" not in engine.cloud_positions
+            # Profit = (2672 - 2650) * 0.02 * 100 = $44.00
+            assert engine.cloud_balance == 1044.0
+
+    def test_manage_cloud_positions_stop_loss_hit(self, engine):
+        # Simulate active open BUY on XAUUSD
+        engine.cloud_positions["XAUUSD"] = CloudPosition(
+            position_id="test-sl-1",
+            symbol="XAUUSD",
+            side="BUY",
+            quantity=0.02,
+            entry_price=2650.0,
+            stop_loss=2640.0,
+            take_profit=2670.0,
+            mark_price=2650.0,
+            unrealized_pnl=0.0,
+            opened_at="2026-10-21T12:00:00Z",
+            strategy="volatility_regime_breakout",
+        )
+        engine.cloud_balance = 1000.0
+
+        # Market price hits stop loss (2638.0 <= 2640.0)
+        with patch.object(engine.cloud_feed, "get_current_price", return_value=2638.0):
+            closed = engine.manage_cloud_positions()
+            assert len(closed) == 1
+            assert closed[0]["exit_type"] == "STOP_LOSS"
+            assert closed[0]["symbol"] == "XAUUSD"
+            assert "XAUUSD" not in engine.cloud_positions
+            # Loss = (2638 - 2650) * 0.02 * 100 = -$24.00
+            assert engine.cloud_balance == 976.0
+
+    def test_evaluate_symbol_timeframe_cloud_feed_fallback(self, engine):
+        engine.adapter.enabled = False
+        sample_candles = [
+            {"timestamp": 1700000000 + i * 900, "open": 1.10 + i * 0.0001, "high": 1.101 + i * 0.0001, "low": 1.099 + i * 0.0001, "close": 1.1005 + i * 0.0001, "volume": 100.0}
+            for i in range(50)
+        ]
+        with patch.object(engine.cloud_feed, "get_candles", return_value=sample_candles):
+            with patch.object(engine.breakout_model, "evaluate", return_value={
+                "regime": MarketRegime.LOW_VOL_TRENDING,
+                "action": "BUY",
+                "confidence": 0.82,
+                "stop_loss": 1.095,
+                "take_profit": 1.130,
+                "atr": 0.002,
+            }):
+                with patch.object(engine.kalman_model, "evaluate_price_series", return_value={"z_score": 0.5}):
+                    signal = engine.evaluate_symbol_timeframe("EURUSD", "15m")
+                    assert signal is not None
+                    assert signal.symbol == "EURUSD"
+                    assert signal.action == "BUY"
+
+    def test_get_active_positions_and_balance_cloud_mode(self, engine):
+        engine.adapter.enabled = False
+        engine.cloud_positions["EURUSD"] = CloudPosition(
+            position_id="cld-1",
+            symbol="EURUSD",
+            side="BUY",
+            quantity=0.05,
+            entry_price=1.1000,
+            stop_loss=1.0950,
+            take_profit=1.1100,
+            mark_price=1.1020,
+            unrealized_pnl=10.0,
+            opened_at="2026-10-21T12:00:00Z",
+            strategy="volatility_regime_breakout",
+        )
+        engine.cloud_balance = 1000.0
+
+        positions = engine.get_active_positions()
+        assert len(positions) == 1
+        assert positions[0].symbol == "EURUSD"
+
+        balances = engine.get_account_balance()
+        assert "USD" in balances
+        assert balances["USD"]["total"] == 1000.0
+        assert balances["USD"]["equity"] == 1010.0  # 1000 + 10 unrealized
+
