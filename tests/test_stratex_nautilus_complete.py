@@ -502,3 +502,28 @@ def test_bar_aggregator_rejects_overflowing_tick_and_cumulative_notional():
     assert aggregator._current_ticks == [first]
     assert aggregator._current_notional == pytest.approx(1e308)
     assert aggregator._last_ts_event == 2
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: VolumeBarAggregator("BTCUSDT", step_volume=True),
+        lambda: ValueBarAggregator("BTCUSDT", step_value_usd=True),
+        lambda: TimeBarAggregator("BTCUSDT", step_seconds=True),
+    ],
+)
+def test_all_bar_thresholds_reject_boolean_values(factory):
+    with pytest.raises(ValueError, match="step must be a finite positive number"):
+        factory()
+
+
+def test_bar_aggregator_rejects_cumulative_volume_overflow_without_state_mutation():
+    aggregator = TickBarAggregator("BTCUSDT", step_ticks=3)
+    first = TradeTick("BTCUSDT", price=1.0, size=1e308, ts_event=10)
+    assert aggregator.update(first) is None
+
+    with pytest.raises(ValueError, match="aggregated bar volume must remain finite"):
+        aggregator.update(TradeTick("BTCUSDT", price=1.0, size=1e308, ts_event=11))
+
+    assert aggregator._current_ticks == [first]
+    assert aggregator._current_volume == pytest.approx(1e308)
+    assert aggregator._last_ts_event == 10
