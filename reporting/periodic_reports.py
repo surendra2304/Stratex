@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime
 import re
 from pathlib import Path
+from typing import Any
 
 from atomic_io import atomic_write_json
 from reporting.ledger_metrics import compute_period_metrics, utc_iso
