@@ -14,23 +14,63 @@ retention sweeper; those are not implemented in this module. The
 """
 
 import datetime
+import html
+import hmac
 import json
+import math
+import numbers
 import os
 from typing import Any
 
+from atomic_io import atomic_write_text
 from reporting.voice_summaries import generate_daily_voice_summary
 from security_hardening import sign_audit_record
 
 
 class ComplianceReporter:
-    """
-    Produces regulatory-grade audit dossiers across daily, weekly, monthly, and quarterly horizons.
-    """
+    """Generate evidence-backed compliance reports with tamper-evident signatures."""
 
     def __init__(self, reports_dir: str = "compliance_reports", retention_days: int = 90):
-        self.reports_dir = reports_dir
-        self.retention_days = retention_days
+        if isinstance(retention_days, bool) or not isinstance(retention_days, numbers.Integral) or retention_days < 1:
+            raise ValueError("retention_days must be a positive integer")
+        self.reports_dir = os.fspath(reports_dir)
+        self.retention_days = int(retention_days)
         os.makedirs(self.reports_dir, exist_ok=True)
+
+    @staticmethod
+    def _non_negative_int(value: Any, field: str) -> int:
+        if isinstance(value, bool) or not isinstance(value, numbers.Integral) or value < 0:
+            raise ValueError(f"{field} must be a non-negative integer")
+        return int(value)
+
+    @staticmethod
+    def _finite_number(value: Any, field: str, *, minimum: float | None = None) -> float:
+        if isinstance(value, bool):
+            raise ValueError(f"{field} must be a finite number")
+        try:
+            number = float(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"{field} must be a finite number") from exc
+        if not math.isfinite(number):
+            raise ValueError(f"{field} must be a finite number")
+        if minimum is not None and number < minimum:
+            raise ValueError(f"{field} must be >= {minimum}")
+        return number
+
+    @staticmethod
+    def verify_signed_payload(record: dict[str, Any]) -> bool:
+        """Verify the HMAC over the final record, excluding only its signature field."""
+        signature = record.get("signature")
+        if not isinstance(signature, str) or not signature:
+            return False
+        payload = {key: value for key, value in record.items() if key != "signature"}
+        try:
+            expected = sign_audit_record(payload)
+            return hmac.compare_digest(expected, signature)
+        except (TypeError, ValueError, OverflowError):
+            # compare_digest deliberately rejects non-ASCII str values. Invalid
+            # externally supplied signatures are verification failures, not crashes.
+            return False
 
     def generate_daily_compliance_dossier(
         self,
@@ -52,9 +92,22 @@ class ComplianceReporter:
         - cryptographic_signatures_verified: the dossier's own signature is
           recomputed and compared after signing.
         """
-        now_str = datetime.datetime.utcnow().isoformat() + "Z"
+        trades_count = self._non_negative_int(trades_count, "trades_count")
+        decisions_count = self._non_negative_int(decisions_count, "decisions_count")
+        daily_pnl = self._finite_number(daily_pnl, "daily_pnl")
+        max_drawdown_reached = self._finite_number(
+            max_drawdown_reached, "max_drawdown_reached", minimum=0.0
+        )
+        if not isinstance(live_order_evidence, bool):
+            raise ValueError("live_order_evidence must be a boolean")
+        if best_strategy is not None and not isinstance(best_strategy, str):
+            raise ValueError("best_strategy must be a string or None")
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        now_str = now.isoformat(timespec="seconds").replace("+00:00", "Z")
         voice_summary = generate_daily_voice_summary(
-            net_pnl_pct=round(daily_pnl / 50.0, 2),
+            net_pnl_pct=None,
+            net_pnl_dollars=daily_pnl,
             best_strategy=best_strategy,
             trades_count=trades_count,
             risk_headroom_pct=max(0.0, 15.0 - max_drawdown_reached)
@@ -80,27 +133,30 @@ class ComplianceReporter:
                 "cryptographic_signatures_verified": False
             }
         }
+        # The verification flag is part of the signed payload. Finalize it before
+        # signing and never mutate signed fields after the signature is computed.
+        dossier["regulatory_invariants"]["cryptographic_signatures_verified"] = True
         sig = sign_audit_record(dossier)
+        sig_ok = hmac.compare_digest(sign_audit_record(dossier), sig)
+        if not sig_ok:
+            # Fail closed in the unlikely event that the signer cannot verify its
+            # own output. Re-sign the final payload with the invariant set to False.
+            dossier["regulatory_invariants"]["cryptographic_signatures_verified"] = False
+            sig = sign_audit_record(dossier)
         dossier["signature"] = sig
-
-        # Actually verify the signature we just produced instead of asserting it.
-        unsigned: dict[str, Any] = {k: v for k, v in dossier.items() if k != "signature"}
-        unsigned_invariants = dict(unsigned["regulatory_invariants"])
-        unsigned_invariants["cryptographic_signatures_verified"] = False
-        unsigned["regulatory_invariants"] = unsigned_invariants
-        sig_ok = sign_audit_record(unsigned) == sig
-        dossier_invariants: dict[str, Any] = dossier["regulatory_invariants"]
-        dossier_invariants["cryptographic_signatures_verified"] = sig_ok
 
         def _verdict(ok: bool) -> str:
             return "PASS" if ok else "FAIL"
 
-        date_tag = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+        date_tag = now.strftime("%Y-%m-%d")
 
-        # 1. JSON
+        # Atomic replacement prevents a process interruption from leaving a
+        # partially-written compliance record that looks like a complete report.
         json_path = os.path.join(self.reports_dir, f"compliance_daily_{date_tag}.json")
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(dossier, f, indent=2)
+        atomic_write_text(
+            json_path,
+            json.dumps(dossier, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        )
 
         # 2. Markdown
         md_content = f"""# Daily Compliance Dossier ({date_tag})
@@ -120,13 +176,24 @@ class ComplianceReporter:
 - Signature Self-Verification: {_verdict(sig_ok)}
 - Signature: `{sig[:16]}...`
 """
-        with open(os.path.join(self.reports_dir, f"compliance_daily_{date_tag}.md"), "w", encoding="utf-8") as f:
-            f.write(md_content)
+        atomic_write_text(
+            os.path.join(self.reports_dir, f"compliance_daily_{date_tag}.md"),
+            md_content,
+        )
 
-        # 3. HTML
-        html_content = f"<html><body><h1>Daily Compliance ({date_tag})</h1><p>{voice_summary}</p></body></html>"
-        with open(os.path.join(self.reports_dir, f"compliance_daily_{date_tag}.html"), "w", encoding="utf-8") as f:
-            f.write(html_content)
+        # Treat strategy names and other caller-provided values in the voice
+        # summary as untrusted text when generating browser-rendered HTML.
+        safe_voice_summary = html.escape(voice_summary, quote=True)
+        html_content = (
+            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+            f"<title>Daily Compliance ({date_tag})</title></head><body>"
+            f"<h1>Daily Compliance ({date_tag})</h1><p>{safe_voice_summary}</p>"
+            f"<p>Signature verification: {_verdict(sig_ok)}</p></body></html>"
+        )
+        atomic_write_text(
+            os.path.join(self.reports_dir, f"compliance_daily_{date_tag}.html"),
+            html_content,
+        )
 
         return dossier
 
@@ -134,7 +201,7 @@ class ComplianceReporter:
         """Produces quarterly audit package."""
         pkg = {
             "package_id": f"AUDIT_PACKAGE_{quarter}",
-            "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+            "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
             "retention_policy_days": self.retention_days,
             # Honest label: the package has been generated and signed here,
             # but nothing has been independently audited yet.
