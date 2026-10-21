@@ -274,16 +274,28 @@ def build_report(
     equity_history_log: str | os.PathLike[str] | None = None,
 ) -> dict[str, Any]:
     """Build a JSON-serializable quality report from the selected evidence paths."""
+    mode = os.getenv("TRADING_MODE", "TESTNET").strip().upper()
     opportunity_path = OPPORTUNITY_LOG if opportunity_log is None else opportunity_log
     ledger_path = LEDGER_LOG if ledger_log is None else ledger_log
     equity_path = EQUITY_HISTORY_LOG if equity_history_log is None else equity_history_log
-    opportunities = _aggregate_opportunities(opportunity_path)
-    trades = _aggregate_closed_trades(ledger_path)
-    equity = _aggregate_equity(equity_path)
+    if mode not in {"TESTNET", "FUTURES"}:
+        # This report is explicitly a testnet report. Do not label data from a
+        # different execution environment as testnet or accidentally reuse a
+        # testnet file when the process is configured for another mode.
+        opportunities = _aggregate_opportunities(None)
+        trades = _aggregate_closed_trades(None)
+        equity = _aggregate_equity(None)
+        opportunities["evidence_status"] = "UNSUPPORTED_MODE"
+        trades["evidence_status"] = "UNSUPPORTED_MODE"
+        equity["evidence_status"] = "UNSUPPORTED_MODE"
+    else:
+        opportunities = _aggregate_opportunities(opportunity_path)
+        trades = _aggregate_closed_trades(ledger_path)
+        equity = _aggregate_equity(equity_path)
     return {
         "report_type": "TESTNET_STRATEGY_QUALITY_CONTROL",
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "trading_mode": os.getenv("TRADING_MODE", "TESTNET").upper(),
+        "trading_mode": mode,
         "profitability_guaranteed": False,
         "live_trading_enabled": False,
         "opportunities": opportunities,
