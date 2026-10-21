@@ -134,3 +134,24 @@ def build_venue_aware_authorizer(
         return decision.approved, reason
 
     return authorize
+
+def build_quant_agent(
+    order_manager=None,
+    *,
+    default_venue: str = "binance",
+    default_environment: str = "binance_testnet",
+    statarb_model=None,
+    kalman_model=None,
+    regime_model=None,
+):
+    """Construct a QuantitativeStrategyAgent with optional shared OMS wiring."""
+    from .quant_agent import QuantitativeStrategyAgent
+
+    return QuantitativeStrategyAgent(
+        order_manager=order_manager,
+        statarb_model=statarb_model,
+        kalman_model=kalman_model,
+        regime_model=regime_model,
+        default_venue=default_venue,
+        default_environment=default_environment,
+    )
