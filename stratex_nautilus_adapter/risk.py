@@ -22,7 +22,10 @@ def _finite_number(value: object, *, positive: bool = False, non_negative: bool 
     """Return whether value is a finite real scalar meeting the requested bound."""
     if isinstance(value, bool) or not isinstance(value, Real):
         return False
-    number = float(value)
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return False
     if not math.isfinite(number):
         return False
     if positive and number <= 0.0:
