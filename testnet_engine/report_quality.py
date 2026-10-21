@@ -7,8 +7,14 @@ from __future__ import annotations
 
 import math
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Preserve direct script invocation (python testnet_engine/report_quality.py)
+# as well as package execution (python -m testnet_engine.report_quality).
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from typing import Any
 
 from atomic_io import read_jsonl
