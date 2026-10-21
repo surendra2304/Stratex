@@ -135,6 +135,10 @@ class NautilusOrderManager:
             raise ValueError("STOP_MARKET orders require a positive stop_price")
         if order_type is OrderType.STOP_LIMIT and (price_value is None or stop_value is None):
             raise ValueError("STOP_LIMIT orders require positive price and stop_price values")
+        if order_type is OrderType.STOP_LIMIT:
+            raise ValueError(
+                "STOP_LIMIT is not safely supported by the simulator yet; refusing to leave an unfilled order open"
+            )
         if order_type is OrderType.TRAILING_STOP:
             raise ValueError(
                 "TRAILING_STOP is unsupported until a trailing offset is represented and simulated"
