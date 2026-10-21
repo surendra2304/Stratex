@@ -20,6 +20,9 @@ import json
 import math
 import numbers
 import os
+import re
+import stat
+import threading
 from typing import Any
 
 from atomic_io import atomic_write_text
@@ -35,6 +38,7 @@ class ComplianceReporter:
             raise ValueError("retention_days must be a positive integer")
         self.reports_dir = os.fspath(reports_dir)
         self.retention_days = int(retention_days)
+        self._report_lock = threading.RLock()
         os.makedirs(self.reports_dir, exist_ok=True)
 
     @staticmethod
@@ -150,52 +154,160 @@ class ComplianceReporter:
 
         date_tag = now.strftime("%Y-%m-%d")
 
-        # Atomic replacement prevents a process interruption from leaving a
-        # partially-written compliance record that looks like a complete report.
-        json_path = os.path.join(self.reports_dir, f"compliance_daily_{date_tag}.json")
-        atomic_write_text(
-            json_path,
-            json.dumps(dossier, indent=2, sort_keys=True, allow_nan=False) + "\n",
-        )
+        with self._report_lock:
+            # Atomic replacement prevents a process interruption from leaving a
+            # partially-written compliance record that looks like a complete report.
+            json_path = os.path.join(self.reports_dir, f"compliance_daily_{date_tag}.json")
+            atomic_write_text(
+                json_path,
+                json.dumps(dossier, indent=2, sort_keys=True, allow_nan=False) + "\n",
+            )
+    
+            # 2. Markdown
+            md_content = f"""# Daily Compliance Dossier ({date_tag})
+    
+    **Timestamp:** {now_str}
+    **Voice Summary:** {voice_summary}
+    
+    ## Key Metrics
+    - **Total Trades:** {trades_count}
+    - **Net PnL:** ${daily_pnl:.2f}
+    - **Peak Drawdown:** {max_drawdown_reached:.2f}%
+    - **Decisions Executed:** {decisions_count}
+    
+    ## Invariant Verification
+    - Live Order Invariant: {_verdict(live_policy_ok)}
+    - Drawdown Corridor: {_verdict(drawdown_ok)}
+    - Signature Self-Verification: {_verdict(sig_ok)}
+    - Signature: `{sig[:16]}...`
+    """
+            atomic_write_text(
+                os.path.join(self.reports_dir, f"compliance_daily_{date_tag}.md"),
+                md_content,
+            )
+    
+            # Treat strategy names and other caller-provided values in the voice
+            # summary as untrusted text when generating browser-rendered HTML.
+            safe_voice_summary = html.escape(voice_summary, quote=True)
+            html_content = (
+                "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+                f"<title>Daily Compliance ({date_tag})</title></head><body>"
+                f"<h1>Daily Compliance ({date_tag})</h1><p>{safe_voice_summary}</p>"
+                f"<p>Signature verification: {_verdict(sig_ok)}</p></body></html>"
+            )
+            atomic_write_text(
+                os.path.join(self.reports_dir, f"compliance_daily_{date_tag}.html"),
+                html_content,
+            )
+    
+            return dossier
 
-        # 2. Markdown
-        md_content = f"""# Daily Compliance Dossier ({date_tag})
+    @staticmethod
+    def _resolve_utc_now(now: datetime.datetime | None) -> datetime.datetime:
+        if now is None:
+            return datetime.datetime.now(datetime.timezone.utc)
+        if not isinstance(now, datetime.datetime):
+            raise ValueError("now must be a timezone-aware datetime or None")
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("now must be a timezone-aware datetime or None")
+        return now.astimezone(datetime.timezone.utc)
 
-**Timestamp:** {now_str}
-**Voice Summary:** {voice_summary}
+    def _expired_daily_report_groups(self, cutoff_timestamp: float) -> dict[str, list[str]]:
+        """Find complete daily report groups whose every extant artifact has expired."""
+        grouped: dict[str, list[tuple[str, float]]] = {}
+        with os.scandir(self.reports_dir) as entries:
+            for entry in entries:
+                match = re.fullmatch(r"compliance_daily_(\d{4}-\d{2}-\d{2})\.(json|md|html)", entry.name)
+                if match is None or not entry.is_file(follow_symlinks=False):
+                    continue
+                try:
+                    datetime.datetime.strptime(match.group(1), "%Y-%m-%d")
+                    metadata = entry.stat(follow_symlinks=False)
+                except (OSError, ValueError):
+                    # Ignore files disappearing during the scan and malformed dates.
+                    continue
+                if not stat.S_ISREG(metadata.st_mode):
+                    continue
+                grouped.setdefault(match.group(1), []).append((entry.name, metadata.st_mtime))
 
-## Key Metrics
-- **Total Trades:** {trades_count}
-- **Net PnL:** ${daily_pnl:.2f}
-- **Peak Drawdown:** {max_drawdown_reached:.2f}%
-- **Decisions Executed:** {decisions_count}
+        expired: dict[str, list[str]] = {}
+        for report_date, files in grouped.items():
+            # Retain the entire date group if any artifact was refreshed recently;
+            # this avoids deleting only part of a recently updated dossier.
+            if files and all(modified_at < cutoff_timestamp for _, modified_at in files):
+                expired[report_date] = sorted(name for name, _ in files)
+        return expired
 
-## Invariant Verification
-- Live Order Invariant: {_verdict(live_policy_ok)}
-- Drawdown Corridor: {_verdict(drawdown_ok)}
-- Signature Self-Verification: {_verdict(sig_ok)}
-- Signature: `{sig[:16]}...`
-"""
-        atomic_write_text(
-            os.path.join(self.reports_dir, f"compliance_daily_{date_tag}.md"),
-            md_content,
-        )
+    def find_expired_daily_reports(
+        self,
+        now: datetime.datetime | None = None,
+    ) -> list[str]:
+        """List report filenames older than retention without deleting anything.
 
-        # Treat strategy names and other caller-provided values in the voice
-        # summary as untrusted text when generating browser-rendered HTML.
-        safe_voice_summary = html.escape(voice_summary, quote=True)
-        html_content = (
-            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
-            f"<title>Daily Compliance ({date_tag})</title></head><body>"
-            f"<h1>Daily Compliance ({date_tag})</h1><p>{safe_voice_summary}</p>"
-            f"<p>Signature verification: {_verdict(sig_ok)}</p></body></html>"
-        )
-        atomic_write_text(
-            os.path.join(self.reports_dir, f"compliance_daily_{date_tag}.html"),
-            html_content,
-        )
+        Age is determined by filesystem modification time. Only regular files that
+        match this reporter's strict daily-artifact naming convention are included;
+        directories, symlinks, unrelated files and quarterly metadata are excluded.
+        """
+        current_time = self._resolve_utc_now(now)
+        cutoff_timestamp = (
+            current_time - datetime.timedelta(days=self.retention_days)
+        ).timestamp()
+        with self._report_lock:
+            groups = self._expired_daily_report_groups(cutoff_timestamp)
+            return sorted(name for files in groups.values() for name in files)
 
-        return dossier
+    def purge_expired_daily_reports(
+        self,
+        now: datetime.datetime | None = None,
+        *,
+        dry_run: bool = True,
+    ) -> list[str]:
+        """Explicitly purge expired daily artifacts; defaults to a read-only dry run.
+
+        Each date group is rechecked immediately before deletion. The method never
+        follows file symlinks and never touches files outside the strict daily-report
+        whitelist. Returns the filenames actually identified/deleted.
+        """
+        if not isinstance(dry_run, bool):
+            raise ValueError("dry_run must be a boolean")
+        current_time = self._resolve_utc_now(now)
+        cutoff_timestamp = (
+            current_time - datetime.timedelta(days=self.retention_days)
+        ).timestamp()
+
+        with self._report_lock:
+            groups = self._expired_daily_report_groups(cutoff_timestamp)
+            if dry_run:
+                return sorted(name for files in groups.values() for name in files)
+
+            deleted: list[str] = []
+            for report_date in sorted(groups):
+                # Re-scan the group to avoid deleting a dossier that was rewritten
+                # after the initial inventory was collected.
+                current_group = self._expired_daily_report_groups(cutoff_timestamp).get(report_date)
+                if not current_group or current_group != groups[report_date]:
+                    continue
+
+                paths: list[tuple[str, os.stat_result]] = []
+                stale_or_missing = False
+                for name in current_group:
+                    path = os.path.join(self.reports_dir, name)
+                    try:
+                        metadata = os.lstat(path)
+                    except FileNotFoundError:
+                        stale_or_missing = True
+                        break
+                    if not stat.S_ISREG(metadata.st_mode) or metadata.st_mtime >= cutoff_timestamp:
+                        stale_or_missing = True
+                        break
+                    paths.append((path, metadata))
+
+                if stale_or_missing:
+                    continue
+                for path, _ in paths:
+                    os.unlink(path)
+                    deleted.append(os.path.basename(path))
+            return sorted(deleted)
 
     def generate_quarterly_audit_package(self, quarter: str = "Q3_2026") -> dict[str, Any]:
         """Produces quarterly audit package."""
