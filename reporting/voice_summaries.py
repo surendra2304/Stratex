@@ -34,7 +34,7 @@ def generate_daily_voice_summary(
         clean_strat = best_strategy.replace("strategy_", "").title()
         strat_line = f"{clean_strat} was your strongest measured strategy by net PnL. "
     else:
-        strat_line = "No strongest strategy could be confirmed from measured results. "
+        strat_line = "No single strategy could be confirmed from measured results. "
 
     if risk_headroom_pct is None:
         risk_line = "Risk budget headroom is unavailable from the current evidence."
