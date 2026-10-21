@@ -95,3 +95,41 @@ def test_metrics_statistical_formulas():
     assert m["expectancy"] == (600.0 / 5.0) # 120.0
     assert m["sharpe"] > 0
     assert m["sortino"] > 0
+
+
+
+def test_walk_forward_windows_use_half_open_bounds():
+    import numpy as np
+    from research.upgrade_2026_08.walk_forward_validation import filter_trades_by_window
+    trades = [
+        (np.datetime64("2022-12-31T23:59:59"), 1.0),
+        (np.datetime64("2023-01-01"), 2.0),
+        (np.datetime64("2023-12-31T23:59:59"), 3.0),
+        (np.datetime64("2024-01-01"), 4.0),
+    ]
+    assert filter_trades_by_window(trades, "2021-01-01", "2023-01-01") == [trades[0]]
+    assert filter_trades_by_window(trades, "2023-01-01", "2024-01-01") == trades[1:3]
+
+
+def test_walk_forward_does_not_reuse_pre_window_trade_state():
+    from research.upgrade_2026_08.expansion_study import run
+    ts = np.arange(
+        np.datetime64("2023-01-01"),
+        np.datetime64("2023-01-01") + np.timedelta64(204 * 4, "h"),
+        np.timedelta64(4, "h"),
+    )
+    values = np.full(204, 100.0)
+    d = {
+        "ts": ts, "o": values.copy(), "h": values + 1, "l": values - 1, "c": values.copy(),
+        "e20": np.full(204, 2.0), "e50": np.full(204, 1.0), "e200": np.full(204, 1.0),
+        "atr": np.ones(204), "adx": np.full(204, 30.0),
+    }
+    d["e20"][199] = 0.5
+    d["l"][202] = 97.0
+    regime = np.ones(204, dtype=bool)
+    start = ts[202]
+    unbounded = run(d, 20, 2.0, 3.0, regime)
+    bounded = run(d, 20, 2.0, 3.0, regime, start=start)
+    assert len(unbounded) == 1
+    assert unbounded[0][0] >= start
+    assert bounded == []
