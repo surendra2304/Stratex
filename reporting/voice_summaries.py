@@ -10,7 +10,11 @@ def generate_daily_voice_summary(
 ) -> str:
     """Create spoken text without implying unavailable measurements are zero."""
     trade_suffix = f" across {trades_count} closed trades" if trades_count is not None else ""
-    if net_pnl_pct is not None:
+    if trades_count == 0 and net_pnl_pct is None and net_pnl_dollars in (None, 0, 0.0):
+        # A zero-filled aggregator with no closed trades is absence of evidence,
+        # not a measured flat or profitable session.
+        performance_line = "Performance results are unavailable because no closed trades were measured. "
+    elif net_pnl_pct is not None:
         pnl_text = (
             f"gained {abs(net_pnl_pct):.1f} percent"
             if net_pnl_pct >= 0
