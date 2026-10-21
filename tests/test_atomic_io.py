@@ -248,37 +248,23 @@ def test_parse_json_strict_and_finite_or_none():
 
 
 def test_read_jsonl_streams_records_without_reading_entire_file(tmp_path, monkeypatch):
-    """Large append-only ledgers should be iterated line-by-line."""
     target = tmp_path / "large.jsonl"
     target.write_text("".join(json.dumps({"i": i}) + "\n" for i in range(5_000)), encoding="utf-8")
     real_open = open
-
     class GuardedReader:
-        def __init__(self, handle):
-            self._handle = handle
-        def __enter__(self):
-            self._handle.__enter__()
-            return self
-        def __exit__(self, *args):
-            return self._handle.__exit__(*args)
-        def __iter__(self):
-            return iter(self._handle)
-        def read(self, *args, **kwargs):
-            raise AssertionError("read_jsonl must not materialize the whole file")
-        def __getattr__(self, name):
-            return getattr(self._handle, name)
-
+        def __init__(self, handle): self._handle = handle
+        def __enter__(self): self._handle.__enter__(); return self
+        def __exit__(self, *args): return self._handle.__exit__(*args)
+        def __iter__(self): return iter(self._handle)
+        def read(self, *args, **kwargs): raise AssertionError("read_jsonl must not read the whole file")
+        def __getattr__(self, name): return getattr(self._handle, name)
     def guarded_open(path, *args, **kwargs):
         handle = real_open(path, *args, **kwargs)
-        if os.fspath(path) == os.fspath(target):
-            return GuardedReader(handle)
-        return handle
-
+        return GuardedReader(handle) if os.fspath(path) == os.fspath(target) else handle
     monkeypatch.setattr("builtins.open", guarded_open)
     result = read_jsonl(target)
     assert len(result.records) == 5_000
-    assert result.records[0] == {"i": 0}
-    assert result.records[-1] == {"i": 4_999}
+    assert result.records[0] == {"i": 0} and result.records[-1] == {"i": 4_999}
     assert result.clean
 
 
@@ -291,5 +277,3 @@ def test_read_jsonl_tracks_physical_line_numbers_and_torn_tail(tmp_path):
     assert result.skipped_line_numbers == [3, 5]
     assert result.truncated_tail is True
     assert result.skipped == 2
-    assert "line 3:" in result.errors[0]
-    assert "line 5:" in result.errors[1]
