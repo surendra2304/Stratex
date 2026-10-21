@@ -4,7 +4,6 @@ from __future__ import annotations
 import datetime
 import re
 from pathlib import Path
-from typing import Any
 
 from atomic_io import atomic_write_json
 from reporting.ledger_metrics import compute_period_metrics, utc_iso
@@ -86,22 +85,11 @@ class PeriodicReportGenerator:
             "No return, win-rate, or risk status is asserted without complete ledger evidence."
         )
 
-    @staticmethod
-    def _metrics_payload(metrics: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "weekly_return_pct" if metrics.get("period_days") == 7 else "period_return_pct": metrics["period_return_pct"],
-            "total_trades": metrics["closed_trade_count"],
-            "overall_win_rate_pct": metrics["win_rate_pct"],
-            "profit_factor": metrics["profit_factor"],
-            "max_drawdown_pct": metrics["max_observed_drawdown_pct"],
-        }
-
     def generate_weekly_report(self, week_str: str | None = None) -> dict[str, Any]:
         now = datetime.datetime.now(datetime.timezone.utc)
         week_tag = week_str or now.strftime("%G-W%V")
         start, end = self._weekly_bounds(week_tag)
         measured = compute_period_metrics(start, end)
-        measured["period_days"] = 7
         metrics = {
             "weekly_return_pct": measured["period_return_pct"],
             "total_trades": measured["closed_trade_count"],
