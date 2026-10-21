@@ -57,7 +57,7 @@ def test_risk_engine_does_not_replace_an_explicit_invalid_price_with_an_estimate
     assert len(risk._order_timestamps) == 0
 
 
-@pytest.mark.parametrize("quantity", [0.0, -1.0, float("nan"), float("inf"), True])
+@pytest.mark.parametrize("quantity", [0.0, -1.0, float("nan"), float("inf"), True, 10**400])
 def test_risk_engine_rejects_invalid_order_quantities(quantity):
     result = NautilusRiskEngine().check_order(_order(quantity=quantity))
 
@@ -137,6 +137,9 @@ def test_order_manager_rejects_invalid_quantity_and_missing_required_prices():
     manager = NautilusOrderManager()
     with pytest.raises(ValueError, match="quantity must be positive"):
         manager.create_order("BTCUSDT", OrderSide.BUY, OrderType.MARKET, 0.0)
+
+    with pytest.raises(ValueError, match="quantity must be a finite number"):
+        manager.create_order("BTCUSDT", OrderSide.BUY, OrderType.MARKET, 10**400)
 
     with pytest.raises(ValueError, match="LIMIT orders require a positive price"):
         manager.create_order("BTCUSDT", OrderSide.BUY, OrderType.LIMIT, 1.0)
