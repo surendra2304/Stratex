@@ -140,6 +140,11 @@ class StratexOrderManager:
                     publish_risk_rejection_audit(intent, risk_reason)
                 except Exception:
                     pass
+                try:
+                    from notifications.telegram_bot import get_telegram_bot
+                    get_telegram_bot().notify_risk_rejection(intent, risk_reason)
+                except Exception:
+                    pass
                 return OMSResult(intent.client_order_id, intent.venue, "REJECTED", reason=risk_reason)
             self.store.transition(intent.client_order_id, "SUBMITTING")
             # Deliberately no automatic failover. Network exceptions are ambiguous.
@@ -152,6 +157,11 @@ class StratexOrderManager:
                 try:
                     from autonomy.memora_audit import publish_trade_intent_audit
                     publish_trade_intent_audit(intent, status, result=result)
+                except Exception:
+                    pass
+                try:
+                    from notifications.telegram_bot import get_telegram_bot
+                    get_telegram_bot().notify_trade_intent(intent, status=status)
                 except Exception:
                     pass
             return OMSResult(intent.client_order_id, intent.venue, status, result=result)
