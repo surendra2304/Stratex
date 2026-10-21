@@ -254,10 +254,7 @@ def _recent_equity_records(history: JsonlReadResult, max_points: int) -> tuple[l
         if history.truncated_tail and history.skipped_line_numbers
         else None
     )
-    has_gap = any(
-        line >= first_line and line != final_torn_line
-        for line in history.skipped_line_numbers
-    )
+    has_gap = any(line >= first_line and line != final_torn_line for line in history.skipped_line_numbers)
     return records, not has_gap
 
 def build_measured_snapshot(
@@ -358,7 +355,6 @@ def build_measured_snapshot(
                     malformed_reason = f"Active trades row {row_number} has invalid sl_price."
                     continue
                 if stop is None:
-                    # An unprotected position risks its full notional.
                     risk_value = qty * entry
                 else:
                     risk_value = qty * abs(entry - stop)
