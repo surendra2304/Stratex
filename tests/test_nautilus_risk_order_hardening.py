@@ -225,3 +225,26 @@ def test_order_manager_rejects_invalid_bracket_levels_before_creating_orders():
 
     assert manager.list_orders() == []
     assert manager.list_brackets() == []
+
+@pytest.mark.parametrize(
+    "order_type,kwargs,reason",
+    [
+        (
+            OrderType.STOP_LIMIT,
+            {"price": 101.0, "stop_price": 100.0},
+            "STOP_LIMIT is not safely supported",
+        ),
+        (
+            OrderType.TRAILING_STOP,
+            {"stop_price": 100.0},
+            "TRAILING_STOP is unsupported",
+        ),
+    ],
+)
+def test_order_manager_rejects_order_types_without_a_complete_simulation(order_type, kwargs, reason):
+    manager = NautilusOrderManager()
+
+    with pytest.raises(ValueError, match=reason):
+        manager.create_order("BTCUSDT", OrderSide.BUY, order_type, 1.0, **kwargs)
+
+    assert manager.list_orders() == []
