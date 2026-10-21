@@ -21,7 +21,8 @@ class AdvisoryImpactAttribution:
     strategy: str
     pre_change_win_rate: float | None
     post_change_win_rate: float | None
-    estimated_alpha_pct: float
+    observed_pnl_delta: float
+    estimated_alpha_pct: float | None = None
     status: str = "UNVERIFIED"
     evidence_status: str = "CALLER_SUPPLIED_PRE_POST_PNL"
 
@@ -57,7 +58,8 @@ class AdvisoryImpactAnalyzer:
             strategy=strategy,
             pre_change_win_rate=None,
             post_change_win_rate=None,
-            estimated_alpha_pct=round(difference, 8),
+            observed_pnl_delta=round(difference, 8),
+            estimated_alpha_pct=None,
             status=status,
             evidence_status="CALLER_SUPPLIED_PRE_POST_PNL",
         )
