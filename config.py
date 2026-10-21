@@ -94,7 +94,6 @@ TRADING_MODE = os.getenv("TRADING_MODE", "PAPER").upper()
 PAPER_SAFE_MODE = os.getenv("PAPER_SAFE_MODE", "False" if TRADING_MODE in ["TESTNET", "FUTURES"] else "True").lower() == "true"
 TESTNET_ENABLED = os.getenv("TESTNET_ENABLED", "True" if TRADING_MODE in ["TESTNET", "FUTURES"] else "False").lower() == "true"
 LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is impossible by design
-TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-09-01T00:00:00Z")
 
 # --- Strategy candidates ---
 # Entries here are requests, not execution authorization. The strategy registry
@@ -125,7 +124,6 @@ MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.02")
 MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.04")) # 4% max net directional exposure
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))            # Base limit of 5
 MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "10")) # Bounded positions for aggressive mode
-VOLATILITY_BUFFER = 0.2  # Scale down positions during high volatility
 BLOCK_SHORTS_IN_BULL_REGIME = os.getenv("BLOCK_SHORTS_IN_BULL_REGIME", "False").lower() == "true" # Allow both long and short setups
 
 MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.02"))          # 2% daily loss limit
@@ -136,9 +134,6 @@ TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-10-13
 # --- Strategy Quality Control (Stage 5) ---
 MINIMUM_EXPECTED_EDGE = float(os.getenv("MINIMUM_EXPECTED_EDGE", "0.0001"))     # Standard positive expected edge threshold
 MIN_PROBABILITY_THRESHOLD = float(os.getenv("MIN_PROBABILITY_THRESHOLD", "0.40")) # 40% platform minimum probability threshold
-DEGRADATION_WINDOW = 20            # Evaluate last 20 trades for degradation
-MIN_WIN_RATE_THRESHOLD = 0.35      # Automatically switch to OBSERVE-ONLY if < 35% win rate
-MAX_PREDICTION_ERROR = 0.02        # Automatically switch to OBSERVE-ONLY if actual differs from expected by > 2%
 
 BTC_REGIME_FILTER = os.getenv("BTC_REGIME_FILTER", "True").lower() == "true" # Altcoins follow BTC; block alt longs when BTC < 4h EMA200
 INTELX_INTELLIGENCE_ENABLED = os.getenv("INTELX_INTELLIGENCE_ENABLED", "False").lower() == "true" # IntelX sentiment & news catalyst gate
