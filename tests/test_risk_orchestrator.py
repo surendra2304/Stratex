@@ -21,6 +21,7 @@ Verifies:
    - API latency (> 2.0s median).
 """
 
+import json
 import tempfile
 
 import numpy as np
@@ -150,3 +151,43 @@ def test_risk_orchestrator_heat_and_gating():
         assert allow is False
         assert size == 0.0
         assert "HEAT_EXCEEDED" in reason
+
+
+def test_measured_snapshot_fails_closed_for_malformed_active_trade_rows(tmp_path):
+    from risk.risk_orchestrator import build_measured_snapshot
+
+    history = tmp_path / "equity.jsonl"
+    history.write_text('{"equity": 10000}\n', encoding="utf-8")
+    active = tmp_path / "active.json"
+    active.write_text(json.dumps([{"quantity": 1, "entry_price": "invalid"}]), encoding="utf-8")
+    snapshot = build_measured_snapshot(str(history), str(active))
+    assert snapshot["portfolio_heat_pct"] is None
+    assert snapshot["unmeasured_reasons"]["portfolio_heat_pct"] == (
+        "Active trades row 1 has invalid or missing entry_price."
+    )
+
+
+def test_measured_snapshot_ignores_old_corruption_but_rejects_gap_in_window(tmp_path):
+    from risk.risk_orchestrator import build_measured_snapshot
+
+    history = tmp_path / "equity.jsonl"
+    active = tmp_path / "active.json"
+    active.write_text("[]", encoding="utf-8")
+    history.write_text(
+        '{"equity": 10000}\n{"equity": 9900}\n{old-corrupt}\n'
+        '{"equity": 9800}\n{"equity": 9700}\n{"equity": 9600}\n',
+        encoding="utf-8",
+    )
+    recent = build_measured_snapshot(str(history), str(active), max_points=3)
+    assert recent["drawdown_metrics"] is not None
+    assert recent["portfolio_heat_pct"] == 0.0
+
+    history.write_text(
+        '{"equity": 10000}\n{"equity": 9900}\n{"equity": 9800}\n'
+        '{recent-corrupt}\n{"equity": 9700}\n{"equity": 9600}\n',
+        encoding="utf-8",
+    )
+    gapped = build_measured_snapshot(str(history), str(active), max_points=3)
+    assert gapped["drawdown_metrics"] is None
+    assert gapped["portfolio_heat_pct"] is None
+    assert gapped["unmeasured_reasons"]["var_95_pct"].startswith("Equity history contains skipped lines")
