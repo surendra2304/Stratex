@@ -45,6 +45,12 @@ class TelegramBotClient:
         *,
         request_timeout: int = 8,
     ):
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(".env")
+        except Exception:
+            pass
+
         self.bot_token = (bot_token or os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()
         self.chat_id = str(chat_id or os.getenv("TELEGRAM_CHAT_ID", "")).strip()
         self.timeout = request_timeout
