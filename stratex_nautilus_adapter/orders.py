@@ -313,6 +313,21 @@ class NautilusOrderManager:
                 raise OrderNotFoundError(f"Child order {cid} must exist before linking OTO.")
         self._oto_triggers[parent_order_id] = list(child_order_ids)
 
+    def is_order_ready_for_matching(self, client_order_id: str) -> bool:
+        """Return False for OTO children until their parent is fully filled.
+
+        OTO child orders are registered as SUBMITTED before entry execution so
+        they can be tracked and audited. A matching engine must not treat that
+        registration state as permission to execute the child.
+        """
+        self.get_order(client_order_id)  # Preserve the normal not-found contract.
+        for parent_id, child_ids in self._oto_triggers.items():
+            if client_order_id not in child_ids:
+                continue
+            parent = self._orders.get(parent_id)
+            return parent is not None and parent.state is OrderState.FILLED
+        return True
+
     def create_bracket_order(
         self,
         symbol: str,
