@@ -203,3 +203,24 @@ def test_report_cli_runs_directly_from_a_different_working_directory(tmp_path):
     assert "Opportunity evidence: MISSING" in process.stdout
     assert "Trade-ledger evidence: MISSING" in process.stdout
     assert "Current equity: Unavailable" in process.stdout
+
+
+
+def test_testnet_quality_report_refuses_other_trading_modes(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRADING_MODE", "PAPER")
+    opportunities = tmp_path / "opportunities.jsonl"
+    ledger = tmp_path / "trades.jsonl"
+    equity = tmp_path / "equity.jsonl"
+    _write_jsonl(opportunities, [{"decision": "ACCEPTED", "expected_gross_return": 0.01, "expected_net_return": 0.01}])
+    _write_jsonl(ledger, [{"status": "CLOSED", "timestamp": "2026-10-20T09:00:00Z", "net_pnl": 10.0}])
+    _write_jsonl(equity, [{"timestamp": "2026-10-20T09:00:00Z", "equity": 100.0}])
+
+    report = build_report(opportunities, ledger, equity)
+
+    assert report["trading_mode"] == "PAPER"
+    assert report["opportunities"]["evidence_status"] == "UNSUPPORTED_MODE"
+    assert report["opportunities"]["signals_evaluated"] is None
+    assert report["closed_trades"]["evidence_status"] == "UNSUPPORTED_MODE"
+    assert report["closed_trades"]["net_pnl"] is None
+    assert report["equity"]["evidence_status"] == "UNSUPPORTED_MODE"
+    assert report["equity"]["current_equity"] is None
