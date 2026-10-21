@@ -72,31 +72,32 @@ class AIUniverseClient:
         """
         Standardizes telemetry dictionary into the canonical /v1/trading/consult request shape.
         """
-        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         payload = dict(telemetry_payload or {})
 
-        # Ensure telemetry_freshness envelope
+        # Never turn absence of source evidence into positive health assertions.
+        # The advisory telemetry collector may provide a measured envelope; if it
+        # does not, defaults must remain explicitly unknown/unverified.
         if "telemetry_freshness" not in payload:
             payload["telemetry_freshness"] = {
-                "timestamp": payload.get("timestamp", now_iso),
-                "max_staleness_seconds": 60.0,
-                "clock_skew_ms": 0.0,
-                "status": "FRESH"
+                "timestamp": None,
+                "max_staleness_seconds": None,
+                "clock_skew_ms": None,
+                "status": "UNKNOWN"
             }
 
-        # Ensure exchange_status envelope
         if "exchange_status" not in payload:
             payload["exchange_status"] = {
-                "connectivity": "CONNECTED",
-                "exchange": "binance_testnet",
-                "latency_ms": 15.0
+                "connectivity": "UNKNOWN",
+                "exchange": "unspecified",
+                "latency_ms": None
             }
 
-        # Ensure positions envelope
         if "positions" not in payload:
+            portfolio = payload.get("portfolio")
+            portfolio = portfolio if isinstance(portfolio, dict) else {}
             payload["positions"] = {
-                "open_count": payload.get("portfolio", {}).get("open_positions_count", 0),
-                "reconciliation_status": "RECONCILED",
+                "open_count": portfolio.get("open_positions_count"),
+                "reconciliation_status": "UNKNOWN",
                 "active_symbols": []
             }
 
