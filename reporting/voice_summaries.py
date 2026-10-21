@@ -1,66 +1,63 @@
-"""
-reporting/voice_summaries.py — Voice-Ready Natural Language Summary Generator.
-
-Generates conversational, spoken-language text for audio synthesis:
-- Numbers are rounded and formatted naturally for speech (e.g. "one point two percent").
-- No jargon, clear cadence, and calibrated urgency.
-"""
-
+"""Truthful, voice-ready summaries of explicitly supplied trading evidence."""
 
 
 def generate_daily_voice_summary(
     net_pnl_pct: float | None,
     best_strategy: str | None,
-    trades_count: int,
-    risk_headroom_pct: float,
+    trades_count: int | None,
+    risk_headroom_pct: float | None,
     net_pnl_dollars: float | None = None,
 ) -> str:
-    """Produces a conversational spoken summary of daily trading performance.
-
-    best_strategy may be None when no strategy can be determined from real
-    data — the summary then says so instead of naming a fabricated winner.
-    """
+    """Create spoken text without implying unavailable measurements are zero."""
+    trade_suffix = f" across {trades_count} closed trades" if trades_count is not None else ""
     if net_pnl_pct is not None:
         pnl_text = (
             f"gained {abs(net_pnl_pct):.1f} percent"
             if net_pnl_pct >= 0
             else f"lost {abs(net_pnl_pct):.1f} percent"
         )
-        performance_line = f"Today you {pnl_text} across {trades_count} trades. "
+        performance_line = f"Observed equity value {pnl_text}{trade_suffix}. "
     elif net_pnl_dollars is not None:
         pnl_text = (
             f"a net profit of ${abs(net_pnl_dollars):,.2f}"
             if net_pnl_dollars >= 0
             else f"a net loss of ${abs(net_pnl_dollars):,.2f}"
         )
-        performance_line = f"Today your net PnL was {pnl_text} across {trades_count} trades. "
+        performance_line = f"Measured realized PnL was {pnl_text}{trade_suffix}. "
     else:
         performance_line = (
-            f"Today performance percentage was unavailable across {trades_count} trades. "
+            "Performance results are unavailable because no complete, period-matched "
+            "measurement was available. "
         )
 
     if best_strategy:
         clean_strat = best_strategy.replace("strategy_", "").title()
-        strat_line = f"{clean_strat} was your strongest performing strategy. "
+        strat_line = f"{clean_strat} had the highest measured net PnL. "
     else:
-        strat_line = "No single strategy could be confirmed as today's strongest. "
+        strat_line = "No strongest strategy could be confirmed from measured results. "
 
-    summary = (
-        f"{performance_line}"
-        f"{strat_line}"
-        f"Your risk budget for tomorrow is {risk_headroom_pct:.0f} percent available."
-    )
-    return summary
+    if risk_headroom_pct is None:
+        risk_line = "Risk budget headroom is unavailable from the current evidence."
+    else:
+        risk_line = f"Measured risk budget headroom is {risk_headroom_pct:.1f} percent."
+
+    return f"{performance_line}{strat_line}{risk_line}"
 
 
-def generate_trade_voice_snippet(event_type: str, symbol: str, side: str, price: float, pnl_pct: float | None = None) -> str:
-    """Generates short spoken updates for real-time trade fills and exits."""
+def generate_trade_voice_snippet(
+    event_type: str,
+    symbol: str,
+    side: str,
+    price: float,
+    pnl_pct: float | None = None,
+) -> str:
+    """Generate a concise spoken update for a real trade fill or exit."""
     clean_symbol = symbol.split("/")[0] if "/" in symbol else symbol
     price_str = f"{price:,.0f}"
 
     if event_type == "OPEN":
         return f"Position opened: {clean_symbol} {side.lower()} at {price_str}."
-    elif event_type == "CLOSE":
+    if event_type == "CLOSE":
         if pnl_pct is not None:
             pnl_word = "profit" if pnl_pct >= 0 else "loss"
             return f"Closed {clean_symbol} {side.lower()} with a {abs(pnl_pct):.1f} percent {pnl_word}."
@@ -68,16 +65,20 @@ def generate_trade_voice_snippet(event_type: str, symbol: str, side: str, price:
     return f"Trade update on {clean_symbol}."
 
 
-def generate_alert_voice_snippet(severity: str, title: str, recommendation: str | None = None) -> str:
-    """Produces speech text for urgent system and risk alerts."""
+def generate_alert_voice_snippet(
+    severity: str,
+    title: str,
+    recommendation: str | None = None,
+) -> str:
+    """Produce spoken text for urgent system and risk alerts."""
     urgency_prefix = {
         "CRITICAL": "Critical Alert! Immediate attention needed: ",
         "HIGH": "High priority warning: ",
         "MEDIUM": "Notice: ",
-        "LOW": "Information update: "
+        "LOW": "Information update: ",
     }.get(severity.upper(), "Alert: ")
 
-    msg = f"{urgency_prefix}{title}."
+    message = f"{urgency_prefix}{title}."
     if recommendation:
-        msg += f" Recommended action: {recommendation}."
-    return msg
+        message += f" Recommended action: {recommendation}."
+    return message
