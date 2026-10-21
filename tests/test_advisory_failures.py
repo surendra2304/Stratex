@@ -17,6 +17,29 @@ from advisory_scheduler import AdvisoryScheduler
 from ai_universe_client import AIUniverseClient
 
 
+def _ready_advisory_telemetry():
+    """Explicitly measured fixture for tests that exercise the provider/gate path."""
+    return {
+        "telemetry_quality": {"advisory_ready": True, "blocking_reasons": []},
+        "active_strategy": "adx_ema",
+        "telemetry": {
+            "equity": 10000.0, "unrealized_pnl": 0.0, "realized_pnl": 100.0,
+            "win_rate": 0.6, "profit_factor": 1.5, "max_drawdown_pct": 2.0,
+            "consecutive_losses": 1, "total_trades": 20, "sharpe_ratio": 0.7,
+        },
+        "portfolio": {
+            "equity": 10000.0, "cash": 9900.0, "realized_pnl": 100.0,
+            "unrealized_pnl": 0.0, "max_drawdown_pct": 2.0, "open_positions": 0,
+        },
+        "performance_metrics": {
+            "total_trades": 20, "win_rate": 60.0, "profit_factor": 1.5,
+            "winning_trades": 12, "losing_trades": 8, "consecutive_losses": 1,
+        },
+        "market_regime": {"regime": "RANGE", "volatility_state": "LOW_VOL"},
+        "regime_data": {"regime": "RANGE", "volatility_state": "LOW_VOL"},
+    }
+
+
 def test_ai_universe_unreachable_fails_soft():
     """Verify connection error logs warning and returns None without raising."""
     client = AIUniverseClient(base_url="http://unreachable-ai-universe:8000")
@@ -71,7 +94,8 @@ def test_advisory_scheduler_thread_crash_isolation():
     scheduler = AdvisoryScheduler(client=mock_client, shadow_mode=True)
 
     # Calling cycle directly returns None
-    result = scheduler.run_consultation_cycle("CRASH_TEST")
+    with patch("advisory_scheduler.build_telemetry_payload", return_value=_ready_advisory_telemetry()):
+        result = scheduler.run_consultation_cycle("CRASH_TEST")
     assert result is None
 
 
@@ -90,7 +114,9 @@ def test_advisory_ledger_write_failure_disables_scheduler_cleanly():
     assert scheduler._running is True
 
     # Mock append_advisory_entry to simulate disk failure (returns False)
-    with patch("advisory_scheduler.append_advisory_entry", return_value=False):
+    with patch("advisory_scheduler.append_advisory_entry", return_value=False), patch(
+        "advisory_scheduler.build_telemetry_payload", return_value=_ready_advisory_telemetry()
+    ):
         res = scheduler.run_consultation_cycle("DISK_FULL_TEST")
         assert res is None
         # Verify scheduler stopped itself cleanly
