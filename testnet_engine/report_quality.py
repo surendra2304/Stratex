@@ -109,7 +109,15 @@ def _aggregate_opportunities(path: str | os.PathLike[str] | None) -> dict[str, A
             "avg_expected_net_return": None,
         }
 
-    accepted = [row for row in rows if isinstance(row.get("decision"), str) and "ACCEPTED" in row["decision"].upper()]
+    accepted = [
+        row for row in rows
+        if isinstance(row.get("decision"), str)
+        and (
+            row["decision"].strip().upper() == "ACCEPTED"
+            or row["decision"].strip().upper().startswith("ACCEPTED_")
+            or row["decision"].strip().upper().startswith("ACCEPTED:")
+        )
+    ]
     rejected = len(rows) - len(accepted)
     gross_values: list[float] = []
     net_values: list[float] = []
