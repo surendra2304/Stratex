@@ -50,6 +50,7 @@ psycopg==3.3.6
 psycopg-binary==3.3.6
 Pygments==2.21.0
 pytest==9.1.1
+pytest-asyncio==1.4.0
 pytest-mock==3.16.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.4
