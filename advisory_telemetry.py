@@ -140,75 +140,135 @@ def build_telemetry_payload(
     """
     Constructs the structured telemetry dictionary sent to AI-Universe.
     """
-    mode = (trading_mode or getattr(config, "TRADING_MODE", "PAPER")).upper()
-    now_iso = datetime.datetime.utcnow().isoformat() + "Z"
+    now = datetime.datetime.now(datetime.timezone.utc)
+    now_iso = now.isoformat().replace("+00:00", "Z")
+    mode = (trading_mode or getattr(config, "TRADING_MODE", "PAPER")).strip().upper()
+    mode_supported = mode in {"PAPER", "TESTNET", "FUTURES"}
+    normalized_mode = "TESTNET" if mode in {"TESTNET", "FUTURES"} else "PAPER" if mode == "PAPER" else "UNKNOWN"
 
-    # 1. Gather Portfolio Metrics
-    equity = 10000.0
-    cash = 10000.0
-    realized_pnl = 0.0
-    unrealized_pnl = 0.0
-    max_drawdown = 0.0
-    open_positions_count = 0
-    consecutive_losses = 0
+    # Missing sources remain missing. The downstream scheduler checks the
+    # telemetry_quality contract before allowing any model consultation.
+    equity = None
+    cash = None
+    realized_pnl = None
+    unrealized_pnl = None
+    max_drawdown = None
+    open_positions_count = None
+    portfolio_raw: dict[str, Any] = {}
+    portfolio_file = (
+        os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+        if mode in {"TESTNET", "FUTURES"}
+        else os.getenv("PAPER_PORTFOLIO_FILE", "paper_portfolio.json")
+        if mode == "PAPER"
+        else None
+    )
+    portfolio_missing_fields: list[str] = []
+    portfolio_status = "UNSUPPORTED_MODE" if not mode_supported else "MISSING"
+    snapshot_dt: datetime.datetime | None = None
 
-    portfolio_file = "testnet_portfolio.json" if mode in ["TESTNET", "FUTURES"] else "paper_portfolio.json"
-    if os.path.exists(portfolio_file):
+    if portfolio_file and os.path.isfile(portfolio_file):
         try:
             with open(portfolio_file, "r", encoding="utf-8") as pf:
-                pdata = json.load(pf)
-                equity = float(pdata.get("equity", pdata.get("current_equity", 10000.0)))
-                cash = float(pdata.get("cash", pdata.get("usdt_cash", equity)))
-                realized_pnl = float(pdata.get("realized_pnl", 0.0))
-                unrealized_pnl = float(pdata.get("unrealized_pnl", 0.0))
-                max_drawdown = float(pdata.get("max_drawdown", 0.0))
-                positions = pdata.get("positions", {})
-                open_positions_count = len(positions) if isinstance(positions, (dict, list)) else 0
-        except Exception as e:
-            logger.warning(f"[ADVISORY_TELEMETRY] Could not read {portfolio_file}: {e}")
+                loaded = json.load(pf)
+            if not isinstance(loaded, dict):
+                portfolio_status = "INVALID"
+                portfolio_missing_fields.append("json_object")
+            else:
+                portfolio_raw = loaded
+                equity = _finite_number(loaded.get("equity", loaded.get("current_equity")))
+                if equity is None or equity <= 0.0:
+                    portfolio_missing_fields.append("equity")
+                cash = _finite_number(loaded.get("cash", loaded.get("usdt_cash")))
+                realized_pnl = _finite_number(loaded.get("realized_pnl"))
+                unrealized_pnl = _finite_number(loaded.get("unrealized_pnl"))
 
-    # 2. Gather Ledger Trades and Compute Win Rate & Profit Factor
-    ledger_file = "testnet_trade_ledger.jsonl" if mode in ["TESTNET", "FUTURES"] else "paper_trade_ledger.jsonl"
-    recent_closed_trades = _read_recent_trades_from_ledger(ledger_file, limit=15)
+                if "max_drawdown_pct" in loaded:
+                    max_drawdown_pct = _finite_number(loaded.get("max_drawdown_pct"))
+                    max_drawdown = max_drawdown_pct
+                else:
+                    legacy_dd = _finite_number(loaded.get("max_drawdown"))
+                    max_drawdown = legacy_dd
+                    max_drawdown_pct = (
+                        legacy_dd * 100.0
+                        if legacy_dd is not None and 0.0 <= legacy_dd <= 1.0
+                        else legacy_dd
+                    )
+                if max_drawdown_pct is None or not 0.0 <= max_drawdown_pct <= 100.0:
+                    portfolio_missing_fields.append("max_drawdown_pct")
 
-    total_trades = 0
-    winning_trades = 0
-    losing_trades = 0
-    gross_profit = 0.0
-    gross_loss = 0.0
-    streak_losses = 0
+                if isinstance(loaded.get("positions"), (dict, list)):
+                    open_positions_count = len(loaded["positions"])
+                else:
+                    open_count = _finite_number(loaded.get("open_positions", loaded.get("open_positions_count")))
+                    if open_count is None or not open_count.is_integer() or open_count < 0:
+                        portfolio_missing_fields.append("positions")
+                    else:
+                        open_positions_count = int(open_count)
 
-    # Parse full ledger for accurate statistics
-    if os.path.exists(ledger_file):
-        try:
-            with open(ledger_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line_str = line.strip()
-                    if not line_str:
-                        continue
-                    try:
-                        rec = json.loads(line_str)
-                        pnl = float(rec.get("net_pnl", rec.get("pnl", rec.get("realized_pnl", 0.0))))
-                        total_trades += 1
-                        if pnl > 0:
-                            winning_trades += 1
-                            gross_profit += pnl
-                            streak_losses = 0
-                        elif pnl < 0:
-                            losing_trades += 1
-                            gross_loss += abs(pnl)
-                            streak_losses += 1
-                        else:
-                            pass
-                    except Exception:
-                        continue
-        except Exception as e:
-            logger.warning(f"[ADVISORY_TELEMETRY] Error calculating metrics from {ledger_file}: {e}")
+                timestamp_raw = loaded.get("timestamp", loaded.get("updated_at", loaded.get("captured_at")))
+                snapshot_dt = _parse_timestamp(timestamp_raw)
+                if snapshot_dt is None:
+                    portfolio_missing_fields.append("snapshot_timestamp")
+                if realized_pnl is None:
+                    portfolio_missing_fields.append("realized_pnl")
+                if unrealized_pnl is None:
+                    portfolio_missing_fields.append("unrealized_pnl")
+                if cash is None:
+                    portfolio_missing_fields.append("cash")
+                portfolio_status = "MEASURED" if not portfolio_missing_fields else "INCOMPLETE"
+        except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
+            portfolio_status = "UNREADABLE"
+            portfolio_missing_fields.append("valid_portfolio_snapshot")
+            logger.warning("[ADVISORY_TELEMETRY] Portfolio snapshot unavailable (%s)", type(exc).__name__)
 
-    consecutive_losses = streak_losses
-    win_rate = (winning_trades / total_trades * 100.0) if total_trades > 0 else 0.0
-    profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (1.0 if gross_profit > 0 else 0.0)
+    # The ledger has an all-or-nothing integrity boundary. Only explicitly
+    # closed trades with finite PnL and a parseable close time are counted.
+    ledger_file = (
+        os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
+        if mode in {"TESTNET", "FUTURES"}
+        else os.getenv("PAPER_LEDGER_FILE", os.getenv("PAPER_TRADE_LEDGER_FILE", "paper_trade_ledger.jsonl"))
+        if mode == "PAPER"
+        else None
+    )
+    closed_trades, ledger_status, ledger_issues = _load_closed_ledger(ledger_file)
+    ledger_complete = ledger_status in {"COMPLETE", "EMPTY"}
+    if not ledger_complete:
+        closed_trades = []
 
+    total_trades = len(closed_trades) if ledger_complete else None
+    winning_pnls = [pnl for _, pnl, _ in closed_trades if pnl > 0.0]
+    losing_pnls = [pnl for _, pnl, _ in closed_trades if pnl < 0.0]
+    winning_trades = len(winning_pnls) if ledger_complete else None
+    losing_trades = len(losing_pnls) if ledger_complete else None
+    gross_profit = sum(winning_pnls) if ledger_complete else None
+    gross_loss = abs(sum(losing_pnls)) if ledger_complete else None
+    win_rate = (len(winning_pnls) / total_trades) if total_trades and total_trades > 0 else None
+    profit_factor = (
+        gross_profit / gross_loss
+        if gross_profit is not None and gross_loss is not None and gross_loss > 0.0
+        else None
+    )
+    consecutive_losses = 0 if ledger_complete else None
+    if ledger_complete:
+        for _, pnl, _ in reversed(closed_trades):
+            if pnl < 0.0:
+                consecutive_losses += 1
+            else:
+                break
+    realized_from_ledger = sum(pnl for _, pnl, _ in closed_trades) if ledger_complete else None
+    if realized_pnl is None and realized_from_ledger is not None:
+        realized_pnl = realized_from_ledger
+
+    # A source timestamp is measured separately from the time this function runs.
+    snapshot_age_sec = (now - snapshot_dt).total_seconds() if snapshot_dt is not None else None
+    freshness_status = (
+        "FRESH"
+        if snapshot_age_sec is not None and 0.0 <= snapshot_age_sec <= _MAX_PORTFOLIO_AGE_SECONDS
+        else "STALE"
+        if snapshot_age_sec is not None and snapshot_age_sec > _MAX_PORTFOLIO_AGE_SECONDS
+        else "UNKNOWN"
+    )
+    recent_closed_trades = [row for row, _, _ in closed_trades[-15:]] if ledger_complete else []
     # 3. Market Regime Analysis
     regime_data = {"regime": "RANGE", "volatility_state": "LOW_VOL"}
     if current_df is not None and not current_df.empty:
