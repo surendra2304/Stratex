@@ -8,6 +8,7 @@ Integrates Google Gemini 3.5 Flash and FRIDAY Universe Inference Mesh to power:
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass, field
 from typing import Any
@@ -159,6 +160,21 @@ class StratexAIAdvisor:
 
         return None
 
+    @staticmethod
+    def _fail_closed_verdict(symbol: str, reason: str) -> AITradeVerdict:
+        """Return a non-approving verdict when AI evidence is absent or invalid."""
+        return AITradeVerdict(
+            approved=False,
+            verdict="REJECTED",
+            confidence=0.0,
+            thesis=f"AI approval withheld for {symbol}: {reason}",
+            risk_factors=[
+                reason,
+                "Trade approval requires a valid, schema-compliant AI verdict.",
+            ],
+            model_used="unavailable",
+        )
+
     def evaluate_trade_candidate(
         self,
         symbol: str,
@@ -192,37 +208,90 @@ class StratexAIAdvisor:
             "Evaluate if this setup provides genuine statistical expectancy. Output JSON only."
         )
 
-        raw = self._call_llm(system_prompt, user_prompt, max_tokens=350)
-        if raw:
-            try:
-                cleaned = raw.strip()
-                if cleaned.startswith("```json"):
-                    cleaned = cleaned[7:]
-                elif cleaned.startswith("```"):
-                    cleaned = cleaned[3:]
-                if cleaned.endswith("```"):
-                    cleaned = cleaned[:-3]
-                parsed = json.loads(cleaned.strip())
-                return AITradeVerdict(
-                    approved=bool(parsed.get("approved", True)),
-                    verdict=str(parsed.get("verdict", "APPROVED")),
-                    confidence=float(parsed.get("confidence", 0.8)),
-                    thesis=str(parsed.get("thesis", "AI confirmed strong structural breakout.")),
-                    risk_factors=list(parsed.get("risk_factors", [])),
-                    model_used="gemini-3.5-flash",
-                )
-            except Exception as exc:
-                logger.debug(f"[AI_ADVISOR] Failed parsing LLM response: {exc}")
+        try:
+            raw = self._call_llm(system_prompt, user_prompt, max_tokens=350)
+        except Exception as exc:
+            logger.warning(
+                "[AI_ADVISOR] Provider routing failed; trade approval withheld (%s)",
+                type(exc).__name__,
+            )
+            return self._fail_closed_verdict(symbol, "AI provider call failed.")
 
-        # Deterministic fallback when AI provider is unreachable
-        return AITradeVerdict(
-            approved=True,
-            verdict="APPROVED",
-            confidence=0.75,
-            thesis=f"Statistical breakout on {symbol} validated by multi-timeframe ATR brackets.",
-            risk_factors=["External LLM unreachable; local quant rule approved."],
-            model_used="local_fallback",
-        )
+        if not isinstance(raw, str) or not raw.strip():
+            return self._fail_closed_verdict(symbol, "No AI provider returned a response.")
+
+        try:
+            cleaned = raw.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            elif cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            parsed = json.loads(cleaned.strip())
+            if not isinstance(parsed, dict):
+                raise ValueError("response must be a JSON object")
+
+            required = {"approved", "verdict", "confidence", "thesis", "risk_factors"}
+            missing = required.difference(parsed)
+            if missing:
+                raise ValueError("response is missing required fields")
+
+            approved = parsed["approved"]
+            if type(approved) is not bool:
+                raise ValueError("'approved' must be a boolean")
+
+            verdict_value = parsed["verdict"]
+            if not isinstance(verdict_value, str):
+                raise ValueError("'verdict' must be a string")
+            verdict = verdict_value.strip().upper()
+            if verdict not in {"APPROVED", "DAMPENED", "REJECTED"}:
+                raise ValueError("'verdict' is not a supported decision")
+
+            confidence_value = parsed["confidence"]
+            if isinstance(confidence_value, bool) or not isinstance(confidence_value, (int, float)):
+                raise ValueError("'confidence' must be a number")
+            confidence = float(confidence_value)
+            if not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0:
+                raise ValueError("'confidence' must be finite and between 0 and 1")
+
+            thesis_value = parsed["thesis"]
+            if not isinstance(thesis_value, str) or not thesis_value.strip() or len(thesis_value) > 2000:
+                raise ValueError("'thesis' must be a non-empty string of at most 2000 characters")
+
+            factors_value = parsed["risk_factors"]
+            if not isinstance(factors_value, list) or len(factors_value) > 20:
+                raise ValueError("'risk_factors' must be a list of at most 20 strings")
+            if any(
+                not isinstance(factor, str) or not factor.strip() or len(factor) > 500
+                for factor in factors_value
+            ):
+                raise ValueError("each risk factor must be a non-empty string of at most 500 characters")
+
+            consistent = (
+                (verdict == "REJECTED" and approved is False)
+                or (verdict in {"APPROVED", "DAMPENED"} and approved is True)
+            )
+            if not consistent:
+                raise ValueError("'approved' and 'verdict' express conflicting decisions")
+
+            return AITradeVerdict(
+                approved=approved,
+                verdict=verdict,
+                confidence=confidence,
+                thesis=thesis_value.strip(),
+                risk_factors=[factor.strip() for factor in factors_value],
+                model_used="gemini-3.5-flash",
+            )
+        except (TypeError, ValueError, OverflowError) as exc:
+            logger.warning(
+                "[AI_ADVISOR] Invalid provider verdict; trade approval withheld (%s)",
+                type(exc).__name__,
+            )
+            return self._fail_closed_verdict(
+                symbol,
+                "AI provider returned invalid or schema-inconsistent output.",
+            )
 
     def generate_chat_response(
         self,

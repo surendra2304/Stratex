@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from autonomy.ai_advisor import AITradeVerdict
 from autonomy.agent_contracts import (
     FuturisForecast,
     IntelXResearch,
@@ -143,6 +144,20 @@ def mock_friday():
 
 
 @pytest.fixture
+def mock_ai_advisor():
+    advisor = MagicMock()
+    advisor.evaluate_trade_candidate.return_value = AITradeVerdict(
+        approved=True,
+        verdict="APPROVED",
+        confidence=0.9,
+        thesis="Explicit test fixture approval.",
+        risk_factors=[],
+        model_used="test",
+    )
+    return advisor
+
+
+@pytest.fixture
 def mock_telegram():
     bot = MagicMock()
     bot.notify_trade_intent.return_value = True
@@ -160,6 +175,7 @@ def engine(
     mock_memora,
     mock_friday,
     mock_telegram,
+    mock_ai_advisor,
 ):
     return MT5AutonomousEngine(
         adapter=mock_adapter,
@@ -175,6 +191,7 @@ def engine(
         memora_client=mock_memora,
         friday_client=mock_friday,
         telegram_bot=mock_telegram,
+        ai_advisor=mock_ai_advisor,
     )
 
 
@@ -239,6 +256,38 @@ class TestMT5AutonomousEngine:
         assert decision.verdict == "APPROVED"
         assert decision.size_multiplier == 1.0
         assert decision.sentinel_approved is True
+
+    def test_peer_consensus_ai_rejection_blocks_trade(self, engine, mock_ai_advisor):
+        mock_ai_advisor.evaluate_trade_candidate.return_value = AITradeVerdict(
+            approved=False,
+            verdict="REJECTED",
+            confidence=0.0,
+            thesis="AI provider unavailable; approval withheld.",
+            risk_factors=["provider unavailable"],
+            model_used="unavailable",
+        )
+        signal = OpportunitySignal(
+            symbol="EURUSD",
+            timeframe="15m",
+            action="BUY",
+            regime=MarketRegime.LOW_VOL_TRENDING,
+            current_price=1.1050,
+            stop_loss=1.1000,
+            take_profit=1.1150,
+            risk_reward_ratio=2.0,
+            confidence=0.80,
+            kalman_z=0.5,
+            atr=0.002,
+            strategy_source="volatility_regime_breakout",
+        )
+
+        decision = engine.consult_peer_mesh(signal)
+
+        assert decision.approved is False
+        assert decision.verdict == "REJECTED"
+        assert decision.size_multiplier == 0.0
+        assert any("approval withheld" in reason.lower() for reason in decision.reasons)
+
 
     def test_peer_consensus_sentinel_rejection(self, engine, mock_sentinel):
         mock_sentinel.verify_action_authorization.return_value = SentinelPolicyResult(

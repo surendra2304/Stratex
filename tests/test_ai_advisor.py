@@ -89,9 +89,60 @@ class TestStratexAIAdvisor:
             risk_reward_ratio=2.0,
             indicators={},
         )
-        assert verdict.approved is True
-        assert verdict.model_used == "local_fallback"
-        assert "Statistical breakout" in verdict.thesis
+        assert verdict.approved is False
+        assert verdict.verdict == "REJECTED"
+        assert verdict.confidence == 0.0
+        assert verdict.model_used == "unavailable"
+        assert "approval withheld" in verdict.thesis.lower()
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "{not-json",
+            "[]",
+            '{"approved": "yes", "verdict": "APPROVED", "confidence": 0.9, "thesis": "ok", "risk_factors": []}',
+            '{"approved": true, "verdict": "APPROVED", "confidence": 1.5, "thesis": "ok", "risk_factors": []}',
+            '{"approved": true, "verdict": "APPROVED", "confidence": NaN, "thesis": "ok", "risk_factors": []}',
+            '{"approved": true, "verdict": "REJECTED", "confidence": 0.5, "thesis": "ok", "risk_factors": []}',
+            '{"approved": false, "verdict": "APPROVED", "confidence": 0.5, "thesis": "ok", "risk_factors": []}',
+            '{"approved": true, "verdict": "APPROVED", "confidence": 0.5, "thesis": "ok", "risk_factors": "not-a-list"}',
+            '{"approved": true, "verdict": "APPROVED", "confidence": 0.5, "risk_factors": []}',
+        ],
+    )
+    @patch.object(StratexAIAdvisor, "_call_llm")
+    def test_invalid_ai_verdict_fails_closed(self, mock_call, raw):
+        mock_call.return_value = raw
+        verdict = StratexAIAdvisor().evaluate_trade_candidate(
+            symbol="EURUSD",
+            timeframe="15m",
+            action="BUY",
+            current_price=1.1050,
+            stop_loss=1.1000,
+            take_profit=1.1150,
+            risk_reward_ratio=2.0,
+            indicators={},
+        )
+
+        assert verdict.approved is False
+        assert verdict.verdict == "REJECTED"
+        assert verdict.confidence == 0.0
+        assert verdict.model_used == "unavailable"
+
+    @patch.object(StratexAIAdvisor, "_call_llm", side_effect=RuntimeError("provider unavailable"))
+    def test_ai_provider_exception_fails_closed(self, mock_call):
+        verdict = StratexAIAdvisor().evaluate_trade_candidate(
+            symbol="EURUSD",
+            timeframe="15m",
+            action="BUY",
+            current_price=1.1050,
+            stop_loss=1.1000,
+            take_profit=1.1150,
+            risk_reward_ratio=2.0,
+            indicators={},
+        )
+        assert verdict.approved is False
+        assert verdict.verdict == "REJECTED"
+        assert verdict.model_used == "unavailable"
 
     @patch.object(StratexAIAdvisor, "_call_llm")
     def test_generate_chat_response_with_llm(self, mock_call):
