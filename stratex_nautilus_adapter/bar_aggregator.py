@@ -102,9 +102,6 @@ class BarAggregator:
     def _build_bar(self) -> Bar:
         ticks = self._current_ticks
         prices = [t.price for t in ticks]
-        sizes = [t.size for t in ticks]
-        notionals = [t.price * t.size for t in ticks]
-
         bar = Bar(
             bar_type=self.bar_type,
             symbol=self.symbol,
