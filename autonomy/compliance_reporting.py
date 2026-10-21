@@ -1,16 +1,11 @@
 """
-autonomy/compliance_reporting.py — Automated Regulatory & Compliance Reporter.
+Compliance reporting and explicit daily-artifact retention.
 
-Implemented report types:
-1. Daily compliance dossier (trades, PnL, drawdown, autonomous decisions) with
-   computed — never hardcoded — regulatory invariants, written as JSON,
-   Markdown, and HTML alongside a voice_summary field.
-2. Quarterly audit package stub (generated + signed; independently audited
-   status is NOT claimed).
-
-Note: earlier documentation described weekly/monthly reports and a 90-day
-retention sweeper; those are not implemented in this module. The
-`retention_days` value is only reported inside the quarterly package metadata.
+The reporter writes signed daily dossiers as JSON, Markdown, and HTML, and can
+produce a clearly labelled generated/signed quarterly package (not an independent
+audit). Retention tools inventory and optionally delete only stale, regular files
+matching the daily dossier naming convention. Cleanup is read-only by default;
+callers must explicitly pass dry_run=False to delete expired files.
 """
 
 import datetime
