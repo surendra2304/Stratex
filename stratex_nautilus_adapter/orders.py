@@ -314,55 +314,72 @@ class NautilusOrderManager:
         stop_loss_price: float,
         entry_type: OrderType = OrderType.LIMIT,
     ) -> BracketOrder:
-        """Creates an institutional Bracket Order: Entry + Take Profit (Limit) + Stop Loss (Stop).
-        
-        The Take-Profit and Stop-Loss orders are formed as an OCO pair and linked as OTO children
-        of the Entry order.
-        """
-        bracket_id = f"nt_brk_{uuid.uuid4().hex[:12]}"
-        opp_side = OrderSide.SELL if side == OrderSide.BUY else OrderSide.BUY
+        """Create a validated entry with OTO-activated, OCO-linked exits."""
+        if not isinstance(symbol, str) or not symbol.strip():
+            raise ValueError("symbol must be a non-empty string")
+        symbol = symbol.strip().upper()
+        try:
+            side = side if isinstance(side, OrderSide) else OrderSide(str(side).upper())
+            entry_type = (
+                entry_type if isinstance(entry_type, OrderType) else OrderType(str(entry_type).upper())
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError("side or entry_type is invalid") from exc
+        if entry_type not in (OrderType.LIMIT, OrderType.MARKET):
+            raise ValueError("bracket entry_type must be LIMIT or MARKET")
 
-        # 1. Entry order
+        quantity_value = _validated_float(quantity, "quantity")
+        entry_value = _validated_float(entry_price, "entry_price")
+        take_profit_value = _validated_float(take_profit_price, "take_profit_price")
+        stop_loss_value = _validated_float(stop_loss_price, "stop_loss_price")
+
+        if side is OrderSide.BUY:
+            levels_valid = stop_loss_value < entry_value < take_profit_value
+        else:
+            levels_valid = take_profit_value < entry_value < stop_loss_value
+        if not levels_valid:
+            raise ValueError(
+                "bracket prices are inconsistent with the side: expected stop-loss < entry < take-profit "
+                "for BUY, and take-profit < entry < stop-loss for SELL"
+            )
+
+        bracket_id = f"nt_brk_{uuid.uuid4().hex[:12]}"
+        opposite_side = OrderSide.SELL if side is OrderSide.BUY else OrderSide.BUY
+
         entry = self.create_order(
             symbol=symbol,
             side=side,
             order_type=entry_type,
-            quantity=quantity,
-            price=entry_price if entry_type == OrderType.LIMIT else None,
+            quantity=quantity_value,
+            price=entry_value if entry_type is OrderType.LIMIT else None,
             contingency_type=ContingencyType.OTO,
         )
-
-        # 2. Take-profit order (Limit)
-        tp = self.create_order(
+        take_profit = self.create_order(
             symbol=symbol,
-            side=opp_side,
+            side=opposite_side,
             order_type=OrderType.LIMIT,
-            quantity=quantity,
-            price=take_profit_price,
+            quantity=quantity_value,
+            price=take_profit_value,
             contingency_type=ContingencyType.OCO,
         )
-
-        # 3. Stop-loss order (Stop Market)
-        sl = self.create_order(
+        stop_loss = self.create_order(
             symbol=symbol,
-            side=opp_side,
+            side=opposite_side,
             order_type=OrderType.STOP_MARKET,
-            quantity=quantity,
-            stop_price=stop_loss_price,
+            quantity=quantity_value,
+            stop_price=stop_loss_value,
             contingency_type=ContingencyType.OCO,
         )
 
-        # Link TP and SL as OCO
-        self.link_oco(tp.client_order_id, sl.client_order_id)
-        # Link Entry as OTO parent of TP and SL
-        self.link_oto(entry.client_order_id, [tp.client_order_id, sl.client_order_id])
+        self.link_oco(take_profit.client_order_id, stop_loss.client_order_id)
+        self.link_oto(entry.client_order_id, [take_profit.client_order_id, stop_loss.client_order_id])
 
         bracket = BracketOrder(
             bracket_id=bracket_id,
-            symbol=symbol.upper(),
+            symbol=symbol,
             entry_order=entry,
-            take_profit_order=tp,
-            stop_loss_order=sl,
+            take_profit_order=take_profit,
+            stop_loss_order=stop_loss,
             is_active=True,
         )
         self._brackets[bracket_id] = bracket
