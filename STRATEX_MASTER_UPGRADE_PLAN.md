@@ -60,7 +60,7 @@ Make Stratex auditable, reproducible, resilient, and safe to operate as the quan
 ### 7. AI advisor and FRIDAY Universe integrations
 - [ ] Validate Gemini, Inference, and OpenRouter provider routing with timeouts, retry policy, response-schema validation, provider attribution, and redaction tests.
 - [ ] Treat model output as advisory only: deterministic execution/risk policy remains authoritative.
-- [ ] Reject malformed JSON, non-finite/out-of-range confidence, unexpected verdicts, invalid types, and missing required fields safely.
+- [~] Reject missing responses, malformed JSON, non-finite/out-of-range confidence, unexpected verdicts, invalid types, and inconsistent verdict fields; regression tests added, CI pending.
 - [ ] Contract-test Sentinel, Futuris, IntelX, Inference, Memora, and FRIDAY clients for unavailable, malformed, stale, and standby responses.
 
 ### 8. Static analysis, tests, and continuous delivery
@@ -95,7 +95,7 @@ Make Stratex auditable, reproducible, resilient, and safe to operate as the quan
 
 ### 2026-10-22 — dependency regression (active)
 - **Finding:** CI test failure on missing `google` namespace during `@patch("google.genai.Client")`.
-- **Change prepared:** Add `google-genai` as a declared runtime dependency and align its required dependencies in `requirements.lock`.
+- **Changes committed to the feature branch:** Declare `google-genai` in runtime requirements and align the package inventory; make AI verdict parsing strict and fail closed on provider errors or schema-invalid output; add malformed-output and MT5-gate regression tests.
 - **Branch:** `fix/ai-advisor-google-genai-dependency`.
-- **Validation:** Pending pull-request CI. No claim is made yet that the new dependency installation, full suite, PostgreSQL integration, or Docker build has passed.
-- **Next:** Inspect the run for the exact branch head; fix any further failures without weakening tests; only merge if every required gate succeeds.
+- **Validation:** Pending pull-request CI. Unit, PostgreSQL integration, Docker build, and post-merge main-branch status remain unverified at this point.
+- **Next:** Inspect the run for the exact branch head; fix any further failures without weakening tests; only merge if every required gate succeeds. Review remaining workstreams in order, with extra attention to any other fail-open safety paths and the consistency of the package lock.
