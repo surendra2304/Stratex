@@ -402,3 +402,128 @@ def test_flask_nautilus_routes(flask_client):
     assert res.status_code == 200
     data = res.get_json()
     assert data["status"] == "OK"
+
+
+# ----------------------------------------------------------------------
+# Market-data integrity regressions for streaming bar aggregation.
+# ----------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "price,size",
+    [
+        (0.0, 1.0),
+        (-1.0, 1.0),
+        (float("nan"), 1.0),
+        (float("inf"), 1.0),
+        (100.0, 0.0),
+        (100.0, -1.0),
+        (100.0, float("nan")),
+        (100.0, float("inf")),
+    ],
+)
+def test_bar_aggregator_rejects_non_positive_or_non_finite_ticks(price, size):
+    aggregator = TickBarAggregator("BTCUSDT", step_ticks=2)
+    invalid = TradeTick("BTCUSDT", price=price, size=size, ts_event=100)
+
+    with pytest.raises(ValueError, match="finite positive number"):
+        aggregator.update(invalid)
+
+    assert aggregator._current_ticks == []
+    assert aggregator._last_ts_event is None
+
+
+def test_bar_aggregator_rejects_mismatched_symbols_without_poisoning_state():
+    aggregator = TickBarAggregator(" btcusdt ", step_ticks=2)
+    first = TradeTick("BTCUSDT", price=100.0, size=1.0, ts_event=100)
+    assert aggregator.update(first) is None
+
+    with pytest.raises(ValueError, match="tick symbol must match"):
+        aggregator.update(TradeTick("ETHUSDT", price=101.0, size=1.0, ts_event=200))
+
+    assert aggregator._current_ticks == [first]
+    second = TradeTick("btcusdt", price=102.0, size=2.0, ts_event=200)
+    bar = aggregator.update(second)
+    assert bar is not None
+    assert bar.symbol == "BTCUSDT"
+    assert bar.ticks_count == 2
+    assert bar.ts_start == 100
+    assert bar.ts_end == 200
+
+
+def test_bar_aggregator_rejects_out_of_order_ticks_before_state_mutation():
+    aggregator = TickBarAggregator("BTCUSDT", step_ticks=2)
+    first = TradeTick("BTCUSDT", price=100.0, size=1.0, ts_event=100)
+    assert aggregator.update(first) is None
+
+    with pytest.raises(ValueError, match="timestamps must be non-decreasing"):
+        aggregator.update(TradeTick("BTCUSDT", price=99.0, size=1.0, ts_event=99))
+
+    assert aggregator._current_ticks == [first]
+    assert aggregator._last_ts_event == 100
+    bar = aggregator.update(TradeTick("BTCUSDT", price=101.0, size=1.0, ts_event=101))
+    assert bar is not None
+    assert bar.close == 101.0
+
+
+@pytest.mark.parametrize("step", [0, -1, 1.5, float("nan"), float("inf"), True])
+def test_tick_bar_aggregator_requires_positive_integer_step(step):
+    with pytest.raises(ValueError, match="step_ticks must be a positive integer"):
+        TickBarAggregator("BTCUSDT", step_ticks=step)
+
+
+def test_batch_aggregation_rejects_mixed_symbols_and_out_of_order_events():
+    btc_first = TradeTick("BTCUSDT", price=100.0, size=1.0, ts_event=100)
+    eth_second = TradeTick("ETHUSDT", price=200.0, size=1.0, ts_event=200)
+    with pytest.raises(ValueError, match="tick symbol must match"):
+        BarAggregatorEngine.aggregate_ticks([btc_first, eth_second], bar_type=BarType.TICK, step=2)
+
+    btc_earlier = TradeTick("BTCUSDT", price=101.0, size=1.0, ts_event=99)
+    with pytest.raises(ValueError, match="timestamps must be non-decreasing"):
+        BarAggregatorEngine.aggregate_ticks([btc_first, btc_earlier], bar_type=BarType.TICK, step=2)
+
+
+def test_bar_aggregator_requires_valid_symbol_and_time_resolution():
+    with pytest.raises(ValueError, match="symbol must be a non-empty string"):
+        TickBarAggregator("   ", step_ticks=2)
+    with pytest.raises(ValueError, match="step_seconds must be at least one nanosecond"):
+        TimeBarAggregator("BTCUSDT", step_seconds=1e-12)
+
+def test_bar_aggregator_rejects_overflowing_tick_and_cumulative_notional():
+    aggregator = TickBarAggregator("BTCUSDT", step_ticks=3)
+
+    with pytest.raises(ValueError, match="tick notional must be a finite positive number"):
+        aggregator.update(TradeTick("BTCUSDT", price=1e308, size=1e308, ts_event=1))
+    assert aggregator._current_ticks == []
+    assert aggregator._last_ts_event is None
+
+    first = TradeTick("BTCUSDT", price=1e154, size=1e154, ts_event=2)
+    assert aggregator.update(first) is None
+    with pytest.raises(ValueError, match="aggregated bar notional must remain finite"):
+        aggregator.update(TradeTick("BTCUSDT", price=1e154, size=1e154, ts_event=3))
+    assert aggregator._current_ticks == [first]
+    assert aggregator._current_notional == pytest.approx(1e308)
+    assert aggregator._last_ts_event == 2
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: VolumeBarAggregator("BTCUSDT", step_volume=True),
+        lambda: ValueBarAggregator("BTCUSDT", step_value_usd=True),
+        lambda: TimeBarAggregator("BTCUSDT", step_seconds=True),
+    ],
+)
+def test_all_bar_thresholds_reject_boolean_values(factory):
+    with pytest.raises(ValueError, match="step must be a finite positive number"):
+        factory()
+
+
+def test_bar_aggregator_rejects_cumulative_volume_overflow_without_state_mutation():
+    aggregator = TickBarAggregator("BTCUSDT", step_ticks=3)
+    first = TradeTick("BTCUSDT", price=1.0, size=1e308, ts_event=10)
+    assert aggregator.update(first) is None
+
+    with pytest.raises(ValueError, match="aggregated bar volume must remain finite"):
+        aggregator.update(TradeTick("BTCUSDT", price=1.0, size=1e308, ts_event=11))
+
+    assert aggregator._current_ticks == [first]
+    assert aggregator._current_volume == pytest.approx(1e308)
+    assert aggregator._last_ts_event == 10
