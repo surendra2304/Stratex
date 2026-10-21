@@ -55,7 +55,10 @@ def finite_number(value: Any) -> float | None:
     """Accept real finite numeric evidence, rejecting booleans and numeric text."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    number = float(value)
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
     return number if math.isfinite(number) else None
 
 
