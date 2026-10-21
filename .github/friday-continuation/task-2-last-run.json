@@ -1,27 +1,25 @@
 {
   "task": 2,
   "repository": "Stratex",
-  "branch": "automation/friday-universe-task-2",
-  "finished_at": "2026-10-21T01:02:56Z",
-  "active_coding_seconds": 3,
-  "passes": 1,
-  "status": "failed",
-  "failures": [
-    "Pass 1 failed with exit 1. See log pass-1.log."
+  "durable_branch": "automation/friday-universe-task-2",
+  "implementation_branch": "fix/task-2-regressions-2026-10-22",
+  "base_sha": "cb1871fd5088d4c4c0fd713d0d72c8556e019d03",
+  "code_commit_sha": "ba0b263f4f771d82e0c3778cfe28f41e682f8b90",
+  "changed_files": [
+    "risk/drawdown_controller.py",
+    "tests/test_drawdown_recovery_regressions.py"
   ],
-  "source_paths_vs_main": [
-    "atomic_io.py",
-    "github/friday-continuation/task-2-checkpoint.md",
-    "research/upgrade_2026_08/expansion_study.py",
-    "research/upgrade_2026_08/walk_forward_validation.py",
-    "risk/risk_orchestrator.py",
-    "tests/test_atomic_io.py",
-    "tests/test_backtest_and_statistical_integrity.py",
-    "tests/test_numeric_edge_cases.py",
-    "tests/test_risk_orchestrator.py"
-  ],
-  "checkpoint_path": ".github/friday-continuation/task-2-checkpoint.md",
-  "next_run_prompt_path": ".github/friday-continuation/task-2-next-run.md",
-  "checkpoint_updated": true,
-  "next_run_updated": true
+  "tests": {
+    "status": "not_run",
+    "command": "pytest -q tests/test_drawdown_recovery_regressions.py tests/test_risk_orchestrator.py",
+    "reason": "Laptop test connector returned HTTP 404; no CI run found for branch push."
+  },
+  "pull_request": {
+    "status": "not_opened",
+    "reason": "GitHub pull-request creation call was blocked by safety checks."
+  },
+  "active_engineering_minutes": null,
+  "target_minutes": 30,
+  "target_met": false,
+  "next_action": "Open focused PR, run focused pytest suite, fix failures, update handoff."
 }
