@@ -22,6 +22,29 @@ from advisory_scheduler import AdvisoryScheduler
 from ai_universe_client import AIUniverseClient
 
 
+def _ready_advisory_telemetry():
+    """Explicitly measured fixture for tests that exercise the provider/gate path."""
+    return {
+        "telemetry_quality": {"advisory_ready": True, "blocking_reasons": []},
+        "active_strategy": "adx_ema",
+        "telemetry": {
+            "equity": 10000.0, "unrealized_pnl": 0.0, "realized_pnl": 100.0,
+            "win_rate": 0.6, "profit_factor": 1.5, "max_drawdown_pct": 2.0,
+            "consecutive_losses": 1, "total_trades": 20, "sharpe_ratio": 0.7,
+        },
+        "portfolio": {
+            "equity": 10000.0, "cash": 9900.0, "realized_pnl": 100.0,
+            "unrealized_pnl": 0.0, "max_drawdown_pct": 2.0, "open_positions": 0,
+        },
+        "performance_metrics": {
+            "total_trades": 20, "win_rate": 60.0, "profit_factor": 1.5,
+            "winning_trades": 12, "losing_trades": 8, "consecutive_losses": 1,
+        },
+        "market_regime": {"regime": "RANGE", "volatility_state": "LOW_VOL"},
+        "regime_data": {"regime": "RANGE", "volatility_state": "LOW_VOL"},
+    }
+
+
 def test_shadow_mode_defaults_to_true():
     """Verify ADVISORY_SHADOW_MODE defaults to True."""
     # Ensure config default is True
@@ -57,7 +80,8 @@ def test_shadow_mode_never_applies_changes_to_overlay():
         overlay = AdvisoryParameterOverlay(state_file=temp_state_file)
 
         with patch("advisory_params.get_advisory_overlay", return_value=overlay), \
-             patch("advisory_ledger.ADVISORY_LOG_FILE", temp_log_file):
+             patch("advisory_ledger.ADVISORY_LOG_FILE", temp_log_file), \
+             patch("advisory_scheduler.build_telemetry_payload", return_value=_ready_advisory_telemetry()):
 
             scheduler = AdvisoryScheduler(client=mock_client, shadow_mode=True)
             result = scheduler.run_consultation_cycle(reason="UNIT_TEST")
