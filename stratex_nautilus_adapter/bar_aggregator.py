@@ -149,7 +149,7 @@ class VolumeBarAggregator(BarAggregator):
     """Aggregates a bar whenever cumulative traded volume reaches threshold."""
 
     def __init__(self, symbol: str, step_volume: float = 10.0) -> None:
-        super().__init__(symbol, BarType.VOLUME, float(step_volume))
+        super().__init__(symbol, BarType.VOLUME, step_volume)
         self._accumulated_volume: float = 0.0
 
     def update(self, tick: TradeTick) -> Bar | None:
@@ -165,7 +165,7 @@ class ValueBarAggregator(BarAggregator):
     """Aggregates a bar whenever cumulative traded dollar/notional value reaches threshold."""
 
     def __init__(self, symbol: str, step_value_usd: float = 100000.0) -> None:
-        super().__init__(symbol, BarType.VALUE, float(step_value_usd))
+        super().__init__(symbol, BarType.VALUE, step_value_usd)
         self._accumulated_value: float = 0.0
 
     def update(self, tick: TradeTick) -> Bar | None:
@@ -181,7 +181,7 @@ class TimeBarAggregator(BarAggregator):
     """Aggregates a bar whenever time interval elapsed exceeds step seconds."""
 
     def __init__(self, symbol: str, step_seconds: float = 60.0) -> None:
-        super().__init__(symbol, BarType.TIME, float(step_seconds))
+        super().__init__(symbol, BarType.TIME, step_seconds)
         self._start_ns: int | None = None
         self._step_ns = int(self.step * 1_000_000_000)
         if self._step_ns < 1:
