@@ -309,18 +309,17 @@ class CTraderFixAdapter(BaseExchange):
         # In cTrader, 1 lot = 100,000 units (FX) or 100 units (Gold)
         # Quantity passed is usually lot size (e.g. 0.01 lot)
         if clean_sym in {"XAUUSD", "GOLD"}:
-            units = int(round(quantity * 100))
+            units = max(1, int(round(quantity * 100)))
         elif clean_sym in {"XAGUSD", "SILVER"}:
-            units = int(round(quantity * 5000))
+            units = max(1, int(round(quantity * 5000)))
         elif clean_sym in {"XTIUSD", "WTI", "XBRUSD", "BRENT"}:
-            units = int(round(quantity * 1000))
-        elif clean_sym in {"BTCUSD", "ETHUSD"}:
-            units = int(round(quantity * 100))
+            units = max(1, int(round(quantity * 1000)))
+        elif clean_sym in {"BTCUSD"}:
+            units = "0.1"
+        elif clean_sym in {"ETHUSD"}:
+            units = "1"
         else:
-            units = int(round(quantity * 100000))
-
-        if units <= 0:
-            units = 1000  # min micro lot fallback
+            units = max(1000, int(round(quantity * 100000)))
 
         cl_ord_id = client_order_id or f"STX_{int(time.time())}_{uuid.uuid4().hex[:6]}"
         now_str = datetime.datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3]
@@ -403,8 +402,12 @@ class CTraderFixAdapter(BaseExchange):
     ) -> dict[str, Any]:
         """Preflight validation for cTrader FIX orders."""
         clean_sym = symbol.replace("/", "").upper()
+        if not self.symbol_map:
+            self._load_symbol_map("state/fix_symbol_map.json")
         if clean_sym not in self.symbol_map and clean_sym not in {
-            "EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "XAGUSD", "XTIUSD", "WTI", "XBRUSD", "BRENT"
+            "EURUSD", "GBPUSD", "USDJPY", "EURJPY", "GBPJPY", "AUDJPY", "NZDJPY",
+            "EURCHF", "USDCAD", "NZDUSD", "AUDUSD", "XAUUSD", "XAGUSD", "XTIUSD",
+            "WTI", "XBRUSD", "BRENT", "BTCUSD", "ETHUSD"
         }:
             raise CTraderFixError(f"Symbol {symbol} not recognized in cTrader FIX")
         return {"approved": True, "symbol": symbol, "volume": quantity}
