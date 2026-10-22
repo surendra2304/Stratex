@@ -46,6 +46,7 @@ from autonomy.agent_contracts import (
 )
 from autonomy.ai_advisor import StratexAIAdvisor, get_ai_advisor
 from autonomy.cloud_data_feed import CloudMarketDataFeed, get_cloud_data_feed
+from exchanges.ctrader_fix_adapter import CTraderFixAdapter
 from exchanges.mt5_bridge_adapter import MT5BridgeAdapter, MT5BridgeError
 from logger import get_logger
 from notifications.telegram_bot import TelegramBotClient, get_telegram_bot
@@ -208,7 +209,12 @@ class MT5AutonomousEngine:
         cloud_feed: CloudMarketDataFeed | None = None,
         initial_balance: float = 1000.0,
     ):
-        self.adapter = adapter or MT5BridgeAdapter()
+        if adapter is not None:
+            self.adapter = adapter
+        elif os.getenv("CTRADER_FIX_ENABLED", "true").lower() in {"1", "true", "yes"}:
+            self.adapter = CTraderFixAdapter()
+        else:
+            self.adapter = MT5BridgeAdapter()
         self.symbols = list(symbols or DEFAULT_SYMBOLS)
         self.timeframes = list(timeframes or DEFAULT_TIMEFRAMES)
         self.max_active_positions = max_active_positions
