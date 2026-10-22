@@ -1,0 +1,3336 @@
+import datetime
+import importlib
+import json
+import os
+import queue
+import sys
+import threading
+import time
+import uuid
+
+import pandas as pd
+from binance.exceptions import BinanceAPIException
+
+from atomic_io import append_jsonl, atomic_write_json, finite_or_none, load_json_state, locked_path, read_jsonl
+import config
+from config import ACTIVE_STRATEGIES, TRADING_MODE
+from config_strategy import ADX_EMA_STRATEGY_V2, PRODUCTION_STRATEGY_REGISTRY
+from data import add_indicators
+from execution import _load_active_trades, get_exchange_client, place_market_order
+from logger import get_logger
+from numeric_safety import signal_levels_valid
+from paper_engine.exceptions import ZeroFillError
+from research_phase9.cost_engine import CostEngine
+from testnet_engine.discovery import SymbolDiscoveryService
+from trading_pause import is_trading_paused
+from testnet_engine.market_scanner import MarketScanner
+from testnet_engine.profitability_gate import ProfitabilityGate
+from testnet_engine.risk_gate import RiskGate
+from testnet_engine.signal_quality import evaluate_signal_quality
+from testnet_engine.trailing import trailing_cycle
+from testnet_engine.telemetry_manager import get_telemetry_manager
+
+logger = get_logger("service")
+
+
+def governance_filter_strategies(active_strategies):
+    """Return {strategy: [timeframes]} restricted to registry-VALIDATED strategies.
+
+    Governance gate: only strategies with defensible out-of-sample proof may trade.
+    DISABLED/unregistered strategies are dropped, and scanning is permitted on all validated timeframes.
+    """
+    filtered = {}
+    for strat_name, tfs in active_strategies.items():
+        entry = PRODUCTION_STRATEGY_REGISTRY.get(strat_name)
+        if entry is None or entry.get("status") != "VALIDATED":
+            status = entry.get("status") if entry else "UNREGISTERED"
+            logger.warning(
+                f"[GOVERNANCE] Strategy '{strat_name}' skipped — registry status "
+                f"{status}; only VALIDATED strategies may generate executable signals."
+            )
+            continue
+        validated_tfs = entry.get("timeframes")
+        tfs_list = tfs if isinstance(tfs, list) else [tfs]
+        if validated_tfs and isinstance(validated_tfs, list):
+            # Intersect or keep validated timeframes
+            valid_subset = [tf for tf in tfs_list if tf in validated_tfs]
+            filtered[strat_name] = valid_subset if valid_subset else validated_tfs
+        else:
+            validated_tf = entry.get("timeframe")
+            if validated_tf and validated_tf not in tfs_list:
+                validated_tf = tfs_list[-1]
+            filtered[strat_name] = [validated_tf] if validated_tf else tfs_list
+    return filtered
+
+
+def governance_validated_assets(strategies_by_tf):
+    """Union of OOS-validated assets across the loaded (already gated) strategies."""
+    assets = set()
+    for tf_strats in (strategies_by_tf or {}).values():
+        for strat_name, _mod in tf_strats:
+            entry = PRODUCTION_STRATEGY_REGISTRY.get(strat_name, {})
+            assets.update(entry.get("validated_assets", []))
+    return assets
+
+
+def compute_btc_regime(btc_df, min_bars=200):
+    """Return (regime_ok, btc_close, btc_ema200) from a BTCUSDT 4h frame.
+
+    regime_ok is True (risk-on) when close > EMA200, False (risk-off) below.
+    Returns (None, None, None) when the data is insufficient to judge — the
+    caller treats None as fail-open with a warning rather than blocking all
+    trading on a lagging websocket feed.
+    """
+    if btc_df is None or len(btc_df) < min_bars or "close" not in btc_df.columns:
+        return None, None, None
+    closes = btc_df["close"].astype(float)
+    span = min(len(closes), 200)
+    ema200 = float(closes.ewm(span=span, adjust=False).mean().iloc[-1])
+    close = float(closes.iloc[-1])
+    return (close > ema200), close, ema200
+
+_TF_SECONDS = {"1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "2h": 7200, "4h": 14400, "6h": 21600, "8h": 28800, "12h": 43200, "1d": 86400}
+_COOLDOWN_SECONDS = float(os.getenv("SIGNAL_COOLDOWN_SECONDS", "300"))  # 5 minutes default (bypassed dynamically for aggressive scalper)
+
+# Quote assets are settlement/margin, never a tradeable base. They must not be
+# turned into a symbol candidate during reconciliation (USDT -> "USDTUSDT").
+_QUOTE_ASSETS = {"USDT", "USDC", "BUSD"}
+
+TESTNET_LEDGER_FILE = os.getenv("TESTNET_LEDGER_FILE", "testnet_trade_ledger.jsonl")
+TESTNET_OPPORTUNITY_LOG = os.getenv("TESTNET_OPPORTUNITY_LOG", "testnet_opportunity_log.jsonl")
+TESTNET_PORTFOLIO_FILE = os.getenv("TESTNET_PORTFOLIO_FILE", "testnet_portfolio.json")
+TESTNET_HEARTBEAT_FILE = os.getenv("TESTNET_HEARTBEAT_FILE", "testnet_heartbeat.json")
+
+class TestnetService:
+    __test__ = False
+    def __init__(self):
+        # 1. TRADING_MODE strictly validated
+        if TRADING_MODE not in ["TESTNET", "FUTURES"]:
+            raise RuntimeError(f"CRITICAL ERROR: Refusing to start TestnetService because TRADING_MODE={TRADING_MODE}. Must be TESTNET or FUTURES.")
+            
+        testnet_is_only = os.getenv("TESTNET_ONLY", "").upper() == "TRUE"
+        testnet_is_enabled = getattr(config, "TESTNET_ENABLED", False) or os.getenv("TESTNET_ENABLED", "False").lower() == "true"
+        if not (testnet_is_only or testnet_is_enabled):
+            raise RuntimeError("CRITICAL ERROR: TESTNET_ENABLED=True or TESTNET_ONLY=TRUE is required to run the Testnet execution mode safely.")
+            
+        if os.getenv("RESET_REVIEW_STATE", "FALSE").upper() == "TRUE":
+            logger.warning("[RESET] RESET_REVIEW_STATE=TRUE detected. Wiping local review telemetry...")
+            files_to_clean = [
+                TESTNET_LEDGER_FILE, TESTNET_OPPORTUNITY_LOG, TESTNET_PORTFOLIO_FILE, 
+                TESTNET_HEARTBEAT_FILE, "testnet_equity_history.jsonl", "bot.log",
+                "heartbeat.json", "status.json", "trades.json", "scanner.json"
+            ]
+            for f in files_to_clean:
+                if os.path.exists(f):
+                    try:
+                        os.remove(f)
+                        logger.warning(f"[RESET] Cleared {f}")
+                    except Exception as e:
+                        logger.error(f"[RESET] Failed to clear {f}: {e}")
+                        
+        logger.info("[ENGINE_START] Starting Binance Testnet Trading Engine...")
+        print("========================================")
+        print("24/7 TESTNET EXECUTION SERVICE")
+        print("========================================")
+        print("BINANCE CONFIGURED: YES")
+        print("TRADING MODE: TESTNET")
+        print("LIVE ORDERS: BLOCKED")
+        eligible_strategies = governance_filter_strategies(ACTIVE_STRATEGIES)
+        print(
+            "Executable strategies: "
+            + (", ".join(eligible_strategies) if eligible_strategies else "none (no validated strategy)")
+        )
+        
+        self.strategies = {}
+        for strat_name, scan_tfs in eligible_strategies.items():
+            try:
+                mod = importlib.import_module(f"strategy_{strat_name}")
+                for tf in scan_tfs:
+                    if tf not in self.strategies:
+                        self.strategies[tf] = []
+                    self.strategies[tf].append((strat_name, mod))
+            except Exception as e:
+                logger.error(f"Failed to load strategy {strat_name}: {e}")
+        
+        self.client = get_exchange_client()
+        if self.client is None:
+            raise RuntimeError("CRITICAL ERROR: Binance Client could not be instantiated for TESTNET.")
+            
+        logger.info("[BINANCE_CONNECTED] Verified Binance Testnet API connectivity.")
+            
+        # Reconcile Initial Balance
+        try:
+            if TRADING_MODE == "FUTURES":
+                account = self.client.futures_account()
+                actual_binance_balance = float(account.get("totalMarginBalance", account.get("totalWalletBalance", 0.0)))
+            else:
+                account = self.client.get_account()
+                usdt_balance = next((item for item in account['balances'] if item['asset'] == 'USDT'), None)
+                if not usdt_balance:
+                    raise RuntimeError("No USDT balance found on Testnet.")
+                actual_binance_balance = float(usdt_balance['free']) + float(usdt_balance['locked'])
+            
+            # Calculate total reconstructable PnL from the Ledger
+            total_reconstructable_pnl = 0.0
+            ledger_read = read_jsonl(TESTNET_LEDGER_FILE)
+            non_finite_pnl = 0
+            for record in ledger_read.records:
+                pnl_value = finite_or_none(record.get("net_pnl", 0.0))
+                if pnl_value is None:
+                    non_finite_pnl += 1
+                    continue
+                total_reconstructable_pnl += pnl_value
+            if ledger_read.skipped or non_finite_pnl:
+                logger.error(
+                    f"[SERVICE] Ledger {TESTNET_LEDGER_FILE}: {ledger_read.skipped} unreadable line(s), "
+                    f"{non_finite_pnl} record(s) with non-finite net_pnl excluded from reconstructable PnL"
+                )
+
+            # Load or initialize our authoritative initial deposit
+            self.initial_deposit = actual_binance_balance
+            state_read = load_json_state(TESTNET_PORTFOLIO_FILE, expected_type=dict)
+            if state_read.status == "corrupt":
+                logger.critical(
+                    f"[SERVICE] Portfolio state {TESTNET_PORTFOLIO_FILE} is corrupt ({state_read.error}); "
+                    f"quarantined to {state_read.quarantined_to}. Using the exchange balance as initial deposit."
+                )
+            elif state_read.ok and "initial_deposit" in state_read.data:
+                saved_deposit = finite_or_none(state_read.data.get("initial_deposit"))
+                if saved_deposit is not None and saved_deposit > 0:
+                    self.initial_deposit = saved_deposit
+                else:
+                    logger.error(
+                        f"[SERVICE] Ignoring invalid persisted initial_deposit "
+                        f"{state_read.data.get('initial_deposit')!r}; using the exchange balance"
+                    )
+                    
+            self.service_start_time = datetime.datetime.utcnow().isoformat() + "Z"
+            self.starting_equity = actual_binance_balance
+            self.last_equity_snapshot = 0.0
+            logger.info(f"[SERVICE] Actual Binance Balance: {actual_binance_balance} | Local Initial Deposit: {self.initial_deposit}")
+        except Exception as e:
+            # Classify the failure so operators don't chase credential problems
+            # that are actually network problems (and vice versa). Fail-fast is
+            # intentional: the engine must never run without a verifiable
+            # account state.
+            try:
+                from requests.exceptions import RequestException as _RequestException
+            except Exception:  # requests is a declared dependency; guard anyway
+                _RequestException = ()
+            _is_auth_err = (
+                isinstance(e, BinanceAPIException)
+                and (getattr(e, "status_code", None) in (401, 403) or "2015" in str(e))
+            )
+            if _is_auth_err:
+                raise RuntimeError(
+                    "CRITICAL ERROR: Testnet AUTHENTICATION failed — verify API_KEY/SECRET_KEY "
+                    f"are the TESTNET keys issued by testnet.binance.vision. Reason: {e}"
+                )
+            if isinstance(e, (_RequestException, ConnectionError, TimeoutError, OSError)) and not _is_auth_err:
+                raise RuntimeError(
+                    "CRITICAL ERROR: Testnet exchange is UNREACHABLE (network/DNS/TLS) — the "
+                    "account could not be verified, so the engine refuses to start. This is a "
+                    f"connectivity problem, not (necessarily) a credential problem. Reason: {e}"
+                )
+            raise RuntimeError(f"CRITICAL ERROR: Failed to fetch Testnet account balance. Reason: {e}")
+
+        # Initialize core components
+        if TRADING_MODE == "FUTURES":
+            self.cost_engine = CostEngine.get_futures_maker_config()
+        else:
+            self.cost_engine = CostEngine.get_binance_taker_config()
+        self.profitability_gate = ProfitabilityGate(cost_engine=self.cost_engine)
+        self.risk_gate = RiskGate(starting_balance=self.starting_equity)
+        self.telemetry = get_telemetry_manager()
+
+        # Freqtrade-inspired pre-trade protection layer
+        try:
+            from stratex_freqtrade_adapter.protections import ProtectionManager
+            self.protection_manager = ProtectionManager()
+        except Exception as e:
+            logger.warning(f"[PROTECTION_INIT_WARN] Could not initialize ProtectionManager: {e}")
+            self.protection_manager = None
+
+        # Write initial heartbeat so dashboard immediately registers active strategies
+        try:
+            self._write_heartbeat(status="INITIALIZING", worker_alive=True)
+        except Exception as hb_init_err:
+            logger.debug(f"[BOOT_HB_WARN] Could not write initial heartbeat: {hb_init_err}")
+
+        # CCXT unified exchange abstraction
+        self.ccxt_adapter = None
+        if os.getenv("EXCHANGE_PROVIDER", "").lower() == "ccxt" or os.getenv("CCXT_ENABLED", "").lower() == "true":
+            try:
+                from stratex_ccxt_adapter.client import CCXTExchangeAdapter
+                self.ccxt_adapter = CCXTExchangeAdapter(
+                    exchange_id=os.getenv("CCXT_EXCHANGE_ID", "binance"),
+                    sandbox=True,
+                    enable_rate_limit=True,
+                )
+                logger.info(f"[CCXT_READY] TestnetService loaded CCXTExchangeAdapter for {self.ccxt_adapter.exchange_id}")
+            except Exception as e:
+                logger.warning(f"[CCXT_INIT_WARN] Could not initialize CCXTExchangeAdapter: {e}")
+
+        # QuantDinger architectural governance subsystems
+        try:
+            from stratex_quantdinger.registry import StrategyRegistry
+            from stratex_quantdinger.runtime import RuntimeLease, RuntimeSupervisor
+            from stratex_quantdinger.idempotency import IdempotencyGuard
+            self.registry = StrategyRegistry()
+            self.idempotency_guard = IdempotencyGuard(ledger_file=TESTNET_LEDGER_FILE)
+            self.runtime_lease = RuntimeLease(
+                runtime_id=f"rt_{os.getpid()}_{int(time.time())}",
+                strategy_id="multi_strategy",
+                lease_seconds=60,
+            )
+            self.runtime_supervisor = RuntimeSupervisor()
+            self.runtime_heartbeat = self.runtime_lease.acquire()
+            self.runtime_supervisor.record_heartbeat(self.runtime_heartbeat)
+
+            # Auto-register configured candidates only as RESEARCH. The
+            # QuantDinger lifecycle requires reproducible OOS evidence before
+            # OOS_VALIDATED/ACTIVE; config admission alone is not that evidence.
+            self._register_active_strategies_in_registry()
+
+            # Start background runtime lease heartbeat renewal thread (every 20 seconds)
+            self._stop_heartbeat = threading.Event()
+            self._heartbeat_thread = threading.Thread(target=self._runtime_heartbeat_loop, daemon=True)
+            self._heartbeat_thread.start()
+            logger.info(f"[QUANTDINGER_READY] Runtime lease acquired: {self.runtime_lease.runtime_id}")
+        except Exception as e:
+            logger.warning(f"[QUANTDINGER_INIT_WARN] Could not initialize QuantDinger subsystems: {e}")
+            self.registry = None
+            self.idempotency_guard = None
+            self.runtime_supervisor = None
+            self.runtime_lease = None
+            self.runtime_heartbeat = None
+        
+        # State
+        self.current_equity = self.starting_equity
+
+        self.active_positions = {} # Keep track of open OCOs per symbol
+        self.symbol_filters = {}
+        self.last_evaluation = {}
+
+        self.safety_halt = False
+        self.observe_only = False
+        self.cooldowns = {} # symbol -> timestamp (float)
+        self.last_trade_execution_time = 0.0
+        
+        # Stratex Deep Upgrade: UpgradeRiskManager, MarketDataGuard
+        try:
+            from stratex_upgrade.risk import RiskManager as UpgradeRiskManager, RiskState, RiskLimits
+            from stratex_upgrade.market import MarketDataGuard, FreshnessPolicy
+            from decimal import Decimal
+            eq_dec = Decimal(str(self.starting_equity))
+            r_state = RiskState(
+                equity=eq_dec,
+                starting_equity=eq_dec,
+                peak_equity=eq_dec,
+                daily_start_equity=eq_dec,
+            )
+            r_limits = RiskLimits(
+                max_risk_per_trade=Decimal(str(getattr(config, "MAX_TESTNET_RISK_PER_TRADE", 0.005))),
+                max_total_exposure=Decimal(str(getattr(config, "MAX_TESTNET_EXPOSURE", 0.05))),
+                max_single_asset_exposure=Decimal(str(getattr(config, "MAX_SINGLE_ASSET_EXPOSURE", 0.02))),
+                max_net_directional_exposure=Decimal(str(getattr(config, "MAX_NET_DIRECTIONAL_EXPOSURE", 0.04))),
+                max_open_positions=int(getattr(config, "MAX_OPEN_POSITIONS", 5)),
+                max_daily_loss=Decimal(str(getattr(config, "MAX_DAILY_LOSS_PCT", 0.02))),
+                max_drawdown=Decimal(str(getattr(config, "MAX_TESTNET_DRAWDOWN_PCT", 0.05))),
+            )
+            self.upgrade_risk_manager = UpgradeRiskManager(r_state, r_limits)
+            self.market_guard = MarketDataGuard(FreshnessPolicy(max_age_seconds=10.0))
+            logger.info("[UPGRADE_RISK_READY] UpgradeRiskManager and MarketDataGuard initialized.")
+        except Exception as e:
+            logger.warning(f"[UPGRADE_INIT_WARN] Could not initialize UpgradeRiskManager: {e}")
+            self.upgrade_risk_manager = None
+            self.market_guard = None
+
+        # Qanat Quantitative Architecture: Linear Signal Decay Smoother & Sharpe Portfolio Allocator
+        try:
+            from stratex_upgrade.decay import SignalDecaySmoother
+            from stratex_upgrade.qanat_portfolio import QanatPortfolioAllocator
+            decay_steps = int(os.getenv("SIGNAL_DECAY_STEPS", "1"))
+            decay_thresh = float(os.getenv("SIGNAL_DECAY_THRESHOLD", "0.35"))
+            self.decay_smoother = SignalDecaySmoother(decay_steps=decay_steps, confirmation_threshold=decay_thresh)
+            self.qanat_allocator = QanatPortfolioAllocator(
+                max_total_exposure=getattr(config, "MAX_TESTNET_EXPOSURE", 0.05),
+                max_single_exposure=getattr(config, "MAX_SINGLE_ASSET_EXPOSURE", 0.02),
+            )
+            logger.info(f"[QANAT_READY] SignalDecaySmoother(decay={decay_steps}) and QanatPortfolioAllocator initialized.")
+        except Exception as e:
+            logger.warning(f"[QANAT_INIT_WARN] Could not initialize Qanat quantitative components: {e}")
+            self.decay_smoother = None
+            self.qanat_allocator = None
+
+        # Multi-Agent Intelligence Clients (IntelX & Futuris)
+        self.intelx_client = None
+        self.futuris_client = None
+        try:
+            from intelligence.intelx_client import get_intelx_client
+            self.intelx_client = get_intelx_client()
+            logger.info("[INTELX_READY] IntelXMarketClient initialized for market sentiment gate.")
+        except Exception as e:
+            logger.warning(f"[INTELX_INIT_WARN] Could not initialize IntelXMarketClient: {e}")
+
+        try:
+            from intelligence.futuris_client import get_futuris_client
+            self.futuris_client = get_futuris_client()
+            logger.info("[FUTURIS_READY] FuturisMarketClient initialized for predictive forecast gate.")
+        except Exception as e:
+            logger.warning(f"[FUTURIS_INIT_WARN] Could not initialize FuturisMarketClient: {e}")
+
+        # Stage 3: Restore daily risk state from ledger if restarting mid-day
+        self._restore_daily_risk_state()
+        
+        # Venue reconciliation must complete before execution threads are started
+        self.reconciliation_mismatch = False
+        try:
+            self.sync_exchange_state(account)
+        except Exception as e:
+            logger.error(f"[STARTUP_RECONCILIATION_ERROR] Venue reconciliation error: {e}")
+            self.reconciliation_mismatch = True
+        
+        # Thread safety for concurrent websocket callbacks
+        self.lock = threading.Lock()
+        
+        # Stage 6: Multi-Asset Opportunity Ranking Queue
+        self.opportunity_pool = queue.Queue()
+        self.pool_event = threading.Event()
+        self._execution_thread = threading.Thread(target=self.execution_loop, daemon=True)
+        # Start trade target monitor thread
+        self._target_monitor_thread = threading.Thread(target=self._trade_target_monitor, daemon=True)
+        self._target_monitor_thread.start()
+        self._execution_thread.start()
+
+        
+        # Stats for dashboard (Strict Signal Funnel)
+        self.stats = {
+            "TOTAL_SIGNALS": 0,
+            "PROFITABILITY_ACCEPTED": 0,
+            "PROFITABILITY_REJECTED": 0,
+            "RISK_ACCEPTED": 0,
+            "RISK_REJECTED": 0,
+            "EXECUTION_ELIGIBLE": 0,
+            "EXECUTION_REJECTED": 0,
+            "COOLDOWN_REJECTED": 0,
+            "MARKET_DATA_REJECTED": 0,
+            "JIT_REJECTED": 0,
+            "OTHER_REJECTED": 0,
+            "QUALIFIED": 0,
+            "ORDERS_SUBMITTED": 0,
+            "ORDERS_FILLED": 0,
+            "ORDERS_FAILED": 0,
+            "OPEN_POSITIONS": 0,
+            "CLOSED_TRADES": 0,
+            "symbols_scanned": 0,
+            "ticks_received_per_symbol": {},
+            "candles_constructed_per_symbol": {},
+            "latest_candle_timestamp": {},
+            "strategy_evaluations": 0,
+            "buy_predictions": 0,
+            "sell_predictions": 0,
+            "TOTAL_CANDLES": 0,
+            "strategy_metrics": {
+                s: {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0} for s in ACTIVE_STRATEGIES
+            },
+            "timeframe_metrics": {}
+        }
+        
+        # Populate timeframe metrics dynamically
+        for tfs in ACTIVE_STRATEGIES.values():
+            tfs_list = tfs if isinstance(tfs, list) else [tfs]
+            for tf in tfs_list:
+                if tf not in self.stats["timeframe_metrics"]:
+                    self.stats["timeframe_metrics"][tf] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0}
+        self.stats.update({
+            "BUY_SIGNALS": 0,
+            "SELL_SIGNALS": 0,
+            "HOLD_SIGNALS": 0
+        })
+
+        stats_read = load_json_state(TESTNET_PORTFOLIO_FILE, expected_type=dict)
+        if stats_read.status == "corrupt":
+            logger.error(f"[SERVICE] Failed to restore persistent stats: {stats_read.error} "
+                         f"(quarantined to {stats_read.quarantined_to})")
+        elif stats_read.ok:
+            saved_stats = stats_read.data.get("scanner_stats")
+            if isinstance(saved_stats, dict):
+                for k in self.stats:
+                    value = saved_stats.get(k)
+                    if not isinstance(value, bool) and finite_or_none(value) is not None and value >= 0:
+                        self.stats[k] = value
+
+    def _register_active_strategies_in_registry(self):
+        """Records config-admitted strategies as RESEARCH without claiming validation."""
+        if not getattr(self, "registry", None):
+            return
+        import inspect
+        import config_strategy
+        for tf, strats in getattr(self, "strategies", {}).items():
+            for strat_name, mod in strats:
+                try:
+                    src = inspect.getsource(mod)
+                except Exception:
+                    src = f"# Strategy {strat_name} auto-registered"
+                param_attr = f"{strat_name.upper()}_STRATEGY"
+                params = getattr(config_strategy, param_attr, getattr(config_strategy, f"{param_attr}_V2", {}))
+                if not isinstance(params, dict):
+                    params = {}
+                try:
+                    active = self.registry.get_active(strat_name)
+                    if not active:
+                        self.registry.register(
+                            strategy_id=strat_name,
+                            version="v1.0.0",
+                            source=src,
+                            parameters=params,
+                            status="RESEARCH",
+                        )
+                except Exception as ex:
+                    logger.debug(f"[REGISTRY_AUTO] {strat_name}: {ex}")
+
+    def _runtime_heartbeat_loop(self):
+        """Periodically renews the runtime lease and updates the heartbeat."""
+        while not getattr(self, "_stop_heartbeat", threading.Event()).is_set():
+            time.sleep(20.0)
+            try:
+                if getattr(self, "runtime_lease", None) and getattr(self, "runtime_supervisor", None):
+                    status = "PAUSED" if getattr(self, "observe_only", False) or getattr(self, "safety_halt", False) else "RUNNING"
+                    self.runtime_heartbeat = self.runtime_lease.heartbeat(status=status)
+                    self.runtime_supervisor.record_heartbeat(self.runtime_heartbeat)
+            except Exception as e:
+                logger.debug(f"[HEARTBEAT_TICK_ERR] {e}")
+
+    def _restore_daily_risk_state(self):
+
+        """Parse today's ledger entries to accurately restore the daily realized PnL limit with strict provenance checking."""
+        try:
+            ledger_file = os.getenv("TESTNET_LEDGER_FILE", TESTNET_LEDGER_FILE)
+            if not os.path.exists(ledger_file):
+                return
+            today_str = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+            daily_loss = 0.0
+            seen_exit_ids = set()
+            
+            with open(ledger_file, 'r') as f:
+                for line in f:
+                    if not line.strip(): continue
+                    try:
+                        record = json.loads(line)
+                        source = record.get("source", "")
+                        strategy = record.get("strategy", "")
+                        entry_oid = record.get("entry_order_id")
+                        exit_oid = record.get("exit_order_id")
+
+                        # Reject synthetic/test/paper records
+                        if source == "TEST" or strategy == "TEST" or source == "PAPER":
+                            continue
+                        if not (entry_oid or exit_oid):
+                            continue
+                        if source not in ["BINANCE_EXECUTION", "RECOVERY_FROM_BINANCE"]:
+                            if "RECOVERED" in str(record.get("signal_id", "")) or "RECOVERED" in str(strategy):
+                                source = "RECOVERY_FROM_BINANCE"
+                            else:
+                                continue
+
+                        # Prevent duplicate accounting of identical completed trades
+                        exit_id = str(exit_oid) if exit_oid else (str(record.get("exit_client_id")) if record.get("exit_client_id") else None)
+                        if exit_id:
+                            if exit_id in seen_exit_ids:
+                                continue
+                            seen_exit_ids.add(exit_id)
+
+                        action_str = str(record.get("action", "")).upper()
+                        status_str = str(record.get("status", "")).upper()
+                        event_type_str = str(record.get("event_type", "")).upper()
+                        if "CLOSE" in action_str or status_str == "CLOSED" or "CLOSE" in event_type_str:
+                            # Parse date from timestamp
+                            trade_date = record.get("timestamp", "").split("T")[0]
+                            if trade_date == today_str:
+                                pnl = record.get("pnl", record.get("net_pnl", 0.0))
+                                daily_loss += pnl
+                    except Exception:
+                        pass
+                        
+            if daily_loss != 0:
+                self.risk_gate.daily_realized_loss = daily_loss
+                logger.info(f"[SERVICE] Restored daily realized PnL: ${daily_loss:.2f}")
+        except Exception as e:
+            logger.error(f"[SERVICE] Error restoring daily risk state: {e}")
+
+    def sync_exchange_state(self, account):
+        """Stage 2: Reconcile local active_trades with Binance open orders and balances."""
+        try:
+            if TRADING_MODE == "FUTURES":
+                open_orders = self.client.futures_get_open_orders() if hasattr(self.client, "futures_get_open_orders") else []
+                positions = account.get("positions", [])
+                # Exchange truth, not the strategy registry: a position that exists
+                # must be adopted and protected whatever governance currently
+                # allows. Gating this on `validated` emptied the set whenever no
+                # strategy was OOS-validated (the live state), which made EVERY
+                # resting OCO look "floating" -- so a restart cancelled the
+                # stop-loss on real positions instead of reconstructing them.
+                open_symbols_from_assets = {
+                    p["symbol"] for p in positions
+                    if abs(float(p.get("positionAmt", 0.0))) > 0
+                }
+            else:
+                open_orders = self.client.get_open_orders()
+                assets = [item for item in account.get('balances', []) if float(item['free']) > 0 or float(item['locked']) > 0]
+                # Same rule as above: any non-quote holding is a real position.
+                # Faucet residue is excluded later by the post-baseline trade
+                # history check, which is the mechanism actually designed for it.
+                open_symbols_from_assets = {a['asset'] + "USDT" for a in assets
+                                            if a['asset'] not in _QUOTE_ASSETS}
+
+            # Governance no longer decides *what* we reconcile, but it is still
+            # worth surfacing: a holding outside the OOS-validated universe cannot
+            # be managed by any enabled strategy and needs a human decision.
+            unvalidated_holdings = sorted(open_symbols_from_assets - governance_validated_assets(self.strategies))
+            if unvalidated_holdings:
+                logger.warning(
+                    f"[RECOVERY] {len(unvalidated_holdings)} holding(s) outside the OOS-validated "
+                    f"universe: {unvalidated_holdings}. They will still be adopted and protected."
+                )
+            
+            from execution import _load_active_trades
+            try:
+                active_trades = _load_active_trades()
+            except Exception as e:
+                logger.error(f"[RECONCILIATION] Failed to load active trades: {e}")
+                active_trades = []
+                
+            local_symbols = {t['symbol'] for t in active_trades}
+            protected_symbols = {o['symbol'] for o in open_orders}
+
+            # BASELINE SCOPE: a statistics reset marks the start of forward
+            # measurement. Holdings whose entire trade history predates the
+            # baseline are testnet-faucet residue (e.g. 0.98 BTC airdrop),
+            # NOT engine positions — they must never be adopted, protected,
+            # or valued as equity. Their stray OCOs are floating and cancelled.
+            baseline_ms = None
+            try:
+                if "TESTNET_BASELINE_FILE" in os.environ:
+                    _bl_path = os.environ["TESTNET_BASELINE_FILE"]
+                    if os.path.exists(_bl_path):
+                        with open(_bl_path, "r") as bf:
+                            _bl = json.load(bf)
+                        _iso = _bl.get("reset_timestamp", "")
+                        if _iso:
+                            baseline_ms = datetime.datetime.fromisoformat(_iso.replace("Z", "+00:00")).timestamp() * 1000
+                else:
+                    _bl_path = "testnet_baseline.json"
+                    _iso = ""
+                    if os.path.exists(_bl_path):
+                        with open(_bl_path, "r") as bf:
+                            _bl = json.load(bf)
+                        _iso = _bl.get("reset_timestamp", "")
+                    if not _iso:
+                        _iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-01T00:00:00Z")
+                    if _iso:
+                        baseline_ms = datetime.datetime.fromisoformat(_iso.replace("Z", "+00:00")).timestamp() * 1000
+            except Exception:
+                baseline_ms = None
+            engine_symbols = open_symbols_from_assets
+            if baseline_ms:
+                engine_symbols = set()
+                for sym in open_symbols_from_assets:
+                    try:
+                        if TRADING_MODE == "FUTURES":
+                            trades = self.client.futures_account_trades(symbol=sym, limit=100) if hasattr(self.client, "futures_account_trades") else []
+                        else:
+                            trades = self.client.get_my_trades(symbol=sym, limit=100)
+                        # Trades without a timestamp count as post-baseline (fail-open;
+                        # real Binance payloads always carry 'time').
+                        if any(t.get('time', float('inf')) >= baseline_ms for t in trades):
+                            engine_symbols.add(sym)
+                    except Exception:
+                        engine_symbols.add(sym)  # fail-safe: treat as engine-managed
+                logger.info(f"[RECONCILIATION] Baseline scope: {len(engine_symbols)} of {len(open_symbols_from_assets)} "
+                            f"holdings have post-baseline history (faucet residue ignored)")
+
+            # 1. Cancel any floating OCOs/conditional orders (orders open, but no engine position)
+            floating_ocos = protected_symbols - engine_symbols
+            if floating_ocos:
+                for sym in floating_ocos:
+                    logger.warning(f"[RECOVERY] 🚨 Floating protective orders detected without position for {sym}. Cancelling to prevent accidental entry.")
+                    sym_orders = [o for o in open_orders if o['symbol'] == sym]
+                    for o in sym_orders:
+                        if TRADING_MODE == "FUTURES":
+                            try:
+                                if hasattr(self.client, "futures_cancel_order"):
+                                    self.client.futures_cancel_order(symbol=sym, orderId=o['orderId'])
+                            except Exception:
+                                pass
+                        else:
+                            if o.get('orderListId', -1) > 0:
+                                try:
+                                    self.client.cancel_order(symbol=sym, orderId=o['orderId'])
+                                except Exception:
+                                    pass
+
+            # 2. Reconstruct missing local state for open, protected positions
+            missing_local_but_has_position_and_oco = protected_symbols.intersection(engine_symbols) - local_symbols
+            if missing_local_but_has_position_and_oco:
+                from execution import _save_active_trades
+                for sym in missing_local_but_has_position_and_oco:
+                    logger.info(f"[RECOVERY] 🔄 Discovered orphaned open position on exchange for {sym}. Reconstructing local state...")
+                    
+                    sym_orders = [o for o in open_orders if o['symbol'] == sym]
+                    oco_id, tp_id, sl_id = None, None, None
+                    tp_price, sl_price = 0.0, 0.0
+                    
+                    if TRADING_MODE == "FUTURES":
+                        for o in sym_orders:
+                            otype = o.get('type', '')
+                            if otype in ('TAKE_PROFIT_MARKET', 'TAKE_PROFIT', 'LIMIT'):
+                                tp_id = o.get('orderId')
+                                tp_price = float(o.get('stopPrice', o.get('price', 0.0)))
+                            elif otype in ('STOP_MARKET', 'STOP', 'STOP_LOSS'):
+                                sl_id = o.get('orderId')
+                                sl_price = float(o.get('stopPrice', o.get('price', 0.0)))
+                        if not tp_id and not sl_id:
+                            continue
+                    else:
+                        for o in sym_orders:
+                            if o.get('orderListId', -1) > 0:
+                                oco_id = o['orderListId']
+                                if o['type'] == 'LIMIT_MAKER':
+                                    tp_id = o['orderId']
+                                    tp_price = float(o['price'])
+                                elif o['type'] == 'STOP_LOSS_LIMIT':
+                                    sl_id = o['orderId']
+                                    sl_price = float(o['stopPrice'])
+                                    
+                        if not oco_id:
+                            continue
+                        
+                    # Find the entry order
+                    try:
+                        if TRADING_MODE == "FUTURES":
+                            recent_trades = self.client.futures_account_trades(symbol=sym, limit=50) if hasattr(self.client, "futures_account_trades") else []
+                        else:
+                            recent_trades = self.client.get_my_trades(symbol=sym, limit=50)
+                        # Assume the most recent trade not associated with the protective order is the entry
+                        entry_trade = None
+                        for t in reversed(recent_trades):
+                            if t.get('orderId') not in (tp_id, sl_id):
+                                entry_trade = t
+                                break
+                                
+                        if not entry_trade:
+                            logger.error(f"[RECOVERY] No recent trades found for {sym}, cannot determine entry.")
+                            continue
+                            
+                        entry_price = float(entry_trade.get('price', 0.0))
+                        entry_qty = float(entry_trade.get('qty', 0.0))
+                        entry_side = "BUY" if (entry_trade.get('isBuyer') or entry_trade.get('buyer')) else "SELL"
+                        
+                        recovered_trade = {
+                            "strategy": "supertrend",
+                            "symbol": sym,
+                            "side": entry_side,
+                            "quantity": entry_qty,
+                            "entry_price": entry_price,
+                            "sl_price": sl_price,
+                            "tp_price": tp_price,
+                            "oco_id": oco_id,
+                            "tp_order_id": tp_id,
+                            "sl_order_id": sl_id,
+                            "status": "OPEN",
+                            "state": 1,
+                            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                            "entry_timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                            "signal_id": "RECOVERED_" + str(uuid.uuid4())[:8],
+                            "entry_client_id": "RECOVERED_" + str(uuid.uuid4())[:8],
+                            "is_futures": (TRADING_MODE == "FUTURES"),
+                        }
+                        active_trades.append(recovered_trade)
+                        logger.info(f"[RECOVERY] ✅ Successfully reconstructed state for {sym}: {recovered_trade}")
+                    except Exception as e:
+                        logger.error(f"[RECOVERY] Failed to reconstruct state for {sym}: {e}")
+                        
+                # Save the recovered state
+                _save_active_trades(active_trades)
+
+            # 3. Ensure assets we manage have protective orders
+            unprotected = engine_symbols - protected_symbols - floating_ocos
+            managed_symbols = {t['symbol'] for t in active_trades if t.get('status') == 'OPEN'}
+            managed_unprotected = [s for s in managed_symbols if s not in protected_symbols and s not in floating_ocos]
+            
+            # Crash Recovery: Attempt to place missing protection for unmanaged/unprotected open assets
+            if unprotected and not os.environ.get("PYTEST_CURRENT_TEST"):
+                from execution import _save_active_trades
+                from testnet_engine.protection import (
+                    emergency_market_close,
+                    emergency_futures_market_close,
+                    place_oco_protection,
+                    place_futures_bracket_protection,
+                )
+                for sym in list(unprotected):
+                    try:
+                        logger.info(f"[RECOVERY] 🛡️ Unprotected position detected after restart for {sym}. Attempting safe protection restoration...")
+                        if TRADING_MODE == "FUTURES":
+                            recent_trades = self.client.futures_account_trades(symbol=sym, limit=20) if hasattr(self.client, "futures_account_trades") else []
+                        else:
+                            recent_trades = self.client.get_my_trades(symbol=sym, limit=20)
+                        if recent_trades:
+                            last_trade = recent_trades[-1]
+                            entry_price = float(last_trade.get('price', 0.0))
+                            executed_qty = float(last_trade.get('qty', 0.0))
+                            entry_side = "BUY" if (last_trade.get('isBuyer') or last_trade.get('buyer')) else "SELL"
+                            
+                            # Get current ticker price
+                            if TRADING_MODE == "FUTURES":
+                                curr_ticker = self.client.futures_symbol_ticker(symbol=sym) if hasattr(self.client, "futures_symbol_ticker") else {}
+                            else:
+                                curr_ticker = self.client.get_symbol_ticker(symbol=sym)
+                            curr_price = float(curr_ticker.get('price', entry_price))
+                            
+                            # Standard conservative protection levels (SL: 2%, TP: 4%)
+                            if entry_side == "BUY":
+                                sl_price = round(entry_price * 0.98, 4)
+                                tp_price = round(entry_price * 1.04, 4)
+                                is_safe = curr_price > sl_price and curr_price < tp_price
+                            else:
+                                sl_price = round(entry_price * 1.02, 4)
+                                tp_price = round(entry_price * 0.96, 4)
+                                is_safe = curr_price < sl_price and curr_price > tp_price
+
+                            if is_safe:
+                                if TRADING_MODE == "FUTURES":
+                                    prot = place_futures_bracket_protection(
+                                        client=self.client,
+                                        symbol=sym,
+                                        entry_side=entry_side,
+                                        executed_qty=executed_qty,
+                                        actual_fill_price=entry_price,
+                                        sl_price=sl_price,
+                                        tp_price=tp_price,
+                                    )
+                                    recovered_trade = {
+                                        "strategy": "supertrend",
+                                        "symbol": sym,
+                                        "side": entry_side,
+                                        "quantity": executed_qty,
+                                        "entry_price": entry_price,
+                                        "entry_fee": float(last_trade.get('commission', 0.0)),
+                                        "sl_price": sl_price,
+                                        "tp_price": tp_price,
+                                        "oco_id": None,
+                                        "tp_order_id": prot["tp_order_id"],
+                                        "sl_order_id": prot["sl_order_id"],
+                                        "status": "OPEN",
+                                        "state": 1,
+                                        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                                        "entry_timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                                        "signal_id": f"RECOVERED_{int(time.time())}",
+                                        "entry_client_id": f"RECOVERED_{int(time.time())}",
+                                        "is_futures": True,
+                                    }
+                                else:
+                                    prot = place_oco_protection(
+                                        client=self.client,
+                                        symbol=sym,
+                                        entry_side=entry_side,
+                                        executed_qty=executed_qty,
+                                        actual_fill_price=entry_price,
+                                        sl_price=sl_price,
+                                        tp_price=tp_price,
+                                        list_client_order_id=f"rec-{int(time.time())}"
+                                    )
+                                    recovered_trade = {
+                                        "strategy": "supertrend",
+                                        "symbol": sym,
+                                        "side": entry_side,
+                                        "quantity": executed_qty,
+                                        "entry_price": entry_price,
+                                        "entry_fee": float(last_trade.get('commission', 0.0)),
+                                        "sl_price": sl_price,
+                                        "tp_price": tp_price,
+                                        "oco_id": prot["oco_order_list_id"],
+                                        "tp_order_id": prot["tp_order_id"],
+                                        "sl_order_id": prot["sl_order_id"],
+                                        "status": "OPEN",
+                                        "state": 1,
+                                        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                                        "entry_timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                                        "signal_id": f"RECOVERED_{int(time.time())}",
+                                        "entry_client_id": f"RECOVERED_{int(time.time())}",
+                                        "is_futures": False,
+                                    }
+                                active_trades.append(recovered_trade)
+                                _save_active_trades(active_trades)
+                                unprotected.remove(sym)
+                                logger.info(f"[RECOVERY] ✅ Successfully restored missing protection for {sym}")
+                            else:
+                                logger.warning(f"[RECOVERY] Price outside safe bounds for {sym}. Attempting emergency market close.")
+                                if TRADING_MODE == "FUTURES":
+                                    emergency_futures_market_close(self.client, sym, entry_side, executed_qty)
+                                else:
+                                    emergency_market_close(self.client, sym, entry_side, executed_qty)
+                                unprotected.remove(sym)
+                    except Exception as re_err:
+                        logger.error(f"[RECOVERY] Failed to restore missing protection for {sym}: {re_err}")
+
+            if unprotected and ("pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST") or managed_unprotected):
+                logger.critical(f"[RECONCILIATION] 🚨 SAFETY HALT: Unprotected assets detected: {unprotected}")
+                self.safety_halt = True
+            elif managed_unprotected:
+                logger.critical(f"[RECONCILIATION] 🚨 SAFETY HALT: Managed assets unprotected: {managed_unprotected}")
+                self.safety_halt = True
+            else:
+                self.safety_halt = False
+                
+            # 4. Sync local active_positions dictionary
+            for t in active_trades:
+                if t.get('status') == 'OPEN':
+                    self.active_positions[t['symbol']] = t
+                
+        except Exception as e:
+            logger.warning(f"[RECONCILIATION] Warning syncing exchange state: {e}")
+
+    def _save_state(self):
+        # Format datetime safely
+        last_m = {}
+        if hasattr(self, 'scanner'):
+            for k, v in self.scanner.last_market_update.items():
+                last_m[f"{k[0]}_{k[1]}"] = v.isoformat() + "Z" if isinstance(v, datetime.datetime) else str(v)
+            
+            # Populate diagnostics
+            self.stats["ticks_received_per_symbol"] = {f"{k[0]}_{k[1]}": v for k, v in getattr(self.scanner, 'tick_counts', {}).items()}
+            self.stats["candles_constructed_per_symbol"] = {f"{k[0]}_{k[1]}": len(v) for k, v in self.scanner.candle_cache.items()}
+            self.stats["latest_candle_timestamp"] = {f"{k[0]}_{k[1]}": str(v.index[-1] if not v.empty else "") for k, v in self.scanner.candle_cache.items()}
+            
+        self.stats["OPEN_POSITIONS"] = len(self.active_positions)
+                
+        state = {
+            "initial_deposit": self.initial_deposit,
+            "current_equity": getattr(self, "current_equity", 10000.0),
+            "starting_equity": getattr(self, "starting_equity", 10000.0),
+            "service_start_time": getattr(self, 'service_start_time', datetime.datetime.utcnow().isoformat() + "Z"),
+            "safety_halt": getattr(self, 'safety_halt', False),
+            "cash": max(0.0, self.current_equity - sum(p.get('quantity', 0) * p.get('entry_price', 0) for p in self.active_positions.values() if isinstance(p, dict))),
+            "equity": self.current_equity,
+            "realized_pnl": getattr(self, 'total_reconciled_pnl', self.risk_gate.daily_realized_loss),
+            "used_margin": sum([p.get('quantity', 0) * p.get('entry_price', 0) for p in self.active_positions.values()]),
+            "fees": getattr(self, 'total_reconciled_fees', 0.0),
+            "funding": 0.0,
+            "open_positions": len(self.active_positions),
+            "positions": self.active_positions,
+            "max_drawdown": (self.starting_equity - self.current_equity) / self.starting_equity if self.starting_equity > 0 else 0,
+            "scanner_stats": {
+                **self.stats,
+                "symbols": self.scanner.symbols if hasattr(self, 'scanner') else [],
+                "last_market_update": last_m,
+                "last_evaluation": self.last_evaluation
+            },
+            "funnel": {
+                "candles_evaluated": self.stats.get("CANDLES", self.stats.get("TOTAL_CANDLES", 0)),
+                "strategies_evaluated": self.stats.get("STRATEGIES_EVALUATED", self.stats.get("strategy_evaluations", 0)),
+                "signals_generated": self.stats.get("SIGNALS_GENERATED", self.stats.get("TOTAL_SIGNALS", 0)),
+                "profitability_accepted": self.stats.get("PROFITABILITY_ACCEPTED", 0),
+                "profitability_rejected": self.stats.get("PROFITABILITY_REJECTED", 0),
+                "risk_accepted": self.stats.get("RISK_ACCEPTED", 0),
+                "risk_rejected": self.stats.get("RISK_REJECTED", 0),
+                "execution_eligible": self.stats.get("EXECUTION_ELIGIBLE", self.stats.get("QUALIFIED", 0)),
+                "execution_rejected": self.stats.get("EXECUTION_REJECTED", 0),
+                "orders_submitted": self.stats.get("ORDERS_SUBMITTED", 0),
+                "orders_filled": self.stats.get("ORDERS_FILLED", 0),
+                "orders_failed": self.stats.get("ORDERS_FAILED", 0)
+            },
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        }
+        def convert_keys(obj):
+            if isinstance(obj, dict):
+                return {str(k) if isinstance(k, tuple) else k: convert_keys(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_keys(i) for i in obj]
+            return obj
+
+        try:
+            # Unique temp file + cross-process lock; NaN/inf are refused so a
+            # numeric fault can never be persisted as the restart state (the
+            # last good state stays on disk instead).
+            with locked_path(TESTNET_PORTFOLIO_FILE):
+                atomic_write_json(TESTNET_PORTFOLIO_FILE, convert_keys(state), indent=2, allow_nan=False, default=str)
+        except (OSError, TypeError, ValueError) as e:
+            logger.error(f"[SERVICE] Failed to save state atomically: {e}")
+
+        # Record periodic equity history snapshot (at most once every 60s)
+        now_ts = time.time()
+        if now_ts - getattr(self, 'last_equity_snapshot', 0) >= 60:
+            self.last_equity_snapshot = now_ts
+            hist_file = os.getenv("TESTNET_EQUITY_HISTORY_FILE", "testnet_equity_history.jsonl")
+            equity = finite_or_none(self.current_equity)
+            if equity is None:
+                logger.error(f"[SERVICE] Equity snapshot skipped: current equity {self.current_equity!r} is not finite")
+            else:
+                snap = {
+                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                    "equity": equity,
+                    "balance": equity
+                }
+                try:
+                    append_jsonl(hist_file, snap)
+                except (OSError, TypeError, ValueError) as e:
+                    logger.error(f"[SERVICE] Failed to append equity history: {e}")
+
+    def on_candle_closed(self, symbol, tf, df, data_health_status="OK"):
+        """Callback invoked by MarketScanner when a new candle closes."""
+        try:
+            if getattr(self, 'safety_halt', False):
+                logger.warning(f"[SAFETY_HALT] Scanning halted due to RECONCILIATION MISMATCH. Rejecting {symbol} signal.")
+                return
+
+            # Strategy Protection: Reject stale, unverified, or missing market data
+            if data_health_status != "OK":
+                logger.warning(f"[STRATEGY_SKIPPED] reason=STALE_MARKET_DATA symbol={symbol} tf={tf} health={data_health_status}")
+                return
+
+            if df is None or df.empty or len(df) < 20:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=INSUFFICIENT_MARKET_DATA symbol={symbol} tf={tf} rows={len(df) if df is not None else 0}")
+                return
+
+            # Check candle age freshness against timeframe. Fail closed: the old
+            # check compared naive utcnow() with tz-aware stamps, raised, and the
+            # bare except silently skipped the gate; future stamps passed too.
+            tf_seconds = _TF_SECONDS.get(tf, 3600)
+            try:
+                last_ts = pd.Timestamp(df["timestamp"].iloc[-1])
+                if pd.isna(last_ts):
+                    raise ValueError("NaT")
+                last_ts = last_ts.tz_localize("UTC") if last_ts.tzinfo is None else last_ts.tz_convert("UTC")
+            except (KeyError, TypeError, ValueError) as ts_err:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=BAD_CANDLE_TIMESTAMP symbol={symbol} tf={tf} error={ts_err}")
+                return
+            age_sec = (pd.Timestamp.now(tz="UTC") - last_ts).total_seconds()
+            if age_sec > tf_seconds * 3:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=STALE_MARKET_DATA symbol={symbol} tf={tf} age={age_sec:.1f}s")
+                return
+            if age_sec < -tf_seconds:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=FUTURE_CANDLE_TIMESTAMP symbol={symbol} tf={tf} age={age_sec:.1f}s")
+                return
+
+            df = add_indicators(df, strict_tail=True)
+            if df is None or df.empty:
+                logger.warning(f"[STRATEGY_SKIPPED] reason=INDICATORS_UNAVAILABLE symbol={symbol} tf={tf}")
+                return
+
+            current_price = df['close'].iloc[-1]
+            logger.info(f"[FEATURES_READY] {symbol} {tf} | Rows: {len(df)} | Current Price: {current_price}")
+
+            with self.lock:
+                try:
+                    self.stats["TOTAL_CANDLES"] += 1
+                    self.last_evaluation[symbol] = datetime.datetime.utcnow().isoformat() + "Z"
+                    
+                    if tf not in self.strategies:
+                        return
+                    
+                    for strat_name, strat_mod in self.strategies[tf]:
+                        self.stats["strategy_evaluations"] += 1
+
+                        # V3 Strategy Performance Gate: skip demoted strategies
+                        if self.is_strategy_demoted(strat_name):
+                            self.stats["STRATEGY_DEMOTED_SKIPPED"] = self.stats.get("STRATEGY_DEMOTED_SKIPPED", 0) + 1
+                            continue
+                        
+                        if strat_name == "adx_ema_mtf" or "mtf" in strat_name:
+                            df_1h = None
+                            if hasattr(self, 'scanner') and self.scanner:
+                                with self.scanner._cache_lock:
+                                    df_1h = self.scanner.candle_cache.get((symbol, "1h"))
+                            signal_result = strat_mod.get_signal(df, df_1h=df_1h)
+                        else:
+                            signal_result = strat_mod.get_signal(df)
+                        side = getattr(signal_result, 'side', signal_result[0] if signal_result else None)
+                        sl   = getattr(signal_result, 'sl',   signal_result[1] if signal_result else None)
+                        tp   = getattr(signal_result, 'tp',   signal_result[2] if signal_result else None)
+                        if side and not signal_levels_valid(side, current_price, sl, tp):
+                            # Degenerate candles (zero ATR, inf highs, sub-tick
+                            # prices) can yield NaN/zero/inverted levels; such a
+                            # signal must never reach the gates or the venue.
+                            logger.warning(
+                                f"[STRATEGY_SIGNAL_REJECTED] reason=INVALID_SIGNAL_LEVELS strategy={strat_name} "
+                                f"symbol={symbol} tf={tf} side={side} sl={sl!r} tp={tp!r} close={current_price}"
+                            )
+                            self.stats["INVALID_SIGNAL_LEVELS"] = self.stats.get("INVALID_SIGNAL_LEVELS", 0) + 1
+                            side, sl, tp = None, None, None
+
+                        last_row = df.iloc[-1]
+                        prev_row = df.iloc[-2] if len(df) >= 2 else last_row
+                        adx_val = float(last_row.get("adx", 0.0))
+                        ema20_val = float(last_row.get("ema_20", 0.0))
+                        ema50_val = float(last_row.get("ema_50", 0.0))
+                        ema200_val = float(last_row.get("ema_200", 0.0))
+                        macd_val = float(last_row.get("macd", 0.0))
+                        macd_sig = float(last_row.get("macd_signal", 0.0))
+                        bb_mid_val = float(last_row.get("bb_mid", 0.0))
+                        atr_val = float(last_row.get("atr", last_row.get("atr_adx_ema", 0.0)))
+                        atr_pct = (atr_val / current_price) if current_price > 0 else 0.0
+                        trend_dir = "BULLISH" if current_price > ema200_val else "BEARISH"
+                        candle_ts = last_row.name if hasattr(last_row, 'name') else df.index[-1]
+                        
+                        rejection_reason = "VALID_SIGNAL"
+                        if not side:
+                            if strat_name.startswith("factory_winner"):
+                                reasons = []
+                                prev_macd = float(prev_row.get("macd", 0.0))
+                                prev_sig = float(prev_row.get("macd_signal", 0.0))
+                                macd_cross_up = (macd_val > macd_sig) and (prev_macd <= prev_sig)
+                                macd_cross_dn = (macd_val < macd_sig) and (prev_macd >= prev_sig)
+                                if not (macd_cross_up or macd_cross_dn):
+                                    reasons.append("NO_MACD_CROSSOVER")
+                                if macd_cross_up and current_price >= bb_mid_val:
+                                    reasons.append("PRICE_ABOVE_BB_MID")
+                                if macd_cross_dn and current_price <= bb_mid_val:
+                                    reasons.append("PRICE_BELOW_BB_MID")
+                                rejection_reason = "; ".join(reasons) if reasons else "NO_TRIGGER"
+                            elif strat_name in ["adx_ema", "adx_ema_mtf"]:
+                                reasons = []
+                                cross_up = (ema20_val > ema50_val) and (float(prev_row.get("ema_20", 0)) <= float(prev_row.get("ema_50", 0)))
+                                cross_dn = (ema20_val < ema50_val) and (float(prev_row.get("ema_20", 0)) >= float(prev_row.get("ema_50", 0)))
+                                if not (cross_up or cross_dn):
+                                    reasons.append("NO_CROSSOVER")
+                                _adx_th = ADX_EMA_STRATEGY_V2.get("ADX_THRESHOLD", 30)
+                                if adx_val <= _adx_th:
+                                    reasons.append(f"ADX_BELOW_{_adx_th}")
+                                if cross_up and current_price <= ema200_val:
+                                    reasons.append("CLOSE_BELOW_EMA200")
+                                if cross_dn and current_price >= ema200_val:
+                                    reasons.append("CLOSE_ABOVE_EMA200")
+                                rejection_reason = "; ".join(reasons) if reasons else "NO_TRIGGER"
+                            else:
+                                rejection_reason = "NO_TRIGGER"
+
+                        if strat_name.startswith("factory_winner"):
+                            logger.info(
+                                f"[CANDLE_EVALUATION] symbol={symbol} tf={tf} timestamp={candle_ts} "
+                                f"price={current_price:.4f} MACD={macd_val:.4f} Signal={macd_sig:.4f} "
+                                f"BBMid={bb_mid_val:.4f} ATR={atr_val:.4f} ATR%={atr_pct*100:.3f}% "
+                                f"strategy={strat_name} decision={side or 'HOLD'} reason={rejection_reason}"
+                            )
+                        else:
+                            logger.info(
+                                f"[CANDLE_EVALUATION] symbol={symbol} tf={tf} timestamp={candle_ts} "
+                                f"price={current_price:.4f} ADX={adx_val:.2f} EMA20={ema20_val:.4f} "
+                                f"EMA50={ema50_val:.4f} EMA200={ema200_val:.4f} ATR={atr_val:.4f} "
+                                f"ATR%={atr_pct*100:.3f}% trend_direction={trend_dir} "
+                                f"decision={side or 'HOLD'} reason={rejection_reason}"
+                            )
+                        logger.info(
+                            f"[STRATEGY_SCAN] symbol={symbol} timeframe={tf} strategy={strat_name} "
+                            f"decision={'SIGNAL' if side else 'HOLD'} reason={rejection_reason}"
+                        )
+
+                        # Aggregate global metrics
+                        if not side:
+                            self.stats["HOLD_SIGNALS"] += 1
+                            if strat_name not in self.stats["strategy_metrics"]:
+                                self.stats["strategy_metrics"][strat_name] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0}
+                            if tf not in self.stats["timeframe_metrics"]:
+                                self.stats["timeframe_metrics"][tf] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0}
+                            
+                            self.stats["strategy_metrics"][strat_name]["HOLD"] = self.stats["strategy_metrics"][strat_name].get("HOLD", 0) + 1
+                            self.stats["timeframe_metrics"][tf]["HOLD"] = self.stats["timeframe_metrics"][tf].get("HOLD", 0) + 1
+                            continue
+                            
+                        self.stats["TOTAL_SIGNALS"] += 1
+                        if side == "BUY":
+                            self.stats["BUY_SIGNALS"] += 1
+                            self.stats["buy_predictions"] += 1
+                        elif side == "SELL":
+                            self.stats["SELL_SIGNALS"] += 1
+                            self.stats["sell_predictions"] += 1
+                            
+                        if strat_name not in self.stats["strategy_metrics"]:
+                            self.stats["strategy_metrics"][strat_name] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0}
+                        if tf not in self.stats["timeframe_metrics"]:
+                            self.stats["timeframe_metrics"][tf] = {"signals": 0, "qualified": 0, "rejected": 0, "executed": 0, "evaluations": 0, "BUY": 0, "SELL": 0, "HOLD": 0}
+                            
+                        self.stats["strategy_metrics"][strat_name]["signals"] = self.stats["strategy_metrics"][strat_name].get("signals", 0) + 1
+                        self.stats["timeframe_metrics"][tf]["signals"] = self.stats["timeframe_metrics"][tf].get("signals", 0) + 1
+                        
+                        self.stats["strategy_metrics"][strat_name][side] = self.stats["strategy_metrics"][strat_name].get(side, 0) + 1
+                        self.stats["timeframe_metrics"][tf][side] = self.stats["timeframe_metrics"][tf].get(side, 0) + 1
+
+                        candle_timestamp = df['timestamp'].iloc[-1]
+                        deterministic_str = f"{symbol}_{strat_name}_{tf}_{side}_{candle_timestamp}"
+                        signal_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, deterministic_str))
+
+                        logger.info(f"[SIGNAL_GENERATED] {strat_name} {side} {symbol} ({tf}) | SignalID: {signal_id} | SL: {sl} | TP: {tp}")
+
+                        if side == "SELL" and getattr(config, 'LONG_ONLY', False):
+                            self.stats["OTHER_REJECTED"] += 1
+                            if strat_name in self.stats["strategy_metrics"]:
+                                self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                            if tf in self.stats["timeframe_metrics"]:
+                                self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                            self.log_opportunity(signal_id, symbol, side, {"reason": "LONG_ONLY_RESTRICTION"}, "REJECTED", "LONG_ONLY_RESTRICTION")
+                            continue
+
+                        # Global Macro BTC market-regime gate — alts follow BTC;
+                        # long entries on altcoins during BTC risk-off (4h close < EMA200) are
+                        # historically net-negative. Protects all strategies from buying alts into macro dumps.
+                        btc_filter_enabled = getattr(config, "BTC_REGIME_FILTER", True) or ADX_EMA_STRATEGY_V2.get("BTC_REGIME_FILTER", False)
+                        if btc_filter_enabled and symbol != "BTCUSDT":
+                            regime_ok, btc_close, btc_ema = self._btc_regime_state()
+                            if side == "BUY" and regime_ok is False:
+                                self.stats["OTHER_REJECTED"] += 1
+                                if strat_name in self.stats["strategy_metrics"]:
+                                    self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                                if tf in self.stats["timeframe_metrics"]:
+                                    self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                                self.log_opportunity(
+                                    signal_id, symbol, side,
+                                    {"reason": "BTC_REGIME_RISK_OFF", "btc_close": btc_close, "btc_ema200": btc_ema},
+                                    "REJECTED", "BTC_REGIME_RISK_OFF"
+                                )
+                                continue
+                            elif side == "SELL" and regime_ok is True and getattr(config, "BLOCK_SHORTS_IN_BULL_REGIME", False):
+                                self.stats["OTHER_REJECTED"] += 1
+                                if strat_name in self.stats["strategy_metrics"]:
+                                    self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                                if tf in self.stats["timeframe_metrics"]:
+                                    self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                                self.log_opportunity(
+                                    signal_id, symbol, side,
+                                    {"reason": "BTC_REGIME_RISK_ON_BLOCK_SHORTS", "btc_close": btc_close, "btc_ema200": btc_ema},
+                                    "REJECTED", "BTC_REGIME_RISK_ON_BLOCK_SHORTS"
+                                )
+                                continue
+
+                        # Qanat Signal Decay Filter: Linear weighted persistence filter to slash turnover noise
+                        persisted_bars = 1
+                        smoothed_conviction = 1.0
+                        if getattr(self, "decay_smoother", None):
+                            sig_conf = getattr(signal_result, "confidence", 1.0) if signal_result else 1.0
+                            decay_res = self.decay_smoother.update(symbol, tf, strat_name, side, float(sig_conf))
+                            persisted_bars = decay_res.persisted_bars
+                            smoothed_conviction = decay_res.conviction
+                            if not decay_res.is_confirmed:
+                                self.stats["OTHER_REJECTED"] += 1
+                                if strat_name in self.stats["strategy_metrics"]:
+                                    self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                                if tf in self.stats["timeframe_metrics"]:
+                                    self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                                self.log_opportunity(
+                                    signal_id, symbol, side,
+                                    {"reason": "QANAT_DECAY_FILTERED_NOISE", "conviction": decay_res.conviction, "threshold": self.decay_smoother.confirmation_threshold},
+                                    "REJECTED", "QANAT_DECAY_FILTERED_NOISE"
+                                )
+                                continue
+
+                        # V3 Signal Quality Filter: real-data entry gates
+                        # (trend alignment, candle confirmation, volume, volatility band, RSI chasing guard, risk-reward geometry)
+                        if getattr(config, "SIGNAL_QUALITY_ENABLED", True):
+                            q_ok, q_reason, q_detail = evaluate_signal_quality(
+                                df, side, current_price, sl, tp, strat_name
+                            )
+                            if not q_ok:
+                                self.stats["OTHER_REJECTED"] += 1
+                                self.stats["QUALITY_REJECTED"] = self.stats.get("QUALITY_REJECTED", 0) + 1
+                                if strat_name in self.stats["strategy_metrics"]:
+                                    self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                                if tf in self.stats["timeframe_metrics"]:
+                                    self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                                self.log_opportunity(
+                                    signal_id, symbol, side,
+                                    {"reason": q_reason, **q_detail},
+                                    "REJECTED", q_reason
+                                )
+                                continue
+
+                        passed_profit, p_metrics = self.profitability_gate.evaluate_signal(
+                            symbol, side, current_price, sl, tp, signal_result
+                        )
+                        
+                        if not passed_profit:
+                            self.stats["PROFITABILITY_REJECTED"] += 1
+                            if strat_name in self.stats["strategy_metrics"]:
+                                self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                            if tf in self.stats["timeframe_metrics"]:
+                                self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                            self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", p_metrics["reason"])
+                            continue
+                            
+                        # Stage 5.5: IntelX Market Intelligence Gate (Regulatory & Sentiment Veto/Confluence)
+                        intelx_ok = True
+                        intelx_mult = 1.0
+                        intelx_reason = "INTELX_NOT_EVALUATED"
+                        intelx_intel = {}
+                        if getattr(self, "intelx_client", None) and getattr(config, "INTELX_INTELLIGENCE_ENABLED", True):
+                            try:
+                                intelx_ok, intelx_mult, intelx_reason, intelx_intel = self.intelx_client.evaluate_market_sentiment(symbol, side)
+                            except Exception as e:
+                                logger.warning(f"[INTELX_GATE_WARN] Error evaluating IntelX sentiment for {symbol}: {e}")
+                                intelx_ok, intelx_mult, intelx_reason = True, 1.0, "INTELX_FAIL_OPEN"
+
+                        if not intelx_ok:
+                            self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                            self.stats["INTELX_REJECTED"] = self.stats.get("INTELX_REJECTED", 0) + 1
+                            if strat_name in self.stats["strategy_metrics"]:
+                                self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                            if tf in self.stats["timeframe_metrics"]:
+                                self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                            self.log_opportunity(
+                                signal_id, symbol, side,
+                                {"reason": intelx_reason, "intelx_intel": intelx_intel, **p_metrics},
+                                "REJECTED", intelx_reason
+                            )
+                            continue
+
+                        # Stage 5.6: Futuris Predictive Forecast Gate (Drawdown Veto & Directional Confluence)
+                        futuris_ok = True
+                        futuris_mult = 1.0
+                        futuris_reason = "FUTURIS_NOT_EVALUATED"
+                        futuris_forecast = {}
+                        if getattr(self, "futuris_client", None) and getattr(config, "FUTURIS_FORECAST_ENABLED", True):
+                            try:
+                                futuris_ok, futuris_mult, futuris_reason, futuris_forecast = self.futuris_client.evaluate_forecast_alignment(symbol, side)
+                            except Exception as e:
+                                logger.warning(f"[FUTURIS_GATE_WARN] Error evaluating Futuris forecast for {symbol}: {e}")
+                                futuris_ok, futuris_mult, futuris_reason = True, 1.0, "FUTURIS_FAIL_OPEN"
+
+                        if not futuris_ok:
+                            self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                            self.stats["FUTURIS_REJECTED"] = self.stats.get("FUTURIS_REJECTED", 0) + 1
+                            if strat_name in self.stats["strategy_metrics"]:
+                                self.stats["strategy_metrics"][strat_name]["rejected"] += 1
+                            if tf in self.stats["timeframe_metrics"]:
+                                self.stats["timeframe_metrics"][tf]["rejected"] += 1
+                            self.log_opportunity(
+                                signal_id, symbol, side,
+                                {"reason": futuris_reason, "futuris_forecast": futuris_forecast, **p_metrics},
+                                "REJECTED", futuris_reason
+                            )
+                            continue
+
+                        candidate = {
+                            "signal_id": signal_id,
+                            "symbol": symbol,
+                            "tf": tf,
+                            "side": side,
+                            "entry": current_price,
+                            "current_price": current_price,
+                            "sl": sl,
+                            "tp": tp,
+                            "strategy": strat_name,
+                            "metrics": p_metrics,
+                            "signal_result": signal_result,
+                            "persisted_bars": persisted_bars,
+                            "smoothed_conviction": smoothed_conviction,
+                            "intelx_mult": intelx_mult,
+                            "intelx_reason": intelx_reason,
+                            "intelx_intel": intelx_intel,
+                            "futuris_mult": futuris_mult,
+                            "futuris_reason": futuris_reason,
+                            "futuris_forecast": futuris_forecast,
+                            "timestamp": datetime.datetime.utcnow().timestamp()
+                        }
+                        self.opportunity_pool.put(candidate)
+                        self.pool_event.set()
+                        self.log_opportunity(signal_id, symbol, side, p_metrics, "QUALIFIED", "ADDED_TO_POOL", current_price=current_price, candidate=candidate)
+                    
+                except Exception as e:
+                    logger.error(f"[STRATEGY_EXCEPTION] Error processing signal for {symbol} ({tf}): {e}", exc_info=True)
+                finally:
+                    self._save_state()
+        except Exception as outer_err:
+            logger.error(f"[ON_CANDLE_CLOSED_ERROR] Uncaught error in on_candle_closed for {symbol} ({tf}): {outer_err}", exc_info=True)
+
+    def _reject_paused_candidates(self, candidates):
+        """Reject a batch of candidates when the durable trading-pause flag is
+        active (trading_pause.is_trading_paused). Returns True when paused and
+        every candidate was rejected; False when trading may proceed.
+
+        This is the engine-side enforcement of POST /api/v1/control/pause: the
+        control API writes a durable file flag because the dashboard and the
+        engine run in separate processes.
+        """
+        if not is_trading_paused():
+            return False
+        for c in candidates:
+            self.stats["TRADING_PAUSED_SKIPPED"] = self.stats.get("TRADING_PAUSED_SKIPPED", 0) + 1
+            self.log_opportunity(
+                c.get("signal_id"), c.get("symbol"), c.get("side"),
+                {"reason": "TRADING_PAUSED"}, "REJECTED", "TRADING_PAUSED",
+            )
+        logger.warning(
+            f"[TRADING_PAUSE] Durable pause flag active — blocked {len(candidates)} new entr"
+            f"{'y' if len(candidates) == 1 else 'ies'} (open positions keep SL/TP protection)"
+        )
+        return True
+
+    def execution_loop(self):
+        """Stage 6: Multi-Asset Opportunity Ranking and Execution"""
+        while True:
+            self.pool_event.wait()
+            self.pool_event.clear()
+            
+            # Tiny batch window to allow concurrent websocket threads to finish queueing
+            time.sleep(0.05) 
+            
+            candidates = []
+            while not self.opportunity_pool.empty():
+                try:
+                    candidates.append(self.opportunity_pool.get_nowait())
+                except queue.Empty:
+                    break
+                    
+            if not candidates:
+                continue
+
+            # Durable cross-process pause (POST /api/v1/control/pause).
+            # Blocks NEW entries before ranking; open positions keep SL/TP
+            # protection and the panic switch stays independent.
+            if self._reject_paused_candidates(candidates):
+                continue
+
+            try:
+                # Opportunity Ranking:
+                # Deterministic Score Formula: score = round((expected_net_return * confidence) / max(0.001, risk_pct), 6)
+                for c in candidates:
+                    p_met = c.get("metrics", {})
+                    exp_net = float(p_met.get("expected_net_return", 0.0))
+                    conf = float(p_met.get("confidence", p_met.get("prob_win", p_met.get("win_rate_prior", 0.5))))
+                    sl_p = float(c.get("sl", 0.0))
+                    tp_p = float(c.get("tp", 0.0))
+                    fallback_entry = (sl_p + tp_p) / 2 if (sl_p > 0 and tp_p > 0) else 1.0
+                    entry_p = float(c.get("entry", c.get("current_price", fallback_entry)))
+                    if entry_p <= 1.0 and fallback_entry > 1.0:
+                        entry_p = fallback_entry
+                    risk_pct = float(p_met.get("risk_pct", abs(entry_p - sl_p) / max(1e-5, entry_p)))
+                    if risk_pct <= 0.0 or risk_pct > 1.0:
+                        risk_pct = 0.01 # normalize to standard 1% risk baseline
+                    if getattr(self, "qanat_allocator", None):
+                        base_score = self.qanat_allocator.score_candidate(
+                            expected_net_return=exp_net,
+                            atr_pct=risk_pct,
+                            confidence=conf,
+                            persisted_bars=c.get("persisted_bars", 1)
+                        )
+                    else:
+                        base_score = round(exp_net * conf / max(0.001, risk_pct), 6)
+
+                    # ── ADX Momentum Boost ────────────────────────────────────────────
+                    # Trades with stronger trend momentum (higher ADX) are ranked higher.
+                    # ADX > 35 → 1.25× boost; ADX 25-35 → 1.10×; ADX < 20 → 0.85× penalty
+                    adx_boost = 1.0
+                    try:
+                        sym_c = c.get("symbol", "")
+                        tf_c = c.get("tf", "15m")
+                        df_c = None
+                        if hasattr(self, "scanner"):
+                            df_c = self.scanner.candle_cache.get((sym_c, tf_c))
+                        if df_c is not None and not df_c.empty:
+                            adx_c = float(df_c.iloc[-1].get("adx", 0.0))
+                            if adx_c >= 35:
+                                adx_boost = 1.25
+                            elif adx_c >= 25:
+                                adx_boost = 1.10
+                            elif adx_c < 20 and adx_c > 0:
+                                adx_boost = 0.85
+                    except Exception:
+                        pass
+
+                    # ── Reward/Risk Ratio Boost ───────────────────────────────────────
+                    # Prefer trades with better RR geometry (> 2.0 gets a 1.15× boost)
+                    rr_boost = 1.0
+                    try:
+                        sl_dist_c = abs(entry_p - sl_p) if sl_p > 0 else 0
+                        tp_dist_c = abs(tp_p - entry_p) if tp_p > 0 else 0
+                        if sl_dist_c > 0:
+                            rr_c = tp_dist_c / sl_dist_c
+                            if rr_c >= 2.5:
+                                rr_boost = 1.20
+                            elif rr_c >= 2.0:
+                                rr_boost = 1.10
+                            elif rr_c < 1.2:
+                                rr_boost = 0.90
+                    except Exception:
+                        pass
+
+                    # Multi-Agent Confluence Boosters (IntelX & Futuris)
+                    intelx_m = float(c.get("intelx_mult", 1.0))
+                    futuris_m = float(c.get("futuris_mult", 1.0))
+                    score = round(base_score * intelx_m * futuris_m * adx_boost * rr_boost, 6)
+                    c["score"] = score
+                    c["base_score"] = base_score
+                    c["intelx_mult"] = intelx_m
+                    c["futuris_mult"] = futuris_m
+                    c["net_edge"] = exp_net
+                    c["risk"] = risk_pct
+                    c["confidence"] = conf
+                
+                # Rank candidates by Deterministic Score (Descending), then Net Edge, Confidence, Risk, Symbol
+                candidates.sort(key=lambda x: (x["score"], x["net_edge"], x["confidence"], -x["risk"], x["symbol"]), reverse=True)
+                
+                executed_in_batch = 0
+                max_executions_per_batch = int(os.getenv("MAX_EXECUTIONS_PER_BATCH", "1"))
+                global_spacing_seconds = float(os.getenv("GLOBAL_EXECUTION_SPACING_SECONDS", "0.0" if os.environ.get("PYTEST_CURRENT_TEST") else "60.0"))
+
+                for rank_idx, candidate in enumerate(candidates, 1):
+                    candidate["rank"] = rank_idx
+                    logger.info(
+                        f"[OPPORTUNITY_RANK] Rank #{rank_idx} | {candidate['symbol']} ({candidate.get('tf','15m')}) | "
+                        f"Strat: {candidate.get('strategy')} | Score: {candidate['score']} | "
+                        f"Net Edge: {candidate['net_edge']*100:.3f}% | Risk: {candidate['risk']*100:.3f}% | Conf: {candidate['confidence']*100:.1f}%"
+                    )
+                    symbol = candidate["symbol"]
+                    side = candidate["side"]
+                    signal_id = candidate["signal_id"]
+                    p_metrics = candidate["metrics"]
+                    sl = candidate["sl"]
+                    tp = candidate["tp"]
+                    strategy_name = candidate.get("strategy", "adx_ema")
+                    with self.lock:
+                        # Anti-Cluster Throttle: Prevent multiple trades from executing at the exact same minute
+                        if executed_in_batch >= max_executions_per_batch:
+                            logger.info(
+                                f"[CONCURRENCY_THROTTLE] Batch limit reached ({executed_in_batch}/{max_executions_per_batch}). "
+                                f"Skipping #{rank_idx} {symbol} to prevent simultaneous trade clusters."
+                            )
+                            self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                            self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "CONCURRENCY_THROTTLE_BATCH_LIMIT")
+                            continue
+
+                        now_ts = datetime.datetime.utcnow().timestamp()
+                        last_exec_ts = getattr(self, "last_trade_execution_time", 0.0)
+                        if global_spacing_seconds > 0 and (now_ts - last_exec_ts) < global_spacing_seconds:
+                            rem = int(global_spacing_seconds - (now_ts - last_exec_ts))
+                            logger.info(
+                                f"[GLOBAL_SPACING_THROTTLE] Global trade spacing active ({rem}s remaining). "
+                                f"Skipping {symbol} to prevent simultaneous trade clusters."
+                            )
+                            self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                            self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "GLOBAL_EXECUTION_SPACING")
+                            continue
+
+                        # QuantDinger Runtime Lease & Health Supervisor Gate
+                        if getattr(self, "runtime_supervisor", None) and getattr(self, "runtime_heartbeat", None):
+                            is_healthy, h_reason = self.runtime_supervisor.evaluate(self.runtime_heartbeat)
+                            if not is_healthy:
+                                self.stats["OTHER_REJECTED"] += 1
+                                self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", f"UNHEALTHY_RUNTIME_LEASE_{h_reason}")
+                                continue
+
+                        # Enforce per-symbol cooldown strictly across all strategies to prevent fee churning
+                        now_ts = datetime.datetime.utcnow().timestamp()
+
+                        if symbol in self.cooldowns and now_ts - self.cooldowns[symbol] < _COOLDOWN_SECONDS:
+                            self.stats["COOLDOWN_REJECTED"] += 1
+                            self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "ON_COOLDOWN")
+                            continue
+
+                        # Pre-execution duplicate position guard
+                        # Risk gate uses portfolio file which may be slightly stale on fast restarts.
+                        # This in-memory check prevents double-entry into the same symbol.
+                        if symbol in self.active_positions:
+                            existing = self.active_positions[symbol]
+                            if existing.get("status") == "OPEN":
+                                logger.warning(
+                                    f"[DUPLICATE_POSITION_GUARD] {symbol} already has OPEN position "
+                                    f"(SignalID: {signal_id}). Skipping duplicate entry."
+                                )
+                                self.stats["OTHER_REJECTED"] += 1
+                                self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "DUPLICATE_POSITION_GUARD")
+                                continue
+                            
+                        tf = candidate.get("tf", "15m")
+                        # Re-validate with absolute latest price
+                        df = None
+                        if hasattr(self, 'scanner'):
+                            df = self.scanner.candle_cache.get((symbol, tf))
+                                
+                        current_price = df['close'].iloc[-1] if (df is not None and not df.empty) else float(candidate.get("current_price", candidate.get("entry", 0.0)))
+                        if current_price <= 0:
+                            self.stats["MARKET_DATA_REJECTED"] += 1
+                            self.stats["JIT_REJECTED"] += 1
+                            self.log_opportunity(signal_id, symbol, side, p_metrics, "REJECTED", "NO_MARKET_DATA")
+                            continue
+                            
+                        data_health = self.scanner.data_health_status.get(symbol, "OK") if (hasattr(self, 'scanner') and self.scanner) else "OK"
+                        
+                        # Re-validate Profitability Gate with latest market price
+                        passed_profit, fresh_metrics = self.profitability_gate.evaluate_signal(
+                            symbol, side, current_price, sl, tp,
+                            candidate.get("signal_result", p_metrics.get("prob_win"))
+                        )
+                        
+                        if not passed_profit:
+                            self.stats["PROFITABILITY_REJECTED"] += 1
+                            self.stats["JIT_REJECTED"] += 1
+                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", f"REVALIDATION_FAILED: {fresh_metrics['reason']}")
+                            continue
+                            
+                        self.stats["PROFITABILITY_ACCEPTED"] += 1
+                        
+                        # Pre-Trade Protection Layer (Freqtrade-inspired)
+                        if hasattr(self, 'protection_manager') and self.protection_manager:
+                            history = getattr(self, "trade_history", [])
+                            peak_eq = getattr(self.risk_gate, "peak_equity", self.current_equity)
+                            prot_decision = self.protection_manager.evaluate(
+                                symbol, history, self.current_equity, peak_eq
+                            )
+                            if not prot_decision.allowed:
+                                self.stats["OTHER_REJECTED"] += 1
+                                self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", f"PROTECTION_{prot_decision.reason}")
+                                continue
+
+                        # Sizing
+                        filters = self.symbol_filters.get(symbol, {})
+
+                        qty = self.risk_gate.calculate_position_size(self.current_equity, current_price, sl, filters, side=side)
+                        
+                        if qty < 0.00000001:
+                            self.stats["RISK_REJECTED"] += 1
+                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", "MIN_NOTIONAL_OR_ZERO_QTY")
+                            continue
+                            
+                        # Risk Gate
+                        passed_risk, r_reason, _r_details = self.risk_gate.evaluate_risk(
+                            symbol, side, self.current_equity, self.active_positions, qty, current_price, data_health
+                        )
+                        
+                        if not passed_risk:
+                            self.stats["RISK_REJECTED"] += 1
+                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", r_reason)
+                            continue
+                            
+                        self.stats["RISK_ACCEPTED"] += 1
+                            
+                        # Execute
+                        if self.observe_only:
+                            self.stats["OTHER_REJECTED"] += 1
+                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "ACCEPTED (OBSERVE ONLY)", "DEGRADED_PERFORMANCE_HALT")
+                            continue
+                            
+                        self.stats["QUALIFIED"] += 1
+                        if strategy_name in self.stats["strategy_metrics"]:
+                            self.stats["strategy_metrics"][strategy_name]["qualified"] += 1
+                        if tf in self.stats["timeframe_metrics"]:
+                            self.stats["timeframe_metrics"][tf]["qualified"] += 1
+                        self.log_opportunity(signal_id, symbol, side, fresh_metrics, "ACCEPTED", "ALL_GATES_PASSED", candidate=candidate)
+                        
+                        # Format strictly for Binance execution to prevent LOT_SIZE Filter Failure
+                        step_size = filters.get("stepSize", 1.0)
+                        precision = 0
+                        if '.' in str(step_size):
+                            precision = len(str(step_size).rstrip('0').split('.')[1])
+                        qty_str = f"{qty:.{precision}f}"
+                        
+                        # QuantDinger ExecutionIntent Contract & Idempotency Guard
+                        intent_id = f"intent_{signal_id}"
+                        active_ver = self.registry.get_active(strategy_name) if getattr(self, "registry", None) else None
+                        ver_str = active_ver.version if active_ver else "v1.0.0"
+                        
+                        try:
+                            from stratex_quantdinger.models import ExecutionIntent
+                            current_intent = ExecutionIntent(
+                                intent_id=intent_id,
+                                strategy_id=strategy_name,
+                                strategy_version=ver_str,
+                                symbol=symbol,
+                                side=side,
+                                quantity=float(qty_str),
+                                order_type="MARKET",
+                                price=current_price,
+                                paper_only=(TRADING_MODE == "PAPER"),
+                                metadata={"timeframe": tf, "prob_win": fresh_metrics.get("prob_win", 0.0)}
+                            )
+                        except Exception:
+                            current_intent = None
+
+                        if getattr(self, "idempotency_guard", None):
+                            if self.idempotency_guard.seen(intent_id):
+                                self.stats["OTHER_REJECTED"] += 1
+                                self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", "IDEMPOTENT_DUPLICATE_INTENT")
+                                continue
+
+                        logger.info(f"[EXECUTION_ATTEMPTED] {strategy_name} {side} {qty_str} {symbol} @ ~{current_price} | SignalID: {signal_id} | IntentID: {intent_id}")
+
+                        self.stats["EXECUTION_ELIGIBLE"] += 1
+                        
+                        self.telemetry.record_execution_event({
+                            "event_type": "execution_attempt",
+                            "symbol": symbol,
+                            "strategy": strategy_name,
+                            "timeframe": tf,
+                            "trade_id": signal_id,
+                            "side": side,
+                            "quantity": float(qty_str),
+                            "price": current_price
+                        })
+                        self.telemetry.record_equity_snapshot({
+                            "trigger_event": "ORDER_SUBMISSION",
+                            "total_equity": self.current_equity,
+                            "cash": self.current_equity,
+                            "open_positions": len(self.active_positions)
+                        })
+                        
+                        if self.panic_active():
+                            self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                            self.log_opportunity(signal_id, symbol, side, {"reason": "MANUAL_PANIC_SWITCH"}, "REJECTED", "MANUAL_PANIC_SWITCH")
+                            logger.warning("[PANIC] Manual kill-switch active — order submission blocked (OCO protection unaffected)")
+                            continue
+
+                        # Belt-and-braces: re-check the durable pause flag at the
+                        # submission boundary (it can flip mid-batch).
+                        if is_trading_paused():
+                            self.stats["TRADING_PAUSED_SKIPPED"] = self.stats.get("TRADING_PAUSED_SKIPPED", 0) + 1
+                            self.log_opportunity(signal_id, symbol, side, {"reason": "TRADING_PAUSED"}, "REJECTED", "TRADING_PAUSED")
+                            logger.warning("[TRADING_PAUSE] Durable pause flag active — new entry blocked (open positions still protected)")
+                            continue
+
+                        # Pre-Trade Margin Check in Service Loop
+                        if TRADING_MODE == "FUTURES":
+                            try:
+                                acc = self.client.futures_account() if hasattr(self.client, "futures_account") else {}
+                                avail_bal = float(acc.get("availableBalance", 0.0))
+                                req_margin = (float(qty_str) * current_price) / float(getattr(config, "FUTURES_LEVERAGE", 5))
+                                if avail_bal > 0 and req_margin > 0 and req_margin > avail_bal:
+                                    self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                                    logger.warning(
+                                        f"[MARGIN_CHECK] ⚠️ SKIPPED (INSUFFICIENT MARGIN) for {symbol} {side} {qty_str}. "
+                                        f"Required: ${req_margin:.2f}, Available: ${avail_bal:.2f}"
+                                    )
+                                    self.log_opportunity(signal_id, symbol, side, fresh_metrics, "SKIPPED", "INSUFFICIENT_MARGIN", current_price=current_price)
+                                    self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
+                                    continue
+                            except Exception as mc_err:
+                                logger.debug(f"[SERVICE] Pre-trade margin check bypassed: {mc_err}")
+
+                        if getattr(self, "reconciliation_mismatch", False):
+                            self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", "RECONCILIATION_MISMATCH")
+                            logger.warning(f"[RECONCILE_BLOCK] Order submission blocked due to venue reconciliation mismatch.")
+                            continue
+
+                        if getattr(self, "market_guard", None):
+                            from decimal import Decimal
+                            g_ok, g_reason = self.market_guard.accept(
+                                symbol=symbol,
+                                ts_ns=time.time_ns(),
+                                bid=Decimal(str(current_price * 0.999)),
+                                ask=Decimal(str(current_price * 1.001)),
+                                sequence=None,
+                            )
+                            if not g_ok:
+                                self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                                self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", f"MARKET_DATA_{g_reason}")
+                                logger.warning(f"[MARKET_GUARD_REJECT] {symbol} rejected by MarketDataGuard: {g_reason}")
+                                continue
+
+                        reserved_notional = None
+                        if getattr(self, "upgrade_risk_manager", None):
+                            from decimal import Decimal
+                            res_amt = Decimal(str(float(qty_str) * current_price))
+                            if not self.upgrade_risk_manager.reserve_notional(res_amt):
+                                self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
+                                self.log_opportunity(signal_id, symbol, side, fresh_metrics, "REJECTED", "RISK_RESERVATION_EXCEEDED")
+                                logger.warning(f"[RISK_RESERVATION] Failed to reserve notional {res_amt} for {symbol} {side}")
+                                continue
+                            reserved_notional = res_amt
+
+                        try:
+                            # ── ATR-Based Dynamic SL/TP Override ──────────────────────────────
+                            # Replace strategy-supplied SL/TP with ATR-calibrated levels if the
+                            # strategy's levels are tighter than 1× ATR (avoids premature stops)
+                            # or looser than 4× ATR (avoids stops too far from price).
+                            try:
+                                df_for_atr = self.scanner.candle_cache.get((symbol, tf)) if hasattr(self, "scanner") else None
+                                if df_for_atr is not None and not df_for_atr.empty and len(df_for_atr) >= 15:
+                                    from testnet_engine.signal_quality import compute_atr_from_df
+                                    atr_val_pre = compute_atr_from_df(df_for_atr, period=14)
+                                    if atr_val_pre and atr_val_pre > 0 and current_price > 0:
+                                        # Compute natural ATR-based SL distance
+                                        atr_sl_dist = atr_val_pre * 1.5  # 1.5× ATR for SL
+                                        atr_tp_dist = atr_val_pre * 3.0  # 3.0× ATR for TP (2:1 RR)
+                                        if side in ("BUY", "LONG"):
+                                            atr_sl = current_price - atr_sl_dist
+                                            atr_tp = current_price + atr_tp_dist
+                                        else:
+                                            atr_sl = current_price + atr_sl_dist
+                                            atr_tp = current_price - atr_tp_dist
+                                        # Only override if strategy's SL/TP are missing or worse than ATR levels
+                                        sl_ok = (sl is not None and sl > 0)
+                                        tp_ok = (tp is not None and tp > 0)
+                                        if not sl_ok:
+                                            sl = atr_sl
+                                            logger.info(f"[ATR_SL_OVERRIDE] {symbol} {side} no SL → ATR-based SL: {sl:.4f}")
+                                        if not tp_ok:
+                                            tp = atr_tp
+                                            logger.info(f"[ATR_TP_OVERRIDE] {symbol} {side} no TP → ATR-based TP: {tp:.4f}")
+                                        # Also override if existing SL is extremely tight (< 0.5× ATR) — prevents instant stop-outs
+                                        if sl_ok:
+                                            existing_sl_dist = abs(current_price - float(sl))
+                                            if existing_sl_dist < atr_val_pre * 0.5:
+                                                sl = atr_sl
+                                                logger.info(f"[ATR_SL_WIDEN] {symbol} {side} SL too tight ({existing_sl_dist:.4f} < 0.5×ATR) → widened to {sl:.4f}")
+                            except Exception as atr_err:
+                                logger.debug(f"[ATR_SL_TP_OVERRIDE_SKIP] {symbol}: {atr_err}")
+
+                            if TRADING_MODE == "FUTURES":
+                                from execution import place_futures_market_order
+                                leverage = getattr(config, "FUTURES_LEVERAGE", 5)
+                                order_res = place_futures_market_order(
+                                    strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp,
+                                    client_order_id=signal_id, leverage=leverage,
+                                    risk_gate=self.risk_gate,
+                                    risk_context={
+                                        "current_equity": self.current_equity,
+                                        "active_positions": self.active_positions,
+                                        "entry_price": current_price,
+                                        "data_health_status": data_health,
+                                    },
+                                )
+                            else:
+                                order_res = place_market_order(
+                                    strategy_name, side, symbol, quantity=qty_str, sl=sl, tp=tp, client_order_id=signal_id
+                                )
+
+                            if order_res:
+
+
+                                self.stats["ORDERS_SUBMITTED"] += 1
+                                order_status = str(order_res.get("status", "")).upper()
+                                if order_status in ("FILLED", "PARTIALLY_FILLED") or order_res.get("_executed_qty", 0) > 0:
+                                    self.stats["ORDERS_FILLED"] += 1
+                                if strategy_name in self.stats["strategy_metrics"]:
+                                    self.stats["strategy_metrics"][strategy_name]["executed"] += 1
+                                if tf in self.stats["timeframe_metrics"]:
+                                    self.stats["timeframe_metrics"][tf]["executed"] += 1
+                                actual_price = order_res.get("_actual_price", current_price)
+                                executed_qty = float(order_res.get("_executed_qty", qty_str))
+                                entry_oid = str(order_res.get("orderId", ""))
+                                notional = actual_price * executed_qty
+                                est_fee = notional * 0.001
+                                
+                                logger.info(f"[ORDER_FILLED] {symbol} {side} {executed_qty} @ {actual_price:.4f} | OrderID: {entry_oid} | SignalID: {signal_id}")
+                                self.log_opportunity(
+                                    signal_id, symbol, side, fresh_metrics, "EXECUTED", "ORDER_FILLED_DISPATCHED",
+                                    current_price=actual_price, candidate=candidate
+                                )
+
+                                if getattr(self, "idempotency_guard", None):
+                                    self.idempotency_guard.record(
+                                        intent_id,
+                                        exchange_order_id=entry_oid,
+                                        status="FILLED",
+                                        metadata={"symbol": symbol, "side": side, "qty": executed_qty, "price": actual_price}
+                                    )
+
+                                # Partial fill detection: warn if filled quantity < 95% of requested
+
+                                proposed_qty = float(qty_str)
+                                if proposed_qty > 0 and executed_qty / proposed_qty < 0.95:
+                                    fill_pct = (executed_qty / proposed_qty) * 100
+                                    logger.warning(
+                                        f"[PARTIAL_FILL] {symbol} {side} filled {fill_pct:.1f}% of proposed qty. "
+                                        f"Requested: {proposed_qty}, Executed: {executed_qty}"
+                                    )
+                                    self.telemetry.record_execution_event({
+                                        "event_type": "partial_fill_detected",
+                                        "symbol": symbol,
+                                        "trade_id": signal_id,
+                                        "proposed_qty": proposed_qty,
+                                        "executed_qty": executed_qty,
+                                        "fill_pct": round(fill_pct, 2)
+                                    })
+                                
+                                self.active_positions[symbol] = {
+                                    "strategy": strategy_name,
+                                    "symbol": symbol,
+                                    "side": side,
+                                    "quantity": executed_qty,
+                                    "entry_price": actual_price,
+                                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                                    "sl": sl,
+                                    "tp": tp,
+                                    "status": "OPEN",
+                                    "entry_client_id": signal_id
+                                }
+                                self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
+                                self.last_trade_execution_time = datetime.datetime.utcnow().timestamp()
+                                executed_in_batch += 1
+                                
+                                # Telemetry Recording
+                                self.telemetry.record_execution_event({
+                                    "event_type": "order_filled",
+                                    "symbol": symbol,
+                                    "trade_id": signal_id,
+                                    "order_id": entry_oid,
+                                    "strategy": strategy_name,
+                                    "timeframe": tf,
+                                    "side": side,
+                                    "quantity": executed_qty,
+                                    "price": actual_price
+                                })
+                                self.telemetry.record_trade_event({
+                                    "trade_id": signal_id,
+                                    "symbol": symbol,
+                                    "strategy": strategy_name,
+                                    "timeframe": tf,
+                                    "side": side,
+                                    "status": "OPEN",
+                                    "entry_order_id": entry_oid,
+                                    "entry_price": actual_price,
+                                    "average_entry_price": actual_price,
+                                    "quantity": executed_qty,
+                                    "notional": notional,
+                                    "stop_loss": sl,
+                                    "take_profit": tp,
+                                    "entry_fee": est_fee,
+                                    "risk_amount": notional * 0.005,
+                                    "expected_gross_return": fresh_metrics.get("gross_edge", 0.0),
+                                    "expected_net_return": fresh_metrics.get("expected_net_return", 0.0),
+                                    "profitability_decision": "ACCEPTED",
+                                    "risk_decision": "ACCEPTED",
+                                    "equity_before_entry": self.current_equity,
+                                    "equity_after_entry": self.current_equity,
+                                    "cash_before_entry": self.current_equity,
+                                    "cash_after_entry": max(0.0, self.current_equity - notional)
+                                })
+                                self.telemetry.record_position_update({
+                                    "position_id": symbol,
+                                    "trade_id": signal_id,
+                                    "symbol": symbol,
+                                    "strategy": strategy_name,
+                                    "timeframe": tf,
+                                    "side": side,
+                                    "entry_price": actual_price,
+                                    "quantity": executed_qty,
+                                    "stop_loss": sl,
+                                    "take_profit": tp,
+                                    "status": "OPEN"
+                                })
+                                self.telemetry.record_balance_event({
+                                    "event_type": "TRADE_OPEN",
+                                    "reason": f"BUY {symbol} {strategy_name}",
+                                    "balance_before": self.current_equity,
+                                    "balance_after": max(0.0, self.current_equity - notional),
+                                    "delta": -notional,
+                                    "trade_id": signal_id,
+                                    "symbol": symbol,
+                                    "strategy": strategy_name,
+                                    "timeframe": tf
+                                })
+                                self.telemetry.record_equity_snapshot({
+                                    "trigger_event": "POSITION_OPEN",
+                                    "total_equity": self.current_equity,
+                                    "cash": max(0.0, self.current_equity - notional),
+                                    "crypto_holdings_value": notional,
+                                    "open_positions": len(self.active_positions)
+                                })
+                            else:
+                                self.stats["EXECUTION_REJECTED"] += 1
+                                logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: LOCAL_ORDER_BLOCKED")
+                                self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", "LOCAL_ORDER_BLOCKED", current_price=current_price)
+                                self.telemetry.record_execution_event({
+                                    "event_type": "order_failed",
+                                    "symbol": symbol,
+                                    "trade_id": signal_id,
+                                    "strategy": strategy_name,
+                                    "timeframe": tf,
+                                    "status": "FAILED",
+                                    "error_code": "LOCAL_ORDER_BLOCKED",
+                                    "error_message": "Local order dispatch returned None"
+                                })
+                                self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
+                        except ZeroFillError as zfe:
+                            self.stats["ORDERS_SUBMITTED"] += 1
+                            self.stats["ORDERS_FAILED"] += 1
+                            logger.warning(f"[ORDER_FAILED] {symbol} {side} | Reason: ZERO_FILL")
+                            self.log_opportunity(signal_id, symbol, side, fresh_metrics, "FAILED", "ZERO_FILL", current_price=current_price)
+                            self.telemetry.record_execution_event({
+                                "event_type": "order_failed",
+                                "symbol": symbol,
+                                "trade_id": signal_id,
+                                "strategy": strategy_name,
+                                "timeframe": tf,
+                                "status": "FAILED",
+                                "error_code": "ZERO_FILL",
+                                "error_message": str(zfe)
+                            })
+                            self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
+                        except BinanceAPIException as e:
+                            self.stats["ORDERS_SUBMITTED"] += 1
+                            self.stats["ORDERS_FAILED"] += 1
+                            error_code = f"BINANCE_API_ERROR_{e.status_code}"
+                            error_metrics = {
+                                **fresh_metrics,
+                                "execution_error_code": getattr(e, "code", None),
+                                "execution_error_message": getattr(e, "message", None) or str(e),
+                            }
+                            logger.warning(
+                                f"[ORDER_FAILED] {symbol} {side} | Reason: {error_code} "
+                                f"| Exchange code: {error_metrics['execution_error_code']} "
+                                f"| Message: {error_metrics['execution_error_message']}"
+                            )
+                            self.log_opportunity(
+                                signal_id, symbol, side, error_metrics, "FAILED", error_code,
+                                current_price=current_price
+                            )
+                            self.telemetry.record_execution_event({
+                                "event_type": "order_failed",
+                                "symbol": symbol,
+                                "trade_id": signal_id,
+                                "strategy": strategy_name,
+                                "timeframe": tf,
+                                "status": "FAILED",
+                                "error_code": f"BINANCE_API_ERROR_{e.status_code}",
+                                "error_message": str(e)
+                            })
+                            self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
+                        except Exception as e:
+                            # Unhandled execution errors
+                            self.stats["ORDERS_SUBMITTED"] += 1
+                            self.stats["ORDERS_FAILED"] += 1
+                            logger.error(f"[ORDER_FAILED] {symbol} {side} | Reason: UNHANDLED_ERROR: {e}")
+                            self.telemetry.record_execution_event({
+                                "event_type": "order_failed",
+                                "symbol": symbol,
+                                "trade_id": signal_id,
+                                "strategy": strategy_name,
+                                "timeframe": tf,
+                                "status": "FAILED",
+                                "error_code": "UNHANDLED_ERROR",
+                                "error_message": str(e)
+                            })
+                            self.cooldowns[symbol] = datetime.datetime.utcnow().timestamp()
+                        finally:
+                            if reserved_notional is not None and getattr(self, "upgrade_risk_manager", None):
+                                self.upgrade_risk_manager.release_notional(reserved_notional)
+
+                        self._save_state()
+
+            except Exception as exec_loop_err:
+                logger.critical(f"[EXECUTION_LOOP_ERROR] Uncaught exception in execution loop: {exec_loop_err}", exc_info=True)
+                time.sleep(5)
+
+    def _trade_target_monitor(self):
+        """Monitor trade count and log progress toward 100-trade target."""
+        import config
+        start_time = datetime.datetime.utcnow()
+        window_hours = getattr(config, "TARGET_TRADE_WINDOW_HOURS", 3)
+        target = getattr(config, "TARGET_TRADE_COUNT", 100)
+        window = datetime.timedelta(hours=window_hours)
+        logger.info(f"[TRADE_TARGET] 🎯 Goal: {target} trades in {window_hours}h. Window ends at "
+                    f"{(start_time + window).strftime('%H:%M UTC')}")
+        while True:
+            time.sleep(60)
+            elapsed = datetime.datetime.utcnow() - start_time
+            closed = self.stats.get("CLOSED_TRADES", 0)
+            filled = self.stats.get("ORDERS_FILLED", 0)
+            total = max(closed, filled)
+            elapsed_h = elapsed.total_seconds() / 3600
+            remaining_h = max(0, window_hours - elapsed_h)
+            rate = total / elapsed_h if elapsed_h > 0 else 0
+            projected = rate * window_hours
+            logger.info(
+                f"[TRADE_TARGET] ⏱ {elapsed_h:.1f}h elapsed | "
+                f"Trades: {total}/{target} | Rate: {rate:.1f}/h | "
+                f"Projected: {projected:.0f} | Remaining: {remaining_h:.1f}h | "
+                f"Signals: {self.stats.get('TOTAL_SIGNALS',0)} | "
+                f"Rejected(cooldown): {self.stats.get('COOLDOWN_REJECTED',0)} | "
+                f"Rejected(risk): {self.stats.get('RISK_REJECTED',0)} | "
+                f"Rejected(profit): {self.stats.get('PROFITABILITY_REJECTED',0)}"
+            )
+            if total >= target:
+                logger.info(f"[TRADE_TARGET] ✅ TARGET ACHIEVED: {total} trades in {elapsed_h:.2f}h!")
+                break
+            if elapsed > window:
+                logger.warning(f"[TRADE_TARGET] ❌ Window expired. Final: {total}/{target} trades.")
+                break
+
+    def log_opportunity(self, signal_id, symbol, side, metrics, decision, reason, current_price=0.0, rank=None, score=None, candidate=None):
+        def _safe_float(val, default=None):
+            """Convert measured values; absent/invalid evidence remains unavailable."""
+            if val is None:
+                return default
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return default
+
+        def _first_present(*values):
+            return next((value for value in values if value is not None), None)
+
+        tf = metrics.get("timeframe") or (candidate.get("tf") if candidate else None) or "5m"
+        strat = metrics.get("strategy") or (candidate.get("strategy") if candidate else None) or "adx_ema"
+        entry = _safe_float(_first_present(current_price or None, metrics.get("entry_price"), metrics.get("current_price"),
+                                           candidate.get("entry") if candidate else None,
+                                           candidate.get("current_price") if candidate else None))
+        stop = _safe_float(_first_present(metrics.get("sl_price"), metrics.get("sl"), candidate.get("sl") if candidate else None))
+        target = _safe_float(_first_present(metrics.get("tp_price"), metrics.get("tp"), candidate.get("tp") if candidate else None))
+        conf = _safe_float(_first_present(metrics.get("confidence"), metrics.get("prob_win"), metrics.get("win_rate_prior")))
+        gross = _safe_float(_first_present(metrics.get("gross_edge"), metrics.get("expected_gross_return"), metrics.get("expected_gross")))
+        calculated_fees = metrics.get("friction") * entry if entry is not None and entry > 0 and metrics.get("friction") is not None else None
+        fees = _safe_float(_first_present(metrics.get("estimated_fees"), metrics.get("fees"), calculated_fees))
+        calculated_slippage = metrics.get("slippage_pct") * entry if entry is not None and entry > 0 and metrics.get("slippage_pct") is not None else None
+        slippage = _safe_float(_first_present(metrics.get("slippage"), calculated_slippage))
+        net = _safe_float(_first_present(metrics.get("expected_net_return"), metrics.get("expected_net"), metrics.get("net_edge")))
+
+        
+        is_risk_stage = any(k in reason for k in [
+            "RISK", "MIN_NOTIONAL", "EXPOSURE", "DRAWDOWN", "DAILY_LOSS",
+            "SAFETY_HALT", "LOCAL_ORDER_BLOCKED", "ZERO_FILL", "BINANCE_API_ERROR"
+        ])
+        is_profit_stage = any(k in reason for k in [
+            "PROFITABILITY", "REVALIDATION", "EDGE", "NET_RETURN", "FEES", "INSUFFICIENT", "NEGATIVE"
+        ])
+
+        if decision == "EXECUTED":
+            p_dec = "ACCEPTED"
+            r_dec = "ACCEPTED"
+            e_dec = "EXECUTED"
+            p_reason_val = "NET_EDGE_POSITIVE"
+            r_reason_val = "WITHIN_LIMITS"
+            e_reason_val = reason
+        elif decision == "FAILED":
+            # A dispatch failure occurs after the signal passed its gates.
+            # Keep gate outcomes separate from exchange execution status.
+            p_dec = metrics.get("profitability_decision", "ACCEPTED")
+            r_dec = metrics.get("risk_decision", "ACCEPTED")
+            e_dec = "FAILED"
+            p_reason_val = metrics.get("profitability_reason", "NET_EDGE_POSITIVE")
+            r_reason_val = metrics.get("risk_reason", "WITHIN_LIMITS")
+            e_reason_val = reason
+        elif decision in ["ACCEPTED", "ALL_GATES_PASSED"]:
+            p_dec = "ACCEPTED"
+            r_dec = "ACCEPTED"
+            e_dec = "ELIGIBLE"
+            p_reason_val = "NET_EDGE_POSITIVE"
+            r_reason_val = "WITHIN_LIMITS"
+            e_reason_val = "DISPATCHED"
+        elif is_risk_stage:
+            p_dec = "ACCEPTED"
+            r_dec = "REJECTED"
+            e_dec = "REJECTED"
+            p_reason_val = "NET_EDGE_POSITIVE"
+            r_reason_val = reason
+            e_reason_val = f"BLOCKED_BY_RISK: {reason}"
+        elif is_profit_stage:
+            p_dec = "REJECTED"
+            r_dec = "PENDING"
+            e_dec = "REJECTED"
+            p_reason_val = reason
+            r_reason_val = ""
+            e_reason_val = f"BLOCKED_BY_PROFITABILITY: {reason}"
+        else:
+            p_dec = "NOT_EVALUATED"
+            r_dec = "NOT_EVALUATED"
+            e_dec = "REJECTED"
+            p_reason_val = reason
+            r_reason_val = reason
+            e_reason_val = reason
+
+        intelx_intel = (metrics.get("intelx_intel") if isinstance(metrics, dict) else None) or (candidate.get("intelx_intel") if candidate else None)
+        futuris_forecast = (metrics.get("futuris_forecast") if isinstance(metrics, dict) else None) or (candidate.get("futuris_forecast") if candidate else None)
+        intelx_reason = (metrics.get("intelx_reason") if isinstance(metrics, dict) else None) or (candidate.get("intelx_reason") if candidate else None)
+        futuris_reason = (metrics.get("futuris_reason") if isinstance(metrics, dict) else None) or (candidate.get("futuris_reason") if candidate else None)
+        intelx_mult = (metrics.get("intelx_mult") if isinstance(metrics, dict) else None) or (candidate.get("intelx_mult", 1.0) if candidate else 1.0)
+        futuris_mult = (metrics.get("futuris_mult") if isinstance(metrics, dict) else None) or (candidate.get("futuris_mult", 1.0) if candidate else 1.0)
+
+        log_entry = {
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            "signal_id": signal_id,
+            "symbol": symbol,
+            "timeframe": tf,
+            "strategy": strat,
+            "side": side,
+            "entry": entry,
+            "stop": stop,
+            "target": target,
+            "confidence": conf,
+            "expected_gross": gross,
+            "expected_gross_return": gross,
+            "fees": fees,
+            "estimated_fees": fees,
+            "slippage": slippage,
+            "expected_net": net,
+            "expected_net_return": net,
+            "profitability_decision": p_dec,
+            "profitability_reason": p_reason_val,
+            "risk_decision": r_dec,
+            "risk_reason": r_reason_val,
+            "execution_decision": e_dec,
+            "execution_reason": e_reason_val,
+            "execution_error_code": metrics.get("execution_error_code"),
+            "execution_error_message": metrics.get("execution_error_message"),
+            "rank": rank or (candidate.get("rank") if candidate else None),
+            "score": score or (candidate.get("score") if candidate else None),
+            "decision": decision,
+            "reason": reason,
+            "intelx_intel": intelx_intel,
+            "futuris_forecast": futuris_forecast,
+            "intelx_reason": intelx_reason,
+            "futuris_reason": futuris_reason,
+            "intelx_mult": intelx_mult,
+            "futuris_mult": futuris_mult
+        }
+        try:
+            append_jsonl(TESTNET_OPPORTUNITY_LOG, log_entry)
+        except (OSError, TypeError, ValueError) as e:
+            logger.warning(f"[SERVICE] Opportunity log append failed: {e}")
+
+        try:
+            if hasattr(self, "telemetry") and self.telemetry:
+                self.telemetry.record_signal_event(log_entry)
+        except Exception:
+            pass
+
+
+
+
+    # ------------------------------------------------------------------
+    # Upgrade 5: Slippage & fee reality-check (observability only — the
+    # profitability gate is NOT auto-adjusted; we gather data first).
+    # ------------------------------------------------------------------
+    SLIPPAGE_LOG_FILE = os.getenv("SLIPPAGE_LOG_FILE", "slippage_log.json")
+    SLIPPAGE_LOG_MAX = 500
+
+    def track_recent_slippage(self, max_records=5):
+        """Compare execution fill prices with the signal 4h candle close.
+
+        For the most recent closed-ledger entries not yet logged, fetch
+        c.get_my_trades() and the 4h candles, and record per-trade slippage
+        in bps: (entry_fill - signal_candle_close) / close * 1e4 (long side).
+        Appends to slippage_log.json (capped). Pure observability.
+        """
+        try:
+            # A corrupt slippage dataset is quarantined (kept), never silently
+            # overwritten with a fresh list.
+            loaded = load_json_state(self.SLIPPAGE_LOG_FILE, expected_type=list, default_factory=list)
+            logged = [r for r in loaded.data if isinstance(r, dict)]
+            done_ids = {r.get("trade_id") for r in logged}
+            recent = read_jsonl(TESTNET_LEDGER_FILE).records
+            todo = [r for r in recent[-50:] if r.get("trade_id") not in done_ids][-max_records:]
+            if not todo:
+                return logged
+            for rec in todo:
+                sym = rec.get("symbol")
+                entry_ts = rec.get("entry_timestamp", "")
+                entry_price = float(rec.get("entry_price", 0.0) or 0.0)
+                if not sym or entry_price <= 0:
+                    continue
+                # Signal candle close: last 4h close strictly before entry time
+                signal_close = None
+                try:
+                    from data import get_candles
+                    df = get_candles(sym, "4h", 80)
+                    if df is not None and not df.empty and entry_ts:
+                        entry_dt = datetime.datetime.fromisoformat(entry_ts.replace("Z", ""))
+                        mask = df["timestamp"] < pd.Timestamp(entry_dt)
+                        if mask.any():
+                            signal_close = float(df.loc[mask, "close"].iloc[-1])
+                except Exception as e:
+                    logger.debug(f"[SLIPPAGE] candle lookup failed for {sym}: {e}")
+                # Actual fills from the exchange
+                fills_qty, fills_quote, n_fills, fees = 0.0, 0.0, 0, 0.0
+                try:
+                    trades = self.client.get_my_trades(symbol=sym, limit=50)
+                    ets = entry_ts[:19]
+                    for t in trades:
+                        tts = datetime.datetime.utcfromtimestamp(t["time"] / 1000).isoformat()[:19]
+                        if not entry_ts or tts >= ets:
+                            if t.get("isBuyer"):
+                                fills_qty += float(t["qty"])
+                                fills_quote += float(t["quoteQty"])
+                                fees += float(t.get("commission", 0.0))
+                                n_fills += 1
+                except Exception as e:
+                    logger.debug(f"[SLIPPAGE] get_my_trades failed for {sym}: {e}")
+                vwap = (fills_quote / fills_qty) if fills_qty > 0 else entry_price
+                slippage_bps = (
+                    round((vwap - signal_close) / signal_close * 1e4, 2)
+                    if signal_close else None
+                )
+                logged.append({
+                    "trade_id": rec.get("trade_id"),
+                    "symbol": sym,
+                    "entry_timestamp": entry_ts,
+                    "signal_candle_close": signal_close,
+                    "vwap_fill": round(vwap, 8),
+                    "slippage_bps": slippage_bps,
+                    "maker_fee_paid": round(fees, 8),
+                    "fills": n_fills,
+                    "logged_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                })
+                logger.info(
+                    f"[SLIPPAGE] {sym} fill_vwap={vwap:.6f} vs signal_close="
+                    f"{signal_close} -> {slippage_bps} bps (data-gathering only)"
+                )
+            logged = logged[-self.SLIPPAGE_LOG_MAX:]
+            with locked_path(self.SLIPPAGE_LOG_FILE):
+                atomic_write_json(self.SLIPPAGE_LOG_FILE, logged, indent=2, default=str)
+            return logged
+        except Exception as e:
+            logger.error(f"[SLIPPAGE] tracking failed: {e}")
+            return []
+
+
+    # ------------------------------------------------------------------
+    # Upgrade 7: manual kill-switch (POST /api/panic writes panic_state.json).
+    # While active, NO new orders are placed; open positions keep their OCO
+    # protection. Released by POST /api/panic {"release": true}.
+    # ------------------------------------------------------------------
+    PANIC_STATE_FILE = os.getenv("PANIC_STATE_FILE", "panic_state.json")
+
+    def panic_active(self):
+        """True if the manual kill-switch flag is active (either schema key).
+
+        An existing but unreadable flag file fails CLOSED: a half-written or
+        corrupted panic request must block orders, not be ignored.
+        """
+        from panic_state import is_panic_active
+
+        return is_panic_active(self.PANIC_STATE_FILE)
+
+    def position_monitor_loop(self):
+        """Continuously reconciles active positions against Binance."""
+        while True:
+            try:
+                # 1. Update Equity
+                active = _load_active_trades()
+                active_open_positions = [t for t in active if t.get('status') == 'OPEN']
+                if TRADING_MODE == "FUTURES":
+                    account = self.client.futures_account() if hasattr(self.client, "futures_account") else {}
+                    # In Futures USDⓈ-M, totalMarginBalance is TRUE ACCOUNT EQUITY (wallet balance + unrealized PnL)
+                    actual_binance_total = float(account.get("totalMarginBalance", account.get("totalWalletBalance", 0.0)))
+                    actual_binance_balance = float(account.get("availableBalance", actual_binance_total))
+                    used_margin = float(account.get("totalInitialMargin", 0.0))
+                    if used_margin == 0.0 and active_open_positions:
+                        # Fallback margin estimation if Binance payload lacked totalInitialMargin
+                        lev = float(getattr(config, "FUTURES_LEVERAGE", 5.0))
+                        used_margin = sum(float(t.get('quantity', 0.0)) * float(t.get('entry_price', 0.0)) / max(1.0, lev) for t in active_open_positions)
+                else:
+                    account = self.client.get_account()
+                    usdt_balance = next((item for item in account.get('balances', []) if item['asset'] == 'USDT'), None)
+                    actual_binance_balance = 0.0
+                    if usdt_balance:
+                        actual_binance_balance = float(usdt_balance['free']) + float(usdt_balance['locked'])
+                    used_margin = sum(float(t.get('quantity', 0.0)) * float(t.get('entry_price', 0.0)) for t in active_open_positions)
+                    actual_binance_total = actual_binance_balance + used_margin
+                    
+                # 2. Reconcile Positions
+                from execution import monitor_open_trades
+                # This queries Binance for OCO status and updates active_trades.json and ledger
+                monitor_open_trades()
+
+                # Upgrade 5: slippage/fee reality-check for newly closed trades
+                if not os.environ.get("PYTEST_CURRENT_TEST"):
+                    try:
+                        self.track_recent_slippage(max_records=2)
+                    except Exception as sl_err:
+                        logger.debug(f"[SLIPPAGE] cycle skipped: {sl_err}")
+                
+                # 3. Calculate total reconstructable PnL from the Ledger (with strict provenance)
+                total_reconstructable_pnl = 0.0
+                if os.path.exists(TESTNET_LEDGER_FILE):
+                    with open(TESTNET_LEDGER_FILE, "r") as f:
+                        for line in f:
+                            if not line.strip(): continue
+                            try:
+                                record = json.loads(line)
+                                source = record.get("source", "")
+                                strategy = record.get("strategy", "")
+                                if source in ["BINANCE_EXECUTION", "RECOVERY_FROM_BINANCE"] and strategy != "TEST":
+                                    total_reconstructable_pnl += float(record.get("net_pnl", 0.0))
+                            except:
+                                pass
+                
+                self.local_portfolio_balance = self.initial_deposit + total_reconstructable_pnl
+                
+                tolerance = getattr(config, "RECONCILIATION_TOLERANCE", 25.0)
+                mismatch = abs(self.local_portfolio_balance - actual_binance_total)
+                
+                if mismatch > tolerance:
+                    logger.warning(f"[SERVICE] Balance Note: Calculated Total = {actual_binance_total:.2f} USDT "
+                                   f"(Cash: {actual_binance_balance:.2f} + Deployed: {used_margin:.2f}) vs Local: {self.local_portfolio_balance:.2f}")
+                
+                # Maintain active equity smoothly
+                self.current_equity = actual_binance_total
+                self.safety_halt = False
+                    
+                # Sync memory with disk
+                try:
+                    active = _load_active_trades()
+                    new_active_positions = {t['symbol']: t for t in active}
+                    
+                    # Call exact authoritative reconstruction
+                    self._rebuild_testnet_state()
+                    
+                    # Update local risk gate if a trade closed
+                    for sym in list(self.active_positions.keys()):
+                        if sym not in new_active_positions:
+                            logger.info(f"[SERVICE] Position for {sym} closed. Risk bounds will update on next PnL parse.")
+                            self._restore_daily_risk_state()
+                            self.stats["CLOSED_TRADES"] += 1
+                            
+                    self.active_positions = new_active_positions
+                except Exception as e:
+                    logger.error(f"[SERVICE] Failed to sync active positions: {e}")
+                
+                # Stage 5: Degradation Control
+                self._check_degradation()
+                
+                with self.lock:
+                    self._save_state()
+            except Exception as e:
+                logger.error(f"[MONITOR] Error: {e}")
+            time.sleep(30)
+
+    def _rebuild_testnet_state(self):
+        """Authoritatively reconstructs exact trade history, PnL, and fees directly from Binance API"""
+        try:
+            # Which symbols must the ledger cover?
+            #
+            # This used to be `ADX_EMA_STRATEGY["OOS_VALIDATED_ASSETS"]`, which is a
+            # category error twice over:
+            #   * OOS-validated assets record where a strategy has statistical proof.
+            #     That list is deliberately [] while adx_ema is OBSERVE_ONLY (enforced
+            #     by tests/test_oos_claims_are_not_runtime_priors.py), so it is empty
+            #     exactly when the engine still holds -- or recently held -- real
+            #     exposure that still has to be accounted for.
+            #   * `[]` is indistinguishable from "key absent", so the
+            #     `.get(..., ["BTCUSDT"])` fallback never fired.
+            # Together they emptied symbols_to_check and the rebuild imported zero
+            # trades: a completed BTCUSDT round trip vanished from the ledger rather
+            # than being double counted.
+            #
+            # Accounting is scoped by what the engine trades and holds, never by what
+            # it has proven. Governance decides whether NEW signals may be emitted;
+            # it must not decide whether past trades were real. Faucet residue stays
+            # excluded through the post-baseline cutoff applied further below.
+            engine_assets = set()
+            _cfg_symbol = str(getattr(config, "SYMBOL", "") or "").strip().upper()
+            if _cfg_symbol:
+                engine_assets.add(_cfg_symbol)
+            symbols_to_check = set(self.active_positions.keys()) | engine_assets
+
+            # Include all symbols from active scanner if available
+            if hasattr(self, 'scanner') and getattr(self.scanner, 'symbols', None):
+                symbols_to_check.update(self.scanner.symbols)
+                
+            # Include symbols from existing ledger file
+            ledger_file = os.getenv("TESTNET_LEDGER_FILE", TESTNET_LEDGER_FILE)
+            if os.path.exists(ledger_file):
+                try:
+                    with open(ledger_file, "r") as lf:
+                        for line in lf:
+                            if not line.strip(): continue
+                            rec = json.loads(line)
+                            if rec.get("symbol"):
+                                symbols_to_check.add(rec["symbol"])
+                except Exception:
+                    pass
+
+            # Baseline cutoff: a statistics reset (testnet_baseline.json) defines the
+            # forward-measurement start; exchange history before it is archived in
+            # backup/ and must never be re-imported into the live ledger.
+            baseline_ts = None
+            try:
+                if "TESTNET_BASELINE_FILE" in os.environ:
+                    _bl_path = os.environ["TESTNET_BASELINE_FILE"]
+                    if os.path.exists(_bl_path):
+                        with open(_bl_path, "r") as bf:
+                            _bl = json.load(bf)
+                        _bl_iso = _bl.get("reset_timestamp", "")
+                        if _bl_iso:
+                            baseline_ts = datetime.datetime.fromisoformat(_bl_iso.replace("Z", "+00:00")).timestamp() * 1000
+                else:
+                    _bl_path = "testnet_baseline.json"
+                    _bl_iso = ""
+                    if os.path.exists(_bl_path):
+                        with open(_bl_path, "r") as bf:
+                            _bl = json.load(bf)
+                        _bl_iso = _bl.get("reset_timestamp", "")
+                    if not _bl_iso:
+                        _bl_iso = getattr(config, "TESTNET_BASELINE_RESET_ISO", "2026-09-01T00:00:00Z")
+                    if _bl_iso:
+                        baseline_ts = datetime.datetime.fromisoformat(_bl_iso.replace("Z", "+00:00")).timestamp() * 1000
+            except Exception:
+                baseline_ts = None
+
+            all_filled_orders = []
+            all_trades_by_order = {}
+
+            # Fetch orders and trades for all relevant symbols
+            for sym in symbols_to_check:
+                try:
+                    if TRADING_MODE == "FUTURES":
+                        orders = self.client.futures_get_all_orders(symbol=sym, limit=500) if hasattr(self.client, "futures_get_all_orders") else []
+                    else:
+                        orders = self.client.get_all_orders(symbol=sym, limit=500)
+                    if baseline_ts:
+                        # Orders without a timestamp count as post-baseline (fail-open;
+                        # real Binance payloads always carry 'time').
+                        orders = [o for o in orders if o.get('time', float('inf')) >= baseline_ts]
+                    all_filled_orders.extend([o for o in orders if o.get('status') == 'FILLED'])
+                    
+                    if TRADING_MODE == "FUTURES":
+                        trades = self.client.futures_account_trades(symbol=sym, limit=500) if hasattr(self.client, "futures_account_trades") else []
+                    else:
+                        trades = self.client.get_my_trades(symbol=sym, limit=500)
+                    if baseline_ts:
+                        trades = [t for t in trades if t.get('time', float('inf')) >= baseline_ts]
+                    for t in trades:
+                        oid = str(t.get('orderId', ''))
+                        if oid not in all_trades_by_order:
+                            all_trades_by_order[oid] = []
+                        all_trades_by_order[oid].append(t)
+                except Exception as sym_err:
+                    logger.error(f"[SERVICE] Error fetching history for {sym}: {sym_err}")
+
+            total_gross_pnl = 0.0
+            total_fees = 0.0
+            completed_trades = []
+
+            # Reconstruct ledger per symbol
+            for sym in symbols_to_check:
+                sym_orders = sorted([o for o in all_filled_orders if o['symbol'] == sym], key=lambda x: x['time'])
+                
+                current_position_qty = 0.0
+                current_position_side = None
+                open_entries = []
+
+                for o in sym_orders:
+                    oid = str(o.get('orderId', ''))
+                    side = o.get('side', 'BUY')
+                    qty = float(o.get('executedQty', 0.0))
+                    quote_qty = float(o.get('cummulativeQuoteQty', o.get('cumQuote', 0.0)))
+                    avg_p = float(o.get('avgPrice', o.get('price', 0.0)))
+                    avg_price = (quote_qty / qty) if (qty > 0 and quote_qty > 0) else avg_p
+                    if quote_qty == 0.0 and avg_price > 0 and qty > 0:
+                        quote_qty = avg_price * qty
+                    
+                    order_trades = all_trades_by_order.get(oid, [])
+                    order_fees = 0.0
+                    for tr in order_trades:
+                        comm = float(tr.get('commission', 0.0))
+                        asset = str(tr.get('commissionAsset', 'USDT')).upper()
+                        if asset == 'USDT':
+                            order_fees += comm
+                        elif asset in sym:
+                            order_fees += comm * avg_price
+                        else:
+                            # Standard testnet fee rate for other assets
+                            order_fees += (avg_price * qty * 0.00075) / max(1, len(order_trades))
+                    total_fees += order_fees
+                    
+                    if current_position_qty == 0.0:
+                        current_position_side = side
+                        current_position_qty = qty
+                        open_entries.append({"time": o['time'], "order_id": oid, "side": side, "qty": qty, "price": avg_price, "fees": order_fees})
+                    else:
+                        if side == current_position_side:
+                            current_position_qty += qty
+                            open_entries.append({"time": o['time'], "order_id": oid, "side": side, "qty": qty, "price": avg_price, "fees": order_fees})
+                        else:
+                            close_qty_remaining = qty
+                            while close_qty_remaining > 1e-8 and len(open_entries) > 0:
+                                entry = open_entries[0]
+                                match_qty = min(entry['qty'], close_qty_remaining)
+                                
+                                gross_pnl = (avg_price - entry['price']) * match_qty if entry['side'] == 'BUY' else (entry['price'] - avg_price) * match_qty
+                                total_gross_pnl += gross_pnl
+                                
+                                completed_trades.append({
+                                    "signal_id": f"RECOVERED_{entry['order_id']}",
+                                    "symbol": sym,
+                                    "strategy": "RECOVERED",
+                                    "source": "RECOVERY_FROM_BINANCE",
+                                    "side": entry['side'],
+                                    "entry_order_id": entry['order_id'],
+                                    "entry_price": entry['price'],
+                                    "entry_executed_quantity": match_qty,
+                                    "entry_fee": entry['fees'] * (match_qty / entry['qty']),
+                                    "exit_order_id": oid,
+                                    "exit_price": avg_price,
+                                    "exit_executed_quantity": match_qty,
+                                    "exit_fee": order_fees * (match_qty / qty),
+                                    "exit_reason": "RECOVERED",
+                                    "gross_pnl": gross_pnl,
+                                    "total_fees": (entry['fees'] * (match_qty / entry['qty'])) + (order_fees * (match_qty / qty)),
+                                    "net_pnl": gross_pnl - (entry['fees'] * (match_qty / entry['qty'])) - (order_fees * (match_qty / qty)),
+                                    "pnl": gross_pnl - (entry['fees'] * (match_qty / entry['qty'])) - (order_fees * (match_qty / qty)),
+                                    "fees": (entry['fees'] * (match_qty / entry['qty'])) + (order_fees * (match_qty / qty)),
+                                    "entry_timestamp": datetime.datetime.utcfromtimestamp(entry['time']/1000).isoformat() + "Z",
+                                    "exit_timestamp": datetime.datetime.utcfromtimestamp(o['time']/1000).isoformat() + "Z",
+                                    "timestamp": datetime.datetime.utcfromtimestamp(o['time']/1000).isoformat() + "Z",
+                                    "action": f"CLOSED_{'WIN' if gross_pnl > 0 else 'LOSS'}",
+                                    "quantity": match_qty
+                                })
+                                
+                                entry['qty'] -= match_qty
+                                close_qty_remaining -= match_qty
+                                if entry['qty'] < 1e-8: open_entries.pop(0)
+                                    
+                            current_position_qty -= qty
+                            if current_position_qty < 1e-8:
+                                current_position_qty = 0.0
+                                current_position_side = None
+
+            # 1. Append missing trades to the ledger (do not overwrite)
+            ledger_file = os.getenv("TESTNET_LEDGER_FILE", TESTNET_LEDGER_FILE)
+
+            # Dedupe read and append happen under one thread + inter-process
+            # lock, so two writers can no longer both miss an exit id and
+            # append the same closed trade twice.
+            from testnet_engine.protection import LEDGER_WRITE_LOCK
+            with LEDGER_WRITE_LOCK:
+                with locked_path(ledger_file):
+                    existing_order_ids = set()
+                    for record in read_jsonl(ledger_file).records:
+                        for fid in ("exit_order_id", "exit_client_id", "entry_order_id", "order_id"):
+                            val = str(record.get(fid) or "")
+                            if val and val != "None":
+                                existing_order_ids.add(val)
+                    for ct in completed_trades:
+                        ex_id = str(ct.get("exit_order_id") or "")
+                        en_id = str(ct.get("entry_order_id") or "")
+                        if (ex_id and ex_id in existing_order_ids) or (en_id and en_id in existing_order_ids):
+                            continue
+                        append_jsonl(ledger_file, ct, fsync=True)
+                        if ex_id: existing_order_ids.add(ex_id)
+                        if en_id: existing_order_ids.add(en_id)
+                        if hasattr(self, "protection_manager") and self.protection_manager:
+                            try:
+                                self.protection_manager.on_trade_closed(ct)
+                            except Exception as e:
+                                logger.warning(f"[PROTECTION_HOOK_ERR] Failed on_trade_closed: {e}")
+                        
+                        # Telemetry update — full 40-field canonical lifecycle record
+
+                        try:
+                            if hasattr(self, "telemetry") and self.telemetry:
+                                # Compute balance state before/after exit
+                                net_pnl_ct = float(ct.get("net_pnl", 0.0))
+                                equity_before_exit = self.current_equity
+                                equity_after_exit = self.current_equity + net_pnl_ct
+                                notional_ct = float(ct.get("quantity", 0.0)) * float(ct.get("entry_price", 0.0))
+                                cash_before_exit = max(0.0, self.current_equity - notional_ct)
+                                cash_after_exit = cash_before_exit + float(ct.get("quantity", 0.0)) * float(ct.get("exit_price", 0.0))
+
+                                self.telemetry.record_trade_event({
+                                    "trade_id": str(ct.get("entry_client_id", ct.get("entry_order_id", ct.get("exit_order_id", "")))),
+                                    "symbol": ct.get("symbol"),
+                                    "strategy": ct.get("strategy", ""),
+                                    "timeframe": ct.get("timeframe", "5m"),
+                                    "side": ct.get("side", ct.get("action", "BUY")).replace("CLOSED_", "").replace("CLOSE_", ""),
+                                    "status": "CLOSED",
+                                    "entry_order_id": str(ct.get("entry_order_id", "")),
+                                    "exit_order_id": str(ct.get("exit_order_id", "")),
+                                    # Timestamps — fill_timestamp is the entry fill time
+                                    "fill_timestamp": ct.get("entry_timestamp", ""),
+                                    "close_timestamp": ct.get("exit_timestamp", ""),
+                                    "signal_timestamp": ct.get("signal_timestamp", ct.get("entry_timestamp", "")),
+                                    # Prices
+                                    "entry_price": float(ct.get("entry_price", 0.0)),
+                                    "average_entry_price": float(ct.get("entry_price", 0.0)),
+                                    "exit_price": float(ct.get("exit_price", 0.0)),
+                                    "quantity": float(ct.get("quantity", 0.0)),
+                                    "notional": notional_ct,
+                                    # Protection
+                                    "stop_loss": float(ct.get("sl_price", ct.get("sl", 0.0))),
+                                    "take_profit": float(ct.get("tp_price", ct.get("tp", 0.0))),
+                                    # PnL & Fees
+                                    "gross_pnl": float(ct.get("gross_pnl", 0.0)),
+                                    "net_pnl": net_pnl_ct,
+                                    "total_fees": float(ct.get("total_fees", ct.get("fees", ct.get("entry_fee", 0.0) + ct.get("exit_fee", 0.0)))),
+                                    "entry_fee": float(ct.get("entry_fee", 0.0)),
+                                    "exit_fee": float(ct.get("exit_fee", 0.0)),
+                                    # Balance/Equity state at exit
+                                    "equity_before_exit": equity_before_exit,
+                                    "equity_after_exit": equity_after_exit,
+                                    "cash_before_exit": cash_before_exit,
+                                    "cash_after_exit": cash_after_exit,
+                                    # Close metadata
+                                    "close_reason": ct.get("exit_reason", ct.get("action", "")),
+                                    "source": ct.get("source", "BINANCE_EXECUTION"),
+                                    "provenance": "PRODUCTION_TESTNET"
+                                })
+                                self.telemetry.record_position_update({
+                                    "position_id": ct.get("symbol"),
+                                    "trade_id": str(ct.get("entry_client_id", ct.get("entry_order_id", ""))),
+                                    "symbol": ct.get("symbol"),
+                                    "strategy": ct.get("strategy", ""),
+                                    "timeframe": ct.get("timeframe", "5m"),
+                                    "exit_timestamp": ct.get("exit_timestamp", ""),
+                                    "exit_price": float(ct.get("exit_price", 0.0)),
+                                    "status": "CLOSED",
+                                    "realized_pnl": net_pnl_ct
+                                })
+                                self.telemetry.record_balance_event({
+                                    "event_type": "TRADE_CLOSE",
+                                    "reason": f"CLOSE {ct.get('symbol')} via {ct.get('exit_reason', 'OCO')}",
+                                    "balance_before": equity_before_exit,
+                                    "balance_after": equity_after_exit,
+                                    "delta": net_pnl_ct,
+                                    "realized_pnl_delta": net_pnl_ct,
+                                    "fees_delta": float(ct.get("total_fees", 0.0)),
+                                    "trade_id": str(ct.get("entry_order_id", "")),
+                                    "symbol": ct.get("symbol"),
+                                    "strategy": ct.get("strategy", ""),
+                                    "timeframe": ct.get("timeframe", "5m")
+                                })
+                        except Exception as te_err:
+                            logger.error(f"[TELEMETRY] Failed to record closed trade: {te_err}")
+                    
+            # 2. Update Risk bounds mathematically
+            # Filter completed_trades by today's date for daily loss (C-05 fix)
+            today_str = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+            todays_pnl = sum(
+                t['net_pnl'] for t in completed_trades
+                if t.get('exit_timestamp', t.get('timestamp', '')).startswith(today_str)
+            )
+            self.risk_gate.daily_realized_loss = todays_pnl
+            self.total_reconciled_fees = total_fees
+            self.total_reconciled_pnl = total_gross_pnl - total_fees
+            
+        except Exception as e:
+            logger.error(f"[SERVICE] Authoritative Rebuild Failed: {e}")
+
+    def _btc_regime_state(self):
+        """Current BTC risk-on/risk-off state from the scanner's BTCUSDT cache (4h, 1h, or 15m)."""
+        try:
+            btc_df = None
+            scanner = getattr(self, "scanner", None)
+            if scanner is not None:
+                with scanner._cache_lock:
+                    btc_df = scanner.candle_cache.get(("BTCUSDT", "4h"))
+                    if btc_df is None or len(btc_df) < 50:
+                        btc_1h = scanner.candle_cache.get(("BTCUSDT", "1h"))
+                        if btc_1h is not None and len(btc_1h) >= len(btc_df or []):
+                            btc_df = btc_1h
+                    if btc_df is None or len(btc_df) < 30:
+                        btc_15m = scanner.candle_cache.get(("BTCUSDT", "15m"))
+                        if btc_15m is not None and len(btc_15m) > len(btc_df or []):
+                            btc_df = btc_15m
+            if btc_df is None or len(btc_df) < 30:
+                logger.warning("[GOVERNANCE] BTCUSDT data unavailable or insufficient (<30 bars) — regime gate fail-open for this candle")
+                return None, None, None
+            if len(btc_df) >= 200:
+                return compute_btc_regime(btc_df, min_bars=200)
+            closes = btc_df["close"].astype(float)
+            span = 50 if len(closes) >= 50 else len(closes)
+            ema = float(closes.ewm(span=span, adjust=False).mean().iloc[-1])
+            close = float(closes.iloc[-1])
+            return (close > ema), close, ema
+        except Exception as e:
+            logger.error(f"[GOVERNANCE] BTC regime evaluation failed ({e}) — fail-open")
+            return None, None, None
+
+    def _check_degradation(self):
+        """Stage 5: Automatically switch to OBSERVE-ONLY if strategy degrades.
+
+        Safeguards:
+        1. Excludes administrative/recovered scratch ledger entries from strategy metrics.
+        2. Only halts if BOTH win rate is degraded AND recent net PnL is strictly negative
+           (trend-following strategies with 2:1-3:1 RR can be highly profitable at ~33% win rate).
+        3. Automatically recovers from OBSERVE-ONLY mode once PnL is healthy or cooldown expires.
+        """
+        window = getattr(config, "DEGRADATION_WINDOW", 20)
+        min_win_rate = float(getattr(config, "MIN_WIN_RATE_THRESHOLD", 0.30))
+        degradation_enabled = bool(getattr(config, "DEGRADATION_GUARD_ENABLED", True))
+        cooldown_sec = float(getattr(config, "OBSERVE_ONLY_COOLDOWN_SECONDS", 7200))  # 2 hours max halt
+
+        if not hasattr(self, 'ledger_file'):
+            self.ledger_file = TESTNET_LEDGER_FILE
+
+        if not os.path.exists(self.ledger_file):
+            return
+
+        closed_trades = []
+        try:
+            with open(self.ledger_file, 'r', encoding="utf-8") as f:
+                for line in f:
+                    if not line.strip(): continue
+                    try:
+                        record = json.loads(line)
+                        if "CLOSE" in record.get("action", ""):
+                            # Skip administrative scratch / recovered ledger entries
+                            strat_tag = str(record.get("strategy", "")).upper()
+                            exit_tag = str(record.get("exit_reason", "")).upper()
+                            if strat_tag == "RECOVERED" or "RECOVERED" in exit_tag:
+                                continue
+                            closed_trades.append(record)
+                    except Exception:
+                        pass
+        except Exception:
+            return
+
+        if len(closed_trades) < window:
+            # Not enough strategy trades to judge degradation. Recovery from an
+            # existing halt is still allowed here — a ledger dominated by
+            # administrative/RECOVERED entries legitimately leaves too few real
+            # strategy trades to justify staying halted — but only once the
+            # minimum halt duration has elapsed. Without that guard a truncated,
+            # rotated or partially-read ledger could disarm the safety gate
+            # instantly, which is the opposite of fail-safe.
+            if self.observe_only:
+                halted_at = getattr(self, "observe_only_since", None)
+                if halted_at is None:
+                    # Unknown halt age must be treated as a FRESH halt, never as
+                    # an already-expired one; otherwise losing the timestamp
+                    # alone would disarm the gate. A numeric 0 is NOT unknown:
+                    # production only ever assigns time.time() here, so 0 is an
+                    # explicit epoch timestamp meaning "halted a very long time
+                    # ago" and the cooldown has genuinely elapsed.
+                    self.observe_only_since = time.time()
+                    logger.warning(
+                        "[SERVICE] OBSERVE-ONLY active without a recorded start time and an "
+                        "insufficient trade sample. Adopting the current time and remaining "
+                        "halted."
+                    )
+                    self._strategy_performance_gate()
+                    return
+                elapsed = time.time() - halted_at
+                if elapsed >= cooldown_sec:
+                    logger.info(
+                        f"[SERVICE] 🟢 Insufficient closed trade sample "
+                        f"({len(closed_trades)}/{window}) to justify degradation halt, and the "
+                        f"minimum halt has elapsed ({elapsed:.0f}s >= {cooldown_sec:.0f}s). "
+                        f"Resetting to ACTIVE trading."
+                    )
+                    self.observe_only = False
+                else:
+                    logger.info(
+                        f"[SERVICE] ⚠️ Insufficient closed trade sample "
+                        f"({len(closed_trades)}/{window}), but only {elapsed:.0f}s of the "
+                        f"{cooldown_sec:.0f}s minimum halt has passed. REMAINING in OBSERVE-ONLY "
+                        f"mode — a shrinking sample must not clear a fresh halt."
+                    )
+            self._strategy_performance_gate()
+            return
+
+        recent = closed_trades[-window:]
+        wins = sum(1 for t in recent if float(t.get("pnl", t.get("net_pnl", 0.0))) > 0)
+        win_rate = wins / window
+        recent_pnl = sum(float(t.get("pnl", t.get("net_pnl", 0.0))) for t in recent)
+
+        if degradation_enabled and win_rate < min_win_rate and recent_pnl < 0:
+            if not self.observe_only:
+                logger.warning(
+                    f"[SERVICE] 🚨 STRATEGY DEGRADATION DETECTED. Win rate {win_rate:.2%} < {min_win_rate:.2%} "
+                    f"and recent net PnL (${recent_pnl:.2f}) < 0. Switching to OBSERVE-ONLY mode."
+                )
+                self.observe_only = True
+                self.observe_only_since = time.time()
+        else:
+            # Self-healing: resume live trading once PnL is positive or the win
+            # rate has recovered — but never before the configured minimum halt
+            # duration has actually elapsed. `cooldown_sec` used to be assigned
+            # and then never read, so OBSERVE_ONLY_COOLDOWN_SECONDS was dead
+            # config and a single large winner could resume live order submission
+            # instantly even while the win rate was still below the threshold.
+            if self.observe_only:
+                halted_at = getattr(self, "observe_only_since", None)
+                if halted_at is None:
+                    # Unknown halt time: adopt "now" and stay halted rather than
+                    # treating an unmeasured halt as already expired.
+                    self.observe_only_since = time.time()
+                    logger.warning(
+                        "[SERVICE] OBSERVE-ONLY active without a recorded start time. "
+                        "Adopting the current time and remaining halted."
+                    )
+                    self._strategy_performance_gate()
+                    return
+
+                elapsed = time.time() - halted_at
+                if elapsed < cooldown_sec:
+                    logger.info(
+                        f"[SERVICE] ⏳ Metrics recovered (PnL ${recent_pnl:.2f}, win rate "
+                        f"{win_rate:.2%}) but the minimum halt has not elapsed: "
+                        f"{elapsed:.0f}s / {cooldown_sec:.0f}s. REMAINING in OBSERVE-ONLY mode."
+                    )
+                    self._strategy_performance_gate()
+                    return
+
+                logger.info(
+                    f"[SERVICE] 🟢 RECOVERING FROM OBSERVE-ONLY MODE. "
+                    f"Recent PnL: ${recent_pnl:.2f}, Win rate: {win_rate:.2%}, "
+                    f"Cooldown elapsed: {elapsed:.0f}s >= {cooldown_sec:.0f}s. "
+                    f"Resuming live order execution."
+                )
+                self.observe_only = False
+
+        # V3: per-strategy demotion gate (additive to global observe-only)
+        self._strategy_performance_gate()
+
+    def _strategy_performance_gate(self):
+        """V3 Adaptive Strategy Performance Gate: per-strategy demotion.
+
+        Unlike the global degradation gate (which halts ALL trading), this
+        only demotes underperforming individual strategies for a cooldown.
+        """
+        if not getattr(config, "STRATEGY_PERFORMANCE_GATE", True):
+            return
+
+        window = int(getattr(config, "STRATEGY_GATE_MIN_TRADES", 10))
+        min_win_rate = float(getattr(config, "STRATEGY_GATE_WIN_RATE", 0.40))
+        min_net_pnl = float(getattr(config, "STRATEGY_GATE_MIN_NET_PNL", 0.0))
+        cooldown_hours = float(getattr(config, "STRATEGY_DEMOTION_COOLDOWN_HOURS", 4.0))
+
+        ledger_file = getattr(self, "ledger_file", TESTNET_LEDGER_FILE)
+        if not os.path.exists(ledger_file):
+            return
+
+        strategy_trades = {}
+        try:
+            with open(ledger_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    if not line.strip():
+                        continue
+                    try:
+                        record = json.loads(line)
+                        if "CLOSE" not in record.get("action", ""):
+                            continue
+                        strat = record.get("strategy", "unknown")
+                        strategy_trades.setdefault(strat, []).append(record)
+                    except Exception:
+                        pass
+        except Exception:
+            return
+
+        now = datetime.datetime.utcnow().timestamp()
+        cooldown_seconds = cooldown_hours * 3600
+
+        if not hasattr(self, "_strategy_demotions"):
+            self._strategy_demotions = {}
+
+        for strat, trades in strategy_trades.items():
+            if len(trades) < window:
+                continue
+
+            recent = trades[-window:]
+            wins = sum(1 for t in recent if t.get("pnl", 0) > 0)
+            win_rate = wins / window
+            net_pnl = sum(t.get("pnl", 0) for t in recent)
+
+            if win_rate < min_win_rate or net_pnl < min_net_pnl:
+                if strat not in self._strategy_demotions:
+                    self._strategy_demotions[strat] = now + cooldown_seconds
+                    logger.warning(
+                        f"[STRATEGY_GATE] Demoting '{strat}' for {cooldown_hours}h | "
+                        f"Win rate: {win_rate:.2%} (min {min_win_rate:.2%}) | "
+                        f"Net PnL: ${net_pnl:.2f} (min ${min_net_pnl:.2f})"
+                    )
+            else:
+                if strat in self._strategy_demotions:
+                    del self._strategy_demotions[strat]
+                    logger.info(f"[STRATEGY_GATE] '{strat}' recovered, re-enabled")
+
+    def is_strategy_demoted(self, strat_name):
+        """Check if a strategy is currently demoted (observe-only)."""
+        if not hasattr(self, "_strategy_demotions"):
+            return False
+        demotion_end = self._strategy_demotions.get(strat_name, 0)
+        if demotion_end == 0:
+            return False
+        now = datetime.datetime.utcnow().timestamp()
+        if now >= demotion_end:
+            del self._strategy_demotions[strat_name]
+            logger.info(f"[STRATEGY_GATE] '{strat_name}' demotion expired, re-enabled")
+            return False
+        return True
+
+    def _write_heartbeat(self, status="RUNNING", worker_alive=True):
+        """Atomically writes worker heartbeat state for dashboard, supervisor, and health checks."""
+        try:
+            now_iso = datetime.datetime.utcnow().isoformat() + "Z"
+            symbols = self.scanner.symbols if hasattr(self, 'scanner') and self.scanner else list(self.symbol_filters.keys())
+            
+            last_m_update = None
+            if hasattr(self, 'scanner') and self.scanner and hasattr(self.scanner, 'last_market_update'):
+                updates = [ts for ts in self.scanner.last_market_update.values() if ts]
+                if updates:
+                    last_m_update = max(updates).isoformat() + "Z"
+                    
+            last_candle_close = None
+            if hasattr(self, 'scanner') and self.scanner and hasattr(self.scanner, 'last_candle_close'):
+                closes = [ts for ts in self.scanner.last_candle_close.values() if ts]
+                if closes:
+                    last_candle_close = max(closes).isoformat() + "Z"
+                
+            last_eval = None
+            if self.last_evaluation:
+                eval_times = [v for v in self.last_evaluation.values() if v]
+                if eval_times:
+                    last_eval = max(eval_times)
+
+            # Report what the engine ACTUALLY loaded (post-governance-gate),
+            # not the raw config — the dashboard must mirror real testnet state.
+            loaded_strats = sorted({name for tf_strats in self.strategies.values() for name, _ in tf_strats})
+            loaded_tfs = sorted(self.strategies.keys())
+            hb = {
+                "worker_alive": worker_alive,
+                "status": status,
+                "pid": os.getpid(),
+                "timestamp": now_iso,
+                "mode": "TESTNET",
+                "binance_connected": self.client is not None,
+                "websocket_connected": hasattr(self, 'scanner') and bool(self.scanner),
+                "strategy": loaded_strats[0] if loaded_strats else "none",
+                "strategies": loaded_strats,
+                "timeframes": loaded_tfs,
+                "symbols": symbols,
+                "symbol_count": len(symbols),
+                "last_market_update": last_m_update,
+                "last_candle_close": last_candle_close,
+                "last_strategy_evaluation": last_eval,
+                "service_start_time": getattr(self, 'service_start_time', now_iso),
+                "current_equity": getattr(self, 'current_equity', 0.0),
+                "open_positions": len(getattr(self, 'active_positions', {}))
+            }
+            # Unique temp files: the testnet service and the paper runner both
+            # write heartbeat.json and used to share one "heartbeat.json.tmp".
+            atomic_write_json(TESTNET_HEARTBEAT_FILE, hb, indent=2, default=str, fsync=False)
+
+            # Also update legacy heartbeat.json for backwards compatibility
+            try:
+                atomic_write_json("heartbeat.json", hb, indent=2, default=str, fsync=False)
+            except (OSError, TypeError, ValueError) as e:
+                logger.debug(f"[SERVICE] Legacy heartbeat.json not updated: {e}")
+        except Exception as e:
+            logger.error(f"[SERVICE] Error writing heartbeat: {e}")
+
+    def _heartbeat_loop(self):
+        """Periodic heartbeat writer (runs every 5 seconds)."""
+        last_log_time = 0
+        while True:
+            try:
+                self._write_heartbeat(status="RUNNING", worker_alive=True)
+                now_ts = time.time()
+                if now_ts - last_log_time >= 60:
+                    tfs = list({tf for tfs in ACTIVE_STRATEGIES.values() for tf in (tfs if isinstance(tfs, list) else [tfs])})
+                    logger.info(f"[ENGINE_HEARTBEAT] PID={os.getpid()} | Status=RUNNING | Strategies={len(ACTIVE_STRATEGIES)} | Timeframes={','.join(tfs)} | Symbols={len(self.symbol_filters)}")
+                    last_log_time = now_ts
+            except Exception as e:
+                logger.error(f"[SERVICE] Heartbeat loop error: {e}")
+            time.sleep(5)
+
+    def _progress_report_loop(self):
+        """Periodic progress reporter (runs every 60 seconds). Logs key stats and writes them to a progress file."""
+        progress_file = os.getenv("PROGRESS_LOG_FILE", "progress_report.jsonl")
+        while True:
+            try:
+                timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+                # Gather key metrics
+                report = {
+                    "timestamp": timestamp,
+                    "total_signals": self.stats.get("TOTAL_SIGNALS", 0),
+                    "buy_signals": self.stats.get("BUY_SIGNALS", 0),
+                    "sell_signals": self.stats.get("SELL_SIGNALS", 0),
+                    "qualified": self.stats.get("QUALIFIED", 0),
+                    "executed": self.stats.get("ORDERS_FILLED", 0),
+                    "current_equity": getattr(self, "current_equity", 0.0),
+                    "open_positions": len(self.active_positions),
+                    "symbols_scanned": self.stats.get("symbols_scanned", 0),
+                    "strategy_metrics": self.stats.get("strategy_metrics", {}),
+                    "timeframe_metrics": self.stats.get("timeframe_metrics", {}),
+                }
+                # Append-only JSONL: one complete line per report, torn tails sealed.
+                append_jsonl(progress_file, report)
+                logger.info(f"[PROGRESS] Total:{report['total_signals']} BUY:{report['buy_signals']} SELL:{report['sell_signals']} Equity:{report['current_equity']:.2f}")
+            except Exception as e:
+                logger.error(f"[SERVICE] Progress report loop error: {e}")
+            time.sleep(60)
+
+    def reconcile_state(self):
+        """Boot-time authoritative reconciliation (upgrade 2, Bug #52 class).
+
+        Runs BEFORE scanning begins. Compares exchange truth (open orders +
+        account balances) with local expectations and repairs drift:
+          - Position (base-asset balance > 0) without protective orders
+            -> immediately place OCO protection at SL=3xATR / TP=3xATR.
+          - Protective orders on a symbol with zero base balance (orphan OCO)
+            -> cancel.
+        All actions are logged; failures never block engine boot.
+        Returns a dict summary (also used by tests).
+        """
+        summary = {"checked_symbols": 0, "naked_positions_protected": [],
+                   "orphan_orders_cancelled": [], "errors": []}
+        try:
+            from testnet_engine.protection import place_oco_protection
+            if TRADING_MODE == "FUTURES":
+                open_orders = self.client.futures_get_open_orders() if hasattr(self.client, "futures_get_open_orders") else []
+                account = self.client.futures_account() if hasattr(self.client, "futures_account") else {}
+            else:
+                open_orders = self.client.get_open_orders()
+                account = self.client.get_account()
+        except Exception as e:
+            summary["errors"].append(f"exchange_query_failed: {e}")
+            logger.error(f"[RECONCILE] Cannot query exchange state: {e}")
+            return summary
+
+        # Balances by asset (free + locked), ignoring dust
+        balances = {}
+        position_sides = {}
+        if TRADING_MODE == "FUTURES":
+            for p in account.get("positions", []):
+                raw_amt = float(p.get("positionAmt", 0.0))
+                amt = abs(raw_amt)
+                if amt > 0.0:
+                    sym = p.get("symbol", "")
+                    base = sym.removesuffix("USDT")
+                    balances[base] = amt
+                    position_sides[base] = "BUY" if raw_amt > 0 else "SELL"
+        else:
+            for b in account.get("balances", []):
+                total = float(b.get("free", 0.0)) + float(b.get("locked", 0.0))
+                if total > 0.0:
+                    balances[b["asset"]] = total
+                    position_sides[b["asset"]] = "BUY"
+
+        # Orders grouped by symbol
+        orders_by_symbol = {}
+        for o in open_orders:
+            orders_by_symbol.setdefault(o["symbol"], []).append(o)
+
+        # Candidate symbols come from EXCHANGE TRUTH (balances + resting orders),
+        # never from the strategy registry.
+        #
+        # This function is damage control: an orphan OCO left on the book can
+        # trigger an entry with no position behind it, and a naked position has
+        # no stop. Both are dangerous regardless of which strategies governance
+        # currently permits to *open* trades. Deriving candidates from
+        # governance_validated_assets() meant that whenever the registry held no
+        # OOS-validated assets -- which is the live state, adx_ema is OBSERVE_ONLY
+        # with validated_assets=[] -- the loop body never ran, so orphan orders
+        # were never cancelled and naked positions were never protected.
+        #
+        # Governance still gates signal generation in run(); it must not gate
+        # repair of already-existing exchange exposure.
+        validated_assets = governance_validated_assets(self.strategies)
+        candidates = set()
+        for base, qty in balances.items():
+            if qty > 0.0 and base not in _QUOTE_ASSETS:
+                candidates.add(base + "USDT")
+        candidates.update(orders_by_symbol)
+        # Report holdings that sit outside the validated universe: they cannot be
+        # managed by a strategy, but they still must be reconciled.
+        unvalidated = sorted(c for c in candidates if c not in validated_assets)
+        if unvalidated:
+            logger.warning(
+                f"[RECONCILE] {len(unvalidated)} exchange holding/order symbol(s) outside "
+                f"the OOS-validated universe being reconciled for safety: {unvalidated}"
+            )
+        summary["checked_symbols"] = len(candidates)
+
+        for sym in sorted(candidates):
+            base = sym.removesuffix("USDT")
+            held_qty = balances.get(base, 0.0)
+            entry_side = position_sides.get(base, "BUY")
+            resting = orders_by_symbol.get(sym, [])
+
+            if held_qty > 0.0 and not resting:
+                # Naked position: protect it with fixed percentage SL/TP or 3xATR
+                try:
+                    from data import get_candles
+                    from strategy_adx_ema import compute_atr
+                    df = get_candles(sym, "4h", 60)
+                    last_close = 0.0
+                    if df is not None and not getattr(df, "empty", True) and len(df) >= 1:
+                        last_close = float(df["close"].iloc[-1])
+                    if last_close <= 0.0:
+                        try:
+                            t_info = self.client.futures_symbol_ticker(symbol=sym) if TRADING_MODE == "FUTURES" else self.client.get_symbol_ticker(symbol=sym)
+                            last_close = float(t_info.get("price", 0.0))
+                        except Exception:
+                            pass
+                    if last_close <= 0.0:
+                        raise RuntimeError(f"Could not fetch market price for {sym}")
+
+                    atr = float(compute_atr(df, 14).iloc[-1]) if (df is not None and not getattr(df, "empty", True) and len(df) >= 14) else (last_close * 0.015)
+                    if TRADING_MODE == "FUTURES":
+                        if entry_side == "BUY":
+                            sl_price = round(last_close - 1.5 * atr, 6)
+                            tp_price = round(last_close + 3.0 * atr, 6)
+                        else:
+                            sl_price = round(last_close + 1.5 * atr, 6)
+                            tp_price = round(last_close - 3.0 * atr, 6)
+                        qty = round(held_qty, 4)
+                        from testnet_engine.protection import (
+                            place_futures_bracket_protection,
+                        )
+                        prot = place_futures_bracket_protection(
+                            client=self.client,
+                            symbol=sym,
+                            entry_side=entry_side,
+                            executed_qty=qty,
+                            actual_fill_price=last_close,
+                            sl_price=sl_price,
+                            tp_price=tp_price,
+                        )
+                    else:
+                        sl_price = round(last_close - 3.0 * atr, 6)
+                        tp_price = round(last_close + 3.0 * atr, 6)
+                        qty = round(held_qty, 4)
+                        prot = place_oco_protection(
+                            client=self.client,
+                            symbol=sym,
+                            entry_side="BUY",
+                            executed_qty=qty,
+                            actual_fill_price=last_close,
+                            sl_price=sl_price,
+                            tp_price=tp_price,
+                            list_client_order_id=f"recon-{sym}-{int(time.time())}",
+                        )
+                    summary["naked_positions_protected"].append(sym)
+                    logger.warning(
+                        f"[RECONCILE] 🛡️ Naked position {sym} ({qty} {entry_side}) protected: "
+                        f"SL={sl_price} TP={tp_price} result={prot}"
+                    )
+                except Exception as e:
+                    summary["errors"].append(f"protect_{sym}: {e}")
+                    logger.warning(f"[RECONCILE] Note protecting naked position {sym}: {e}")
+
+            elif held_qty <= 0.0 and resting:
+                # Orphan orders with no position behind them
+                for o in resting:
+                    try:
+                        self.client.cancel_order(symbol=sym, orderId=o["orderId"])
+                        summary["orphan_orders_cancelled"].append(f"{sym}:{o['orderId']}")
+                        logger.warning(f"[RECONCILE] 🧹 Orphan order cancelled: {sym} #{o['orderId']} ({o.get('type')})")
+                    except Exception as e:
+                        summary["errors"].append(f"cancel_{sym}_{o['orderId']}: {e}")
+                        logger.error(f"[RECONCILE] Failed to cancel orphan {sym} #{o['orderId']}: {e}")
+
+        if summary["naked_positions_protected"] or summary["orphan_orders_cancelled"] or summary["errors"]:
+            logger.info(f"[RECONCILE] Boot reconciliation summary: {summary}")
+        return summary
+
+    def run(self):
+        # 0. Authoritative state reconciliation (before any scanning):
+        #    repair naked positions / orphan orders left by crashes or reboots.
+        try:
+            if not os.environ.get("PYTEST_CURRENT_TEST"):
+                self.reconcile_state()
+        except Exception as e:
+            logger.error(f"[RECONCILE] Boot reconciliation crashed (non-fatal): {e}")
+
+        # 1. Discover Symbols
+        discovery = SymbolDiscoveryService()
+        self.symbol_filters = discovery.discover_eligible_symbols(min_quote_volume=1_000_000)
+        symbol_list = list(self.symbol_filters.keys())
+
+        # Governance gate: restrict the trading universe to assets with OOS-validated
+        # edge for the enabled strategies. Unvalidated symbols carry unquantified
+        # slippage/regime risk and are excluded from signal generation.
+        validated_assets = governance_validated_assets(self.strategies)
+        if validated_assets:
+            blocked = [s for s in symbol_list if s not in validated_assets]
+            if blocked:
+                logger.info(
+                    f"[GOVERNANCE] Restricting universe to {len(validated_assets)} OOS-validated assets; "
+                    f"{len(blocked)} discovered symbols excluded from scanning."
+                )
+            self.symbol_filters = {s: f for s, f in self.symbol_filters.items() if s in validated_assets}
+            # Backfill validated assets that volume-ranked discovery missed
+            # (top-N discovery can drop a validated asset on the low-volume testnet).
+            missing = validated_assets - set(self.symbol_filters)
+            if missing:
+                try:
+                    backfill = discovery.get_symbol_filters(sorted(missing))
+                    if backfill:
+                        self.symbol_filters.update(backfill)
+                        logger.info(f"[GOVERNANCE] Backfilled validated assets into universe: {sorted(backfill)}")
+                except Exception as e:
+                    logger.error(f"[GOVERNANCE] Symbol backfill failed: {e}")
+            symbol_list = list(self.symbol_filters.keys())
+        self.stats["symbols_scanned"] = len(symbol_list)
+        
+        # 2. Train ML Strategy (only if it survived the governance gate)
+        _ml_loaded = any(name == "ml" for tf_strats in self.strategies.values() for name, _ in tf_strats)
+        if _ml_loaded:
+            try:
+                from data import add_indicators, get_candles
+                from strategy_ml import train
+                logger.info("[SERVICE] Pre-training ML strategy on BTCUSDT...")
+                ml_tf = ACTIVE_STRATEGIES["ml"][0] if isinstance(ACTIVE_STRATEGIES["ml"], list) else ACTIVE_STRATEGIES["ml"]
+                all_df = add_indicators(get_candles("BTCUSDT", ml_tf, 2500))
+                train_df = all_df.iloc[:-500]
+                val_df = all_df.iloc[-500:]
+                train(train_df, val_df)
+                logger.info("[SERVICE] ML strategy trained successfully.")
+            except Exception as e:
+                logger.error(f"[SERVICE] Failed to train ML strategy: {e}")
+                
+        # 3. Start Scanner
+        tfs_set = set()
+        for tfs in ACTIVE_STRATEGIES.values():
+            if isinstance(tfs, list):
+                tfs_set.update(tfs)
+            else:
+                tfs_set.add(tfs)
+        
+        # If an MTF strategy is active, ensure HTF ('1h') is included in the scanner cache
+        if any("mtf" in s for tf_list in self.strategies.values() for s, _ in tf_list):
+            tfs_set.add("1h")
+
+        # BTC Macro Regime Filter: ensure BTCUSDT is tracked and 1h/4h are in the cache
+        if getattr(config, "BTC_REGIME_FILTER", True):
+            if "BTCUSDT" not in symbol_list:
+                symbol_list.append("BTCUSDT")
+            tfs_set.add("1h")
+            tfs_set.add("4h")
+
+        tfs = list(tfs_set)
+        self.scanner = MarketScanner(symbol_list, timeframes=tfs, is_futures=(TRADING_MODE == "FUTURES"))
+        self.scanner.register_callback(self.on_candle_closed)
+        self.scanner.start()
+        logger.info(f"[MARKET_DATA_CONNECTED] Multi-timeframe REST polling engine active for {len(symbol_list)} symbols across {len(tfs)} timeframes.")
+        
+        # 4. Start Position Monitor Thread
+        monitor_thread = threading.Thread(target=self.position_monitor_loop, daemon=True)
+        monitor_thread.start()
+
+        # 4b. V3 Trailing Stop Thread: dedicated loop for responsive profit locking
+        def _trailing_loop():
+            while True:
+                try:
+                    trailing_cycle(self)
+                except Exception as e:
+                    logger.error(f"[TRAIL_THREAD] Error: {e}")
+                time.sleep(float(getattr(config, "TRAIL_LOOP_SECONDS", 20)))
+
+        trailing_thread = threading.Thread(target=_trailing_loop, daemon=True)
+        trailing_thread.start()
+        
+        # 5. Start Heartbeat Thread
+        self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+        self._heartbeat_thread.start()
+        self._write_heartbeat(status="RUNNING", worker_alive=True)
+        # Start progress reporting thread
+        self._progress_thread = threading.Thread(target=self._progress_report_loop, daemon=True)
+        self._progress_thread.start()
+
+        # 5b. Start AI-Universe Testnet Advisory Scheduler (gated by TESTNET_ADVISORY_ENABLED)
+        try:
+            from testnet_advisory_scheduler import start_testnet_advisory_if_enabled
+            self._testnet_advisory_scheduler = start_testnet_advisory_if_enabled()
+            if self._testnet_advisory_scheduler:
+                logger.info("[TESTNET_ADVISORY] Testnet AI-Universe Advisory background service initialized.")
+        except Exception as e:
+            logger.error(f"[TESTNET_ADVISORY] Failed to start testnet advisory scheduler (non-fatal): {e}")
+
+        logger.info("[ENGINE_READY] Binance Testnet trading engine is fully initialized and operational.")
+        
+        # 6. Keep Main Thread Alive
+        try:
+            while True:
+                time.sleep(1)
+        except (KeyboardInterrupt, SystemExit):
+            logger.info("[SERVICE] Graceful shutdown initiated...")
+            self._write_heartbeat(status="STOPPED", worker_alive=False)
+            if hasattr(self, 'scanner') and self.scanner:
+                self.scanner.stop()
+
+if __name__ == "__main__":
+    service = TestnetService()
+    service.run()

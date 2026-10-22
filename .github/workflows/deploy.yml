@@ -1,0 +1,43 @@
+name: Sovereign VM Continuous Deployment
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Sync Repository to Cloud Host
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Cloud VM via SSH
+        env:
+          SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          HOST: ${{ secrets.SERVER_HOST }}
+          USER: ${{ secrets.SERVER_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+          
+          ssh "$USER@$HOST" "bash -s" << 'EOF'
+            REPO_NAME="${{ github.event.repository.name }}"
+            AGENT_DIR="/opt/friday_universe/$REPO_NAME"
+            echo "=== Syncing $REPO_NAME on $(hostname) ==="
+            if [ -d "$AGENT_DIR" ]; then
+              cd "$AGENT_DIR"
+              git fetch origin main || git fetch origin master
+              git reset --hard origin/main || git reset --hard origin/master
+              echo "Git pull complete for $REPO_NAME."
+              
+              SERVICE="friday-$(echo $REPO_NAME | tr '[:upper:]' '[:lower:]').service"
+              if systemctl is-active --quiet "$SERVICE"; then
+                echo "Restarting $SERVICE..."
+                sudo systemctl restart "$SERVICE"
+              fi
+            else
+              echo "Directory $AGENT_DIR not found."
+              exit 1
+            fi
+          EOF

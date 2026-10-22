@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090b0f">
+  <meta name="description" content="Stratex trading operations dashboard">
+  <title>STRATEX — Operations desk</title>
+  <link rel="stylesheet" href="/static/style.css?v=9.0.2">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Main navigation">
+      <a class="brand" href="#overview" aria-label="Stratex home">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        <span class="brand-copy"><strong>STRATEX</strong><small>OPERATIONS DESK</small></span>
+      </a>
+      <div class="nav-label">Workspace</div>
+      <nav class="primary-nav">
+        <button class="nav-item active" type="button" data-view="overview"><span class="nav-icon">◫</span><span>Overview</span><span class="nav-marker"></span></button>
+        <button class="nav-item" type="button" data-view="portfolio"><span class="nav-icon">▤</span><span>Portfolio</span></button>
+        <button class="nav-item" type="button" data-view="activity"><span class="nav-icon">↗</span><span>Trade activity</span></button>
+        <button class="nav-item" type="button" data-view="markets"><span class="nav-icon">◎</span><span>Markets</span></button>
+        <button class="nav-item" type="button" data-view="health"><span class="nav-icon">⌘</span><span>System health</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="service-card">
+          <span class="service-orbit" aria-hidden="true"><i></i></span>
+          <div><span class="eyebrow">ENGINE</span><strong id="sidebar-engine">Connecting</strong></div>
+        </div>
+        <div class="sidebar-foot"><span class="live-dot muted" id="sidebar-dot"></span><span id="sidebar-caption">Waiting for service data</span></div>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>Stratex</span><b>/</b><span id="breadcrumb-view">Overview</span></div>
+        <div class="topbar-right">
+          <div class="connection-state" id="connection-state" data-state="loading"><span class="live-dot"></span><span id="connection-label">Connecting to service</span></div>
+          <span class="mode-pill" id="header-mode">Mode unavailable</span>
+          <span class="live-clock" id="live-clock">--:--:-- UTC</span>
+          <button class="refresh-button" id="btn-refresh" type="button"><span class="refresh-icon" aria-hidden="true">↻</span><span>Refresh</span></button>
+          <span class="sync-time" id="last-sync-time" aria-live="polite">—</span>
+        </div>
+      </header>
+
+      <div class="page-content">
+        <section class="page-heading">
+          <div>
+            <p class="eyebrow">TRADING OPERATIONS <span class="heading-slash">/</span> <span id="heading-date">—</span></p>
+            <h1 id="page-title">Overview</h1>
+            <p class="heading-copy" id="page-description">A live view of Stratex service data, positions, and paper validation.</p>
+          </div>
+          <div class="heading-status" id="runtime-pill" data-state="loading">
+            <span class="status-icon" aria-hidden="true">◌</span>
+            <div><strong id="runtime-title">Loading service state</strong><span id="runtime-caption">Waiting for health endpoint</span></div>
+          </div>
+        </section>
+
+        <section class="metric-grid" aria-label="Account and trade metrics">
+          <article class="metric-card metric-primary">
+            <div class="metric-top"><span class="metric-label">Total equity</span><span class="metric-icon">⌁</span></div>
+            <strong class="metric-value" id="kpi-balance">—</strong>
+            <span class="metric-foot" id="kpi-equity-sub">Waiting for account data</span>
+          </article>
+          <article class="metric-card">
+            <div class="metric-top"><span class="metric-label">Net P&amp;L</span><span class="metric-icon">↗</span></div>
+            <strong class="metric-value" id="kpi-total-pnl">—</strong>
+            <span class="metric-foot" id="kpi-pnl-sub">Realized and open position P&amp;L</span>
+          </article>
+          <article class="metric-card">
+            <div class="metric-top"><span class="metric-label">Today · UTC</span><span class="metric-icon">◷</span></div>
+            <strong class="metric-value" id="kpi-today-pnl">—</strong>
+            <span class="metric-foot" id="kpi-today-sub">Waiting for daily account data</span>
+          </article>
+          <article class="metric-card">
+            <div class="metric-top"><span class="metric-label">Open positions</span><span class="metric-icon">▤</span></div>
+            <strong class="metric-value" id="kpi-open-count">—</strong>
+            <span class="metric-foot" id="kpi-open-unrealized">Waiting for position data</span>
+          </article>
+          <article class="metric-card">
+            <div class="metric-top"><span class="metric-label">Closed trades</span><span class="metric-icon">◷</span></div>
+            <strong class="metric-value" id="kpi-trades-count">—</strong>
+            <span class="metric-foot" id="kpi-win-rate">Win rate unavailable</span>
+          </article>
+        </section>
+
+        <section class="view-panel active" id="view-overview" data-view-panel="overview">
+          <div class="overview-grid">
+            <article class="panel chart-panel">
+              <div class="panel-heading">
+                <div><p class="eyebrow">ACCOUNT HISTORY</p><h2>Equity trajectory</h2></div>
+                <span class="source-tag">Telemetry · 7 days</span>
+              </div>
+              <div class="chart-summary"><strong id="chart-current">—</strong><span id="chart-range">No timeline loaded</span></div>
+              <div class="chart-wrap" id="equity-chart-wrap" data-state="loading">
+                <div class="chart-state" id="equity-chart-state">Loading recorded equity points…</div>
+                <svg id="equity-chart" class="equity-chart" role="img" aria-label="Recorded account equity over time" viewBox="0 0 780 250" preserveAspectRatio="none" hidden></svg>
+              </div>
+              <div class="chart-footer"><span><i class="legend-line"></i> Recorded equity</span><span id="chart-point-count">—</span></div>
+            </article>
+
+            <article class="panel engine-panel">
+              <div class="panel-heading"><div><p class="eyebrow">RUNTIME</p><h2>Engine status</h2></div><span class="state-badge" id="diag-engine-status" data-state="loading">Loading</span></div>
+              <div class="engine-summary"><div class="engine-ring" id="engine-ring"><span id="engine-initial">·</span></div><div><strong id="engine-summary-title">Checking health</strong><span id="engine-summary-copy">No response yet</span></div></div>
+              <div class="detail-list">
+                <div><span>Active strategy</span><strong id="engine-strategies">—</strong></div>
+                <div><span>Market feed</span><strong id="engine-feed">—</strong></div>
+                <div><span>Last candle</span><strong id="engine-candle">—</strong></div>
+                <div><span>Worker heartbeat</span><strong id="engine-heartbeat">—</strong></div>
+              </div>
+              <p class="panel-note" id="engine-context">Engine status is reported separately from paper experiment status.</p>
+            </article>
+
+            <article class="panel paper-panel">
+              <div class="panel-heading"><div><p class="eyebrow">ISOLATED SIMULATION</p><h2>Paper experiment</h2></div><span class="state-badge" id="paper-state" data-state="loading">Loading</span></div>
+              <div class="paper-lead"><div class="paper-symbol">P</div><div><strong id="paper-mode">—</strong><span id="paper-runner-status">Waiting for experiment status</span></div></div>
+              <div class="paper-stats">
+                <div><span>Experiment age</span><strong id="paper-age">—</strong></div>
+                <div><span>Recorded signals</span><strong id="paper-signals">—</strong></div>
+                <div><span>Closed trades</span><strong id="paper-closed">—</strong></div>
+                <div><span>Open positions</span><strong id="paper-open">—</strong></div>
+              </div>
+              <div class="paper-warning" id="paper-warning" hidden></div>
+              <div class="validation-list" id="paper-validation" data-state="loading"><span>Loading validation gates…</span></div>
+            </article>
+
+            <article class="panel positions-panel">
+              <div class="panel-heading"><div><p class="eyebrow">ACCOUNT EXPOSURE</p><h2>Open positions</h2></div><button class="text-button" type="button" data-go="portfolio">Full portfolio <span>↗</span></button></div>
+              <div class="table-scroll">
+                <table><thead><tr><th>Market</th><th>Side</th><th>Quantity</th><th>Entry</th><th>Mark</th><th>Unrealized</th></tr></thead><tbody id="overview-positions-tbody"><tr><td colspan="6" class="empty-row">Loading position records…</td></tr></tbody></table>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view-panel" id="view-portfolio" data-view-panel="portfolio" hidden>
+          <article class="panel full-panel">
+            <div class="panel-heading"><div><p class="eyebrow">CURRENT EXPOSURE</p><h2>Position book</h2></div><span class="source-tag" id="open-positions-count">—</span></div>
+            <div class="table-scroll"><table><thead><tr><th>Market</th><th>Side</th><th>Quantity</th><th>Entry price</th><th>Mark price</th><th>Unrealized P&amp;L</th><th>Strategy</th><th>Opened (UTC)</th></tr></thead><tbody id="open-positions-tbody"><tr><td colspan="8" class="empty-row">Loading position records…</td></tr></tbody></table></div>
+          </article>
+          <article class="panel full-panel history-panel">
+            <div class="panel-heading"><div><p class="eyebrow">ACCOUNT HISTORY</p><h2>Daily realized P&amp;L</h2></div><span class="source-tag">Derived from returned closed-trade records</span></div>
+            <div class="table-scroll"><table><thead><tr><th>Date (UTC)</th><th>Closed trades</th><th>Winners</th><th>Losers</th><th>Net P&amp;L</th></tr></thead><tbody id="daily-pnl-tbody"><tr><td colspan="5" class="empty-row">Loading trade records…</td></tr></tbody></table></div>
+          </article>
+        </section>
+
+        <section class="view-panel" id="view-activity" data-view-panel="activity" hidden>
+          <article class="panel full-panel">
+            <div class="panel-heading activity-heading"><div><p class="eyebrow">EXECUTION RECORDS</p><h2>Closed trades</h2></div><div class="table-tools"><label class="search-box"><span aria-hidden="true">⌕</span><input type="search" id="trades-search" placeholder="Filter by symbol" autocomplete="off"></label><span class="source-tag" id="total-trades-badge">—</span></div></div>
+            <div class="table-scroll"><table><thead><tr><th>Closed time (UTC)</th><th>Market</th><th>Side</th><th>Strategy</th><th>Quantity</th><th>Entry</th><th>Exit</th><th>Net P&amp;L</th><th>Fees</th></tr></thead><tbody id="trades-history-tbody"><tr><td colspan="9" class="empty-row">Loading trade records…</td></tr></tbody></table></div>
+          </article>
+          <article class="panel full-panel"><div class="panel-heading"><div><p class="eyebrow">DECISION TELEMETRY</p><h2>Recent signal events</h2></div><span class="source-tag" id="signal-count">—</span></div><div class="signal-list" id="signal-list" data-state="loading"><div class="section-state">Loading signal events…</div></div></article>
+        </section>
+
+        <section class="view-panel" id="view-markets" data-view-panel="markets" hidden>
+          <article class="panel full-panel">
+            <div class="panel-heading"><div><p class="eyebrow">MARKET WATCH</p><h2>Streaming quotes</h2></div><span class="source-tag" id="scanned-symbols-count">—</span></div>
+            <div class="market-grid" id="market-scanner-grid" data-state="loading"><div class="section-state">Loading market feed…</div></div>
+            <div class="market-footnote" id="market-footnote">Only quotes marked STREAMING by the service are shown.</div>
+          </article>
+        </section>
+
+        <section class="view-panel" id="view-health" data-view-panel="health" hidden>
+          <div class="health-grid">
+            <article class="panel"><div class="panel-heading"><div><p class="eyebrow">GENERAL ENGINE</p><h2>Runtime diagnostics</h2></div><span class="state-badge" id="health-engine-badge" data-state="loading">Loading</span></div><div class="health-rows" id="engine-health-rows"><div class="section-state">Loading engine health…</div></div><span class="visually-hidden" id="diag-heartbeat">—</span><span class="visually-hidden" id="diag-uptime">—</span></article>
+            <article class="panel"><div class="panel-heading"><div><p class="eyebrow">PAPER WORKER</p><h2>Forward validation</h2></div><span class="state-badge" id="health-paper-badge" data-state="loading">Loading</span></div><div class="health-rows" id="paper-health-rows"><div class="section-state">Loading paper health…</div></div></article>
+            <article class="panel health-wide"><div class="panel-heading"><div><p class="eyebrow">DATA SOURCES</p><h2>Endpoint status</h2></div></div><div class="source-grid" id="source-grid"></div><p class="panel-note">Each panel reflects its latest successful or failed read-only API request. Missing data is shown as unavailable.</p></article>
+          </div>
+        </section>
+
+        <footer class="page-footer"><span>STRATEX <i>·</i> Service-reported data</span><span id="footer-update">No successful sync yet</span></footer>
+      </div>
+    </main>
+  </div>
+  <script src="/static/app.js?v=9.0.2" defer></script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quantum Research</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    body { background-color: #05070B; color: #F8FAFC; font-family: 'Inter', sans-serif; }
+    .panel { background: #0A0F16; border: 1px solid #1D2A3A; padding: 1rem; margin-bottom: 1rem; border-radius: 4px; }
+    .header { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .status { color: #60A5FA; margin-bottom: 1rem; }
+    .section-title { font-weight: 600; margin-top: 1rem; margin-bottom: 0.5rem; }
+    .metric { display: flex; justify-content: space-between; margin: 0.2rem 0; }
+    .btn { background: #3B82F6; color: #F8FAFC; border: none; padding: 0.5rem 1rem; margin-right: 0.5rem; cursor: pointer; border-radius: 3px; }
+    .btn:hover { background: #60A5FA; }
+    .skeleton { background: #1D2A3A; height: 1rem; margin: 0.2rem 0; overflow: hidden; position: relative; }
+    .skeleton::after { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); animation: loading 1.5s infinite; }
+    @keyframes loading { to { left: 100%; } }
+  </style>
+</head>
+<body>
+  <div class="container" style="padding:1rem; max-width:1200px; margin:auto;">
+    <div class="header">QUANTUM RESEARCH</div>
+    <div class="status" id="status">● SIMULATOR ONLINE</div>
+    <div class="panel" id="secondaryInfo">
+      <div class="section-title">Backend • Model • Qubits • Circuit Depth • Shots • Latency</div>
+      <div class="metric"><span>Backend</span><span id="backend">-</span></div>
+      <div class="metric"><span>Model</span><span id="model">-</span></div>
+      <div class="metric"><span>Qubits</span><span id="qubits">-</span></div>
+      <div class="metric"><span>Circuit Depth</span><span id="depth">-</span></div>
+      <div class="metric"><span>Shots</span><span id="shots">-</span></div>
+      <div class="metric"><span>Latency (ms)</span><span id="latency">-</span></div>
+    </div>
+    <div class="panel" id="scorePanel">
+      <div class="section-title">Signal Comparison</div>
+      <div class="metric"><span>CLASSICAL SCORE</span><span id="classicalScore">-</span></div>
+      <div class="metric"><span>QUANTUM SCORE</span><span id="quantumScore">-</span></div>
+      <div class="metric"><span>HYBRID SCORE</span><span id="hybridScore">-</span></div>
+    </div>
+    <div class="panel" id="modelPanel">
+      <div class="section-title">Quantum Model</div>
+      <div class="metric"><span>MODEL</span><span>VQC / HYBRID</span></div>
+      <div class="metric"><span>QUBITS</span><span id="modelQubits">-</span></div>
+      <div class="metric"><span>CIRCUIT DEPTH</span><span id="modelDepth">-</span></div>
+      <div class="metric"><span>SHOTS</span><span id="modelShots">-</span></div>
+      <div class="metric"><span>BACKEND</span><span id="modelBackend">-</span></div>
+      <div class="metric"><span>SIMULATION</span><span id="modelSim">-</span></div>
+    </div>
+    <div class="panel" id="benchmarkPanel">
+      <div class="section-title">Benchmark Panel</div>
+      <div class="metric"><span>Accuracy</span><span id="benchAcc">-</span></div>
+      <div class="metric"><span>Precision</span><span id="benchPrec">-</span></div>
+      <div class="metric"><span>Recall</span><span id="benchRec">-</span></div>
+      <div class="metric"><span>F1</span><span id="benchF1">-</span></div>
+      <div class="metric"><span>Win Rate</span><span id="benchWin">-</span></div>
+      <div class="metric"><span>Profit Factor</span><span id="benchPF">-</span></div>
+      <div class="metric"><span>Drawdown</span><span id="benchDD">-</span></div>
+      <div class="metric"><span>Sharpe</span><span id="benchSharpe">-</span></div>
+      <div class="metric"><span>Latency (ms)</span><span id="benchLat">-</span></div>
+    </div>
+    <div class="panel" id="portfolioPanel">
+      <div class="section-title">Portfolio Optimization (Research Only)</div>
+      <div class="metric"><span>Candidates</span><span id="candidatesCount">-</span></div>
+      <div class="metric"><span>Selected</span><span id="selectedCount">-</span></div>
+      <div class="metric"><span>Expected Return</span><span id="expReturn">-</span></div>
+      <div class="metric"><span>Portfolio Risk</span><span id="portRisk">-</span></div>
+      <div class="metric"><span>Concentration</span><span id="concentration">-</span></div>
+      <div class="metric"><span>Objective Score</span><span id="objScore">-</span></div>
+    </div>
+    <div class="panel" id="ibmPanel">
+      <div class="section-title">IBM QUANTUM</div>
+      <div class="metric"><span>Status</span><span id="ibmStatus">NOT CONFIGURED</span></div>
+    </div>
+    <div class="panel" id="actions">
+      <button class="btn" id="runSimBtn">RUN SIMULATION</button>
+      <button class="btn" id="runBenchBtn">RUN BENCHMARK</button>
+      <button class="btn" id="refreshBtn">REFRESH RESULTS</button>
+    </div>
+    <div class="panel" id="safetyLabel">
+      <div class="section-title" style="color:#F59E0B;">QUANTUM LAYER – ADVISORY / RESEARCH ONLY</div>
+      <div class="section-title" style="color:#EF4444;">NO EXECUTION AUTHORITY</div>
+    </div>
+  </div>
+  <script src="/quantum.js"></script>
+</body>
+</html>

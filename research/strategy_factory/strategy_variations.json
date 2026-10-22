@@ -1,0 +1,3542 @@
+[
+  {
+    "id": 1,
+    "name": "factory_ema_crossover_5m_001",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 2,
+    "name": "factory_ema_crossover_5m_002",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 3,
+    "name": "factory_ema_crossover_5m_003",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 4,
+    "name": "factory_ema_crossover_5m_004",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 5,
+    "name": "factory_ema_crossover_15m_005",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 6,
+    "name": "factory_ema_crossover_15m_006",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 7,
+    "name": "factory_ema_crossover_15m_007",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 8,
+    "name": "factory_ema_crossover_15m_008",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 9,
+    "name": "factory_ema_crossover_1h_009",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 10,
+    "name": "factory_ema_crossover_1h_010",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 11,
+    "name": "factory_ema_crossover_1h_011",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 12,
+    "name": "factory_ema_crossover_1h_012",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 13,
+    "name": "factory_ema_crossover_5m_013",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 10,
+      "slow_ema": 20
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 14,
+    "name": "factory_ema_crossover_5m_014",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 10,
+      "slow_ema": 20
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 15,
+    "name": "factory_ema_crossover_5m_015",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 10,
+      "slow_ema": 20
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 16,
+    "name": "factory_ema_crossover_5m_016",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 10,
+      "slow_ema": 20
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 17,
+    "name": "factory_ema_crossover_15m_017",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 10,
+      "slow_ema": 20
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 18,
+    "name": "factory_ema_crossover_15m_018",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 10,
+      "slow_ema": 20
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 19,
+    "name": "factory_ema_crossover_15m_019",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 10,
+      "slow_ema": 20
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 20,
+    "name": "factory_ema_crossover_15m_020",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 10,
+      "slow_ema": 20
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 21,
+    "name": "factory_ema_crossover_1h_021",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 10,
+      "slow_ema": 20
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 22,
+    "name": "factory_ema_crossover_1h_022",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 10,
+      "slow_ema": 20
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 23,
+    "name": "factory_ema_crossover_1h_023",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 10,
+      "slow_ema": 20
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 24,
+    "name": "factory_ema_crossover_1h_024",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 10,
+      "slow_ema": 20
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 25,
+    "name": "factory_ema_crossover_5m_025",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 26,
+    "name": "factory_ema_crossover_5m_026",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 27,
+    "name": "factory_ema_crossover_5m_027",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 28,
+    "name": "factory_ema_crossover_5m_028",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 29,
+    "name": "factory_ema_crossover_15m_029",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 30,
+    "name": "factory_ema_crossover_15m_030",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 31,
+    "name": "factory_ema_crossover_15m_031",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 32,
+    "name": "factory_ema_crossover_15m_032",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 33,
+    "name": "factory_ema_crossover_1h_033",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 34,
+    "name": "factory_ema_crossover_1h_034",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 35,
+    "name": "factory_ema_crossover_1h_035",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 36,
+    "name": "factory_ema_crossover_1h_036",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 37,
+    "name": "factory_ema_crossover_5m_037",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 50,
+      "slow_ema": 200
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 38,
+    "name": "factory_ema_crossover_5m_038",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 50,
+      "slow_ema": 200
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 39,
+    "name": "factory_ema_crossover_5m_039",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 50,
+      "slow_ema": 200
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 40,
+    "name": "factory_ema_crossover_5m_040",
+    "type": "ema_crossover",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 50,
+      "slow_ema": 200
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 5m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 41,
+    "name": "factory_ema_crossover_15m_041",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 50,
+      "slow_ema": 200
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 42,
+    "name": "factory_ema_crossover_15m_042",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 50,
+      "slow_ema": 200
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 43,
+    "name": "factory_ema_crossover_15m_043",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 50,
+      "slow_ema": 200
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 44,
+    "name": "factory_ema_crossover_15m_044",
+    "type": "ema_crossover",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 50,
+      "slow_ema": 200
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 15m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 45,
+    "name": "factory_ema_crossover_1h_045",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 50,
+      "slow_ema": 200
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 46,
+    "name": "factory_ema_crossover_1h_046",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 50,
+      "slow_ema": 200
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 47,
+    "name": "factory_ema_crossover_1h_047",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 50,
+      "slow_ema": 200
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 48,
+    "name": "factory_ema_crossover_1h_048",
+    "type": "ema_crossover",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 50,
+      "slow_ema": 200
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "ema_crossover on 1h chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 49,
+    "name": "factory_rsi_mean_reversion_5m_049",
+    "type": "rsi_mean_reversion",
+    "timeframe": "5m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 5m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 50,
+    "name": "factory_rsi_mean_reversion_5m_050",
+    "type": "rsi_mean_reversion",
+    "timeframe": "5m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 5m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 51,
+    "name": "factory_rsi_mean_reversion_5m_051",
+    "type": "rsi_mean_reversion",
+    "timeframe": "5m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "rsi_mean_reversion on 5m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 52,
+    "name": "factory_rsi_mean_reversion_5m_052",
+    "type": "rsi_mean_reversion",
+    "timeframe": "5m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 5m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 53,
+    "name": "factory_rsi_mean_reversion_15m_053",
+    "type": "rsi_mean_reversion",
+    "timeframe": "15m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 15m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 54,
+    "name": "factory_rsi_mean_reversion_15m_054",
+    "type": "rsi_mean_reversion",
+    "timeframe": "15m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 15m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 55,
+    "name": "factory_rsi_mean_reversion_15m_055",
+    "type": "rsi_mean_reversion",
+    "timeframe": "15m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "rsi_mean_reversion on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 56,
+    "name": "factory_rsi_mean_reversion_15m_056",
+    "type": "rsi_mean_reversion",
+    "timeframe": "15m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 15m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 57,
+    "name": "factory_rsi_mean_reversion_1h_057",
+    "type": "rsi_mean_reversion",
+    "timeframe": "1h",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 1h chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 58,
+    "name": "factory_rsi_mean_reversion_1h_058",
+    "type": "rsi_mean_reversion",
+    "timeframe": "1h",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 1h chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 59,
+    "name": "factory_rsi_mean_reversion_1h_059",
+    "type": "rsi_mean_reversion",
+    "timeframe": "1h",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "rsi_mean_reversion on 1h chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 60,
+    "name": "factory_rsi_mean_reversion_1h_060",
+    "type": "rsi_mean_reversion",
+    "timeframe": "1h",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 1h chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 61,
+    "name": "factory_rsi_mean_reversion_5m_061",
+    "type": "rsi_mean_reversion",
+    "timeframe": "5m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 20,
+      "rsi_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 5m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 62,
+    "name": "factory_rsi_mean_reversion_5m_062",
+    "type": "rsi_mean_reversion",
+    "timeframe": "5m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 20,
+      "rsi_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 5m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 63,
+    "name": "factory_rsi_mean_reversion_5m_063",
+    "type": "rsi_mean_reversion",
+    "timeframe": "5m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 20,
+      "rsi_upper": 80
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "rsi_mean_reversion on 5m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 64,
+    "name": "factory_rsi_mean_reversion_5m_064",
+    "type": "rsi_mean_reversion",
+    "timeframe": "5m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 20,
+      "rsi_upper": 80
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 5m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 65,
+    "name": "factory_rsi_mean_reversion_15m_065",
+    "type": "rsi_mean_reversion",
+    "timeframe": "15m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 20,
+      "rsi_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 15m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 66,
+    "name": "factory_rsi_mean_reversion_15m_066",
+    "type": "rsi_mean_reversion",
+    "timeframe": "15m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 20,
+      "rsi_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 15m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 67,
+    "name": "factory_rsi_mean_reversion_15m_067",
+    "type": "rsi_mean_reversion",
+    "timeframe": "15m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 20,
+      "rsi_upper": 80
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "rsi_mean_reversion on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 68,
+    "name": "factory_rsi_mean_reversion_15m_068",
+    "type": "rsi_mean_reversion",
+    "timeframe": "15m",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 20,
+      "rsi_upper": 80
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 15m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 69,
+    "name": "factory_rsi_mean_reversion_1h_069",
+    "type": "rsi_mean_reversion",
+    "timeframe": "1h",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 20,
+      "rsi_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 1h chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 70,
+    "name": "factory_rsi_mean_reversion_1h_070",
+    "type": "rsi_mean_reversion",
+    "timeframe": "1h",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 20,
+      "rsi_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 1h chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 71,
+    "name": "factory_rsi_mean_reversion_1h_071",
+    "type": "rsi_mean_reversion",
+    "timeframe": "1h",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 20,
+      "rsi_upper": 80
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "rsi_mean_reversion on 1h chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 72,
+    "name": "factory_rsi_mean_reversion_1h_072",
+    "type": "rsi_mean_reversion",
+    "timeframe": "1h",
+    "params": {
+      "rsi_period": 14,
+      "rsi_lower": 20,
+      "rsi_upper": 80
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 1h chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 73,
+    "name": "factory_rsi_mean_reversion_5m_073",
+    "type": "rsi_mean_reversion",
+    "timeframe": "5m",
+    "params": {
+      "rsi_period": 7,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 5m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 74,
+    "name": "factory_rsi_mean_reversion_5m_074",
+    "type": "rsi_mean_reversion",
+    "timeframe": "5m",
+    "params": {
+      "rsi_period": 7,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 5m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 75,
+    "name": "factory_rsi_mean_reversion_5m_075",
+    "type": "rsi_mean_reversion",
+    "timeframe": "5m",
+    "params": {
+      "rsi_period": 7,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "rsi_mean_reversion on 5m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 76,
+    "name": "factory_rsi_mean_reversion_5m_076",
+    "type": "rsi_mean_reversion",
+    "timeframe": "5m",
+    "params": {
+      "rsi_period": 7,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 5m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 77,
+    "name": "factory_rsi_mean_reversion_15m_077",
+    "type": "rsi_mean_reversion",
+    "timeframe": "15m",
+    "params": {
+      "rsi_period": 7,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 15m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 78,
+    "name": "factory_rsi_mean_reversion_15m_078",
+    "type": "rsi_mean_reversion",
+    "timeframe": "15m",
+    "params": {
+      "rsi_period": 7,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 15m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 79,
+    "name": "factory_rsi_mean_reversion_15m_079",
+    "type": "rsi_mean_reversion",
+    "timeframe": "15m",
+    "params": {
+      "rsi_period": 7,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "rsi_mean_reversion on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 80,
+    "name": "factory_rsi_mean_reversion_15m_080",
+    "type": "rsi_mean_reversion",
+    "timeframe": "15m",
+    "params": {
+      "rsi_period": 7,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 15m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 81,
+    "name": "factory_rsi_mean_reversion_1h_081",
+    "type": "rsi_mean_reversion",
+    "timeframe": "1h",
+    "params": {
+      "rsi_period": 7,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 1h chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 82,
+    "name": "factory_rsi_mean_reversion_1h_082",
+    "type": "rsi_mean_reversion",
+    "timeframe": "1h",
+    "params": {
+      "rsi_period": 7,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 1h chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 83,
+    "name": "factory_rsi_mean_reversion_1h_083",
+    "type": "rsi_mean_reversion",
+    "timeframe": "1h",
+    "params": {
+      "rsi_period": 7,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "rsi_mean_reversion on 1h chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 84,
+    "name": "factory_rsi_mean_reversion_1h_084",
+    "type": "rsi_mean_reversion",
+    "timeframe": "1h",
+    "params": {
+      "rsi_period": 7,
+      "rsi_lower": 30,
+      "rsi_upper": 70
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "rsi_mean_reversion on 1h chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 85,
+    "name": "factory_bb_break_reenter_5m_085",
+    "type": "bb_break_reenter",
+    "timeframe": "5m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 5m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 86,
+    "name": "factory_bb_break_reenter_5m_086",
+    "type": "bb_break_reenter",
+    "timeframe": "5m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 5m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 87,
+    "name": "factory_bb_break_reenter_5m_087",
+    "type": "bb_break_reenter",
+    "timeframe": "5m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "bb_break_reenter on 5m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 88,
+    "name": "factory_bb_break_reenter_5m_088",
+    "type": "bb_break_reenter",
+    "timeframe": "5m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 5m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 89,
+    "name": "factory_bb_break_reenter_15m_089",
+    "type": "bb_break_reenter",
+    "timeframe": "15m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 15m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 90,
+    "name": "factory_bb_break_reenter_15m_090",
+    "type": "bb_break_reenter",
+    "timeframe": "15m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 15m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 91,
+    "name": "factory_bb_break_reenter_15m_091",
+    "type": "bb_break_reenter",
+    "timeframe": "15m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "bb_break_reenter on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 92,
+    "name": "factory_bb_break_reenter_15m_092",
+    "type": "bb_break_reenter",
+    "timeframe": "15m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 15m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 93,
+    "name": "factory_bb_break_reenter_1h_093",
+    "type": "bb_break_reenter",
+    "timeframe": "1h",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 1h chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 94,
+    "name": "factory_bb_break_reenter_1h_094",
+    "type": "bb_break_reenter",
+    "timeframe": "1h",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 1h chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 95,
+    "name": "factory_bb_break_reenter_1h_095",
+    "type": "bb_break_reenter",
+    "timeframe": "1h",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "bb_break_reenter on 1h chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 96,
+    "name": "factory_bb_break_reenter_1h_096",
+    "type": "bb_break_reenter",
+    "timeframe": "1h",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 1h chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 97,
+    "name": "factory_bb_break_reenter_5m_097",
+    "type": "bb_break_reenter",
+    "timeframe": "5m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 3.0
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 5m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 98,
+    "name": "factory_bb_break_reenter_5m_098",
+    "type": "bb_break_reenter",
+    "timeframe": "5m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 3.0
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 5m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 99,
+    "name": "factory_bb_break_reenter_5m_099",
+    "type": "bb_break_reenter",
+    "timeframe": "5m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 3.0
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "bb_break_reenter on 5m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 100,
+    "name": "factory_bb_break_reenter_5m_100",
+    "type": "bb_break_reenter",
+    "timeframe": "5m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 3.0
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 5m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 101,
+    "name": "factory_bb_break_reenter_15m_101",
+    "type": "bb_break_reenter",
+    "timeframe": "15m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 3.0
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 15m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 102,
+    "name": "factory_bb_break_reenter_15m_102",
+    "type": "bb_break_reenter",
+    "timeframe": "15m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 3.0
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 15m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 103,
+    "name": "factory_bb_break_reenter_15m_103",
+    "type": "bb_break_reenter",
+    "timeframe": "15m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 3.0
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "bb_break_reenter on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 104,
+    "name": "factory_bb_break_reenter_15m_104",
+    "type": "bb_break_reenter",
+    "timeframe": "15m",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 3.0
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 15m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 105,
+    "name": "factory_bb_break_reenter_1h_105",
+    "type": "bb_break_reenter",
+    "timeframe": "1h",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 3.0
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 1h chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 106,
+    "name": "factory_bb_break_reenter_1h_106",
+    "type": "bb_break_reenter",
+    "timeframe": "1h",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 3.0
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 1h chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 107,
+    "name": "factory_bb_break_reenter_1h_107",
+    "type": "bb_break_reenter",
+    "timeframe": "1h",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 3.0
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "bb_break_reenter on 1h chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 108,
+    "name": "factory_bb_break_reenter_1h_108",
+    "type": "bb_break_reenter",
+    "timeframe": "1h",
+    "params": {
+      "bb_period": 20,
+      "bb_std": 3.0
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "bb_break_reenter on 1h chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 109,
+    "name": "factory_macd_crossover_5m_109",
+    "type": "macd_crossover",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 5m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 110,
+    "name": "factory_macd_crossover_5m_110",
+    "type": "macd_crossover",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 5m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 111,
+    "name": "factory_macd_crossover_5m_111",
+    "type": "macd_crossover",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "macd_crossover on 5m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 112,
+    "name": "factory_macd_crossover_5m_112",
+    "type": "macd_crossover",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 5m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 113,
+    "name": "factory_macd_crossover_15m_113",
+    "type": "macd_crossover",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 15m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 114,
+    "name": "factory_macd_crossover_15m_114",
+    "type": "macd_crossover",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 15m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 115,
+    "name": "factory_macd_crossover_15m_115",
+    "type": "macd_crossover",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "macd_crossover on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 116,
+    "name": "factory_macd_crossover_15m_116",
+    "type": "macd_crossover",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 15m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 117,
+    "name": "factory_macd_crossover_1h_117",
+    "type": "macd_crossover",
+    "timeframe": "1h",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 1h chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 118,
+    "name": "factory_macd_crossover_1h_118",
+    "type": "macd_crossover",
+    "timeframe": "1h",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 1h chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 119,
+    "name": "factory_macd_crossover_1h_119",
+    "type": "macd_crossover",
+    "timeframe": "1h",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "macd_crossover on 1h chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 120,
+    "name": "factory_macd_crossover_1h_120",
+    "type": "macd_crossover",
+    "timeframe": "1h",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 1h chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 121,
+    "name": "factory_macd_crossover_5m_121",
+    "type": "macd_crossover",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 5,
+      "macd_slow": 35,
+      "macd_signal": 5
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 5m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 122,
+    "name": "factory_macd_crossover_5m_122",
+    "type": "macd_crossover",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 5,
+      "macd_slow": 35,
+      "macd_signal": 5
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 5m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 123,
+    "name": "factory_macd_crossover_5m_123",
+    "type": "macd_crossover",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 5,
+      "macd_slow": 35,
+      "macd_signal": 5
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "macd_crossover on 5m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 124,
+    "name": "factory_macd_crossover_5m_124",
+    "type": "macd_crossover",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 5,
+      "macd_slow": 35,
+      "macd_signal": 5
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 5m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 125,
+    "name": "factory_macd_crossover_15m_125",
+    "type": "macd_crossover",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 5,
+      "macd_slow": 35,
+      "macd_signal": 5
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 15m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 126,
+    "name": "factory_macd_crossover_15m_126",
+    "type": "macd_crossover",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 5,
+      "macd_slow": 35,
+      "macd_signal": 5
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 15m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 127,
+    "name": "factory_macd_crossover_15m_127",
+    "type": "macd_crossover",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 5,
+      "macd_slow": 35,
+      "macd_signal": 5
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "macd_crossover on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 128,
+    "name": "factory_macd_crossover_15m_128",
+    "type": "macd_crossover",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 5,
+      "macd_slow": 35,
+      "macd_signal": 5
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 15m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 129,
+    "name": "factory_macd_crossover_1h_129",
+    "type": "macd_crossover",
+    "timeframe": "1h",
+    "params": {
+      "macd_fast": 5,
+      "macd_slow": 35,
+      "macd_signal": 5
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 1h chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 130,
+    "name": "factory_macd_crossover_1h_130",
+    "type": "macd_crossover",
+    "timeframe": "1h",
+    "params": {
+      "macd_fast": 5,
+      "macd_slow": 35,
+      "macd_signal": 5
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 1h chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 131,
+    "name": "factory_macd_crossover_1h_131",
+    "type": "macd_crossover",
+    "timeframe": "1h",
+    "params": {
+      "macd_fast": 5,
+      "macd_slow": 35,
+      "macd_signal": 5
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "macd_crossover on 1h chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 132,
+    "name": "factory_macd_crossover_1h_132",
+    "type": "macd_crossover",
+    "timeframe": "1h",
+    "params": {
+      "macd_fast": 5,
+      "macd_slow": 35,
+      "macd_signal": 5
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "macd_crossover on 1h chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 133,
+    "name": "factory_stoch_crossover_5m_133",
+    "type": "stoch_crossover",
+    "timeframe": "5m",
+    "params": {
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 5m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 134,
+    "name": "factory_stoch_crossover_5m_134",
+    "type": "stoch_crossover",
+    "timeframe": "5m",
+    "params": {
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 5m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 135,
+    "name": "factory_stoch_crossover_5m_135",
+    "type": "stoch_crossover",
+    "timeframe": "5m",
+    "params": {
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "stoch_crossover on 5m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 136,
+    "name": "factory_stoch_crossover_5m_136",
+    "type": "stoch_crossover",
+    "timeframe": "5m",
+    "params": {
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 5m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 137,
+    "name": "factory_stoch_crossover_15m_137",
+    "type": "stoch_crossover",
+    "timeframe": "15m",
+    "params": {
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 15m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 138,
+    "name": "factory_stoch_crossover_15m_138",
+    "type": "stoch_crossover",
+    "timeframe": "15m",
+    "params": {
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 15m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 139,
+    "name": "factory_stoch_crossover_15m_139",
+    "type": "stoch_crossover",
+    "timeframe": "15m",
+    "params": {
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "stoch_crossover on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 140,
+    "name": "factory_stoch_crossover_15m_140",
+    "type": "stoch_crossover",
+    "timeframe": "15m",
+    "params": {
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 15m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 141,
+    "name": "factory_stoch_crossover_1h_141",
+    "type": "stoch_crossover",
+    "timeframe": "1h",
+    "params": {
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 1h chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 142,
+    "name": "factory_stoch_crossover_1h_142",
+    "type": "stoch_crossover",
+    "timeframe": "1h",
+    "params": {
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 1h chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 143,
+    "name": "factory_stoch_crossover_1h_143",
+    "type": "stoch_crossover",
+    "timeframe": "1h",
+    "params": {
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "stoch_crossover on 1h chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 144,
+    "name": "factory_stoch_crossover_1h_144",
+    "type": "stoch_crossover",
+    "timeframe": "1h",
+    "params": {
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 1h chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 145,
+    "name": "factory_stoch_crossover_5m_145",
+    "type": "stoch_crossover",
+    "timeframe": "5m",
+    "params": {
+      "stoch_k": 5,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 5m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 146,
+    "name": "factory_stoch_crossover_5m_146",
+    "type": "stoch_crossover",
+    "timeframe": "5m",
+    "params": {
+      "stoch_k": 5,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 5m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 147,
+    "name": "factory_stoch_crossover_5m_147",
+    "type": "stoch_crossover",
+    "timeframe": "5m",
+    "params": {
+      "stoch_k": 5,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "stoch_crossover on 5m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 148,
+    "name": "factory_stoch_crossover_5m_148",
+    "type": "stoch_crossover",
+    "timeframe": "5m",
+    "params": {
+      "stoch_k": 5,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 5m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 149,
+    "name": "factory_stoch_crossover_15m_149",
+    "type": "stoch_crossover",
+    "timeframe": "15m",
+    "params": {
+      "stoch_k": 5,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 15m chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 150,
+    "name": "factory_stoch_crossover_15m_150",
+    "type": "stoch_crossover",
+    "timeframe": "15m",
+    "params": {
+      "stoch_k": 5,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 15m chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 151,
+    "name": "factory_stoch_crossover_15m_151",
+    "type": "stoch_crossover",
+    "timeframe": "15m",
+    "params": {
+      "stoch_k": 5,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "stoch_crossover on 15m chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 152,
+    "name": "factory_stoch_crossover_15m_152",
+    "type": "stoch_crossover",
+    "timeframe": "15m",
+    "params": {
+      "stoch_k": 5,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 15m chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 153,
+    "name": "factory_stoch_crossover_1h_153",
+    "type": "stoch_crossover",
+    "timeframe": "1h",
+    "params": {
+      "stoch_k": 5,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 1h chart with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 154,
+    "name": "factory_stoch_crossover_1h_154",
+    "type": "stoch_crossover",
+    "timeframe": "1h",
+    "params": {
+      "stoch_k": 5,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 1h chart with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 155,
+    "name": "factory_stoch_crossover_1h_155",
+    "type": "stoch_crossover",
+    "timeframe": "1h",
+    "params": {
+      "stoch_k": 5,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "stoch_crossover on 1h chart with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 156,
+    "name": "factory_stoch_crossover_1h_156",
+    "type": "stoch_crossover",
+    "timeframe": "1h",
+    "params": {
+      "stoch_k": 5,
+      "stoch_d": 3,
+      "stoch_smooth": 3,
+      "stoch_lower": 20,
+      "stoch_upper": 80
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "stoch_crossover on 1h chart with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 157,
+    "name": "factory_ema_rsi_confluence_5m_157",
+    "type": "ema_rsi_confluence",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21,
+      "rsi_period": 14,
+      "rsi_long_max": 65,
+      "rsi_short_min": 35
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 5m with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 158,
+    "name": "factory_ema_rsi_confluence_5m_158",
+    "type": "ema_rsi_confluence",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21,
+      "rsi_period": 14,
+      "rsi_long_max": 65,
+      "rsi_short_min": 35
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 5m with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 159,
+    "name": "factory_ema_rsi_confluence_5m_159",
+    "type": "ema_rsi_confluence",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21,
+      "rsi_period": 14,
+      "rsi_long_max": 65,
+      "rsi_short_min": 35
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 5m with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 160,
+    "name": "factory_ema_rsi_confluence_5m_160",
+    "type": "ema_rsi_confluence",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21,
+      "rsi_period": 14,
+      "rsi_long_max": 65,
+      "rsi_short_min": 35
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 5m with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 161,
+    "name": "factory_ema_rsi_confluence_15m_161",
+    "type": "ema_rsi_confluence",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21,
+      "rsi_period": 14,
+      "rsi_long_max": 65,
+      "rsi_short_min": 35
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 15m with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 162,
+    "name": "factory_ema_rsi_confluence_15m_162",
+    "type": "ema_rsi_confluence",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21,
+      "rsi_period": 14,
+      "rsi_long_max": 65,
+      "rsi_short_min": 35
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 15m with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 163,
+    "name": "factory_ema_rsi_confluence_15m_163",
+    "type": "ema_rsi_confluence",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21,
+      "rsi_period": 14,
+      "rsi_long_max": 65,
+      "rsi_short_min": 35
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 15m with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 164,
+    "name": "factory_ema_rsi_confluence_15m_164",
+    "type": "ema_rsi_confluence",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21,
+      "rsi_period": 14,
+      "rsi_long_max": 65,
+      "rsi_short_min": 35
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 15m with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 165,
+    "name": "factory_ema_rsi_confluence_1h_165",
+    "type": "ema_rsi_confluence",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21,
+      "rsi_period": 14,
+      "rsi_long_max": 65,
+      "rsi_short_min": 35
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 1h with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 166,
+    "name": "factory_ema_rsi_confluence_1h_166",
+    "type": "ema_rsi_confluence",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21,
+      "rsi_period": 14,
+      "rsi_long_max": 65,
+      "rsi_short_min": 35
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 1h with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 167,
+    "name": "factory_ema_rsi_confluence_1h_167",
+    "type": "ema_rsi_confluence",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21,
+      "rsi_period": 14,
+      "rsi_long_max": 65,
+      "rsi_short_min": 35
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 1h with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 168,
+    "name": "factory_ema_rsi_confluence_1h_168",
+    "type": "ema_rsi_confluence",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 9,
+      "slow_ema": 21,
+      "rsi_period": 14,
+      "rsi_long_max": 65,
+      "rsi_short_min": 35
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 1h with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 169,
+    "name": "factory_ema_rsi_confluence_5m_169",
+    "type": "ema_rsi_confluence",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "rsi_period": 14,
+      "rsi_long_max": 60,
+      "rsi_short_min": 40
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 5m with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 170,
+    "name": "factory_ema_rsi_confluence_5m_170",
+    "type": "ema_rsi_confluence",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "rsi_period": 14,
+      "rsi_long_max": 60,
+      "rsi_short_min": 40
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 5m with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 171,
+    "name": "factory_ema_rsi_confluence_5m_171",
+    "type": "ema_rsi_confluence",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "rsi_period": 14,
+      "rsi_long_max": 60,
+      "rsi_short_min": 40
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 5m with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 172,
+    "name": "factory_ema_rsi_confluence_5m_172",
+    "type": "ema_rsi_confluence",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "rsi_period": 14,
+      "rsi_long_max": 60,
+      "rsi_short_min": 40
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 5m with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 173,
+    "name": "factory_ema_rsi_confluence_15m_173",
+    "type": "ema_rsi_confluence",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "rsi_period": 14,
+      "rsi_long_max": 60,
+      "rsi_short_min": 40
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 15m with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 174,
+    "name": "factory_ema_rsi_confluence_15m_174",
+    "type": "ema_rsi_confluence",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "rsi_period": 14,
+      "rsi_long_max": 60,
+      "rsi_short_min": 40
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 15m with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 175,
+    "name": "factory_ema_rsi_confluence_15m_175",
+    "type": "ema_rsi_confluence",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "rsi_period": 14,
+      "rsi_long_max": 60,
+      "rsi_short_min": 40
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 15m with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 176,
+    "name": "factory_ema_rsi_confluence_15m_176",
+    "type": "ema_rsi_confluence",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "rsi_period": 14,
+      "rsi_long_max": 60,
+      "rsi_short_min": 40
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 15m with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 177,
+    "name": "factory_ema_rsi_confluence_1h_177",
+    "type": "ema_rsi_confluence",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "rsi_period": 14,
+      "rsi_long_max": 60,
+      "rsi_short_min": 40
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 1h with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 178,
+    "name": "factory_ema_rsi_confluence_1h_178",
+    "type": "ema_rsi_confluence",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "rsi_period": 14,
+      "rsi_long_max": 60,
+      "rsi_short_min": 40
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 1h with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 179,
+    "name": "factory_ema_rsi_confluence_1h_179",
+    "type": "ema_rsi_confluence",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "rsi_period": 14,
+      "rsi_long_max": 60,
+      "rsi_short_min": 40
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 1h with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 180,
+    "name": "factory_ema_rsi_confluence_1h_180",
+    "type": "ema_rsi_confluence",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "rsi_period": 14,
+      "rsi_long_max": 60,
+      "rsi_short_min": 40
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence ema_rsi_confluence on 1h with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 181,
+    "name": "factory_macd_bb_confluence_5m_181",
+    "type": "macd_bb_confluence",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence macd_bb_confluence on 5m with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 182,
+    "name": "factory_macd_bb_confluence_5m_182",
+    "type": "macd_bb_confluence",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence macd_bb_confluence on 5m with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 183,
+    "name": "factory_macd_bb_confluence_5m_183",
+    "type": "macd_bb_confluence",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "Confluence macd_bb_confluence on 5m with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 184,
+    "name": "factory_macd_bb_confluence_5m_184",
+    "type": "macd_bb_confluence",
+    "timeframe": "5m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence macd_bb_confluence on 5m with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 185,
+    "name": "factory_macd_bb_confluence_15m_185",
+    "type": "macd_bb_confluence",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence macd_bb_confluence on 15m with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 186,
+    "name": "factory_macd_bb_confluence_15m_186",
+    "type": "macd_bb_confluence",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence macd_bb_confluence on 15m with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 187,
+    "name": "factory_macd_bb_confluence_15m_187",
+    "type": "macd_bb_confluence",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "Confluence macd_bb_confluence on 15m with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 188,
+    "name": "factory_macd_bb_confluence_15m_188",
+    "type": "macd_bb_confluence",
+    "timeframe": "15m",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence macd_bb_confluence on 15m with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 189,
+    "name": "factory_macd_bb_confluence_1h_189",
+    "type": "macd_bb_confluence",
+    "timeframe": "1h",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence macd_bb_confluence on 1h with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 190,
+    "name": "factory_macd_bb_confluence_1h_190",
+    "type": "macd_bb_confluence",
+    "timeframe": "1h",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence macd_bb_confluence on 1h with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 191,
+    "name": "factory_macd_bb_confluence_1h_191",
+    "type": "macd_bb_confluence",
+    "timeframe": "1h",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "Confluence macd_bb_confluence on 1h with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 192,
+    "name": "factory_macd_bb_confluence_1h_192",
+    "type": "macd_bb_confluence",
+    "timeframe": "1h",
+    "params": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "bb_period": 20,
+      "bb_std": 2.0
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence macd_bb_confluence on 1h with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 193,
+    "name": "factory_stoch_ema_confluence_5m_193",
+    "type": "stoch_ema_confluence",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence stoch_ema_confluence on 5m with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 194,
+    "name": "factory_stoch_ema_confluence_5m_194",
+    "type": "stoch_ema_confluence",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence stoch_ema_confluence on 5m with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 195,
+    "name": "factory_stoch_ema_confluence_5m_195",
+    "type": "stoch_ema_confluence",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "Confluence stoch_ema_confluence on 5m with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 196,
+    "name": "factory_stoch_ema_confluence_5m_196",
+    "type": "stoch_ema_confluence",
+    "timeframe": "5m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence stoch_ema_confluence on 5m with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 197,
+    "name": "factory_stoch_ema_confluence_15m_197",
+    "type": "stoch_ema_confluence",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence stoch_ema_confluence on 15m with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 198,
+    "name": "factory_stoch_ema_confluence_15m_198",
+    "type": "stoch_ema_confluence",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence stoch_ema_confluence on 15m with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 199,
+    "name": "factory_stoch_ema_confluence_15m_199",
+    "type": "stoch_ema_confluence",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "Confluence stoch_ema_confluence on 15m with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 200,
+    "name": "factory_stoch_ema_confluence_15m_200",
+    "type": "stoch_ema_confluence",
+    "timeframe": "15m",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence stoch_ema_confluence on 15m with SL 2.0x ATR and TP 4.0x ATR"
+  },
+  {
+    "id": 201,
+    "name": "factory_stoch_ema_confluence_1h_201",
+    "type": "stoch_ema_confluence",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3
+    },
+    "exits": {
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence stoch_ema_confluence on 1h with SL 1.0x ATR and TP 2.0x ATR"
+  },
+  {
+    "id": 202,
+    "name": "factory_stoch_ema_confluence_1h_202",
+    "type": "stoch_ema_confluence",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3
+    },
+    "exits": {
+      "sl_atr": 1.5,
+      "tp_atr": 3.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence stoch_ema_confluence on 1h with SL 1.5x ATR and TP 3.0x ATR"
+  },
+  {
+    "id": 203,
+    "name": "factory_stoch_ema_confluence_1h_203",
+    "type": "stoch_ema_confluence",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3
+    },
+    "exits": {
+      "sl_atr": 0.5,
+      "tp_atr": 1.5,
+      "rr_ratio": 3.0
+    },
+    "entry_logic": "Confluence stoch_ema_confluence on 1h with SL 0.5x ATR and TP 1.5x ATR"
+  },
+  {
+    "id": 204,
+    "name": "factory_stoch_ema_confluence_1h_204",
+    "type": "stoch_ema_confluence",
+    "timeframe": "1h",
+    "params": {
+      "fast_ema": 20,
+      "slow_ema": 50,
+      "stoch_k": 14,
+      "stoch_d": 3,
+      "stoch_smooth": 3
+    },
+    "exits": {
+      "sl_atr": 2.0,
+      "tp_atr": 4.0,
+      "rr_ratio": 2.0
+    },
+    "entry_logic": "Confluence stoch_ema_confluence on 1h with SL 2.0x ATR and TP 4.0x ATR"
+  }
+]

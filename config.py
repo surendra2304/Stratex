@@ -1,0 +1,310 @@
+# ==============================================================================
+# CONFIG.PY - Central Configuration for the Trading Bot Framework
+# ==============================================================================
+# SECURITY: No credentials are stored in this file.
+# Credentials MUST be set via environment variables or a .env file.
+# See .env.example for the required variables.
+# ==============================================================================
+
+import os
+
+from dotenv import load_dotenv
+
+# We no longer need utf-16le fallback since the file is now standard utf-8
+load_dotenv()
+
+# If a BOM was parsed as part of the first key, it will appear as '\ufeffAPI_KEY'
+if '\ufeffAPI_KEY' in os.environ:
+    os.environ['API_KEY'] = os.environ['\ufeffAPI_KEY']
+    del os.environ['\ufeffAPI_KEY']
+
+# --- Binance environment and credentials ---
+# Current Demo Trading keys take precedence only when that environment is explicitly selected.
+# Credentials from the legacy Testnet must never be silently reused.
+BINANCE_DEMO_TRADING = os.getenv("BINANCE_DEMO_TRADING", "false").strip().lower() in {"1", "true", "yes", "on"}
+if BINANCE_DEMO_TRADING:
+    API_KEY = os.getenv("BINANCE_API_KEY", "").strip().strip(chr(34) + chr(39))
+    SECRET_KEY = os.getenv("BINANCE_API_SECRET", "").strip().strip(chr(34) + chr(39))
+else:
+    API_KEY = (
+        os.getenv("API_KEY")
+        or os.getenv("BINANCE_TESTNET_API_KEY")
+        or os.getenv("TESTNET_API_KEY")
+        or os.getenv("BINANCE_API_KEY")
+        or ""
+    ).strip().strip(chr(34) + chr(39))
+    SECRET_KEY = (
+        os.getenv("SECRET_KEY")
+        or os.getenv("BINANCE_SECRET_KEY")
+        or os.getenv("BINANCE_TESTNET_SECRET_KEY")
+        or os.getenv("TESTNET_SECRET_KEY")
+        or os.getenv("BINANCE_API_SECRET")
+        or os.getenv("BINANCE_SECRET")
+        or ""
+    ).strip().strip(chr(34) + chr(39))
+
+# --- Gemini AI Configuration (from environment / .env file only) ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
+GEMINI_ENABLED = os.getenv("GEMINI_ENABLED", "True").lower() == "true"
+
+# --- Inference Advisory Intelligence System ---
+INFERENCE_URL = os.getenv("INFERENCE_URL", os.getenv("AI_UNIVERSE_URL", os.getenv("AI_UNIVERSE_BASE_URL", "https://friday-universe.duckdns.org/inference")))
+INFERENCE_API_KEY = os.getenv("INFERENCE_API_KEY", os.getenv("AI_UNIVERSE_API_KEY", ""))
+AI_UNIVERSE_BASE_URL = INFERENCE_URL
+
+AI_UNIVERSE_API_KEY = INFERENCE_API_KEY
+AI_UNIVERSE_ENABLED = os.getenv("AI_UNIVERSE_ENABLED", "True").lower() == "true"
+ADVISORY_SHADOW_MODE = os.getenv("ADVISORY_SHADOW_MODE", "True").lower() == "true"
+ADVISORY_AUTONOMY_CONFIRMED = os.getenv("ADVISORY_AUTONOMY_CONFIRMED", "False").lower() == "true"
+ADVISORY_INTERVAL_HOURS = float(os.getenv("ADVISORY_INTERVAL_HOURS", "4.0"))
+ADVISORY_TIMEOUT_SECONDS = int(os.getenv("ADVISORY_TIMEOUT_SECONDS", "120"))
+
+# --- Testnet AI Advisory Settings ---
+TESTNET_ADVISORY_ENABLED = os.getenv("TESTNET_ADVISORY_ENABLED", "False").lower() == "true"
+TESTNET_ADVISORY_SHADOW_MODE = os.getenv("TESTNET_ADVISORY_SHADOW_MODE", "True").lower() == "true"
+TESTNET_ADVISORY_MAX_DRAWDOWN_PCT = float(os.getenv("TESTNET_ADVISORY_MAX_DRAWDOWN_PCT", "0.15"))  # 15% hard cutoff for AI advisory
+# BINANCE_DEMO_TRADING switches endpoints only when fresh Demo Trading credentials
+# are configured. Credentials are not inferred from the legacy testnet variables.
+BASE_URL = "https://demo-api.binance.com" if BINANCE_DEMO_TRADING else "https://testnet.binance.vision"
+WS_URL = "wss://ws-api.testnet.binance.vision/ws-api/v3"
+FUTURES_BASE_URL = "https://demo-fapi.binance.com" if BINANCE_DEMO_TRADING else "https://testnet.binancefuture.com"
+FUTURES_WS_URL = "wss://demo-fstream.binance.com/ws" if BINANCE_DEMO_TRADING else "wss://stream.binancefuture.com/ws"
+
+# --- Futures Configuration ---
+FUTURES_LEVERAGE = int(os.getenv("FUTURES_LEVERAGE", "5"))  # Default 5x leverage for testnet testing
+FUTURES_MARGIN_TYPE = os.getenv("FUTURES_MARGIN_TYPE", "ISOLATED").upper()
+
+# --- Dynamic Market Scanner ---
+SYMBOL = "BTCUSDT"
+
+# --- Risk Management ---
+TRADE_QTY = float(os.getenv("TRADE_QTY", "0.001"))           # BTC quantity per trade (small for safety)
+MAX_OPEN_TRADES = int(os.getenv("MAX_OPEN_TRADES", "5"))       # Bounded open trades (default 5)
+TOP_COINS_LIMIT = 20  # Increase number of top trending coins to scan
+
+TARGET_TRADE_COUNT = 30   # Aligned with the 30-trade statistical validation gate
+TARGET_TRADE_WINDOW_HOURS = 720  # 30-day forward validation window (stress-test remnant fixed)
+LONG_ONLY = os.getenv("TRADING_MODE", "PAPER").upper() != "FUTURES"  # Spot is LONG_ONLY, Futures allows Short
+
+# -------------------------------------------------------------------
+# OPERATIONAL SAFETY GATES (TESTNET ONLY)
+# -------------------------------------------------------------------
+TRADING_MODE = os.getenv("TRADING_MODE", "PAPER").upper()
+PAPER_SAFE_MODE = os.getenv("PAPER_SAFE_MODE", "False" if TRADING_MODE in ["TESTNET", "FUTURES"] else "True").lower() == "true"
+TESTNET_ENABLED = os.getenv("TESTNET_ENABLED", "True" if TRADING_MODE in ["TESTNET", "FUTURES"] else "False").lower() == "true"
+LIVE_TRADING_ENABLED = False  # PERMANENT SECURITY INVARIANT: Live trading is impossible by design
+TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-09-01T00:00:00Z")
+
+# --- Strategy candidates ---
+# Entries here are requests, not execution authorization. The strategy registry
+# must mark an entry VALIDATED before the testnet engine loads it. At present
+# adx_ema remains OBSERVE_ONLY, so the executable set is intentionally empty.
+ACTIVE_STRATEGIES = {
+    "supertrend": ["15m", "1h", "4h"],
+    "bb_reversion": ["15m", "1h"],
+    "adx_ema": ["4h"]
+}
+
+# Legacy single-strategy preference; it does not override registry governance.
+ACTIVE_STRATEGY = "supertrend"
+TIMEFRAME = "15m"
+ALL_ACTIVE_TIMEFRAMES = ["15m", "30m", "1h", "4h"]
+BYPASS_PROFITABILITY_GATE = os.getenv("BYPASS_PROFITABILITY_GATE", "False").lower() == "true"  # Enforces positive mathematical edge calculation by default
+
+
+# Trading Config
+MAX_POSITION_SIZE = 0.95
+
+# --- Testnet Risk Management ---
+# Base defaults maintain test integrity and forensic audit guarantees;
+# environment variables on Render override these dynamically for live execution.
+MAX_TESTNET_RISK_PER_TRADE = float(os.getenv("MAX_TESTNET_RISK_PER_TRADE", "0.005")) # 0.5% risk baseline
+MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.05"))        # 5% max total notional exposure
+MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.02"))   # 2% max per single asset
+MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.04")) # 4% max net directional exposure
+MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))            # Base limit of 5
+MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "10")) # Bounded positions for aggressive mode
+VOLATILITY_BUFFER = 0.2  # Scale down positions during high volatility
+BLOCK_SHORTS_IN_BULL_REGIME = os.getenv("BLOCK_SHORTS_IN_BULL_REGIME", "False").lower() == "true" # Allow both long and short setups
+
+MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.02"))          # 2% daily loss limit
+MAX_TESTNET_DRAWDOWN_PCT = float(os.getenv("MAX_TESTNET_DRAWDOWN_PCT", "0.05"))    # 5% drawdown tolerance
+RECONCILIATION_TOLERANCE = float(os.getenv("RECONCILIATION_TOLERANCE", "5.0"))     # 5 USDT tolerance
+TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-10-13T21:45:00Z")
+
+# --- Strategy Quality Control (Stage 5) ---
+MINIMUM_EXPECTED_EDGE = float(os.getenv("MINIMUM_EXPECTED_EDGE", "0.0001"))     # Standard positive expected edge threshold
+MIN_PROBABILITY_THRESHOLD = float(os.getenv("MIN_PROBABILITY_THRESHOLD", "0.40")) # 40% platform minimum probability threshold
+DEGRADATION_WINDOW = 20            # Evaluate last 20 trades for degradation
+MIN_WIN_RATE_THRESHOLD = 0.35      # Automatically switch to OBSERVE-ONLY if < 35% win rate
+MAX_PREDICTION_ERROR = 0.02        # Automatically switch to OBSERVE-ONLY if actual differs from expected by > 2%
+
+BTC_REGIME_FILTER = os.getenv("BTC_REGIME_FILTER", "True").lower() == "true" # Altcoins follow BTC; block alt longs when BTC < 4h EMA200
+INTELX_INTELLIGENCE_ENABLED = os.getenv("INTELX_INTELLIGENCE_ENABLED", "False").lower() == "true" # IntelX sentiment & news catalyst gate
+FUTURIS_FORECAST_ENABLED = os.getenv("FUTURIS_FORECAST_ENABLED", "False").lower() == "true" # Futuris predictive volatility & regime gate
+
+# -------------------------------------------------------------------
+# SIGNAL QUALITY FILTERS (v3 upgrade) — real-data entry gates
+# Applied to every strategy signal before the profitability gate.
+# Goal: fewer, higher-conviction entries → higher realized win rate.
+# -------------------------------------------------------------------
+SIGNAL_QUALITY_ENABLED = os.getenv("SIGNAL_QUALITY_ENABLED", "True").lower() == "true"
+# Trend alignment strictness: "off" | "partial" (close vs EMA200) | "full" (EMA20>EMA50>EMA200)
+SQ_TREND_ALIGNMENT = os.getenv("SQ_TREND_ALIGNMENT", "full").lower()          # "full" (EMA20>EMA50>EMA200) strictly enforces trend alignment
+SQ_CANDLE_CONFIRMATION = os.getenv("SQ_CANDLE_CONFIRMATION", "True").lower() == "true"   # signal candle must close in signal direction
+SQ_VOLUME_CONFIRMATION = os.getenv("SQ_VOLUME_CONFIRMATION", "True").lower() == "true"   # volume must exceed N × 20-bar average
+SQ_VOLUME_MULT = float(os.getenv("SQ_VOLUME_MULT", "0.2"))                               # 0.2x allows pullback bounce continuation while filtering dead markets
+SIGNAL_DECAY_THRESHOLD = float(os.getenv("SIGNAL_DECAY_THRESHOLD", "0.25"))                 # lower threshold → confirms faster
+SQ_ATR_PCT_MIN = float(os.getenv("SQ_ATR_PCT_MIN", "0.0010"))                            # 0.10% — wider dead-market guard
+SQ_ATR_PCT_MAX = float(os.getenv("SQ_ATR_PCT_MAX", "0.050"))                             # 5.0% — wider chaos guard for futures
+SQ_RSI_GUARD = os.getenv("SQ_RSI_GUARD", "True").lower() == "true"                       # do not chase overbought/oversold
+SQ_RSI_MAX_BUY = float(os.getenv("SQ_RSI_MAX_BUY", "85.0"))                              # slightly wider RSI ceiling
+SQ_RSI_MIN_SELL = float(os.getenv("SQ_RSI_MIN_SELL", "15.0"))                            # slightly wider RSI floor
+SQ_MIN_RISK_REWARD = float(os.getenv("SQ_MIN_RISK_REWARD", "0.8"))                       # 0.8 RR minimum (permits 1:1 supertrend and scalpers)
+
+# -------------------------------------------------------------------
+# ADAPTIVE STRATEGY PERFORMANCE GATE (v3 upgrade)
+# Automatically demotes strategies whose recent REALIZED results are poor
+# (win rate / net PnL from the ledger), for a cooldown period.
+# -------------------------------------------------------------------
+STRATEGY_PERFORMANCE_GATE = os.getenv("STRATEGY_PERFORMANCE_GATE", "False").lower() == "true"
+STRATEGY_GATE_MIN_TRADES = int(os.getenv("STRATEGY_GATE_MIN_TRADES", "10"))
+STRATEGY_GATE_WIN_RATE = float(os.getenv("STRATEGY_GATE_WIN_RATE", "0.40"))
+STRATEGY_GATE_MIN_NET_PNL = float(os.getenv("STRATEGY_GATE_MIN_NET_PNL", "0.0"))
+STRATEGY_DEMOTION_COOLDOWN_HOURS = float(os.getenv("STRATEGY_DEMOTION_COOLDOWN_HOURS", "4.0"))
+
+# Global performance degradation guard (observe-only halt safeguard)
+DEGRADATION_GUARD_ENABLED = os.getenv("DEGRADATION_GUARD_ENABLED", "True").lower() == "true"
+DEGRADATION_WINDOW = int(os.getenv("DEGRADATION_WINDOW", "20"))
+MIN_WIN_RATE_THRESHOLD = float(os.getenv("MIN_WIN_RATE_THRESHOLD", "0.30"))
+OBSERVE_ONLY_COOLDOWN_SECONDS = float(os.getenv("OBSERVE_ONLY_COOLDOWN_SECONDS", "7200"))
+
+
+# -------------------------------------------------------------------
+# TRAILING STOP / BREAKEVEN & PROFIT HARVESTING (v3 upgrade)
+# Converts round-trip losers into breakeven or winning exits by moving
+# the exchange-side protective SL as a position moves into profit.
+# -------------------------------------------------------------------
+TRAILING_STOP_ENABLED = os.getenv("TRAILING_STOP_ENABLED", "True").lower() == "true"
+PROFIT_HARVEST_PCT = float(os.getenv("PROFIT_HARVEST_PCT", "0.015"))                      # 1.5% profit harvest trigger
+TRAIL_BREAKEVEN_TRIGGER_R = float(os.getenv("TRAIL_BREAKEVEN_TRIGGER_R", "0.4"))          # at +0.4R immediately move SL to breakeven(+fees)
+TRAIL_TRIGGER_R = float(os.getenv("TRAIL_TRIGGER_R", "0.8"))                              # at +0.8R start dynamic ATR trailing
+TRAIL_ATR_MULT = float(os.getenv("TRAIL_ATR_MULT", "1.5"))                                # tight trail distance = 1.5 × ATR
+TRAIL_FEE_BUFFER_PCT = float(os.getenv("TRAIL_FEE_BUFFER_PCT", "0.002"))                  # breakeven buffer to cover round-trip fees
+TRAIL_MIN_REARM_SECONDS = float(os.getenv("TRAIL_MIN_REARM_SECONDS", "60"))               # min seconds between SL modifications per symbol
+TRAIL_LOOP_SECONDS = float(os.getenv("TRAIL_LOOP_SECONDS", "20"))                         # trailing evaluation cadence
+
+
+
+# --- Backtesting Engine ---
+BACKTEST_FEE_RATE = 0.001          # 0.1% fee per trade
+BACKTEST_SLIPPAGE_RATE = 0.0005    # 0.05% slippage
+BACKTEST_RISK_PER_TRADE = 0.01     # 1% risk of equity per trade in backtests
+RISK_PER_TRADE = BACKTEST_RISK_PER_TRADE  # Canonical alias for backtest runners
+STARTING_BALANCE = 10000.0         # Initial balance
+OOS_TRAIN_PCT = 0.60               # Walk-forward train %
+OOS_VAL_PCT = 0.20                 # Walk-forward validation %
+INTRABAR_RESOLUTION = "conservative" # "conservative" or "optimistic"
+
+SUPPORTED_STRATEGIES = ["scalper", "swing", "ml", "aggressor", "supertrend", "multi", "adx_ema", "adx_ema_mtf", "aggressive_scalper", "bb_reversion", "rsi_burst", "vwap_trend", "factory_winner_1", "factory_winner_2", "factory_winner_3", "factory_winner_4", "factory_winner_5", "fast1m", "fast5m", "hybrid", "bollinger", "breakout_vol"]
+SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"]
+VALID_MODES = ["PAPER", "TESTNET", "FUTURES"]
+
+class SecurityConfigurationError(ValueError):
+    """Raised when any unsafe live-trading or unauthorized environment configuration is detected."""
+    pass
+
+
+def validate_environment_safety():
+    """
+    PERMANENT SECURITY INVARIANT:
+    No live-money path can be enabled accidentally by an environment typo or misconfiguration.
+    """
+    for key, val in os.environ.items():
+        k_upper = key.upper()
+        v_upper = str(val).strip().upper()
+
+        # Check for live trading flags or common typos
+        if any(term in k_upper for term in ["LIVE_TRADING", "ENABLE_LIVE", "REAL_MONEY", "PROD_TRADING", "PRODUCTION_MONEY", "LIVE_CAPITAL"]):
+            if v_upper in ["TRUE", "1", "YES", "ON", "ENABLED"]:
+                raise SecurityConfigurationError(
+                    f"SECURITY CRITICAL: Live trading flag '{key}={val}' is permanently forbidden. "
+                    "Stratex operates strictly in PAPER or TESTNET mode with zero live capital risk."
+                )
+
+        # Allow only known non-production Binance endpoints. Demo Trading hosts
+        # contain the string API.BINANCE.COM/FAPI.BINANCE.COM, so they must be
+        # explicitly allowlisted rather than misclassified as production.
+        if k_upper in ["BASE_URL", "FUTURES_BASE_URL", "BINANCE_URL", "BINANCE_API_URL"]:
+            is_legacy_testnet = "TESTNET" in v_upper
+            is_current_demo = (
+                v_upper.startswith("HTTPS://DEMO-API.BINANCE.COM")
+                or v_upper.startswith("HTTPS://DEMO-FAPI.BINANCE.COM")
+            )
+            looks_like_binance_production = any(
+                prod in v_upper for prod in ["API.BINANCE.COM", "FAPI.BINANCE.COM"]
+            )
+            if looks_like_binance_production and not (is_legacy_testnet or is_current_demo):
+                raise SecurityConfigurationError(
+                    f"SECURITY CRITICAL: Production Binance URL '{key}={val}' is forbidden. "
+                    "Only explicitly supported Demo Trading or Testnet endpoints are allowed."
+                )
+
+
+def validate_config():
+    global TRADING_MODE, PAPER_SAFE_MODE
+    if TRADING_MODE not in VALID_MODES:
+        raise ValueError(f"Configuration Error: Invalid TRADING_MODE '{TRADING_MODE}'. Only {VALID_MODES} are supported.")
+
+    validate_environment_safety()
+
+    # If legacy ACTIVE_STRATEGY or TIMEFRAME attributes were set dynamically (e.g. in tests)
+    if "ACTIVE_STRATEGY" in globals():
+        strat = globals()["ACTIVE_STRATEGY"]
+        if strat not in SUPPORTED_STRATEGIES:
+            raise ValueError(f"Configuration Error: Invalid ACTIVE_STRATEGY '{strat}'. Supported: {SUPPORTED_STRATEGIES}")
+    if "TIMEFRAME" in globals():
+        tf = globals()["TIMEFRAME"]
+        if tf not in SUPPORTED_TIMEFRAMES:
+            raise ValueError(f"Configuration Error: Invalid TIMEFRAME '{tf}'. Supported: {SUPPORTED_TIMEFRAMES}")
+
+    for strategy, timeframes in ACTIVE_STRATEGIES.items():
+        if strategy not in SUPPORTED_STRATEGIES:
+            raise ValueError(f"Configuration Error: Invalid ACTIVE_STRATEGY '{strategy}'. Supported: {SUPPORTED_STRATEGIES}")
+        
+        tfs = timeframes if isinstance(timeframes, list) else [timeframes]
+        for tf in tfs:
+            if tf not in SUPPORTED_TIMEFRAMES:
+                raise ValueError(f"Configuration Error: Invalid TIMEFRAME '{tf}' for strategy '{strategy}'. Supported: {SUPPORTED_TIMEFRAMES}")
+
+    if not isinstance(TRADE_QTY, (int, float)) or TRADE_QTY <= 0:
+        raise ValueError("Configuration Error: TRADE_QTY must be a positive number.")
+
+
+    if not isinstance(TOP_COINS_LIMIT, int) or TOP_COINS_LIMIT <= 0:
+        raise ValueError("Configuration Error: TOP_COINS_LIMIT must be a positive integer.")
+
+    # For non-PAPER modes, credentials must be set (but not hardcoded here)
+    if TRADING_MODE in ["TESTNET", "FUTURES"] and (not API_KEY or not SECRET_KEY):
+        import logging
+        logging.getLogger("config").warning(
+            f"[CONFIG_WARNING] API_KEY and/or SECRET_KEY not configured in environment for {TRADING_MODE} mode. "
+            f"Gracefully falling back TRADING_MODE to 'PAPER' (safe simulation) and enabling PAPER_SAFE_MODE "
+            f"so web dashboard and health endpoints can boot cleanly without crashing."
+        )
+        TRADING_MODE = "PAPER"
+        PAPER_SAFE_MODE = True
+
+    # Double-key safety check for AI Advisory live execution
+    if not ADVISORY_SHADOW_MODE and not ADVISORY_AUTONOMY_CONFIRMED:
+        raise ValueError(
+            "Configuration Error: ADVISORY_SHADOW_MODE is set to False (live parameter mutation enabled), "
+            "but ADVISORY_AUTONOMY_CONFIRMED is not set to True. "
+            "To disable shadow mode, you must explicitly provide double-key confirmation: "
+            "ADVISORY_SHADOW_MODE=False AND ADVISORY_AUTONOMY_CONFIRMED=True."
+        )
+
+# Validate immediately upon import
+validate_config()
+

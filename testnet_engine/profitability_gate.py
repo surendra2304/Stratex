@@ -1,0 +1,319 @@
+"""
+profitability_gate.py — Expected Net Edge gate
+
+Strategy type semantics
+-----------------------
+PROBABILISTIC (e.g. ML):
+    confidence is a calibrated probability of winning (output of predict_proba).
+    prob_win = confidence directly.
+
+RULE_BASED (e.g. ADX+EMA):
+    confidence carries NO probabilistic meaning.
+    prob_win must come from a validated historical win_rate_prior carried by
+    the SignalResult. A missing or invalid prior is rejected; it is not safe to
+    infer profitability from a neutral guess.
+
+If strategy_type is unknown or missing, the gate uses prob_win = 0.5
+(neutral assumption) and logs a warning — it does NOT silently use 1.0.
+"""
+
+from numeric_safety import finite_float
+from logger import get_logger
+from research_phase9.cost_engine import CostEngine
+
+logger = get_logger("profitability_gate")
+
+
+
+class ProfitabilityGate:
+    def __init__(self, cost_engine=None):
+        if cost_engine:
+            self.cost_engine = cost_engine
+        else:
+            try:
+                import config
+                trading_mode = getattr(config, "TRADING_MODE", "PAPER").upper()
+            except Exception:
+                trading_mode = "PAPER"
+            if trading_mode == "FUTURES":
+                self.cost_engine = CostEngine.get_futures_maker_config()
+            else:
+                self.cost_engine = CostEngine.get_binance_taker_config()
+
+    def evaluate_signal(
+        self,
+        symbol,
+        side,
+        entry_price,
+        sl_price,
+        tp_price,
+        signal_result,          # accepts SignalResult namedtuple OR raw float (legacy ML)
+    ):
+        """
+        Calculate Expected Net Return and accept/reject the signal.
+
+        Parameters
+        ----------
+        signal_result : SignalResult namedtuple | float | None
+            - If SignalResult: read strategy_type and win_rate_prior / confidence.
+            - If float: legacy ML path — treat as calibrated probability.
+            - If None: use neutral fallback 0.5 with a warning.
+
+        Returns
+        -------
+        (bool, dict)  — (accepted, metrics)
+        """
+        import config
+
+        # ------------------------------------------------------------------
+        # 1. Determine prob_win based on strategy type
+        # ------------------------------------------------------------------
+        strategy_type = _resolve_strategy_type(signal_result)
+
+        if strategy_type == "RULE_BASED":
+            # Use a verified prior only. Missing evidence must never become an
+            # executable positive-EV estimate through the neutral fallback.
+            win_rate_prior = getattr(signal_result, "win_rate_prior", None)
+            if win_rate_prior is None or not (0.0 < win_rate_prior < 1.0):
+                logger.warning(
+                    f"[PROFIT GATE] RULE_BASED signal for {symbol} has invalid "
+                    f"win_rate_prior={win_rate_prior}. Rejecting without verified evidence."
+                )
+                return False, {
+                    "decision": "REJECTED",
+                    "reason": "UNVERIFIED_RULE_BASED_PRIOR",
+                    "details": "A rule-based strategy requires a verified win-rate prior.",
+                    "strategy_type": strategy_type,
+                    "prob_source": "UNVERIFIED/NO_PRIOR",
+                    "prob_win": None,
+                    "prob_loss": None,
+                    "expected_gross_return": None,
+                    "expected_net_return": None,
+                }
+            else:
+                prob_win = win_rate_prior
+                prob_source = f"RULE_BASED/OOS_PRIOR={prob_win:.4f}"
+
+        elif strategy_type == "PROBABILISTIC":
+            # ML path: confidence is a calibrated predict_proba output.
+            if isinstance(signal_result, (int, float)):
+                raw_conf = float(signal_result)
+            else:
+                raw_conf = getattr(signal_result, "confidence", None)
+
+            conf = finite_float(raw_conf)
+            if conf is None or not (0.0 <= conf <= 1.0):
+                # Same rule as RULE_BASED: missing evidence must never become an
+                # executable estimate. The old neutral 0.5 fallback accepted
+                # any signal whose reward:risk exceeded ~1:1 plus friction.
+                logger.warning(
+                    f"[PROFIT GATE] PROBABILISTIC signal for {symbol} has invalid "
+                    f"confidence={raw_conf}. Rejecting."
+                )
+                return False, _rejection("INVALID_MODEL_CONFIDENCE",
+                                         f"confidence={raw_conf!r} is not a probability in [0, 1]",
+                                         strategy_type, "PROBABILISTIC/INVALID")
+            prob_win = conf
+            prob_source = f"PROBABILISTIC/ML_CONF={prob_win:.4f}"
+
+        else:
+            # Unknown/missing strategy_type — refuse to invent a probability.
+            logger.warning(
+                f"[PROFIT GATE] Unknown strategy_type='{strategy_type}' for {symbol} {side}. "
+                "Rejecting: no probability source. Fix the strategy module."
+            )
+            return False, _rejection("UNKNOWN_STRATEGY_TYPE",
+                                     f"strategy_type={strategy_type!r} carries no win-probability evidence",
+                                     strategy_type, "UNKNOWN/NO_PROBABILITY")
+
+        prob_loss = 1.0 - prob_win
+
+        # ------------------------------------------------------------------
+        # 2. Calculate gross moves
+        # ------------------------------------------------------------------
+        if not entry_price or not tp_price or not sl_price:
+            return False, {
+                "decision": "REJECTED",
+                "reason": "MISSING_PRICE_LEVELS",
+                "details": f"entry={entry_price}, tp={tp_price}, sl={sl_price}",
+                "strategy_type": strategy_type,
+                "prob_source": prob_source,
+                "confidence": prob_win,
+            }
+
+        entry_v, tp_v, sl_v = (finite_float(entry_price), finite_float(tp_price), finite_float(sl_price))
+        if entry_v is not None and tp_v is not None and sl_v is not None and tp_v > 0 and sl_v > 0:
+            entry_price, tp_price, sl_price = entry_v, tp_v, sl_v
+        else:
+            # NaN levels used to fall through to a NaN "NEGATIVE_EXPECTED_NET_RETURN"
+            # and an infinite TP produced an infinite expected return → ACCEPTED.
+            return False, {
+                "decision": "REJECTED",
+                "reason": "INVALID_PRICE_NUMERICS",
+                "details": f"entry={entry_price}, tp={tp_price}, sl={sl_price}",
+                "strategy_type": strategy_type,
+                "prob_source": prob_source,
+                "confidence": prob_win,
+            }
+
+        if entry_price <= 0:
+            return False, {
+                "decision": "REJECTED",
+                "reason": "NON_POSITIVE_ENTRY_PRICE",
+                "details": f"entry={entry_price}",
+                "strategy_type": strategy_type,
+                "prob_source": prob_source,
+                "confidence": prob_win,
+            }
+
+        if side not in ("BUY", "LONG", "SELL", "SHORT"):
+            return False, _rejection("INVALID_SIDE", f"side={side!r}", strategy_type, prob_source, prob_win)
+        if side in ("BUY", "LONG"):
+            reward_pct = (tp_price - entry_price) / entry_price
+            risk_pct   = (entry_price - sl_price) / entry_price
+            predicted_move = tp_price - entry_price
+        else:  # SELL / SHORT
+            reward_pct = (entry_price - tp_price) / entry_price
+            risk_pct   = (sl_price - entry_price) / entry_price
+            predicted_move = entry_price - tp_price
+
+        if reward_pct <= 0 or risk_pct <= 0:
+            return False, {
+                "decision": "REJECTED",
+                "reason": "INVALID_RISK_REWARD",
+                "details": f"Reward: {reward_pct:.4f}, Risk: {risk_pct:.4f}",
+                "strategy_type": strategy_type,
+                "prob_source": prob_source,
+                "confidence": prob_win,
+            }
+
+        # ------------------------------------------------------------------
+        # 3. Expected value calculation — consistent with benchmark
+        #    E[gross] = P(win)×reward - P(loss)×risk
+        #    E[net]   = E[gross] - total_friction
+        # ------------------------------------------------------------------
+        expected_gross_return = (prob_win * reward_pct) - (prob_loss * risk_pct)
+        total_friction_pct    = self.cost_engine.get_total_friction()
+        expected_net_return   = expected_gross_return - total_friction_pct
+        min_edge              = getattr(config, "MINIMUM_EXPECTED_EDGE", 0.0001)
+
+        MIN_PROB_THRESHOLD = getattr(config, "MIN_PROBABILITY_THRESHOLD", 0.40)
+        # Adapt probability threshold to risk:reward geometry (e.g. 3:1 RR needs only 28% win rate)
+        rr_geom = reward_pct / max(1e-5, risk_pct)
+        if rr_geom >= 2.5:
+            MIN_PROB_THRESHOLD = min(MIN_PROB_THRESHOLD, 0.28)
+        elif rr_geom >= 1.8:
+            MIN_PROB_THRESHOLD = min(MIN_PROB_THRESHOLD, 0.33)
+
+        if getattr(config, "BYPASS_PROFITABILITY_GATE", False):
+            is_accepted = (expected_net_return >= -0.001)
+            reason      = "BYPASS_PROFITABILITY_GATE" if is_accepted else "NEGATIVE_EXPECTED_NET_RETURN"
+        elif prob_win < MIN_PROB_THRESHOLD:
+            is_accepted = False
+            reason      = f"PROB_WIN_BELOW_{int(MIN_PROB_THRESHOLD*100)}PCT"
+        else:
+            # Strict mathematical evaluation — genuine positive expected net edge required
+            is_accepted = (expected_net_return >= min_edge) and (expected_gross_return > total_friction_pct)
+            reason      = "POSITIVE_EDGE" if is_accepted else "NEGATIVE_EXPECTED_NET_RETURN"
+
+
+        # ------------------------------------------------------------------
+        # 4. Diagnostic logging
+        # ------------------------------------------------------------------
+        atr_val = abs(entry_price - sl_price) / 2.0
+        atr_pct = (atr_val / entry_price) if entry_price > 0 else 0.0
+        decision_str = "ACCEPTED" if is_accepted else "REJECTED"
+
+        logger.info(
+            f"[PROFITABILITY] symbol={symbol} side={side} ATR={atr_val:.4f} "
+            f"ATR%={atr_pct*100:.3f}% win_rate={prob_win:.4f} reward={reward_pct:.5f} "
+            f"risk={risk_pct:.5f} friction={total_friction_pct:.6f} "
+            f"expected_net={expected_net_return:.6f} minimum_required={min_edge:.5f} "
+            f"decision={decision_str}"
+        )
+
+        logger.info(f"--- [PROFIT GATE: {symbol} {side}] ---")
+        logger.info(f"  Strategy Type   : {strategy_type}")
+        logger.info(f"  Prob Source     : {prob_source}")
+        logger.info(f"  Prob Win        : {prob_win:.4f} | Prob Loss: {prob_loss:.4f}")
+        logger.info(f"  Reward Pct      : {reward_pct:.5f} | Risk Pct: {risk_pct:.5f}")
+        logger.info(
+            f"  Expected Gross  : ({prob_win:.4f}×{reward_pct:.5f}) - "
+            f"({prob_loss:.4f}×{risk_pct:.5f}) = {expected_gross_return:.6f}"
+        )
+        logger.info(f"  Friction        : {total_friction_pct:.6f}")
+        logger.info(f"  Expected Net    : {expected_net_return:.6f} | Threshold: >={min_edge:.5f}")
+        logger.info(f"  Decision        : {decision_str}")
+        logger.info("---------------------------------------")
+
+        if is_accepted:
+            logger.info(f"[PROFITABILITY_ACCEPTED] {symbol} {side} | Expected Net: {expected_net_return:.5f} >= {min_edge:.5f}")
+        else:
+            logger.info(f"[PROFITABILITY_REJECTED] {symbol} {side} | Reason: {reason} | Expected Net: {expected_net_return:.5f} < {min_edge:.5f}")
+
+        metrics = {
+            "expected_gross_return": expected_gross_return,
+            "total_friction":        total_friction_pct,
+            "expected_net_return":   expected_net_return,
+            "atr":                   atr_val,
+            "atr_pct":               atr_pct,
+            "reward_pct":            reward_pct,
+            "risk_pct":              risk_pct,
+            "prob_win":              prob_win,
+            "confidence":            prob_win,     # legacy key kept for log_opportunity compat
+            "strategy_type":         strategy_type,
+            "prob_source":           prob_source,
+            "predicted_move":        predicted_move,
+            "holding_horizon":       "4H_RULE_BASED" if strategy_type == "RULE_BASED" else "VARIABLE",
+            "decision":              "ACCEPTED" if is_accepted else "REJECTED",
+            "reason":                reason,
+        }
+
+        if not is_accepted:
+            logger.info(
+                f"[PROFITABILITY_REJECTED] {symbol} {side} | Reason: {reason} | "
+                f"Expected Net: {expected_net_return:.5f} < {min_edge:.5f}"
+            )
+            return False, metrics
+
+        logger.info(
+            f"[PROFITABILITY_ACCEPTED] {symbol} {side} | Expected Net: {expected_net_return:.5f} >= {min_edge:.5f}"
+        )
+        return True, metrics
+
+
+# ------------------------------------------------------------------
+# Internal helpers
+# ------------------------------------------------------------------
+
+def _rejection(reason, details, strategy_type, prob_source, prob_win=None):
+    return {
+        "decision": "REJECTED",
+        "reason": reason,
+        "details": details,
+        "strategy_type": strategy_type,
+        "prob_source": prob_source,
+        "prob_win": prob_win,
+        "confidence": prob_win,
+        "expected_gross_return": None,
+        "expected_net_return": None,
+    }
+
+
+def _resolve_strategy_type(signal_result):
+    """
+    Determine the strategy type from the signal.
+
+    SignalResult namedtuple carries strategy_type explicitly.
+    Legacy float (ML confidence) maps to PROBABILISTIC.
+    None or unknown → "UNKNOWN".
+    """
+    if signal_result is None:
+        return "UNKNOWN"
+    if isinstance(signal_result, (int, float)):
+        # Legacy ML path — caller passed raw confidence float
+        return "PROBABILISTIC"
+    strategy_type = getattr(signal_result, "strategy_type", None)
+    if strategy_type in ("RULE_BASED", "PROBABILISTIC"):
+        return strategy_type
+    return "UNKNOWN"

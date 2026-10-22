@@ -1,0 +1,75 @@
+//@version=5
+strategy("High Frequency Win-Rate Scalper (BB + StochRSI + ADX)", overlay=true, initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+
+// -----------------------------------------------------------------------------
+// UPDATES IN THIS VERSION:
+// To increase the number of trades, we've relaxed the entry filters:
+// 1. BB Multiplier lowered from 2.5 to 2.1 (more entries).
+// 2. Max ADX increased from 35 to 45 (allows trading in moderate trends).
+// -----------------------------------------------------------------------------
+
+// --- Bollinger Bands Settings ---
+bb_length = input.int(20, title="BB Length", group="Bollinger Bands")
+// Lowered multiplier to 2.1 to drastically increase trade frequency
+bb_mult = input.float(2.1, title="BB Standard Deviation", group="Bollinger Bands")
+[middle_band, upper_band, lower_band] = ta.bb(close, bb_length, bb_mult)
+
+plot(upper_band, color=color.new(color.red, 70), title="Upper Band")
+plot(lower_band, color=color.new(color.green, 70), title="Lower Band")
+plot(middle_band, color=color.new(color.gray, 50), title="Middle Band")
+
+// --- Stochastic RSI Settings ---
+smoothK = input.int(3, "Stoch K", minval=1, group="Stoch RSI")
+smoothD = input.int(3, "Stoch D", minval=1, group="Stoch RSI")
+lengthRSI = input.int(14, "RSI Length", minval=1, group="Stoch RSI")
+lengthStoch = input.int(14, "Stochastic Length", minval=1, group="Stoch RSI")
+
+rsi1 = ta.rsi(close, lengthRSI)
+k = ta.sma(ta.stoch(rsi1, rsi1, rsi1, lengthStoch), smoothK)
+d = ta.sma(k, smoothD)
+
+// --- ADX Filter (Trend Exhaustion Filter) ---
+adxlen = input.int(14, title="ADX Smoothing", group="ADX Trend Filter")
+dilen = input.int(14, title="DI Length", group="ADX Trend Filter")
+// Increased max ADX to 45 to allow more trades
+max_adx = input.int(45, title="Max ADX (Avoid Strong Trends)", group="ADX Trend Filter")
+
+dirmov(len) =>
+	up = ta.change(high)
+	down = -ta.change(low)
+	plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+	minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+	truerange = ta.rma(ta.tr, len)
+	plus = fixnan(100 * ta.rma(plusDM, len) / truerange)
+	minus = fixnan(100 * ta.rma(minusDM, len) / truerange)
+	[plus, minus]
+[diplus, diminus] = dirmov(dilen)
+adx = ta.sma(math.abs(diplus - diminus) / (diplus + diminus) * 100, adxlen)
+
+// --- ATR for Dynamic TP/SL ---
+atr_length = input.int(14, title="ATR Length", group="Risk Management")
+atr_val = ta.atr(atr_length)
+
+// Tighter Take Profit, Wider Stop Loss for high win rate
+tp_multiplier = input.float(0.6, title="Take Profit (ATR Multiplier)", step=0.1, group="Risk Management")
+sl_multiplier = input.float(3.0, title="Stop Loss (ATR Multiplier)", step=0.1, group="Risk Management")
+
+// -----------------------------------------------------------------------------
+// Trade Logic (Mean Reversion)
+// -----------------------------------------------------------------------------
+// LONG: Price dips below lower band, StochRSI is oversold and crosses up, ADX is below max
+long_cond = (low < lower_band) and (k < 20) and ta.crossover(k, d) and (adx < max_adx)
+
+// SHORT: Price spikes above upper band, StochRSI is overbought and crosses down, ADX is below max
+short_cond = (high > upper_band) and (k > 80) and ta.crossunder(k, d) and (adx < max_adx)
+
+// -----------------------------------------------------------------------------
+// Execution
+// -----------------------------------------------------------------------------
+if (long_cond)
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Exit Long", "Long", profit=atr_val * tp_multiplier / syminfo.mintick, loss=atr_val * sl_multiplier / syminfo.mintick)
+
+if (short_cond)
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Exit Short", "Short", profit=atr_val * tp_multiplier / syminfo.mintick, loss=atr_val * sl_multiplier / syminfo.mintick)
