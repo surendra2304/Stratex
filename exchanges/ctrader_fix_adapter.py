@@ -139,21 +139,47 @@ class CTraderFixAdapter(BaseExchange):
                 self._sock = None
             raise CTraderFixError(f"Connection to cTrader FIX failed: {exc}") from exc
 
-    def _send_msg(self, msg: simplefix.FixMessage) -> bytes:
-        """Send a message and return the response."""
-        with self._lock:
-            self._ensure_connection()
-            self.seq_num += 1
-            msg.append_pair(34, self.seq_num)
-            msg.append_pair(49, self.sender_comp_id)
-            msg.append_pair(56, self.target_comp_id)
-            msg.append_pair(50, "TRADE")
-            msg.append_pair(57, "TRADE")
-            msg.append_pair(52, datetime.datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3])
+    def _create_message(self, msg_type: str, seq: int) -> simplefix.FixMessage:
+        """Create a FIX message with properly ordered standard header fields."""
+        msg = simplefix.FixMessage()
+        msg.append_pair(8, "FIX.4.4")
+        msg.append_pair(35, msg_type)
+        msg.append_pair(49, self.sender_comp_id)
+        msg.append_pair(56, self.target_comp_id)
+        msg.append_pair(34, seq)
+        msg.append_pair(50, "TRADE")
+        msg.append_pair(57, "TRADE")
+        msg.append_pair(52, datetime.datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3])
+        return msg
 
-            assert self._sock is not None
-            self._sock.sendall(msg.encode())
-            return self._sock.recv(8192)
+    def _send_transaction(self, builder_fn) -> bytes:
+        """Execute a FIX transaction with automatic connection management and recovery."""
+        with self._lock:
+            max_attempts = 2
+            for attempt in range(max_attempts):
+                try:
+                    self._ensure_connection()
+                    self.seq_num += 1
+                    msg = builder_fn(self.seq_num)
+                    assert self._sock is not None
+                    self._sock.sendall(msg.encode())
+                    resp = self._sock.recv(8192)
+                    if not resp:
+                        raise CTraderFixError("Broker closed socket (EOF)")
+                    return resp
+                except Exception as e:
+                    self._is_logged_on = False
+                    self.is_connected = False
+                    if self._sock:
+                        try:
+                            self._sock.close()
+                        except Exception:
+                            pass
+                        self._sock = None
+                    if attempt == max_attempts - 1:
+                        raise
+                    logger.warning(f"[CTRADER_FIX] Socket error ({e}); reconnecting and retrying...")
+                    time.sleep(0.5)
 
     def is_healthy(self) -> bool:
         try:
@@ -177,14 +203,14 @@ class CTraderFixAdapter(BaseExchange):
 
     def get_positions(self) -> list[UnifiedPosition]:
         """Request open positions via 35=AN."""
-        pos_req = simplefix.FixMessage()
-        pos_req.append_pair(8, "FIX.4.4")
-        pos_req.append_pair(35, "AN")
-        req_id = f"POS_{int(time.time() * 1000)}"
-        pos_req.append_pair(710, req_id)
+        def build(seq):
+            pos_req = self._create_message("AN", seq)
+            req_id = f"POS_{int(time.time() * 1000)}"
+            pos_req.append_pair(710, req_id)
+            return pos_req
 
         try:
-            resp = self._send_msg(pos_req)
+            resp = self._send_transaction(build)
         except Exception as e:
             logger.error(f"Error querying cTrader FIX positions: {e}")
             return []
@@ -299,19 +325,19 @@ class CTraderFixAdapter(BaseExchange):
         cl_ord_id = client_order_id or f"STX_{int(time.time())}_{uuid.uuid4().hex[:6]}"
         now_str = datetime.datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3]
 
-        order = simplefix.FixMessage()
-        order.append_pair(8, "FIX.4.4")
-        order.append_pair(35, "D")
-        order.append_pair(11, cl_ord_id)
-        order.append_pair(55, symbol_id)
-        order.append_pair(54, fix_side)
-        order.append_pair(38, units)
-        order.append_pair(40, 1)  # Market
-        order.append_pair(60, now_str)
+        def build_order(seq):
+            order = self._create_message("D", seq)
+            order.append_pair(11, cl_ord_id)
+            order.append_pair(55, symbol_id)
+            order.append_pair(54, fix_side)
+            order.append_pair(38, units)
+            order.append_pair(40, 1)  # Market
+            order.append_pair(60, now_str)
+            return order
 
         logger.info(f"[CTRADER_FIX] Sending Order: {cl_ord_id} {norm_side} {quantity} lots ({units} units) {clean_sym} (ID: {symbol_id})")
 
-        resp = self._send_msg(order)
+        resp = self._send_transaction(build_order)
         raw_str = resp.replace(b"\x01", b"|").decode("ascii", errors="replace")
         logger.info(f"[CTRADER_FIX] Response: {raw_str}")
 
@@ -330,7 +356,8 @@ class CTraderFixAdapter(BaseExchange):
             if msg_type == b"8":  # ExecutionReport
                 exec_type = msg.get(150)
                 ord_status = msg.get(39)
-                order_id = msg.get(37, cl_ord_id.encode()).decode()
+                raw_oid = msg.get(37)
+                order_id = raw_oid.decode() if raw_oid else cl_ord_id
                 avg_price = float(msg.get(6) or msg.get(44) or 0.0)
                 executed_qty = float(msg.get(14) or units) / 100000.0
 
@@ -338,14 +365,14 @@ class CTraderFixAdapter(BaseExchange):
                     status = "FILLED"
                 elif ord_status == b"8":
                     status = "REJECTED"
-                    reason = msg.get(58, b"Broker rejected").decode()
+                    reason = (msg.get(58) or b"Broker rejected").decode()
                     raise CTraderFixError(f"Broker rejected order: {reason}")
             elif msg_type == b"j":  # BusinessMessageReject
-                reason = msg.get(58, b"Broker rejected order").decode()
+                reason = (msg.get(58) or b"Broker rejected order").decode()
                 status = "REJECTED"
                 raise CTraderFixError(f"Order rejected by cTrader: {reason}")
             elif msg_type == b"3":  # Reject
-                reason = msg.get(58, b"Session reject").decode()
+                reason = (msg.get(58) or b"Session reject").decode()
                 status = "REJECTED"
                 raise CTraderFixError(f"FIX Reject: {reason}")
 
