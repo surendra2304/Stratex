@@ -262,61 +262,60 @@ class StratexAIAdvisor:
             if not isinstance(parsed, dict):
                 raise ValueError("response must be a JSON object")
 
-            # Extract fields with forgiving normalization
+            # Treat model output as untrusted input. A malformed or contradictory
+            # verdict must never be normalized into an approval.
             approved_raw = parsed.get("approved")
             verdict_raw = parsed.get("verdict")
+            confidence_raw = parsed.get("confidence")
+            thesis_raw = parsed.get("thesis")
+            factors_raw = parsed.get("risk_factors")
+            model_raw = parsed.get("model_used")
 
-            if isinstance(verdict_raw, str):
-                verdict = verdict_raw.strip().upper()
-            else:
-                verdict = "APPROVED" if approved_raw is True else "REJECTED"
-
+            if type(approved_raw) is not bool:
+                raise ValueError("approved must be a JSON boolean")
+            if not isinstance(verdict_raw, str):
+                raise ValueError("verdict must be a string")
+            verdict = verdict_raw.strip().upper()
             if verdict not in {"APPROVED", "DAMPENED", "REJECTED"}:
-                verdict = "APPROVED" if approved_raw is True else "REJECTED"
+                raise ValueError("verdict is not recognized")
 
-            if type(approved_raw) is bool:
-                approved = approved_raw
-            elif isinstance(approved_raw, str):
-                approved = approved_raw.strip().lower() in {"true", "yes", "1"}
-            else:
-                approved = verdict in {"APPROVED", "DAMPENED"}
+            verdict_approves = verdict in {"APPROVED", "DAMPENED"}
+            if approved_raw is not verdict_approves:
+                raise ValueError("approved conflicts with verdict")
 
-            # Reconcile boolean approved with verdict
-            if verdict in {"APPROVED", "DAMPENED"}:
-                approved = True
-            elif verdict == "REJECTED":
-                approved = False
+            if isinstance(confidence_raw, bool) or not isinstance(confidence_raw, (int, float)):
+                raise ValueError("confidence must be a finite number")
+            confidence = float(confidence_raw)
+            if not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0:
+                raise ValueError("confidence must be within [0, 1]")
 
-            confidence_val = parsed.get("confidence", 0.85)
-            try:
-                confidence = float(confidence_val)
-                if not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0:
-                    confidence = 0.85 if approved else 0.15
-            except Exception:
-                confidence = 0.85 if approved else 0.15
-
-            thesis_val = parsed.get("thesis")
-            thesis = str(thesis_val).strip() if thesis_val else ("AI approved trade thesis." if approved else "AI rejected trade thesis.")
+            if not isinstance(thesis_raw, str) or not thesis_raw.strip():
+                raise ValueError("thesis must be a non-empty string")
+            thesis = thesis_raw.strip()
             if len(thesis) > 2000:
                 thesis = thesis[:1997] + "..."
 
-            factors_val = parsed.get("risk_factors") or []
-            if isinstance(factors_val, list):
-                risk_factors = [str(f).strip()[:500] for f in factors_val if str(f).strip()]
-            elif isinstance(factors_val, str):
-                risk_factors = [factors_val.strip()[:500]]
-            else:
-                risk_factors = []
+            if not isinstance(factors_raw, list) or any(
+                not isinstance(item, str) or not item.strip() for item in factors_raw
+            ):
+                raise ValueError("risk_factors must be a list of non-empty strings")
+            risk_factors = [item.strip()[:500] for item in factors_raw]
             if not risk_factors:
                 risk_factors = ["Market volatility", "Execution slippage"]
 
+            if model_raw is not None and not isinstance(model_raw, str):
+                raise ValueError("model_used must be a string when supplied")
+            model_used = model_raw.strip() if isinstance(model_raw, str) else ""
+            if not model_used:
+                model_used = "inference-mesh"
+
             return AITradeVerdict(
-                approved=approved,
+                approved=approved_raw,
                 verdict=verdict,
                 confidence=confidence,
                 thesis=thesis,
                 risk_factors=risk_factors,
-                model_used=str(parsed.get("model_used") or "inference-mesh"),
+                model_used=model_used,
             )
         except (TypeError, ValueError, OverflowError) as exc:
             logger.warning(
