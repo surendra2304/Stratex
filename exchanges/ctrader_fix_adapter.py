@@ -190,9 +190,9 @@ class CTraderFixAdapter(BaseExchange):
         elif sym in {"XTIUSD", "WTI", "XBRUSD", "BRENT", "XNGUSD"}:
             return str(max(1, int(round(quantity * 1000))))
         elif sym in {"BTCUSD"}:
-            return "0.1" if quantity < 0.1 else f"{quantity:.2f}".rstrip("0").rstrip(".")
+            return "0.01" if quantity < 0.05 else f"{quantity:.2f}".rstrip("0").rstrip(".")
         elif sym in {"ETHUSD"}:
-            return "1" if quantity <= 1.0 else f"{quantity:.1f}".rstrip("0").rstrip(".")
+            return "0.1" if quantity <= 1.0 else f"{quantity:.1f}".rstrip("0").rstrip(".")
         elif sym in {
             "DE40", "DE30", "GER40", "USTEC", "US30", "US500", "UK100",
             "JP225", "AUS200", "F40", "STOXX50", "ES35", "US2000", "HK50"
@@ -429,7 +429,7 @@ class CTraderFixAdapter(BaseExchange):
             order.append_pair(60, now_str)
             return order
 
-        logger.info(f"[CTRADER_FIX] Sending Order: {cl_ord_id} {norm_side} {quantity} lots ({units} units) {clean_sym} (ID: {symbol_id})")
+        logger.info(f"[CTRADER_FIX] Sending Order: {cl_ord_id} {norm_side} {quantity} lots ({units} units) {canonical_sym} (ID: {symbol_id})")
 
         resp = self._send_transaction(build_order)
         raw_str = resp.replace(b"\x01", b"|").decode("ascii", errors="replace")
@@ -472,7 +472,7 @@ class CTraderFixAdapter(BaseExchange):
 
         return UnifiedOrderResult(
             order_id=order_id,
-            symbol=clean_sym,
+            symbol=canonical_sym,
             side=norm_side,
             order_type="MARKET",
             price=avg_price,
