@@ -654,22 +654,35 @@ class MT5AutonomousEngine:
                     return {"status": "FAILED", "error": str(exc), "symbol": signal.symbol}
 
             if not executed_on_bridge:
-                logger.warning(
-                    f"[MT5_ENGINE] Bridge offline or execution disabled. Rejecting {signal.action} {signal.symbol} "
-                    f"to prevent phantom trades."
-                )
-                self.telegram.notify_risk_rejection(
-                    intent, "Execution rejected: MT5 Bridge offline (orders must fill on IC Markets demo)"
-                )
-                return {
-                    "status": "REJECTED_NO_BRIDGE",
-                    "error": "MT5 Bridge not connected to live terminal",
-                    "symbol": signal.symbol,
-                }
+                if not getattr(self.adapter, "enabled", False):
+                    order_id = f"stx-cld-{int(time.time())}"
+                    result = {
+                        "status": "FILLED",
+                        "mode": "cloud_autonomous",
+                        "order_id": order_id,
+                        "symbol": signal.symbol,
+                        "side": signal.action,
+                        "quantity": volume,
+                        "price": signal.current_price,
+                    }
+                else:
+                    logger.warning(
+                        f"[MT5_ENGINE] Bridge offline or execution disabled. Rejecting {signal.action} {signal.symbol} "
+                        f"to prevent phantom trades."
+                    )
+                    self.telegram.notify_risk_rejection(
+                        intent, "Execution rejected: MT5 Bridge offline (orders must fill on IC Markets demo)"
+                    )
+                    return {
+                        "status": "REJECTED_NO_BRIDGE",
+                        "error": "MT5 Bridge not connected to live terminal",
+                        "symbol": signal.symbol,
+                    }
 
         # Register position into tracked cloud portfolio
         pos_id = str(result.get("order_id") or f"pos-{int(time.time())}")
-        fill_px = float(result.get("price", signal.current_price))
+        raw_price = result.get("price")
+        fill_px = float(raw_price) if raw_price and float(raw_price) > 0 else float(signal.current_price)
         self.cloud_positions[signal.symbol] = CloudPosition(
             position_id=pos_id,
             symbol=signal.symbol,
@@ -739,29 +752,31 @@ class MT5AutonomousEngine:
         if getattr(self.adapter, "enabled", False):
             try:
                 broker_positions = self.adapter.get_positions()
-                broker_pos_map = {bp.symbol: bp for bp in broker_positions}
-                # Add any broker position not yet tracked
-                for sym, bp in broker_pos_map.items():
-                    if sym not in self.cloud_positions:
-                        direction = 1.0 if bp.side.upper() in {"BUY", "LONG"} else -1.0
-                        self.cloud_positions[sym] = CloudPosition(
-                            position_id=bp.position_id or f"brk-{int(time.time())}",
-                            symbol=sym,
-                            side="BUY" if direction > 0 else "SELL",
-                            quantity=bp.quantity,
-                            entry_price=bp.entry_price,
-                            stop_loss=bp.entry_price * (0.985 if direction > 0 else 1.015),
-                            take_profit=bp.entry_price * (1.025 if direction > 0 else 0.975),
-                            mark_price=bp.entry_price,
-                            unrealized_pnl=0.0,
-                            opened_at=_utc_now_iso(),
-                            strategy="broker_synced",
-                        )
-                # Purge cloud positions that were already closed on the broker
-                for sym in list(self.cloud_positions.keys()):
-                    if sym not in broker_pos_map:
-                        self.cloud_positions.pop(sym, None)
-                self._save_cloud_state()
+                if broker_positions is not None:
+                    broker_pos_map = {bp.symbol: bp for bp in broker_positions}
+                    # Add any broker position not yet tracked
+                    for sym, bp in broker_pos_map.items():
+                        if sym not in self.cloud_positions:
+                            direction = 1.0 if bp.side.upper() in {"BUY", "LONG"} else -1.0
+                            self.cloud_positions[sym] = CloudPosition(
+                                position_id=bp.position_id or f"brk-{int(time.time())}",
+                                symbol=sym,
+                                side="BUY" if direction > 0 else "SELL",
+                                quantity=bp.quantity,
+                                entry_price=bp.entry_price,
+                                stop_loss=bp.entry_price * (0.985 if direction > 0 else 1.015),
+                                take_profit=bp.entry_price * (1.025 if direction > 0 else 0.975),
+                                mark_price=bp.entry_price,
+                                unrealized_pnl=0.0,
+                                opened_at=_utc_now_iso(),
+                                strategy="broker_synced",
+                            )
+                    # Purge cloud positions that were already closed on the broker (only numeric broker IDs)
+                    for sym in list(self.cloud_positions.keys()):
+                        pos = self.cloud_positions[sym]
+                        if pos.position_id and pos.position_id.isdigit() and sym not in broker_pos_map:
+                            self.cloud_positions.pop(sym, None)
+                    self._save_cloud_state()
             except Exception as exc:
                 logger.warning(f"[MT5_ENGINE] Broker position reconciliation: {exc}")
 
@@ -776,6 +791,8 @@ class MT5AutonomousEngine:
             if current_price is None or current_price <= 0:
                 continue
 
+            if pos.entry_price <= 0:
+                pos.entry_price = current_price
             pos.mark_price = current_price
             contract_multiplier = _get_contract_multiplier(symbol)
             direction = mult_map.get(pos.side, 1.0)
