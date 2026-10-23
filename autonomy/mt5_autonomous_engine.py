@@ -36,6 +36,10 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from autonomy.agent_contracts import (
     AgentAdvisorySupervisor,
     FridayGatewayClient,
@@ -194,7 +198,7 @@ class MT5AutonomousEngine:
         adapter: MT5BridgeAdapter | None = None,
         symbols: list[str] | None = None,
         timeframes: list[str] | None = None,
-        max_active_positions: int = 3,
+        max_active_positions: int = 15,
         max_risk_per_trade_pct: float = 0.02,
         max_daily_drawdown_pct: float = 0.05,
         min_confidence: float = 0.65,
@@ -217,7 +221,7 @@ class MT5AutonomousEngine:
             self.adapter = MT5BridgeAdapter()
         self.symbols = list(symbols or DEFAULT_SYMBOLS)
         self.timeframes = list(timeframes or DEFAULT_TIMEFRAMES)
-        self.max_active_positions = max_active_positions
+        self.max_active_positions = int(os.getenv("STRATEX_MAX_POSITIONS", str(max_active_positions)))
         self.max_risk_per_trade_pct = min(0.02, max(0.001, max_risk_per_trade_pct))
         self.max_daily_drawdown_pct = min(0.05, max(0.01, max_daily_drawdown_pct))
         self.min_confidence = min_confidence

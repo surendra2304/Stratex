@@ -1,0 +1,19 @@
+[Unit]
+Description=FRIDAY Universe - Stratex 24/7 Autonomous Trading Daemon
+After=network.target Stratex.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/friday_universe/Stratex
+Environment="PYTHONPATH=/opt/friday_universe/Stratex:/opt/friday_universe"
+EnvironmentFile=/etc/default/friday_universe.env
+EnvironmentFile=/opt/friday_universe/Stratex/.env
+ExecStart=/opt/friday_universe/venv/bin/python -u -m autonomy.run_daemon
+Restart=always
+RestartSec=10
+TimeoutStopSec=15
+MemoryMax=180M
+
+[Install]
+WantedBy=multi-user.target
