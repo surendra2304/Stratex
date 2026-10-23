@@ -98,17 +98,15 @@ DEFAULT_SYMBOLS = [
     "CADCHF",
     "NZDCAD",
     "NZDCHF",
-    # Commodities & Precious Metals
+    # Commodities & Precious Metals (Micro-lots)
     "XAUUSD",
     "XAGUSD",
-    "WTI",
-    "BRENT",
-    # Global Indices
-    "US30",
+    # Global Indices (0.1 contract micro units)
     "US500",
     "USTEC",
     "GER40",
-    # Crypto CFDs
+    "US30",
+    # Crypto CFDs (0.01 micro units)
     "BTCUSD",
     "ETHUSD",
     "SOLUSD",
@@ -198,7 +196,7 @@ class MT5AutonomousEngine:
         adapter: MT5BridgeAdapter | None = None,
         symbols: list[str] | None = None,
         timeframes: list[str] | None = None,
-        max_active_positions: int = 15,
+        max_active_positions: int = 3,
         max_risk_per_trade_pct: float = 0.02,
         max_daily_drawdown_pct: float = 0.05,
         min_confidence: float = 0.65,
@@ -221,7 +219,7 @@ class MT5AutonomousEngine:
             self.adapter = MT5BridgeAdapter()
         self.symbols = list(symbols or DEFAULT_SYMBOLS)
         self.timeframes = list(timeframes or DEFAULT_TIMEFRAMES)
-        self.max_active_positions = int(os.getenv("STRATEX_MAX_POSITIONS", str(max_active_positions)))
+        self.max_active_positions = int(os.getenv("STRATEX_MAX_POSITIONS", "3"))
         self.max_risk_per_trade_pct = min(0.02, max(0.001, max_risk_per_trade_pct))
         self.max_daily_drawdown_pct = min(0.05, max(0.01, max_daily_drawdown_pct))
         self.min_confidence = min_confidence
@@ -551,7 +549,7 @@ class MT5AutonomousEngine:
         except Exception:
             pass
 
-        # Robust deterministic fallback sizing
+        # Robust deterministic fallback sizing (strictly micro-lots for $1,000 base)
         risk_budget = equity * self.max_risk_per_trade_pct * multiplier
         risk_per_unit = abs(current_price - stop_loss)
         if risk_per_unit <= 1e-6:
@@ -561,8 +559,8 @@ class MT5AutonomousEngine:
         contract_size = 100.0 if "XAU" in symbol.upper() else 100000.0
         raw_lots = risk_budget / (risk_per_unit * contract_size)
         stepped_lots = max(0.01, round(raw_lots / 0.01) * 0.01)
-        # Cap at 0.10 lots for demo preservation ($1,000 base)
-        return round(min(0.10, stepped_lots), 2)
+        # Cap strictly at 0.01 lots for capital preservation on $1,000 account
+        return round(min(0.01, stepped_lots), 2)
 
     def execute_signal(self, signal: OpportunitySignal, decision: ConsensusDecision) -> dict[str, Any]:
         """Execute the approved trade on MT5 demo and dispatch notifications."""
@@ -669,6 +667,25 @@ class MT5AutonomousEngine:
                     "symbol": signal.symbol,
                 }
 
+        # Register position into tracked cloud portfolio
+        pos_id = str(result.get("order_id") or f"pos-{int(time.time())}")
+        fill_px = float(result.get("price", signal.current_price))
+        self.cloud_positions[signal.symbol] = CloudPosition(
+            position_id=pos_id,
+            symbol=signal.symbol,
+            side=signal.action,
+            quantity=volume,
+            entry_price=fill_px,
+            stop_loss=signal.stop_loss,
+            take_profit=signal.take_profit,
+            mark_price=fill_px,
+            unrealized_pnl=0.0,
+            opened_at=_utc_now_iso(),
+            strategy=signal.strategy_source,
+            ai_thesis=decision.ai_thesis,
+        )
+        self._save_cloud_state()
+
         # Telegram Fill Alert
         self.telegram.notify_trade_intent(
             intent,
@@ -715,8 +732,39 @@ class MT5AutonomousEngine:
         return result
 
     def manage_cloud_positions(self) -> list[dict[str, Any]]:
-        """Monitor active cloud positions, update unrealized PnL, and execute Take-Profit / Stop-Loss exits."""
+        """Monitor active cloud positions, update unrealized PnL, and execute Take-Profit / Stop-Loss exits via broker."""
         closed_events: list[dict[str, Any]] = []
+
+        # Synchronize with live broker positions if adapter is connected
+        if getattr(self.adapter, "enabled", False):
+            try:
+                broker_positions = self.adapter.get_positions()
+                broker_pos_map = {bp.symbol: bp for bp in broker_positions}
+                # Add any broker position not yet tracked
+                for sym, bp in broker_pos_map.items():
+                    if sym not in self.cloud_positions:
+                        direction = 1.0 if bp.side.upper() in {"BUY", "LONG"} else -1.0
+                        self.cloud_positions[sym] = CloudPosition(
+                            position_id=bp.position_id or f"brk-{int(time.time())}",
+                            symbol=sym,
+                            side="BUY" if direction > 0 else "SELL",
+                            quantity=bp.quantity,
+                            entry_price=bp.entry_price,
+                            stop_loss=bp.entry_price * (0.985 if direction > 0 else 1.015),
+                            take_profit=bp.entry_price * (1.025 if direction > 0 else 0.975),
+                            mark_price=bp.entry_price,
+                            unrealized_pnl=0.0,
+                            opened_at=_utc_now_iso(),
+                            strategy="broker_synced",
+                        )
+                # Purge cloud positions that were already closed on the broker
+                for sym in list(self.cloud_positions.keys()):
+                    if sym not in broker_pos_map:
+                        self.cloud_positions.pop(sym, None)
+                self._save_cloud_state()
+            except Exception as exc:
+                logger.warning(f"[MT5_ENGINE] Broker position reconciliation: {exc}")
+
         if not self.cloud_positions:
             return closed_events
 
@@ -744,6 +792,19 @@ class MT5AutonomousEngine:
                 realized_pnl = pos.unrealized_pnl
                 self.cloud_balance = round(self.cloud_balance + realized_pnl, 2)
                 symbols_to_remove.append(symbol)
+
+                # Close position on broker via adapter
+                if getattr(self.adapter, "enabled", False):
+                    try:
+                        self.adapter.close_position(
+                            position_id=pos.position_id,
+                            symbol=pos.symbol,
+                            side=pos.side,
+                            quantity=pos.quantity,
+                        )
+                        logger.info(f"[MT5_ENGINE] Successfully closed broker position for {pos.symbol} (ID: {pos.position_id}) via FIX")
+                    except Exception as exc:
+                        logger.error(f"[MT5_ENGINE] Failed closing broker position for {pos.symbol}: {exc}")
 
                 # Telegram Notification
                 status_emoji = "🎉 TAKE PROFIT HIT" if tp_hit else "🛡️ STOP LOSS HIT"
@@ -873,6 +934,12 @@ class MT5AutonomousEngine:
         executed: list[dict[str, Any]] = []
 
         for symbol in self.symbols:
+            if len(active_symbols) >= self.max_active_positions:
+                logger.info(
+                    f"[MT5_ENGINE] Max active positions cap reached ({len(active_symbols)}/{self.max_active_positions}). Stopping scan."
+                )
+                break
+
             if symbol in active_symbols:
                 continue
 
@@ -900,7 +967,12 @@ class MT5AutonomousEngine:
                 exec_result = self.execute_signal(signal, decision)
                 executed.append(exec_result)
 
-                # Move to next symbol after initiating position
+                if exec_result.get("status") in {"FILLED", "PENDING", "SIMULATED_FILLED"}:
+                    active_symbols.add(symbol)
+                    logger.info(f"[MT5_ENGINE] Initiated 1 new position for {symbol}. Pausing entries for this cycle.")
+                    return executed
+
+                # Move to next symbol
                 break
 
         return executed

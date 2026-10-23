@@ -71,6 +71,7 @@ class TelegramBotClient:
         self._polling_active = False
         self._poll_thread: threading.Thread | None = None
         self._last_update_id = 0
+        self._rejection_history: dict[str, float] = {}
 
     @property
     def is_configured(self) -> bool:
@@ -159,9 +160,16 @@ class TelegramBotClient:
         return self.send_message("\n".join(lines))
 
     def notify_risk_rejection(self, intent: Any, reason: str) -> bool:
-        """Alert when deterministic risk gate blocks an unsafe order."""
+        """Alert when deterministic risk gate blocks an unsafe order (throttled to prevent spam)."""
         sym = getattr(intent, "symbol", "UNKNOWN")
         side = getattr(intent, "side", "UNKNOWN")
+        now = time.time()
+        key = f"{sym}_{reason[:30]}"
+        if key in self._rejection_history and (now - self._rejection_history[key]) < 300:
+            logger.debug(f"[TELEGRAM] Throttled duplicate rejection alert for {key}")
+            return False
+        self._rejection_history[key] = now
+
         lines = [
             "🛡️ <b>RISK GATE BLOCKED ORDER</b>",
             "",
