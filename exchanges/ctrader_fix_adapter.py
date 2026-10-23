@@ -16,7 +16,10 @@ import time
 import uuid
 from typing import Any
 
-import simplefix
+try:
+    import simplefix
+except ImportError:
+    simplefix = None
 
 from exchanges.base_exchange import (
     BaseExchange, ExchangeCapabilities, UnifiedBalance, UnifiedOrderResult,
@@ -181,27 +184,34 @@ class CTraderFixAdapter(BaseExchange):
         return target, None
 
     def calculate_units(self, canonical_sym: str, quantity: float) -> str:
-        """Calculate Tag 38 (OrderQty) string for cTrader FIX based on asset class."""
+        """Calculate Tag 38 (OrderQty) string for cTrader FIX based on asset class and broker limits."""
         sym = canonical_sym.upper()
         if sym in {"XAUUSD", "GOLD", "XAUEUR"}:
-            return str(max(1, int(round(quantity * 100))))
+            # Gold: 1 unit = 1 oz (~$27 margin). Cap at 2 oz on $1000 account.
+            return str(max(1, min(2, int(round(quantity * 100)))))
         elif sym in {"XAGUSD", "SILVER", "XAGEUR"}:
-            return str(max(1, int(round(quantity * 5000))))
+            # Silver: 50 units = 50 oz (~$6 margin). Safe micro lot.
+            return "50" if quantity <= 0.05 else str(max(10, min(100, int(round(quantity * 1000)))))
         elif sym in {"XTIUSD", "WTI", "XBRUSD", "BRENT", "XNGUSD"}:
-            return str(max(1, int(round(quantity * 1000))))
+            # Oil: Minimum allowed broker volume is 100 units (100 barrels)
+            return "100"
         elif sym in {"BTCUSD"}:
+            # Crypto: 0.01 BTC (~$680 notional, ~$7 margin)
             return "0.01" if quantity < 0.05 else f"{quantity:.2f}".rstrip("0").rstrip(".")
         elif sym in {"ETHUSD"}:
             return "0.1" if quantity <= 1.0 else f"{quantity:.1f}".rstrip("0").rstrip(".")
+        elif sym in {"SOLUSD"}:
+            return "1" if quantity <= 5.0 else str(int(round(quantity)))
         elif sym in {
             "DE40", "DE30", "GER40", "USTEC", "US30", "US500", "UK100",
             "JP225", "AUS200", "F40", "STOXX50", "ES35", "US2000", "HK50"
         }:
-            # Index CFDs trade in whole contract units (e.g. 1 index)
-            return str(max(1, int(round(quantity))))
+            # Index CFDs: Minimum broker volume is 0.10. 1.0 contract requires $1,000-$2,600 margin.
+            # Using 0.10 contract requires only $50-$260 margin, preventing NOT_ENOUGH_MONEY rejections.
+            return "0.1"
         else:
-            # Standard FX: 1 lot = 100,000 units (minimum 1,000 = 0.01 lot)
-            return str(max(1000, int(round(quantity * 100000))))
+            # Standard FX: 1 lot = 100,000 units. Micro lot 0.01 = 1,000 units (~$2-$3 margin).
+            return str(max(1000, min(2000, int(round(quantity * 100000)))))
 
     def _ensure_connection(self):
         """Ensure SSL socket is open and logged on to CSERVER."""
@@ -282,7 +292,18 @@ class CTraderFixAdapter(BaseExchange):
                     msg = builder_fn(self.seq_num)
                     assert self._sock is not None
                     self._sock.sendall(msg.encode())
-                    resp = self._sock.recv(8192)
+                    self._sock.settimeout(1.0)
+                    chunks = [self._sock.recv(8192)]
+                    while True:
+                        try:
+                            more = self._sock.recv(8192)
+                            if not more:
+                                break
+                            chunks.append(more)
+                        except (socket.timeout, BlockingIOError):
+                            break
+                    self._sock.settimeout(8.0)
+                    resp = b"".join(chunks)
                     if not resp:
                         raise CTraderFixError("Broker closed socket (EOF)")
                     return resp
@@ -360,7 +381,7 @@ class CTraderFixAdapter(BaseExchange):
                 short_qty = float(msg.get(705) or 0)
                 side = "LONG" if long_qty > 0 else "SHORT"
                 qty = long_qty if long_qty > 0 else short_qty
-                entry_price = float(msg.get(727) or 0)
+                entry_price = float(msg.get(730) or msg.get(6) or 0)
 
                 if qty > 0 and symbol_str:
                     positions.append(
@@ -483,6 +504,78 @@ class CTraderFixAdapter(BaseExchange):
             exchange="ctrader_fix",
         )
 
+    def close_position(
+        self,
+        position_id: str,
+        symbol: str,
+        side: str,
+        quantity: float,
+    ) -> UnifiedOrderResult:
+        """Close an existing position on IC Markets via 35=D with Tag 721."""
+        canonical_sym, symbol_id = self.resolve_symbol(symbol)
+        if not symbol_id:
+            raise CTraderFixError(f"Symbol '{symbol}' not found in cTrader FIX symbol map.")
+
+        norm_side = side.upper()
+        # Closing a BUY/LONG requires a SELL (2); closing a SELL/SHORT requires a BUY (1)
+        close_fix_side = 2 if norm_side in {"BUY", "LONG"} else 1
+        units = str(quantity) if isinstance(quantity, (int, float)) and quantity < 10 else str(int(round(quantity)))
+
+        cl_ord_id = f"CLS_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+        now_str = datetime.datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3]
+
+        def build_close(seq):
+            order = self._create_message("D", seq)
+            order.append_pair(11, cl_ord_id)
+            order.append_pair(55, symbol_id)
+            order.append_pair(54, close_fix_side)
+            order.append_pair(38, units)
+            order.append_pair(40, 1)  # Market
+            order.append_pair(60, now_str)
+            order.append_pair(721, str(position_id))
+            return order
+
+        logger.info(f"[CTRADER_FIX] Submitting Close Order: {cl_ord_id} PosID={position_id} {canonical_sym} Side={close_fix_side} Qty={units}")
+        resp = self._send_transaction(build_close)
+
+        parser = simplefix.FixParser()
+        parser.append_buffer(resp)
+        avg_price = 0.0
+        status = "PENDING"
+        executed_qty = float(quantity)
+
+        while True:
+            msg = parser.get_message()
+            if not msg:
+                break
+            msg_type = msg.get(35)
+            if msg_type == b"8":
+                exec_type = msg.get(150)
+                ord_status = msg.get(39)
+                if ord_status == b"2" or exec_type == b"F":
+                    status = "FILLED"
+                    avg_price = float(msg.get(6) or 0)
+                    break
+                elif ord_status == b"8":
+                    reason = (msg.get(58) or b"Broker rejected close").decode()
+                    raise CTraderFixError(f"Close rejected by broker: {reason}")
+            elif msg_type == b"3":
+                reason = (msg.get(58) or b"Session reject").decode()
+                raise CTraderFixError(f"FIX Close Reject: {reason}")
+
+        return UnifiedOrderResult(
+            order_id=cl_ord_id,
+            symbol=canonical_sym,
+            side="SELL" if close_fix_side == 2 else "BUY",
+            order_type="MARKET",
+            price=avg_price,
+            quantity=float(quantity),
+            status=status,
+            executed_qty=executed_qty,
+            avg_price=avg_price,
+            exchange="ctrader_fix",
+        )
+
     def order_check(
         self,
         symbol: str,
@@ -508,7 +601,7 @@ class CTraderFixAdapter(BaseExchange):
         stop_loss: float,
         take_profit: float,
     ) -> dict[str, Any]:
-        return {"approved": True, "recommended_volume": 0.05}
+        return {"approved": True, "recommended_volume": 0.01, "volume_step": 0.01, "volume_min": 0.01}
 
     def submit_intent(self, intent: Any) -> dict[str, Any]:
         """Submit a normalized Stratex TradeIntent via cTrader FIX."""
