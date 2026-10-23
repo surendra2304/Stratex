@@ -680,8 +680,9 @@ class TestTelegramBotInteractiveCommands:
 
 
 class TestMT5AutonomousCloudExecution:
-    def test_execute_signal_cloud_autonomous_mode(self, engine):
-        # Set adapter disabled (simulating laptop off / no Windows VPS)
+    def test_execute_signal_rejects_when_mt5_bridge_is_disabled(self, engine):
+        # Without a connected terminal, an approved intent must not fabricate
+        # a fill or create a synthetic cloud position.
         engine.adapter.enabled = False
         signal = OpportunitySignal(
             symbol="XAUUSD",
@@ -709,18 +710,13 @@ class TestMT5AutonomousCloudExecution:
         )
 
         result = engine.execute_signal(signal, decision)
-        assert result["status"] == "FILLED"
-        assert result["mode"] == "cloud_autonomous"
-        assert "stx-cld-" in result["order_id"]
-        assert "XAUUSD" in engine.cloud_positions
-
-        pos = engine.cloud_positions["XAUUSD"]
-        assert pos.symbol == "XAUUSD"
-        assert pos.side == "BUY"
-        assert pos.entry_price == 2650.0
-        assert pos.stop_loss == 2640.0
-        assert pos.take_profit == 2670.0
-        assert pos.ai_thesis == "Breakout above key institutional liquidity zone"
+        assert result["status"] == "REJECTED_NO_BRIDGE"
+        assert result["symbol"] == "XAUUSD"
+        assert result["error"] == "MT5 Bridge not connected to live terminal"
+        assert "XAUUSD" not in engine.cloud_positions
+        engine.adapter.submit_intent.assert_not_called()
+        engine.memora.record_scoped_event.assert_not_called()
+        engine.friday.broadcast_trade_event.assert_not_called()
 
     def test_manage_cloud_positions_take_profit_hit(self, engine):
         # Simulate active open BUY on XAUUSD
