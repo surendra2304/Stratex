@@ -592,6 +592,23 @@ class MT5AutonomousEngine:
             },
         )
 
+        # Fail closed before broadcasting a proposed trade when no authorized bridge exists.
+        # A disabled bridge must not emit events that downstream systems could mistake
+        # for an actionable trade proposal.
+        if not self.dry_run and not getattr(self.adapter, "enabled", False):
+            logger.warning(
+                f"[MT5_ENGINE] Bridge offline or execution disabled. Rejecting {signal.action} {signal.symbol} "
+                "before publishing any trade-proposed event."
+            )
+            self.telegram.notify_risk_rejection(
+                intent, "Execution rejected: MT5 Bridge offline (orders must fill on IC Markets demo)"
+            )
+            return {
+                "status": "REJECTED_NO_BRIDGE",
+                "error": "MT5 Bridge not connected or execution disabled",
+                "symbol": signal.symbol,
+            }
+
         # Notify Telegram of Proposed Intent
         self.telegram.notify_trade_intent(intent, status="PROPOSED")
 
