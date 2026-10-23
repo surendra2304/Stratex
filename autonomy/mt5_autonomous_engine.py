@@ -112,7 +112,7 @@ DEFAULT_SYMBOLS = [
     "SOLUSD",
 ]
 
-DEFAULT_TIMEFRAMES = ["5m", "15m", "1h"]
+DEFAULT_TIMEFRAMES = ["5m", "15m", "30m", "1h"]
 
 
 def _utc_now_iso() -> str:
@@ -196,7 +196,7 @@ class MT5AutonomousEngine:
         adapter: MT5BridgeAdapter | None = None,
         symbols: list[str] | None = None,
         timeframes: list[str] | None = None,
-        max_active_positions: int = 3,
+        max_active_positions: int | None = None,
         max_risk_per_trade_pct: float = 0.02,
         max_daily_drawdown_pct: float = 0.05,
         min_confidence: float = 0.65,
@@ -219,7 +219,10 @@ class MT5AutonomousEngine:
             self.adapter = MT5BridgeAdapter()
         self.symbols = list(symbols or DEFAULT_SYMBOLS)
         self.timeframes = list(timeframes or DEFAULT_TIMEFRAMES)
-        self.max_active_positions = int(os.getenv("STRATEX_MAX_POSITIONS", "3"))
+        if max_active_positions is not None:
+            self.max_active_positions = max_active_positions
+        else:
+            self.max_active_positions = int(os.getenv("STRATEX_MAX_POSITIONS", "5"))
         self.max_risk_per_trade_pct = min(0.02, max(0.001, max_risk_per_trade_pct))
         self.max_daily_drawdown_pct = min(0.05, max(0.01, max_daily_drawdown_pct))
         self.min_confidence = min_confidence
@@ -799,13 +802,40 @@ class MT5AutonomousEngine:
             pnl = (current_price - pos.entry_price) * direction * pos.quantity * contract_multiplier
             pos.unrealized_pnl = round(pnl, 2)
 
+            # Dynamic Profit Locking & Trailing Stop
+            if pos.side == "BUY":
+                profit_distance = current_price - pos.entry_price
+                target_distance = pos.take_profit - pos.entry_price
+                if target_distance > 0 and profit_distance >= (0.45 * target_distance):
+                    trail_level = pos.entry_price + (profit_distance * 0.40)
+                    if pos.stop_loss < trail_level:
+                        pos.stop_loss = round(trail_level, 5)
+                        logger.info(f"[MT5_ENGINE] Trailing stop advanced for {pos.symbol} BUY: New SL = {pos.stop_loss}")
+            elif pos.side == "SELL":
+                profit_distance = pos.entry_price - current_price
+                target_distance = pos.entry_price - pos.take_profit
+                if target_distance > 0 and profit_distance >= (0.45 * target_distance):
+                    trail_level = pos.entry_price - (profit_distance * 0.40)
+                    if pos.stop_loss > trail_level:
+                        pos.stop_loss = round(trail_level, 5)
+                        logger.info(f"[MT5_ENGINE] Trailing stop advanced for {pos.symbol} SELL: New SL = {pos.stop_loss}")
+
             # Check Take Profit
             tp_hit = (pos.side == "BUY" and current_price >= pos.take_profit) or (pos.side == "SELL" and current_price <= pos.take_profit)
             # Check Stop Loss
             sl_hit = (pos.side == "BUY" and current_price <= pos.stop_loss) or (pos.side == "SELL" and current_price >= pos.stop_loss)
 
             if tp_hit or sl_hit:
-                exit_type = "TAKE_PROFIT" if tp_hit else "STOP_LOSS"
+                if tp_hit:
+                    exit_type = "TAKE_PROFIT"
+                    status_emoji = "🎉 TAKE PROFIT HIT"
+                elif pos.unrealized_pnl > 0:
+                    exit_type = "TRAILING_STOP"
+                    status_emoji = "🎯 TRAILING STOP (PROFIT LOCKED)"
+                else:
+                    exit_type = "STOP_LOSS"
+                    status_emoji = "🛡️ STOP LOSS HIT"
+
                 realized_pnl = pos.unrealized_pnl
                 self.cloud_balance = round(self.cloud_balance + realized_pnl, 2)
                 symbols_to_remove.append(symbol)
@@ -824,7 +854,6 @@ class MT5AutonomousEngine:
                         logger.error(f"[MT5_ENGINE] Failed closing broker position for {pos.symbol}: {exc}")
 
                 # Telegram Notification
-                status_emoji = "🎉 TAKE PROFIT HIT" if tp_hit else "🛡️ STOP LOSS HIT"
                 pnl_emoji = "💰" if realized_pnl >= 0 else "🔻"
                 msg = (
                     f"<b>{status_emoji}</b>\n\n"
