@@ -31,6 +31,3 @@ google-genai>=2.0.0,<3.0.0
 
 # PostgreSQL driver for the durable order-intent ledger.
 psycopg[binary]>=3.2,<4
-
-# FIX message encoder/parser imported by the cTrader FIX adapter and its tests.
-simplefix==1.0.17
