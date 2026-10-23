@@ -76,13 +76,132 @@ class CTraderFixAdapter(BaseExchange):
         self._load_symbol_map(symbol_map_file)
 
     def _load_symbol_map(self, path: str):
-        try:
-            if os.path.exists(path):
-                with open(path, "r", encoding="utf-8") as f:
-                    self.symbol_map = json.load(f)
-                    self.id_to_symbol = {v: k for k, v in self.symbol_map.items()}
-        except Exception as e:
-            logger.warning(f"Failed to load symbol map from {path}: {e}")
+        candidates = [
+            path,
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), path),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "state", "fix_symbol_map.json"),
+            "/opt/friday_universe/Stratex/state/fix_symbol_map.json",
+        ]
+        for p in candidates:
+            if p and os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        self.symbol_map = {k.upper(): int(v) for k, v in data.items()}
+                        self.id_to_symbol = {int(v): k.upper() for k, v in self.symbol_map.items()}
+                        logger.info(f"[CTRADER_FIX] Loaded {len(self.symbol_map)} symbols from {p}")
+                        return
+                except Exception as e:
+                    logger.warning(f"Failed to load symbol map from {p}: {e}")
+
+    # Canonical alias dictionary mapping common index/forex/crypto names to IC Markets cTrader names
+    SYMBOL_ALIASES: dict[str, str] = {
+        "GER40": "DE40",
+        "GERMANY40": "DE40",
+        "DAX": "DE40",
+        "DAX40": "DE40",
+        "DE30": "DE40",
+        "USTEC": "USTEC",
+        "NAS100": "USTEC",
+        "US100": "USTEC",
+        "NASDAQ": "USTEC",
+        "US30": "US30",
+        "DJ30": "US30",
+        "DOW": "US30",
+        "US500": "US500",
+        "SPX500": "US500",
+        "SP500": "US500",
+        "SPX": "US500",
+        "UK100": "UK100",
+        "FTSE": "UK100",
+        "FTSE100": "UK100",
+        "JP225": "JP225",
+        "NIKKEI": "JP225",
+        "AUS200": "AUS200",
+        "GOLD": "XAUUSD",
+        "SILVER": "XAGUSD",
+        "WTI": "XTIUSD",
+        "CRUDE": "XTIUSD",
+        "BRENT": "XBRUSD",
+        "OIL": "XTIUSD",
+        "BTC": "BTCUSD",
+        "BTCUSDT": "BTCUSD",
+        "ETH": "ETHUSD",
+        "ETHUSDT": "ETHUSD",
+        "SOL": "SOLUSD",
+        "SOLUSDT": "SOLUSD",
+    }
+
+    def resolve_symbol(self, symbol: str) -> tuple[str, int | None]:
+        """Resolve any incoming symbol or alias to canonical cTrader symbol and numeric security ID."""
+        if not self.symbol_map:
+            self._load_symbol_map("state/fix_symbol_map.json")
+
+        clean = symbol.replace("/", "").replace("_", "").upper()
+        # Direct lookup in symbol map
+        if clean in self.symbol_map:
+            return clean, int(self.symbol_map[clean])
+
+        # Alias lookup
+        canonical = self.SYMBOL_ALIASES.get(clean) or self.SYMBOL_ALIASES.get(symbol.upper())
+        if canonical and canonical in self.symbol_map:
+            return canonical, int(self.symbol_map[canonical])
+
+        # Try stripping suffixes (.r, .m, .c)
+        stripped = clean.rstrip(".MRC")
+        if stripped in self.symbol_map:
+            return stripped, int(self.symbol_map[stripped])
+        if stripped in self.SYMBOL_ALIASES and self.SYMBOL_ALIASES[stripped] in self.symbol_map:
+            canon = self.SYMBOL_ALIASES[stripped]
+            return canon, int(self.symbol_map[canon])
+
+        # Comprehensive fallback table for verified IC Markets symbol IDs
+        fallback_map: dict[str, int] = {
+            "EURUSD": 1, "GBPUSD": 2, "EURJPY": 3, "USDJPY": 4, "AUDUSD": 5, "USDCHF": 6,
+            "GBPJPY": 7, "USDCAD": 8, "EURGBP": 9, "EURCHF": 10, "AUDJPY": 11, "NZDUSD": 12,
+            "CHFJPY": 13, "EURAUD": 14, "CADJPY": 15, "GBPAUD": 16, "EURCAD": 17, "AUDCAD": 18,
+            "GBPCAD": 19, "AUDNZD": 20, "NZDJPY": 21, "USDNOK": 22, "AUDCHF": 23, "USDMXN": 24,
+            "GBPNZD": 25, "EURNZD": 26, "CADCHF": 27, "USDSGD": 28, "USDSEK": 29, "NZDCAD": 30,
+            "EURSEK": 31, "GBPSGD": 32, "EURNOK": 33, "EURHUF": 34, "USDPLN": 35, "USDDKK": 36,
+            "GBPNOK": 37, "AUDDKK": 38, "NZDCHF": 39, "GBPCHF": 40,
+            "XAUUSD": 41, "XAGUSD": 42, "XAUEUR": 43, "XAGEUR": 44,
+            "AUS200": 10000, "STOXX50": 10001, "F40": 10002, "DE30": 10003, "HK50": 10004,
+            "IT40": 10005, "JP225": 10006, "AEX": 10007, "WIG20": 10008, "ES35": 10009,
+            "SMI": 10010, "UK100": 10011, "US2000": 10012, "US500": 10013, "USTEC": 10014,
+            "US30": 10015, "XTIUSD": 10019, "XBRUSD": 10018, "WTI": 10022, "BRENT": 10021,
+            "XNGUSD": 10020, "DE40": 10046, "GER40": 10046,
+            "BTCUSD": 10026, "BCHUSD": 10028, "ETHUSD": 10029, "LTCUSD": 10030,
+        }
+        target = canonical or clean
+        if target in fallback_map:
+            return target, fallback_map[target]
+        if clean in fallback_map:
+            return clean, fallback_map[clean]
+
+        return target, None
+
+    def calculate_units(self, canonical_sym: str, quantity: float) -> str:
+        """Calculate Tag 38 (OrderQty) string for cTrader FIX based on asset class."""
+        sym = canonical_sym.upper()
+        if sym in {"XAUUSD", "GOLD", "XAUEUR"}:
+            return str(max(1, int(round(quantity * 100))))
+        elif sym in {"XAGUSD", "SILVER", "XAGEUR"}:
+            return str(max(1, int(round(quantity * 5000))))
+        elif sym in {"XTIUSD", "WTI", "XBRUSD", "BRENT", "XNGUSD"}:
+            return str(max(1, int(round(quantity * 1000))))
+        elif sym in {"BTCUSD"}:
+            return "0.1" if quantity < 0.1 else f"{quantity:.2f}".rstrip("0").rstrip(".")
+        elif sym in {"ETHUSD"}:
+            return "1" if quantity <= 1.0 else f"{quantity:.1f}".rstrip("0").rstrip(".")
+        elif sym in {
+            "DE40", "DE30", "GER40", "USTEC", "US30", "US500", "UK100",
+            "JP225", "AUS200", "F40", "STOXX50", "ES35", "US2000", "HK50"
+        }:
+            # Index CFDs trade in whole contract units (e.g. 1 index)
+            return str(max(1, int(round(quantity))))
+        else:
+            # Standard FX: 1 lot = 100,000 units (minimum 1,000 = 0.01 lot)
+            return str(max(1000, int(round(quantity * 100000))))
 
     def _ensure_connection(self):
         """Ensure SSL socket is open and logged on to CSERVER."""
@@ -291,35 +410,11 @@ class CTraderFixAdapter(BaseExchange):
             raise ValueError(f"Invalid side: {side}")
         fix_side = 1 if norm_side in {"BUY", "LONG"} else 2
 
-        # Map symbol name to numeric Symbol ID (e.g. XAUUSD -> 41, EURUSD -> 1)
-        clean_sym = symbol.replace("/", "").upper()
-        symbol_id = self.symbol_map.get(clean_sym)
-        if not symbol_id:
-            # Fallback default lookup
-            fallback_map = {
-                "EURUSD": 1, "GBPUSD": 2, "EURJPY": 3, "USDJPY": 4, "AUDUSD": 5, "USDCHF": 6,
-                "NZDUSD": 7, "USDCAD": 8, "AUDJPY": 9, "XAUUSD": 41, "XAGUSD": 42,
-                "XTIUSD": 99, "WTI": 99, "XBRUSD": 100, "BRENT": 100, "BTCUSD": 114, "ETHUSD": 105,
-            }
-            symbol_id = fallback_map.get(clean_sym)
-
+        canonical_sym, symbol_id = self.resolve_symbol(symbol)
         if not symbol_id:
             raise CTraderFixError(f"Symbol '{symbol}' not found in cTrader FIX symbol map.")
 
-        # In cTrader, 1 lot = 100,000 units (FX) or 100 units (Gold)
-        # Quantity passed is usually lot size (e.g. 0.01 lot)
-        if clean_sym in {"XAUUSD", "GOLD"}:
-            units = max(1, int(round(quantity * 100)))
-        elif clean_sym in {"XAGUSD", "SILVER"}:
-            units = max(1, int(round(quantity * 5000)))
-        elif clean_sym in {"XTIUSD", "WTI", "XBRUSD", "BRENT"}:
-            units = max(1, int(round(quantity * 1000)))
-        elif clean_sym in {"BTCUSD"}:
-            units = "0.1"
-        elif clean_sym in {"ETHUSD"}:
-            units = "1"
-        else:
-            units = max(1000, int(round(quantity * 100000)))
+        units = self.calculate_units(canonical_sym, quantity)
 
         cl_ord_id = client_order_id or f"STX_{int(time.time())}_{uuid.uuid4().hex[:6]}"
         now_str = datetime.datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3]
@@ -401,16 +496,10 @@ class CTraderFixAdapter(BaseExchange):
         client_order_id: str | None = None,
     ) -> dict[str, Any]:
         """Preflight validation for cTrader FIX orders."""
-        clean_sym = symbol.replace("/", "").upper()
-        if not self.symbol_map:
-            self._load_symbol_map("state/fix_symbol_map.json")
-        if clean_sym not in self.symbol_map and clean_sym not in {
-            "EURUSD", "GBPUSD", "USDJPY", "EURJPY", "GBPJPY", "AUDJPY", "NZDJPY",
-            "EURCHF", "USDCAD", "NZDUSD", "AUDUSD", "XAUUSD", "XAGUSD", "XTIUSD",
-            "WTI", "XBRUSD", "BRENT", "BTCUSD", "ETHUSD"
-        }:
-            raise CTraderFixError(f"Symbol {symbol} not recognized in cTrader FIX")
-        return {"approved": True, "symbol": symbol, "volume": quantity}
+        canonical_sym, symbol_id = self.resolve_symbol(symbol)
+        if not symbol_id:
+            raise CTraderFixError(f"Symbol '{symbol}' not recognized in cTrader FIX symbol map.")
+        return {"approved": True, "symbol": canonical_sym, "volume": quantity, "symbol_id": symbol_id}
 
     def calculate_position_size(
         self,
