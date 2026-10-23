@@ -209,7 +209,7 @@ class MT5AutonomousEngine:
         telegram_bot: TelegramBotClient | None = None,
         ai_advisor: StratexAIAdvisor | None = None,
         cloud_feed: CloudMarketDataFeed | None = None,
-        initial_balance: float = 1000.0,
+        initial_balance: float = 999.66,
     ):
         if adapter is not None:
             self.adapter = adapter

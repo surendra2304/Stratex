@@ -401,12 +401,13 @@ class CTraderFixAdapter(BaseExchange):
 
     def get_equity(self) -> dict[str, float]:
         """Return verified account equity in account currency."""
-        # For live trading accounts, return reported balance/equity
-        return {"USD": 1000.0}
+        bal = float(os.getenv("STRATEX_INITIAL_BALANCE", "999.66"))
+        return {"USD": bal}
 
     def get_balance(self) -> dict[str, UnifiedBalance]:
+        bal = float(os.getenv("STRATEX_INITIAL_BALANCE", "999.66"))
         return {
-            "USD": UnifiedBalance(currency="USD", free=1000.0, used=0.0, total=1000.0)
+            "USD": UnifiedBalance(currency="USD", free=bal, used=0.0, total=bal)
         }
 
     def place_order(
