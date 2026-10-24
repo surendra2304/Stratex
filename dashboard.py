@@ -43,6 +43,14 @@ core_blueprints = [
     ("api.friday_supervision", "friday_supervision_bp"),
     ("api.trade_optimizer_routes", "trade_optimizer_bp"),
     ("api.advanced_risk_routes", "risk_bp"),
+    ("api.live_execution_routes", "live_execution_bp"),
+    ("api.cross_chain_yield_routes", "yield_optimizer_bp"),
+    ("api.multi_venue_execution_routes", "multi_venue_bp"),
+    ("api.algorithmic_strategy_routes", "strategy_bp"),
+    ("api.portfolio_risk_routes", "risk_bp"),
+    ("api.market_making_routes", "mk_bp"),
+    ("api.sentiment_routes", "sentiment_bp"),
+    ("api.options_routes", "options_bp"),
 ]
 
 adapter_blueprints = [
@@ -6620,6 +6628,14 @@ if _AUTOSTART_SERVICES:
         start_shadow_paper_scheduler()
     except Exception as _shadow_paper_err:
         print(f"[DASHBOARD] paper shadow scheduler unavailable: {_shadow_paper_err}")
+
+# --- Pattern Recognition Engine & Order Flow Analyzer Integration ---
+try:
+    from execution.pattern_recognition_engine import engine as pattern_engine
+    from execution.order_flow_analyzer import engine as orderflow_engine
+    print("[DASHBOARD] Deep execution modules loaded")
+except Exception as _deep_err:
+    print(f"[DASHBOARD] Deep execution modules unavailable: {_deep_err}")
 
 if __name__ == '__main__':
     print("🚀 Starting Unified Live Trading Dashboard...")
