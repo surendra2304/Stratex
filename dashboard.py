@@ -43,6 +43,14 @@ core_blueprints = [
     ("api.friday_supervision", "friday_supervision_bp"),
     ("api.trade_optimizer_routes", "trade_optimizer_bp"),
     ("api.advanced_risk_routes", "risk_bp"),
+    ("api.live_execution_routes", "live_execution_bp"),
+    ("api.cross_chain_yield_routes", "yield_optimizer_bp"),
+    ("api.multi_venue_execution_routes", "multi_venue_bp"),
+    ("api.algorithmic_strategy_routes", "strategy_bp"),
+    ("api.portfolio_risk_routes", "risk_bp"),
+    ("api.market_making_routes", "mk_bp"),
+    ("api.sentiment_routes", "sentiment_bp"),
+    ("api.options_routes", "options_bp"),
 ]
 
 adapter_blueprints = [
