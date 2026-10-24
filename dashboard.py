@@ -44,6 +44,7 @@ core_blueprints = [
     ("api.trade_optimizer_routes", "trade_optimizer_bp"),
     ("api.advanced_risk_routes", "risk_bp"),
     ("api.live_execution_routes", "live_execution_bp"),
+    ("api.cross_chain_yield_routes", "yield_optimizer_bp"),
 ]
 
 adapter_blueprints = [
