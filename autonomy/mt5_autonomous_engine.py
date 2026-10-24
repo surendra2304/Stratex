@@ -61,6 +61,9 @@ from strategies.quantitative_engine import (
     MarketRegime,
     VolatilityRegimeBreakoutModel,
 )
+from strategies.strategy_registry import strategy_registry
+from strategies.ensemble_strategy import get_signal as ensemble_get_signal
+from strategies.ml_ensemble import get_signal as ml_ensemble_get_signal
 
 logger = get_logger("mt5_autonomous_engine")
 
@@ -399,6 +402,31 @@ class MT5AutonomousEngine:
                 else:
                     stop_loss = current_price + (1.5 * atr)
                     take_profit = current_price - (2.5 * atr)
+
+        if action == "HOLD" or stop_loss <= 0 or take_profit <= 0:
+            # Fall back to ensemble strategy for additional signal sources
+            import pandas as pd
+            try:
+                df = pd.DataFrame(candles)
+                # Try ensemble strategy
+                ens_result = ensemble_get_signal(df, strategy_registry=strategy_registry, regime=regime.value if hasattr(regime, 'value') else str(regime))
+                if ens_result and ens_result.side:
+                    action = ens_result.side
+                    strategy_source = "ensemble_consensus"
+                    confidence = float(ens_result.win_rate_prior or 0.72)
+                    stop_loss = float(ens_result.sl)
+                    take_profit = float(ens_result.tp)
+                else:
+                    # Try ML ensemble
+                    ml_result = ml_ensemble_get_signal(df, regime=regime.value if hasattr(regime, 'value') else str(regime))
+                    if ml_result and ml_result.side:
+                        action = ml_result.side
+                        strategy_source = "ml_ensemble"
+                        confidence = float(ml_result.win_rate_prior or 0.65)
+                        stop_loss = float(ml_result.sl)
+                        take_profit = float(ml_result.tp)
+            except Exception as exc:
+                logger.debug(f"[MT5_ENGINE] Ensemble/ML fallback failed for {symbol}: {exc}")
 
         if action == "HOLD" or stop_loss <= 0 or take_profit <= 0:
             return None
