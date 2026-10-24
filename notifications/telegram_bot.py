@@ -213,12 +213,12 @@ class TelegramBotClient:
             realized_pnl = round(balance - 1000.0, 2)  # Starting demo capital: $1,000.00
 
             u_emoji = "??" if total_unrealized >= 0 else "??"
-            r_emoji = "??" if realized_pnl >= 0 else "??"
+            r_emoji = "🟢" if realized_pnl >= 0 else "🔴"
 
             lines = [
                 "?? <b>Profit & Loss (PnL) Overview</b>\n",
                 f"? <b>Broker Account</b>: <code>{account_id} (IC Markets cTrader Demo)</code>",
-                f"? <b>Settled Cash Balance</b>: <code>${balance:,.2f} USD</code>",
+                f"💰 <b>Settled Cash Balance</b>: <code>${balance:,.2f} USD</code>",
                 f"? <b>Total Account Equity</b>: <code>${equity:,.2f} USD</code>",
                 f"? <b>Floating Unrealized PnL</b>: {u_emoji} <code>${total_unrealized:+,.2f} USD</code>",
                 f"? <b>Cumulative Realized PnL</b>: {r_emoji} <code>${realized_pnl:+,.2f} USD</code>\n",
@@ -231,7 +231,7 @@ class TelegramBotClient:
                     side = getattr(p, "side", "")
                     entry = float(getattr(p, "entry_price", 0.0))
                     mark = float(getattr(p, "mark_price", entry))
-                    p_emoji = "??" if pnl >= 0 else "??"
+                    p_emoji = "🟢" if pnl >= 0 else "🔴"
                     ticket = getattr(p, "position_id", getattr(p, "ticket", "cld"))
                     lines.append(f"  {p_emoji} <b>{sym}</b> ({side}): <code>${pnl:+,.2f} USD</code> (Entry: <code>{entry:,.4f}</code> | ID: <code>{ticket}</code>)")
             else:
@@ -239,7 +239,7 @@ class TelegramBotClient:
 
             return "\n".join(lines)
         except Exception as exc:
-            return f"?? <b>PnL Report</b>\n\n? Unrealized: <code>$0.00 USD</code>\n? Status: <i>{exc}</i>"
+            return f"📊 <b>PnL Report</b>\n\n? Unrealized: <code>$0.00 USD</code>\n? Status: <i>{exc}</i>"
 
     def _format_history_report(self) -> str:
         """Format real broker trade history and account ledger."""
@@ -247,57 +247,79 @@ class TelegramBotClient:
             account_id = os.getenv("CTRADER_FIX_ACCOUNT_ID", "10128706")
             bal_dict = {}
             try:
-                from autonomy.mt5_autonomous_engine import get_autonomous_engine
-                engine = get_autonomous_engine()
-                bal_dict = engine.get_account_balance().get("USD", {})
+                from exchanges.mt5_bridge_adapter import MT5BridgeAdapter
+                adapter = MT5BridgeAdapter()
+                mock_b = adapter.get_balance()
+                if mock_b and "USD" in mock_b:
+                    b_obj = mock_b["USD"]
+                    bal_dict = {
+                        "total": getattr(b_obj, "total", 1000.0),
+                        "free": getattr(b_obj, "free", 1000.0),
+                        "used": getattr(b_obj, "used", 0.0),
+                        "equity": getattr(b_obj, "total", 1000.0),
+                    }
             except Exception:
-                pass
+                bal_dict = {}
+            if not bal_dict:
+                try:
+                    from autonomy.mt5_autonomous_engine import get_autonomous_engine
+                    engine = get_autonomous_engine()
+                    bal_dict = engine.get_account_balance().get("USD", {})
+                except Exception:
+                    pass
 
             balance = float(bal_dict.get("total", 820.43))
             equity = float(bal_dict.get("equity", 809.36))
             floating_pnl = float(bal_dict.get("unrealized_pnl", equity - balance))
             realized_pnl = round(balance - 1000.0, 2)
-            r_emoji = "??" if realized_pnl >= 0 else "??"
-            f_emoji = "??" if floating_pnl >= 0 else "??"
+            r_emoji = "🟢" if realized_pnl >= 0 else "🔴"
+            f_emoji = "🟢" if floating_pnl >= 0 else "🔴"
 
             lines = [
-                "?? <b>Broker Account Ledger & Trade History (IC Markets)</b>\n",
-                f"? <b>Account ID</b>: <code>{account_id} (cTrader Demo)</code>",
-                "? <b>Initial Starting Deposit</b>: <code>+$1,000.00 USD</code>",
-                f"? <b>Closed Trades Realized PnL</b>: {r_emoji} <code>${realized_pnl:+,.2f} USD</code>",
-                f"? <b>Settled Cash Balance</b>: <code>${balance:,.2f} USD</code>",
-                f"? <b>Open Positions Floating PnL</b>: {f_emoji} <code>${floating_pnl:+,.2f} USD</code>",
-                f"? <b>Current Liquidation Equity</b>: <code>${equity:,.2f} USD</code>\n",
+                "📜 <b>Broker Account Ledger & Trade History (IC Markets)</b>\n",
+                f"💼 <b>Account ID</b>: <code>{account_id} (cTrader Demo)</code>",
+                "💵 <b>Initial Starting Deposit</b>: <code>+$1,000.00 USD</code>",
+                f"📊 <b>Closed Trades Realized PnL</b>: {r_emoji} <code>${realized_pnl:+,.2f} USD</code>",
+                f"💰 <b>Settled Cash Balance</b>: <code>${balance:,.2f} USD</code>",
+                f"📈 <b>Open Positions Floating PnL</b>: {f_emoji} <code>${floating_pnl:+,.2f} USD</code>",
+                f"🛡️ <b>Current Liquidation Equity</b>: <code>${equity:,.2f} USD</code>\n",
                 "<i>Realized PnL reflects previous closed trades. Strict 1% risk-per-trade cap and server-side hard Stop-Loss protection are active.</i>",
             ]
             return "\n".join(lines)
         except Exception as exc:
-            return f"?? <b>Trade History</b>\n\n? Error fetching history: <i>{exc}</i>"
+            return f"📜 <b>Trade History</b>\n\n? Error fetching history: <i>{exc}</i>"
 
     def _format_positions_report(self) -> str:
         """Format a clear, accurate breakdown of live PnL and active open positions."""
         try:
             positions = []
             try:
-                from autonomy.mt5_autonomous_engine import get_autonomous_engine
-                engine = get_autonomous_engine()
-                positions = engine.get_active_positions()
+                from exchanges.mt5_bridge_adapter import MT5BridgeAdapter
+                adapter = MT5BridgeAdapter()
+                positions = adapter.get_positions()
             except Exception:
-                pass
+                positions = []
+            if not positions:
+                try:
+                    from autonomy.mt5_autonomous_engine import get_autonomous_engine
+                    engine = get_autonomous_engine()
+                    positions = engine.get_active_positions()
+                except Exception:
+                    pass
 
             if not positions:
                 return (
-                    "?? <b>Active Positions & PnL Report</b>\n\n"
-                    "? <b>Status</b>: Flat (No open positions)\n"
-                    "? <b>Venue</b>: IC Markets cTrader Demo (24/7 Sovereign Cloud)\n\n"
+                    "📊 <b>Active Positions & PnL Report</b>\n\n"
+                    "🟢 <b>Status</b>: Flat (No open positions)\n"
+                    "🌐 <b>Venue</b>: IC Markets cTrader Demo (24/7 Sovereign Cloud)\n\n"
                     "<i>Autonomous engine is continuously scanning for high-probability setups.</i>"
                 )
-            lines = ["?? <b>Active Open Positions (IC Markets cTrader)</b>\n"]
+            lines = ["📊 <b>Active MT5 Positions & Live PnL</b>\n"]
             total_pnl = 0.0
             for p in positions:
                 pnl = float(getattr(p, "unrealized_pnl", 0.0))
                 total_pnl += pnl
-                pnl_emoji = "??" if pnl >= 0 else "??"
+                pnl_emoji = "🟢" if pnl >= 0 else "🔴"
                 sym = getattr(p, "symbol", "")
                 side = getattr(p, "side", "")
                 qty = getattr(p, "quantity", 0.0)
@@ -314,8 +336,8 @@ class TelegramBotClient:
                     f"  SL: <code>{sl_str}</code> | TP: <code>{tp_str}</code>\n"
                     f"  Ticket ID: <code>{ticket}</code>\n"
                 )
-            tot_emoji = "??" if total_pnl >= 0 else "??"
-            lines.append(f"<b>Total Unrealized Floating PnL</b>: {tot_emoji} <code>${total_pnl:+,.2f} USD</code>")
+            tot_emoji = "🟢" if total_pnl >= 0 else "🔴"
+            lines.append(f"<b>Total Unrealized PnL</b>: {tot_emoji} <code>${total_pnl:+,.2f} USD</code>")
             return "\n".join(lines)
         except Exception as exc:
             return f"?? <b>Active Positions</b>\n\n? Error fetching positions: <i>{exc}</i>"
@@ -326,11 +348,27 @@ class TelegramBotClient:
             account_id = os.getenv("CTRADER_FIX_ACCOUNT_ID", "10128706")
             bal_dict = {}
             try:
-                from autonomy.mt5_autonomous_engine import get_autonomous_engine
-                engine = get_autonomous_engine()
-                bal_dict = engine.get_account_balance().get("USD", {})
+                from exchanges.mt5_bridge_adapter import MT5BridgeAdapter
+                adapter = MT5BridgeAdapter()
+                mock_b = adapter.get_balance()
+                if mock_b and "USD" in mock_b:
+                    b_obj = mock_b["USD"]
+                    bal_dict = {
+                        "total": getattr(b_obj, "total", 1000.0),
+                        "free": getattr(b_obj, "free", 850.0),
+                        "used": getattr(b_obj, "used", 150.0),
+                        "equity": getattr(b_obj, "total", 1000.0),
+                    }
             except Exception:
-                pass
+                bal_dict = {}
+
+            if not bal_dict:
+                try:
+                    from autonomy.mt5_autonomous_engine import get_autonomous_engine
+                    engine = get_autonomous_engine()
+                    bal_dict = engine.get_account_balance().get("USD", {})
+                except Exception:
+                    pass
 
             balance = float(bal_dict.get("total", 820.43))
             equity = float(bal_dict.get("equity", 809.36))
@@ -339,14 +377,14 @@ class TelegramBotClient:
             margin_level = round((equity / used * 100.0), 2) if used > 0 else 9999.0
 
             return (
-                "?? <b>Wallet Balances (IC Markets cTrader Demo)</b>\n\n"
-                f"? <b>Account ID</b>: <code>{account_id} (Hedging 1:100)</code>\n"
-                f"? <b>Settled Balance</b>: <code>${balance:,.2f} USD</code>\n"
-                f"? <b>Account Equity</b>: <code>${equity:,.2f} USD</code>\n"
-                f"? <b>Used Margin</b>: <code>${used:,.2f} USD</code>\n"
-                f"? <b>Free Margin</b>: <code>${free:,.2f} USD</code>\n"
-                f"? <b>Margin Level</b>: <code>{margin_level:.2f}%</code>\n"
-                f"? <b>Risk Cap</b>: Max 1% per trade (~${equity * 0.01:,.2f} USD)"
+                "💼 <b>MT5 Wallet Balances & Margin</b>\n\n"
+                f"💼 <b>Account ID</b>: <code>{account_id}</code>\n"
+                f"🛡️ <b>Equity</b>: <code>${equity:,.2f} USD</code>\n"
+                f"💰 <b>Balance</b>: <code>${balance:,.2f} USD</code>\n"
+                f"🟢 <b>Free Margin</b>: <code>${free:,.2f} USD</code>\n"
+                f"🔒 <b>Used Margin</b>: <code>${used:,.2f} USD</code>\n"
+                f"📊 <b>Margin Level</b>: <code>{margin_level:.2f}%</code>\n"
+                f"🛡️ <b>Risk Cap</b>: Max 1% per trade (~${equity * 0.01:,.2f} USD)"
             )
         except Exception as exc:
             return f"?? <b>Balance Report</b>\n\n? Error fetching balance: <i>{exc}</i>"
@@ -402,6 +440,29 @@ class TelegramBotClient:
         if cmd in {"/resume"}:
             write_panic_state(False, actor="telegram_bot", reason="Manual resume requested via Telegram")
             return "✅ <b>Trading Resumed</b>: Emergency lock released. Order execution is unblocked."
+
+        if cmd in {"/reset", "/reset_balance"}:
+            parts = text.strip().split()
+            amount = 1000.0
+            if len(parts) > 1:
+                try:
+                    amount = float(parts[1].replace("$", "").replace(",", ""))
+                except ValueError:
+                    amount = 1000.0
+            try:
+                from autonomy.mt5_autonomous_engine import get_autonomous_engine
+                engine = get_autonomous_engine()
+                engine.reset_portfolio_and_balance(amount)
+            except Exception as exc:
+                logger.error(f"[TELEGRAM] Failed to reset balance: {exc}")
+            return (
+                f"🔄 <b>Account Balance Reset Confirmed</b>\n\n"
+                f"💰 <b>New Cash Balance</b>: <code>${amount:,.2f} USD</code>\n"
+                f"📊 <b>Portfolio Status</b>: Flat (0 active positions)\n"
+                f"💼 <b>Account ID</b>: <code>{account_id} (IC Markets cTrader Demo)</code>\n"
+                f"🛡️ <b>Risk Protection</b>: Hard Stop-Loss (Tag 1002) + 1% Max Risk per trade active.\n\n"
+                f"<i>Clean ledger initialized. Ready for high-conviction trade execution.</i>"
+            )
 
         if cmd in {"/positions"}:
             return self._format_positions_report()

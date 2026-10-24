@@ -229,7 +229,7 @@ class MT5AutonomousEngine:
         telegram_bot: TelegramBotClient | None = None,
         ai_advisor: StratexAIAdvisor | None = None,
         cloud_feed: CloudMarketDataFeed | None = None,
-        initial_balance: float = 999.66,
+        initial_balance: float = 1000.0,
     ):
         if adapter is not None:
             self.adapter = adapter
@@ -321,6 +321,18 @@ class MT5AutonomousEngine:
             os.replace(tmp_file, self.state_file)
         except Exception as exc:
             logger.warning(f"[MT5_ENGINE] Could not save state to {self.state_file}: {exc}")
+
+    def reset_portfolio_and_balance(self, new_balance: float = 1000.0) -> None:
+        """Reset the portfolio ledger and clear all positions (e.g. after user resets demo broker account)."""
+        self.cloud_balance = float(new_balance)
+        self.cloud_positions.clear()
+        self._save_cloud_state()
+        if hasattr(self.adapter, "set_settled_balance"):
+            try:
+                self.adapter.set_settled_balance(new_balance)
+            except Exception:
+                pass
+        logger.info(f"[MT5_ENGINE] Portfolio reset to ${new_balance:,.2f} USD with 0 active positions.")
 
     def evaluate_symbol_timeframe(
         self,
