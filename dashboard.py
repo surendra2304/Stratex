@@ -47,6 +47,7 @@ core_blueprints = [
     ("api.cross_chain_yield_routes", "yield_optimizer_bp"),
     ("api.multi_venue_execution_routes", "multi_venue_bp"),
     ("api.algorithmic_strategy_routes", "strategy_bp"),
+    ("api.portfolio_risk_routes", "risk_bp"),
 ]
 
 adapter_blueprints = [
