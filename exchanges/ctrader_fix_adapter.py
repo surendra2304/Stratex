@@ -399,16 +399,47 @@ class CTraderFixAdapter(BaseExchange):
 
         return positions
 
+    def _get_ledger_path(self) -> str:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(base_dir, "state", "account_balance.json")
+
     def get_equity(self) -> dict[str, float]:
         """Return verified account equity in account currency."""
-        bal = float(os.getenv("STRATEX_INITIAL_BALANCE", "999.66"))
-        return {"USD": bal}
+        bal = self.get_balance()
+        return {"USD": bal["USD"].total}
 
     def get_balance(self) -> dict[str, UnifiedBalance]:
-        bal = float(os.getenv("STRATEX_INITIAL_BALANCE", "999.66"))
+        """Return account cash balance from persistent ledger or configuration."""
+        bal = float(os.getenv("STRATEX_INITIAL_BALANCE", "820.43"))
+        ledger_path = self._get_ledger_path()
+        if os.path.exists(ledger_path):
+            try:
+                with open(ledger_path, "r") as f:
+                    data = json.load(f)
+                    bal = float(data.get("balance", bal))
+            except Exception:
+                pass
         return {
             "USD": UnifiedBalance(currency="USD", free=bal, used=0.0, total=bal)
         }
+
+    def set_settled_balance(self, balance: float) -> None:
+        """Explicitly record confirmed broker cash balance into persistent accounting ledger."""
+        ledger_path = self._get_ledger_path()
+        os.makedirs(os.path.dirname(ledger_path), exist_ok=True)
+        try:
+            with open(ledger_path, "w") as f:
+                json.dump({"balance": round(balance, 2), "updated_at": datetime.datetime.utcnow().isoformat() + "Z"}, f, indent=2)
+            logger.info(f"[CTRADER_FIX] Updated settled account balance ledger to ${balance:.2f} USD")
+        except Exception as exc:
+            logger.error(f"[CTRADER_FIX] Failed saving account ledger: {exc}")
+
+    def record_realized_pnl(self, delta: float) -> float:
+        """Update settled cash balance with realized profit or loss from closed trade."""
+        current = self.get_balance()["USD"].total
+        new_bal = round(current + delta, 2)
+        self.set_settled_balance(new_bal)
+        return new_bal
 
     def place_order(
         self,
@@ -449,6 +480,11 @@ class CTraderFixAdapter(BaseExchange):
             order.append_pair(38, units)
             order.append_pair(40, 1)  # Market
             order.append_pair(60, now_str)
+            # Attach broker-side Stop Loss (Tag 1002) and Take Profit (Tag 1000)
+            if stop_loss and float(stop_loss) > 0:
+                order.append_pair(1002, round(float(stop_loss), 5))
+            if take_profit and float(take_profit) > 0:
+                order.append_pair(1000, round(float(take_profit), 5))
             return order
 
         logger.info(f"[CTRADER_FIX] Sending Order: {cl_ord_id} {norm_side} {quantity} lots ({units} units) {canonical_sym} (ID: {symbol_id})")

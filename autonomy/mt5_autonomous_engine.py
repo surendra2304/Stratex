@@ -382,6 +382,7 @@ class MT5AutonomousEngine:
                 # Avoid entering if Kalman filter indicates extreme counter-extension
                 if (b_action == "BUY" and kalman_z > 2.5) or (b_action == "SELL" and kalman_z < -2.5):
                     logger.debug(f"[MT5_ENGINE] {symbol} {b_action} filtered by Kalman overextension (Z={kalman_z:.2f})")
+                    return None
                 else:
                     action = b_action
                     confidence = float(breakout_result.get("confidence", 0.75))
@@ -915,6 +916,11 @@ class MT5AutonomousEngine:
 
                 realized_pnl = pos.unrealized_pnl
                 self.cloud_balance = round(self.cloud_balance + realized_pnl, 2)
+                if hasattr(self.adapter, 'record_realized_pnl'):
+                    try:
+                        self.adapter.record_realized_pnl(realized_pnl)
+                    except Exception as exc:
+                        logger.warning(f'[MT5_ENGINE] Failed updating adapter ledger: {exc}')
                 symbols_to_remove.append(symbol)
 
                 # Close position on broker via adapter
