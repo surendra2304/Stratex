@@ -48,6 +48,7 @@ core_blueprints = [
     ("api.multi_venue_execution_routes", "multi_venue_bp"),
     ("api.algorithmic_strategy_routes", "strategy_bp"),
     ("api.portfolio_risk_routes", "risk_bp"),
+    ("api.market_making_routes", "mk_bp"),
 ]
 
 adapter_blueprints = [
