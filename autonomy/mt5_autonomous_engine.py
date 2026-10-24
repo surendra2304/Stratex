@@ -135,6 +135,23 @@ def _get_contract_multiplier(symbol: str) -> float:
     return 100000.0  # Standard Forex 100,000 units
 
 
+def _calculate_position_margin(symbol: str, quantity: float) -> float:
+    """Returns approximate used margin in USD for a given symbol and position size."""
+    sym = symbol.upper().replace("/", "")
+    if "XAU" in sym or "GOLD" in sym:
+        oz = quantity if quantity >= 1.0 else quantity * 100.0
+        return oz * 8.0  # ~$8 margin per oz (1:500 leverage)
+    if "XAG" in sym or "SILVER" in sym:
+        oz = quantity if quantity >= 10.0 else quantity * 5000.0
+        return (oz / 50.0) * 5.40  # ~$5.40 margin per 50 oz
+    if any(k in sym for k in ["US30", "US500", "USTEC", "DE40", "GER40"]):
+        contracts = quantity if quantity <= 1.0 else quantity / 10.0
+        return contracts * 100.0
+    # Forex
+    lots = quantity / 100000.0 if quantity >= 100.0 else quantity
+    return lots * 200.0  # ~$2 margin per 0.01 lot ($200 per standard lot at 1:500)
+
+
 @dataclass
 class CloudPosition:
     """Active open position managed autonomously in the cloud without client dependencies."""
@@ -774,6 +791,11 @@ class MT5AutonomousEngine:
                                 opened_at=_utc_now_iso(),
                                 strategy="broker_synced",
                             )
+                        else:
+                            # Update existing position with broker ticket ID if available
+                            existing_pos = self.cloud_positions[sym]
+                            if bp.position_id and not existing_pos.position_id:
+                                existing_pos.position_id = bp.position_id
                     # Purge cloud positions that were already closed on the broker (only numeric broker IDs)
                     for sym in list(self.cloud_positions.keys()):
                         pos = self.cloud_positions[sym]
@@ -799,7 +821,34 @@ class MT5AutonomousEngine:
             pos.mark_price = current_price
             contract_multiplier = _get_contract_multiplier(symbol)
             direction = mult_map.get(pos.side, 1.0)
-            pnl = (current_price - pos.entry_price) * direction * pos.quantity * contract_multiplier
+            sym_upper = symbol.upper().replace("/", "")
+
+            # Normalize units for PnL calculation
+            if pos.quantity >= 100.0 and not any(k in sym_upper for k in ["BTC", "ETH", "SOL", "US30", "US500", "USTEC", "DE40", "GER40"]):
+                effective_units = pos.quantity
+            elif ("XAU" in sym_upper or "GOLD" in sym_upper) and pos.quantity >= 1.0:
+                effective_units = pos.quantity
+            elif ("XAG" in sym_upper or "SILVER" in sym_upper) and pos.quantity >= 10.0:
+                effective_units = pos.quantity
+            else:
+                effective_units = pos.quantity * contract_multiplier
+
+            # Forex cross currency conversion to USD
+            quote_conv = 1.0
+            if "JPY" in sym_upper:
+                quote_conv = 1.0 / 152.0  # JPY/USD
+            elif sym_upper.endswith("NZD"):
+                quote_conv = 0.60  # NZD/USD
+            elif sym_upper.endswith("CAD"):
+                quote_conv = 0.72  # CAD/USD
+            elif sym_upper.endswith("CHF"):
+                quote_conv = 1.15  # CHF/USD
+            elif sym_upper.endswith("AUD"):
+                quote_conv = 0.65  # AUD/USD
+            elif sym_upper.endswith("GBP"):
+                quote_conv = 1.30  # GBP/USD
+
+            pnl = (current_price - pos.entry_price) * direction * effective_units * quote_conv
             pos.unrealized_pnl = round(pnl, 2)
 
             # Dynamic Profit Locking & Trailing Stop
@@ -931,15 +980,14 @@ class MT5AutonomousEngine:
         if getattr(self.adapter, "enabled", False):
             try:
                 balances = self.adapter.get_balance()
-                if balances:
-                    return balances
+                if balances and "USD" in balances:
+                    bal_obj = balances["USD"]
+                    self.cloud_balance = float(bal_obj.total or bal_obj.free or self.cloud_balance)
             except Exception:
                 pass
-        if not self.cloud_positions and not os.path.exists(self.state_file):
-            pass
-        elif not self.cloud_positions:
+        if not self.cloud_positions:
             self._load_cloud_state()
-        used_margin = sum(p.quantity * 100.0 for p in self.cloud_positions.values())
+        used_margin = sum(_calculate_position_margin(p.symbol, p.quantity) for p in self.cloud_positions.values())
         unrealized_sum = sum(p.unrealized_pnl for p in self.cloud_positions.values())
         equity = self.cloud_balance + unrealized_sum
         free_margin = max(0.0, equity - used_margin)
@@ -949,6 +997,7 @@ class MT5AutonomousEngine:
                 "equity": round(equity, 2),
                 "free": round(free_margin, 2),
                 "used": round(used_margin, 2),
+                "unrealized_pnl": round(unrealized_sum, 2),
             }
         }
 
