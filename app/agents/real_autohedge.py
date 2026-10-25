@@ -172,7 +172,7 @@ class PortfolioRebalancer:
         return False
 
     def rebalance(self, prices: dict[str, float]) -> dict[str, float]:
-        total = sum(p * q for p, q in prices.items() if p in self.positions) + self.cash
+        total = sum(self.positions[p] * q for p, q in prices.items() if p in self.positions) + self.cash
         trades: dict[str, float] = {}
         for asset, target_w in self.target_weights.items():
             target_val = total * target_w
