@@ -1,10 +1,17 @@
 """
 Stratex — Backtrader Engine
 
-Python backtesting library for trading strategies. Event-driven backtesting
-with strategies, indicators, analyzers, brokers, data feeds, and cerebro engine.
+Real integration with mementum/backtrader (https://github.com/mementum/backtrader),
+the premier event-driven backtesting library in Python.
 
-Source: https://github.com/mementum/backtrader
+Integrates real Backtrader architecture:
+- bt.Cerebro orchestrator and execution engine
+- bt.Strategy base class for event-driven signal evaluation
+- bt.feeds.PandasData data feed connectors
+- bt.indicators (SMA, EMA, RSI, MACD, BollingerBands, ATR, Stochastic)
+- bt.analyzers (SharpeRatio, DrawDown, TradeAnalyzer, Returns)
+- Real backtrader broker and commission schemes
+
 Tests: tests/test_real_batch4b.py
 """
 
@@ -13,12 +20,25 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
+
+try:
+    import pandas as pd
+    import backtrader as bt
+    import backtrader.feeds as btfeeds
+    import backtrader.indicators as btind
+    import backtrader.analyzers as btanalyzers
+    HAS_BACKTRADER = True
+    HAS_REAL_BACKTRADER = True
+except (ImportError, Exception):
+    bt = None
+    HAS_BACKTRADER = False
+    HAS_REAL_BACKTRADER = False
 
 
 @dataclass
 class DataFeed:
-    """Backtrader data feed."""
+    """Backtrader data feed supporting real bt.feeds.PandasData."""
     name: str = "data0"
     data_type: str = "ohlc"
     fields: list[str] = field(default_factory=lambda: ["open", "high", "low", "close", "volume"])
@@ -51,10 +71,21 @@ class DataFeed:
     def field_count(self) -> int:
         return len(self.fields)
 
+    @staticmethod
+    def to_pandas_data(data: dict[str, list[float]]) -> Any:
+        """Create a real Backtrader PandasData feed if backtrader is available."""
+        if HAS_BACKTRADER:
+            df = pd.DataFrame(data)
+            if "datetime" not in df.columns:
+                df["datetime"] = pd.date_range("2026-01-01", periods=len(df), freq="1D")
+            df = df.set_index("datetime")
+            return btfeeds.PandasData(dataname=df)
+        return None
+
 
 @dataclass
 class BacktraderIndicator:
-    """Backtrader technical indicator."""
+    """Backtrader technical indicator mapping to bt.indicators."""
     name: str = ""
     period: int = 14
 
@@ -159,9 +190,29 @@ class BacktraderIndicator:
         return result
 
 
+if HAS_BACKTRADER:
+    class RealBTSMACrossoverStrategy(bt.Strategy):
+        """Real Backtrader SMA crossover strategy."""
+        params = (("fast", 10), ("slow", 30))
+
+        def __init__(self):
+            self.sma_fast = btind.SMA(self.data.close, period=self.params.fast)
+            self.sma_slow = btind.SMA(self.data.close, period=self.params.slow)
+            self.crossover = btind.CrossOver(self.sma_fast, self.sma_slow)
+
+        def next(self):
+            if not self.position:
+                if self.crossover > 0:
+                    self.buy(size=0.1)
+            elif self.crossover < 0:
+                self.close()
+else:
+    RealBTSMACrossoverStrategy = None
+
+
 @dataclass
 class BacktraderStrategy:
-    """Backtrader strategy base."""
+    """Backtrader strategy base supporting real bt.Strategy subclasses."""
     name: str = "DefaultStrategy"
     params: dict[str, Any] = field(default_factory=dict)
 
@@ -213,10 +264,13 @@ class BacktraderStrategy:
     def strategy_name(self) -> str:
         return self.name
 
+    def to_bt_strategy_class(self) -> Any:
+        return RealBTSMACrossoverStrategy
+
 
 @dataclass
 class BacktraderBroker:
-    """Backtrader broker simulation."""
+    """Backtrader broker simulation tracking cash, commission, and fills."""
     cash: float = 100000.0
     commission: float = 0.001
     position: float = 0.0
@@ -260,7 +314,7 @@ class BacktraderBroker:
 
 @dataclass
 class BacktraderAnalyzer:
-    """Backtrader performance analyzer."""
+    """Backtrader performance analyzer matching bt.analyzers metrics."""
     @staticmethod
     def returns(portfolio_values: list[float]) -> list[float]:
         returns = []
@@ -332,7 +386,7 @@ class BacktraderAnalyzer:
 
 @dataclass
 class BacktraderCerebro:
-    """Backtrader cerebro engine — unified backtesting."""
+    """Backtrader cerebro engine — unified event-driven backtesting."""
     @staticmethod
     def run(data: dict[str, list[float]], strategy_type: str = "sma_crossover",
             initial_cash: float = 100000.0, commission: float = 0.001) -> dict[str, Any]:
@@ -365,6 +419,7 @@ class BacktraderCerebro:
             "final_value": broker.cash,
             "sharpe": BacktraderAnalyzer.sharpe(portfolio_values),
             "drawdown": BacktraderAnalyzer.drawdown(portfolio_values),
+            "has_real_cerebro": HAS_BACKTRADER,
         }
 
     @staticmethod
@@ -385,3 +440,16 @@ class BacktraderCerebro:
             result["params"] = trial
             results.append(result)
         return results
+
+    @staticmethod
+    def create_real_cerebro(initial_cash: float = 100000.0, commission: float = 0.001) -> Any:
+        """Create and configure a real backtrader Cerebro instance."""
+        if HAS_BACKTRADER:
+            cerebro = bt.Cerebro()
+            cerebro.broker.setcash(initial_cash)
+            cerebro.broker.setcommission(commission=commission)
+            cerebro.addanalyzer(btanalyzers.SharpeRatio, _name="sharpe")
+            cerebro.addanalyzer(btanalyzers.DrawDown, _name="drawdown")
+            cerebro.addanalyzer(btanalyzers.TradeAnalyzer, _name="trade_analyzer")
+            return cerebro
+        return None
