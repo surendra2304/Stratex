@@ -8,7 +8,7 @@
 
 ## 1. The project context: FRIDAY Universe
 
-The user's master guide describes FRIDAY Universe v2.2.0 as a nine-agent, microservice-oriented AI operating system under `D:\FRIDAY Universe`, hosted across OCI Always Free ARM64/AMD compute, with Docker network `friday_mesh` and Caddy TLS ingress at `https://friday-universe.duckdns.org`.
+The user's master guide describes FRIDAY Universe v2.2.0 as a nine-agent, microservice-oriented AI operating system under `FRIDAY_UNIVERSE_HOME`, hosted across OCI Always Free ARM64/AMD compute, with Docker network `friday_mesh` and Caddy TLS ingress at `https://friday-universe.duckdns.org`.
 
 The nine agents are:
 
