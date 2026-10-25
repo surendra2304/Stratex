@@ -423,7 +423,7 @@ class TradeOptimizer:
 
         ens_sharpe = ens_return / max(0.001, ens_risk) if ens_risk > 0 else 0.0
 
-        ensemble_id = hashlib.md5(f"ensemble:{method}:{time.time()}").hexdigest()[:12]
+        ensemble_id = hashlib.md5(f"ensemble:{method}:{time.time()}".encode()).hexdigest()[:12]
         self._ensemble_weights[ensemble_id] = weights
         self._correlation_matrix[ensemble_id] = corr
 

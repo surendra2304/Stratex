@@ -161,8 +161,8 @@ class AlgorithmicStrategyLibrary:
             raise HTTPException(404, f"Strategy {strategy_id} not found")
 
         # Simulate backtest
-        trades = 100 + (ord(hashlib.md5(f"{strategy_id}:{symbol}").encode()) % 50)
-        win_rate = 0.45 + (ord(hashlib.md5(f"backtest:{strategy_id}").encode()) % 40) / 100
+        trades = 100 + (ord(hashlib.md5(f"{strategy_id}:{symbol}".encode()).encode()) % 50)
+        win_rate = 0.45 + (ord(hashlib.md5(f"backtest:{strategy_id}".encode()).encode()) % 40) / 100
 
         # Calculate returns based on strategy type
         returns = {
@@ -176,7 +176,7 @@ class AlgorithmicStrategyLibrary:
             "ml": 0.25,
         }
 
-        total_return = returns.get(strategy.strategy_type, 0.10) * (0.8 + (ord(hashlib.md5(f"{strategy_id}:{symbol}:{period}").encode()) % 40) / 100)
+        total_return = returns.get(strategy.strategy_type, 0.10) * (0.8 + (ord(hashlib.md5(f"{strategy_id}:{symbol}:{period}".encode()).encode()) % 40) / 100)
         final_capital = initial_capital * (1 + total_return / 100)
 
         result = BacktestResult(
@@ -188,12 +188,12 @@ class AlgorithmicStrategyLibrary:
             total_return_pct=total_return,
             sharpe_ratio=0.8 + total_return * 0.05,
             sortino_ratio=1.0 + total_return * 0.05,
-            drawdown_pct=8 + (ord(hashlib.md5(f"dd:{strategy_id}").encode()) % 10),
+            drawdown_pct=8 + (ord(hashlib.md5(f"dd:{strategy_id}".encode()).encode()) % 10),
             win_rate=win_rate,
-            avg_win_pct=3 + (ord(hashlib.md5(f"win:{strategy_id}").encode()) % 5),
-            avg_loss_pct=1.5 + (ord(hashlib.md5(f"loss:{strategy_id}").encode()) % 3),
+            avg_win_pct=3 + (ord(hashlib.md5(f"win:{strategy_id}".encode()).encode()) % 5),
+            avg_loss_pct=1.5 + (ord(hashlib.md5(f"loss:{strategy_id}".encode()).encode()) % 3),
             profit_factor=win_rate / max(0.01, 1 - win_rate) * (avg_win := 3.5) / max(0.1, avg_loss := 1.5),
-            max_drawdown_pct=10 + (ord(hashlib.md5(f"maxdd:{strategy_id}").encode()) % 15),
+            max_drawdown_pct=10 + (ord(hashlib.md5(f"maxdd:{strategy_id}".encode()).encode()) % 15),
             trades_executed=int(trades * win_rate),
             trades_total=trades,
         )
@@ -212,7 +212,7 @@ class AlgorithmicStrategyLibrary:
         ).hexdigest()[:1] < "6"  # 60% buy
 
         entry_price = 100.0 + (ord(hashlib.md5(symbol.encode())) % 50)
-        confidence = 0.5 + (ord(hashlib.md5(f"conf:{strategy_id}").encode()) % 40) / 100
+        confidence = 0.5 + (ord(hashlib.md5(f"conf:{strategy_id}".encode()).encode()) % 40) / 100
 
         signal = StrategySignal(
             signal_id=hashlib.md5(
@@ -248,9 +248,9 @@ class AlgorithmicStrategyLibrary:
             strategy_id=strategy_id,
             model_type=model_type,
             features=features or ["price", "volume", "rsi", "macd", "bollinger_bands"],
-            accuracy=0.55 + (ord(hashlib.md5(f"acc:{strategy_id}").encode()) % 35) / 100,
-            precision=0.5 + (ord(hashlib.md5(f"prec:{strategy_id}").encode()) % 30) / 100,
-            recall=0.5 + (ord(hashlib.md5(f"rec:{strategy_id}").encode()) % 30) / 100,
+            accuracy=0.55 + (ord(hashlib.md5(f"acc:{strategy_id}".encode()).encode()) % 35) / 100,
+            precision=0.5 + (ord(hashlib.md5(f"prec:{strategy_id}".encode()).encode()) % 30) / 100,
+            recall=0.5 + (ord(hashlib.md5(f"rec:{strategy_id}".encode()).encode()) % 30) / 100,
             training_size=10000,
             last_trained=time.time(),
         )
@@ -276,9 +276,9 @@ class AlgorithmicStrategyLibrary:
         optimization = StrategyOptimization(
             strategy_id=strategy_id,
             best_parameters=dict(strategy.parameters),
-            best_sharpe=1.2 + (ord(hashlib.md5(f"opt:{strategy_id}").encode()) % 50) / 100,
-            best_return_pct=0.18 + (ord(hashlib.md5(f"optret:{strategy_id}").encode()) % 15) / 100,
-            best_drawdown_pct=6 + (ord(hashlib.md5(f"optdd:{strategy_id}").encode()) % 8),
+            best_sharpe=1.2 + (ord(hashlib.md5(f"opt:{strategy_id}".encode()).encode()) % 50) / 100,
+            best_return_pct=0.18 + (ord(hashlib.md5(f"optret:{strategy_id}".encode()).encode()) % 15) / 100,
+            best_drawdown_pct=6 + (ord(hashlib.md5(f"optdd:{strategy_id}".encode()).encode()) % 8),
             parameters_tested=1000,
             optimization_method=method,
             optimization_time_ms=(time.time() - start) * 1000,

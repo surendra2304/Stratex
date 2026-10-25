@@ -51,6 +51,7 @@ core_blueprints = [
     ("api.market_making_routes", "mk_bp"),
     ("api.sentiment_routes", "sentiment_bp"),
     ("api.options_routes", "options_bp"),
+    ("api.real_trading_routes", "real_trading_bp"),
 ]
 
 adapter_blueprints = [

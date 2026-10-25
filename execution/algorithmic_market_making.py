@@ -196,7 +196,7 @@ class AlgorithmicMarketMaker:
         strategy = self._strategies.get(symbol)
         if not strategy:
             strategy = QuoteStrategy(
-                strategy_id=hashlib.md5(f"strategy:{symbol}").hexdigest()[:12],
+                strategy_id=hashlib.md5(f"strategy:{symbol}".encode()).hexdigest()[:12],
                 symbol=symbol,
             )
             self._strategies[symbol] = strategy

@@ -176,7 +176,7 @@ class PortfolioRiskAnalytics:
             market_value=market_value,
             unrealized_pnl=unrealized_pnl,
             beta=0.8 + (ord(hashlib.md5(symbol.encode()).hexdigest()[:1]) % 40) / 100,
-            volatility=0.15 + (ord(hashlib.md5(f"vol:{symbol}").encode()) % 30) / 100,
+            volatility=0.15 + (ord(hashlib.md5(f"vol:{symbol}".encode()).encode()) % 30) / 100,
         )
 
         portfolio.positions.append({
@@ -308,7 +308,7 @@ class PortfolioRiskAnalytics:
                     row.append(1.0)
                 else:
                     # Simulate correlation (0.3 to 0.8 for correlated assets)
-                    corr = 0.3 + (ord(hashlib.md5(f"{symbols[i]}:{symbols[j]}").encode()) % 50) / 100
+                    corr = 0.3 + (ord(hashlib.md5(f"{symbols[i]}:{symbols[j]}".encode()).encode()) % 50) / 100
                     row.append(corr)
             matrix.append(row)
 
