@@ -637,4 +637,54 @@
   switchView(Object.prototype.hasOwnProperty.call(viewCopy, initialView) ? initialView : 'overview');
   refreshData();
   
+  // ===== Scroll progress indicator =====
+  const scrollBar = document.createElement('div');
+  scrollBar.className = 'scroll-progress';
+  scrollBar.innerHTML = '<div class="scroll-progress-bar" id="scroll-bar"></div>';
+  document.body.appendChild(scrollBar);
+
+  let scrollTicking = false;
+  function updateScrollProgress() {
+    const scrollTop = document.documentElement.scrollTop;
+    const scrollHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+    const progress = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
+    const bar = document.getElementById('scroll-bar');
+    if (bar) bar.style.width = progress + '%';
+  }
+  window.addEventListener('scroll', () => {
+    if (!scrollTicking) {
+      requestAnimationFrame(() => { updateScrollProgress(); scrollTicking = false; });
+      scrollTicking = true;
+    }
+  }, { passive: true });
+  updateScrollProgress();
+
+  // ===== IntersectionObserver for panel reveals =====
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduceMotion && 'IntersectionObserver' in window) {
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+
+    document.querySelectorAll('.panel').forEach(panel => revealObserver.observe(panel));
+  } else {
+    document.querySelectorAll('.panel').forEach(panel => panel.classList.add('visible'));
+  }
+
+  // ===== Metric value bump on update =====
+  const originalSetText = setText;
+  setText = (id, value) => {
+    originalSetText(id, value);
+    const node = byId(id);
+    if (node && node.tagName === 'STRONG' && /metric/.test(id)) {
+      node.classList.add('bump');
+      setTimeout(() => node.classList.remove('bump'), 400);
+    }
+  };
+
 })();
