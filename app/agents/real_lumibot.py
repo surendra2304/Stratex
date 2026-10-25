@@ -1,16 +1,10 @@
 """
 Stratex — Lumibot Engine
 
-Real integration with Lumiwealth/lumibot (https://github.com/Lumiwealth/lumibot),
-the open-source Python algorithmic trading framework supporting stocks, options,
-futures, forex, crypto and prediction markets across multiple brokers.
+Python trading framework with AI agents. Backtest, paper and live trading
+on 12 brokers: stocks, options, futures, forex, crypto and prediction markets.
 
-Integrates real Lumibot architecture:
-- lumibot.strategies.strategy.Strategy base class for live & paper trading
-- lumibot.entities.Order, Position, and Asset data structures
-- lumibot.brokers.Broker integrations (Alpaca, Interactive Brokers, Tradier, etc.)
-- Multi-asset backtesting and portfolio metrics computation
-
+Source: https://github.com/Lumiwealth/lumibot
 Tests: tests/test_real_batch4b.py
 """
 
@@ -20,24 +14,7 @@ import math
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Optional
-
-try:
-    import lumibot
-    from lumibot.strategies.strategy import Strategy as RealLumiStrategy
-    from lumibot.entities import Order as RealLumiOrder, Position as RealLumiPosition, Asset as RealLumiAsset
-    from lumibot.brokers import Broker as RealLumiBroker
-    HAS_LUMIBOT = True
-    HAS_REAL_LUMIBOT = True
-except (ImportError, Exception):
-    lumibot = None
-    RealLumiStrategy = None
-    RealLumiOrder = None
-    RealLumiPosition = None
-    RealLumiAsset = None
-    RealLumiBroker = None
-    HAS_LUMIBOT = False
-    HAS_REAL_LUMIBOT = False
+from typing import Any
 
 
 BROKER_NAMES = [
@@ -69,19 +46,10 @@ class BrokerConfig:
     def has_credentials(self) -> bool:
         return bool(self.api_key and self.api_secret)
 
-    def to_lumibot_broker_params(self) -> dict[str, Any]:
-        """Convert into Lumibot broker constructor parameters."""
-        return {
-            "name": self.name,
-            "api_key": self.api_key,
-            "api_secret": self.api_secret,
-            "paper": self.is_paper,
-        }
-
 
 @dataclass
 class LumibotOrder:
-    """Lumibot order wrapping real lumibot Order entity."""
+    """Lumibot order."""
     symbol: str
     side: str  # BUY, SELL, SHORTSELL, COVER
     order_type: str = "market"  # market, limit, stop, trailing_stop
@@ -125,27 +93,10 @@ class LumibotOrder:
     def cancel(self) -> None:
         self.status = "cancelled"
 
-    def to_real_lumibot_order(self) -> Any:
-        """Create a real lumibot.entities.Order object if available."""
-        if HAS_LUMIBOT and RealLumiOrder is not None and RealLumiAsset is not None:
-            try:
-                asset = RealLumiAsset(symbol=self.symbol)
-                side_map = {"BUY": "buy", "SELL": "sell", "SHORTSELL": "sell", "COVER": "buy"}
-                return RealLumiOrder(
-                    asset=asset,
-                    quantity=self.quantity,
-                    side=side_map.get(self.side.upper(), "buy"),
-                    type=self.order_type,
-                    price=self.price if self.price > 0 else None,
-                )
-            except Exception:
-                pass
-        return None
-
 
 @dataclass
 class LumibotPosition:
-    """Lumibot position wrapping real lumibot Position entity."""
+    """Lumibot position."""
     symbol: str
     quantity: float = 0.0
     avg_entry_price: float = 0.0
@@ -187,29 +138,6 @@ class LumibotPosition:
         if self.avg_entry_price <= 0:
             return 0.0
         return self.unrealized_pnl / (self.quantity * self.avg_entry_price) if self.quantity > 0 else 0.0
-
-    def to_real_lumibot_position(self) -> Any:
-        """Create a real lumibot.entities.Position object if available."""
-        if HAS_LUMIBOT and RealLumiPosition is not None and RealLumiAsset is not None:
-            try:
-                asset = RealLumiAsset(symbol=self.symbol)
-                return RealLumiPosition(
-                    asset=asset,
-                    quantity=self.quantity,
-                    hold_cost=self.avg_entry_price,
-                )
-            except Exception:
-                pass
-        return None
-
-
-if HAS_LUMIBOT and RealLumiStrategy is not None:
-    class RealLumibotStrategyWrapper(RealLumiStrategy):
-        """Real Lumibot Strategy subclass."""
-        def on_trading_iteration(self):
-            pass
-else:
-    RealLumibotStrategyWrapper = None
 
 
 @dataclass
@@ -275,9 +203,6 @@ class LumibotStrategy:
     def order_count(self) -> int:
         return len(self.orders)
 
-    def to_real_strategy_class(self) -> Any:
-        return RealLumibotStrategyWrapper
-
 
 @dataclass
 class LumibotBacktest:
@@ -319,7 +244,6 @@ class LumibotBacktest:
             "total_return": total_return,
             "trade_count": len(trades),
             "win_rate": win_rate,
-            "has_real_lumibot": HAS_LUMIBOT,
         }
 
     @staticmethod
@@ -385,7 +309,7 @@ class LumibotBacktest:
 
 @dataclass
 class LumibotManager:
-    """Unified Lumibot manager supporting multi-broker configurations."""
+    """Unified Lumibot manager."""
     strategy: LumibotStrategy = field(default_factory=LumibotStrategy)
     broker_names: list[str] = field(default_factory=lambda: list(BROKER_NAMES))
 

@@ -1,15 +1,11 @@
 """
 Stratex — Vectorbt Engine
 
-Real integration with polakowo/vectorbt (https://github.com/polakowo/vectorbt),
-the high-performance vectorized backtesting library for Python.
+Vectorized backtesting research engine. Fast vectorized operations on
+financial data, portfolio simulation, signal generation, position sizing,
+and metric calculation.
 
-Integrates real VectorBT architecture:
-- vbt.Portfolio.from_signals and vbt.Portfolio.from_orders
-- vbt.signals and vectorized indicator generation (MA, RSI, BBANDS, MACD)
-- Fast numpy/numba-accelerated metrics computation
-- Vectorized position sizing and multi-strategy comparisons
-
+Source: https://github.com/polakowo/vectorbt
 Tests: tests/test_real_batch4b.py
 """
 
@@ -19,23 +15,12 @@ import math
 import random
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Optional
-
-try:
-    import pandas as pd
-    import numpy as np
-    import vectorbt as vbt
-    HAS_VECTORBT = True
-    HAS_REAL_VECTORBT = True
-except (ImportError, Exception):
-    vbt = None
-    HAS_VECTORBT = False
-    HAS_REAL_VECTORBT = False
+from typing import Any
 
 
 @dataclass
 class SignalGenerator:
-    """Vectorized signal generation using vectorbt and native methods."""
+    """Vectorized signal generation."""
     @staticmethod
     def sma_signal(close: list[float], short_window: int = 20, long_window: int = 50) -> list[int]:
         signals = []
@@ -125,21 +110,10 @@ class SignalGenerator:
                 signals.append(0)
         return signals
 
-    @staticmethod
-    def vbt_signals_from_series(close_series: Any) -> Any:
-        """Generate vectorbt signal containers using real vectorbt if available."""
-        if HAS_VECTORBT and isinstance(close_series, pd.Series):
-            fast_ma = vbt.MA.run(close_series, 20)
-            slow_ma = vbt.MA.run(close_series, 50)
-            entries = fast_ma.ma_crossed_above(slow_ma)
-            exits = fast_ma.ma_crossed_below(slow_ma)
-            return entries, exits
-        return None, None
-
 
 @dataclass
 class PositionSizer:
-    """Vectorized position sizing integrating vectorbt sizing capabilities."""
+    """Vectorized position sizing."""
     @staticmethod
     def fixed_fraction(capital: float, price: float, fraction: float = 0.1) -> float:
         return (capital * fraction) / price if price > 0 else 0.0
@@ -172,7 +146,7 @@ class PositionSizer:
 
 @dataclass
 class PortfolioSimulation:
-    """Vectorized portfolio simulation integrating real vectorbt Portfolio engine."""
+    """Vectorized portfolio simulation."""
     @staticmethod
     def simulate(prices: list[float], signals: list[int], initial_capital: float = 10000.0) -> dict[str, Any]:
         cash = initial_capital
@@ -200,12 +174,7 @@ class PortfolioSimulation:
             trades.append({"type": "SELL", "price": prices[-1], "shares": position, "index": len(prices)-1,
                           "pnl": (prices[-1] - entry_price) / entry_price})
             portfolio_values[-1] = cash
-        return {
-            "portfolio_values": portfolio_values,
-            "trades": trades,
-            "final_value": cash,
-            "has_real_vectorbt": HAS_VECTORBT,
-        }
+        return {"portfolio_values": portfolio_values, "trades": trades, "final_value": cash}
 
     @staticmethod
     def simulate_multi(price_data: dict[str, list[float]], signals: dict[str, list[int]],
@@ -332,32 +301,12 @@ class VectorbtMetrics:
 
 @dataclass
 class VectorbtPortfolio:
-    """Unified vectorbt portfolio engine using real vectorbt when available."""
+    """Unified vectorbt portfolio engine."""
     @staticmethod
     def from_signals(prices: list[float], signals: list[int], initial_capital: float = 10000.0) -> dict[str, Any]:
-        """Execute portfolio simulation from entry/exit signals."""
         sim = PortfolioSimulation.simulate(prices, signals, initial_capital)
         metrics = VectorbtMetrics.calculate_all(sim["portfolio_values"])
-        out: dict[str, Any] = {"simulation": sim, "metrics": metrics}
-
-        # Real vectorbt integration
-        if HAS_VECTORBT and len(prices) > 0:
-            try:
-                price_s = pd.Series(prices)
-                entries = pd.Series([s == 1 for s in signals])
-                exits = pd.Series([s == -1 for s in signals])
-                real_pf = vbt.Portfolio.from_signals(
-                    price_s,
-                    entries=entries,
-                    exits=exits,
-                    init_cash=initial_capital,
-                    size=0.1,
-                    size_type="targetpercent",
-                )
-                out["vbt_portfolio"] = real_pf
-            except Exception:
-                pass
-        return out
+        return {"simulation": sim, "metrics": metrics}
 
     @staticmethod
     def compare_strategies(prices: list[float], strategies: dict[str, list[int]],
