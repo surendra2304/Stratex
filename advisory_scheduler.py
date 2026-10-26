@@ -73,11 +73,15 @@ class AdvisoryScheduler:
         try:
             logger.info(f"[ADVISORY_SCHEDULER] Starting consultation cycle (reason='{reason}', shadow_mode={self.shadow_mode})...")
 
-            # 1. Build Telemetry Payload
+            # 1. Build Telemetry Payload with OpenBB research
             telemetry = build_telemetry_payload(
                 trading_mode=self.trading_mode,
                 consultation_reason=reason
             )
+            
+            # 1a. Add OpenBB research context to consultation
+            if telemetry.get("openbb_context"):
+                logger.info(f"[ADVISORY_SCHEDULER] OpenBB research available: {len(telemetry['openbb_context'].get('recommendations', []))} symbols")
 
             # 2. Consult AI-Universe
             decision = self.client.consult(telemetry)
@@ -111,6 +115,7 @@ class AdvisoryScheduler:
                 "rejected_changes": result.rejected_changes,
                 "ai_debate_summary": decision.get("debate_summary", decision.get("recommendation", "")),
                 "regime_analysis": telemetry.get("market_regime", {}),
+                "openbb_research": telemetry.get("openbb_context"),
                 "latency_ms": decision.get("latency_ms", 0.0),
                 "shadow_mode": self.shadow_mode,
                 "bounds_checked": result.bounds_checked

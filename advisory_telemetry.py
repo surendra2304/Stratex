@@ -215,6 +215,165 @@ def build_telemetry_payload(
         "consecutive_losses": int(max(consecutive_losses, 0))
     }
 
+    # 5. Integrate OpenBB Research Context
+    openbb_context = None
+    try:
+        from real_trading_engine import engine
+        openbb_context = {
+            "research_available": True,
+            "recommendations": [],
+        }
+        # Research active symbols in portfolio
+        symbols = []
+        if isinstance(positions, dict):
+            symbols = list(positions.keys())[:5]
+        elif isinstance(open_positions, list):
+            for pos in open_positions[:5]:
+                if isinstance(pos, dict) and "symbol" in pos:
+                    symbols.append(pos["symbol"])
+        
+        for symbol in symbols:
+            result = engine.research_symbol(symbol)
+            if "recommendation" in result:
+                openbb_context["recommendations"].append({
+                    "symbol": symbol,
+                    "recommendation": result["recommendation"],
+                    "confidence": result.get("confidence", 0.5),
+                })
+        if not openbb_context["recommendations"]:
+            openbb_context["research_available"] = False
+    except Exception as e:
+        logger.debug(f"[ADVISORY_TELEMETRY] OpenBB context lookup skipped: {e}")
+        openbb_context = None
+
+    # 5. Integrate OpenBB Research Context
+    openbb_context = None
+    try:
+        from real_trading_engine import engine
+        openbb_context = {
+            "research_available": True,
+            "recommendations": [],
+        }
+        # Research active symbols in portfolio
+        symbols = []
+        if isinstance(positions, dict):
+            symbols = list(positions.keys())[:5]
+        elif isinstance(open_positions, list):
+            for pos in open_positions[:5]:
+                if isinstance(pos, dict) and "symbol" in pos:
+                    symbols.append(pos["symbol"])
+        
+        for symbol in symbols:
+            result = engine.research_symbol(symbol)
+            if "recommendation" in result:
+                openbb_context["recommendations"].append({
+                    "symbol": symbol,
+                    "recommendation": result["recommendation"],
+                    "confidence": result.get("confidence", 0.5),
+                })
+        if not openbb_context["recommendations"]:
+            openbb_context["research_available"] = False
+    except Exception as e:
+        logger.debug(f"[ADVISORY_TELEMETRY] OpenBB context lookup skipped: {e}")
+        openbb_context = None
+
+    # 5. Integrate OpenBB Research Context
+    openbb_context = None
+    try:
+        from real_trading_engine import engine
+        openbb_context = {
+            "research_available": True,
+            "recommendations": [],
+        }
+        # Research active symbols in portfolio
+        symbols = []
+        if isinstance(positions, dict):
+            symbols = list(positions.keys())[:5]
+        elif isinstance(open_positions, list):
+            for pos in open_positions[:5]:
+                if isinstance(pos, dict) and "symbol" in pos:
+                    symbols.append(pos["symbol"])
+        
+        for symbol in symbols:
+            result = engine.research_symbol(symbol)
+            if "recommendation" in result:
+                openbb_context["recommendations"].append({
+                    "symbol": symbol,
+                    "recommendation": result["recommendation"],
+                    "confidence": result.get("confidence", 0.5),
+                })
+        if not openbb_context["recommendations"]:
+            openbb_context["research_available"] = False
+    except Exception as e:
+        logger.debug(f"[ADVISORY_TELEMETRY] OpenBB context lookup skipped: {e}")
+        openbb_context = None
+
+    # Integrate OpenBB Research Context
+    openbb_context = None
+    try:
+        from real_trading_engine import engine
+        openbb_context = {
+            "research_available": True,
+            "recommendations": [],
+            "fundamental_scores": [],
+        }
+        # Research active symbols in portfolio
+        symbols = []
+        if isinstance(positions, dict):
+            symbols = list(positions.keys())[:10]
+        elif isinstance(open_positions, list):
+            for pos in open_positions[:10]:
+                if isinstance(pos, dict) and "symbol" in pos:
+                    symbols.append(pos["symbol"])
+        
+        for symbol in symbols:
+            result = engine.research_symbol(symbol)
+            if "recommendation" in result:
+                openbb_context["recommendations"].append({
+                    "symbol": symbol,
+                    "recommendation": result["recommendation"],
+                    "confidence": result.get("confidence", 0.5),
+                    "financial_health": result.get("fundamentals", {}).get("financial_health_score", 50.0),
+                })
+        if not openbb_context["recommendations"]:
+            openbb_context["research_available"] = False
+    except Exception as e:
+        logger.debug(f"[ADVISORY_TELEMETRY] OpenBB context lookup skipped: {e}")
+        openbb_context = None
+
+    # Integrate OpenBB Research Context
+    openbb_context = None
+    try:
+        from real_trading_engine import engine
+        openbb_context = {
+            "research_available": True,
+            "recommendations": [],
+            "fundamental_scores": [],
+        }
+        # Research active symbols in portfolio
+        symbols = []
+        if isinstance(positions, dict):
+            symbols = list(positions.keys())[:10]
+        elif isinstance(open_positions, list):
+            for pos in open_positions[:10]:
+                if isinstance(pos, dict) and "symbol" in pos:
+                    symbols.append(pos["symbol"])
+        
+        for symbol in symbols:
+            result = engine.research_symbol(symbol)
+            if "recommendation" in result:
+                openbb_context["recommendations"].append({
+                    "symbol": symbol,
+                    "recommendation": result["recommendation"],
+                    "confidence": result.get("confidence", 0.5),
+                    "financial_health": result.get("fundamentals", {}).get("financial_health_score", 50.0),
+                })
+        if not openbb_context["recommendations"]:
+            openbb_context["research_available"] = False
+    except Exception as e:
+        logger.debug(f"[ADVISORY_TELEMETRY] OpenBB context lookup skipped: {e}")
+        openbb_context = None
+
     payload = {
         "bot_id": "stratex_bot_01",
         "trading_mode": normalized_mode,
@@ -225,6 +384,11 @@ def build_telemetry_payload(
         "market_context": market_context,
         "futuris_context": futuris_context,
         "market_regime": regime_data,
+        "openbb_context": openbb_context,
+        "openbb_context": openbb_context,
+        "openbb_context": openbb_context,
+        "openbb_context": openbb_context,
+        "openbb_context": openbb_context,
         "strategy_performance": [
             {
                 "strategy_name": current_strategy,

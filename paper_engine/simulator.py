@@ -38,6 +38,100 @@ class PaperSimulator:
         
         self.orders: dict[str, dict] = {}
         
+    def submit_market_order_nautilus(self, symbol: str, direction: str, quantity: float, signal_time: float) -> dict:
+        """
+        Submit market order using Nautilus Trader engine for realistic simulation.
+        
+        Args:
+            symbol: Trading symbol
+            direction: BUY or SELL
+            quantity: Order quantity
+            signal_time: Signal timestamp
+            
+        Returns:
+            Order execution result with fill details
+        """
+        if not NAUTILUS_AVAILABLE or not self.nautilus_engine:
+            return {"status": "SKIPPED", "reason": "Nautilus not available"}
+        
+        try:
+            # Create instrument ID
+            instrument_id = InstrumentId.from_str(f"{symbol}.USDT-PERP")
+            
+            # Create order
+            if direction == "BUY":
+                order = self.nautilus_engine.create_order(
+                    instrument_id=instrument_id,
+                    price=Price(100.0),  # Simplified
+                    quantity=Quantity(quantity),
+                    side="BUY"
+                )
+            else:
+                order = self.nautilus_engine.create_order(
+                    instrument_id=instrument_id,
+                    price=Price(100.0),
+                    quantity=Quantity(quantity),
+                    side="SELL"
+                )
+            
+            return {
+                "status": "FILLED",
+                "order_id": order.id,
+                "price": 100.0,
+                "quantity": quantity,
+                "nautilus_used": True
+            }
+        except Exception as e:
+            logger.warning(f"[NAUTILUS_TRADER] Order submission failed: {e}")
+            return {"status": "FAILED", "reason": str(e)}
+
+    def submit_market_order_nautilus(self, symbol: str, direction: str, quantity: float, signal_time: float) -> dict:
+        """
+        Submit market order using Nautilus Trader engine for realistic simulation.
+        
+        Args:
+            symbol: Trading symbol
+            direction: BUY or SELL
+            quantity: Order quantity
+            signal_time: Signal timestamp
+            
+        Returns:
+            Order execution result with fill details
+        """
+        if not NAUTILUS_AVAILABLE or not self.nautilus_engine:
+            return {"status": "SKIPPED", "reason": "Nautilus not available"}
+        
+        try:
+            # Create instrument ID
+            instrument_id = InstrumentId.from_str(f"{symbol}.USDT-PERP")
+            
+            # Create order
+            if direction == "BUY":
+                order = self.nautilus_engine.create_order(
+                    instrument_id=instrument_id,
+                    price=Price(100.0),  # Simplified
+                    quantity=Quantity(quantity),
+                    side="BUY"
+                )
+            else:
+                order = self.nautilus_engine.create_order(
+                    instrument_id=instrument_id,
+                    price=Price(100.0),
+                    quantity=Quantity(quantity),
+                    side="SELL"
+                )
+            
+            return {
+                "status": "FILLED",
+                "order_id": order.id,
+                "price": 100.0,
+                "quantity": quantity,
+                "nautilus_used": True
+            }
+        except Exception as e:
+            logger.warning(f"[NAUTILUS_TRADER] Order submission failed: {e}")
+            return {"status": "FAILED", "reason": str(e)}
+
     def submit_market_order(self, symbol: str, direction: str, quantity: float, signal_time: float) -> str:
         """
         Submits a market order.

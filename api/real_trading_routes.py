@@ -439,3 +439,70 @@ def fincept_fundamentals():
         "metrics": metrics,
         "financial_health_score": health_score,
     })
+
+# ── OPENBB ENDPOINTS ──────────────────────────────────────────────────────
+
+@real_trading_bp.route("/openbb/research", methods=["POST"])
+def openbb_research():
+    """Research a symbol using OpenBB capabilities."""
+    try:
+        from Stratex.real_trading_engine import engine
+        data = request.get_json() or {}
+        symbol = data.get("symbol", "AAPL")
+        market_cap_min = float(data.get("market_cap_min", 0))
+        result = engine.research_symbol(symbol, market_cap_min)
+        return jsonify({"status": "ok", "result": result})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@real_trading_bp.route("/openbb/screen", methods=["POST"])
+def openbb_screen():
+    """Screen universe using OpenBB screener."""
+    try:
+        from Stratex.real_trading_engine import engine
+        data = request.get_json() or {}
+        filters = data.get("filters", {})
+        results = engine.screen_universe(filters)
+        return jsonify({"status": "ok", "results": results, "count": len(results)})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ── NAUTILUS TRADER ENDPOINTS ─────────────────────────────────────────────
+
+@real_trading_bp.route("/nautilus/backtest", methods=["POST"])
+def nautilus_backtest():
+    """Run backtest using Nautilus Trader engine."""
+    try:
+        from Stratex.real_trading_engine import engine, PriceBar
+        data = request.get_json() or {}
+        symbol = data.get("symbol", "BTCUSDT")
+        strategy = data.get("strategy", "sma_cross")
+        bars_data = data.get("bars", [])
+
+        bars = [PriceBar(timestamp=b.get("timestamp", 0), open=b.get("open", 0),
+                        high=b.get("high", 0), low=b.get("low", 0),
+                        close=b.get("close", 0), volume=b.get("volume", 0))
+                for b in bars_data]
+
+        result = engine.nautilus_backtest(symbol, bars, strategy)
+        return jsonify({"status": "ok", "result": result})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@real_trading_bp.route("/nautilus/status", methods=["GET"])
+def nautilus_status():
+    """Check Nautilus Trader engine status."""
+    try:
+        from Stratex.app.agents.real_nautilus_trader import (
+            NautilusBacktestEngine, NautilusStrategy, Account,
+            NautilusOrderBook, NautilusDataFeed,
+        )
+        return jsonify({
+            "status": "ok",
+            "engines": ["NautilusBacktestEngine", "NautilusOrderBook", "NautilusDataFeed"],
+        })
+    except ImportError as e:
+        return jsonify({"status": "error", "message": str(e)}), 503
