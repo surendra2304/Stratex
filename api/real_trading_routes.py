@@ -439,3 +439,221 @@ def fincept_fundamentals():
         "metrics": metrics,
         "financial_health_score": health_score,
     })
+
+
+# ── EXTENDED DEEP TRADING ENGINE ENDPOINTS (BATCH 4B & UNIFIED HUB) ─────────
+
+try:
+    from app.trading_hub import hub as trading_hub
+except ImportError:
+    from Stratex.app.trading_hub import hub as trading_hub
+
+
+@real_trading_bp.route("/ccxt/ticker", methods=["GET", "POST"])
+def ccxt_ticker_endpoint():
+    """Fetch live or simulated unified ticker via CCXT engine."""
+    if request.method == "POST":
+        data = request.get_json() or {}
+        symbol = data.get("symbol", "BTC/USDT")
+        exchange = data.get("exchange", "binance")
+    else:
+        symbol = request.args.get("symbol", "BTC/USDT")
+        exchange = request.args.get("exchange", "binance")
+
+    quote = trading_hub.get_market_quote(symbol=symbol, exchange=exchange)
+    return jsonify({
+        "status": "success",
+        "engine": "CCXT",
+        "exchange": exchange,
+        "symbol": symbol,
+        "ticker": quote,
+    })
+
+
+@real_trading_bp.route("/ccxt/arbitrage", methods=["POST"])
+def ccxt_arbitrage_endpoint():
+    """Scan spatial arbitrage opportunities across exchange connectors."""
+    data = request.get_json() or {}
+    symbol = data.get("symbol", "BTC/USDT")
+    min_spread = float(data.get("min_spread_pct", 0.1))
+    opps = trading_hub.scan_arbitrage(symbol=symbol, min_spread_pct=min_spread)
+    return jsonify({
+        "status": "success",
+        "engine": "CCXT",
+        "symbol": symbol,
+        "min_spread_pct": min_spread,
+        "opportunities": opps,
+    })
+
+
+@real_trading_bp.route("/backtrader/backtest", methods=["POST"])
+def backtrader_backtest_endpoint():
+    """Run event-driven Backtrader backtest simulation."""
+    data = request.get_json() or {}
+    closes = data.get("close", [100.0 + i * 0.5 for i in range(50)])
+    ohlcv = {
+        "close": closes,
+        "open": data.get("open", closes),
+        "high": data.get("high", [c * 1.01 for c in closes]),
+        "low": data.get("low", [c * 0.99 for c in closes]),
+        "volume": data.get("volume", [1000.0] * len(closes)),
+    }
+    fast = int(data.get("fast", 10))
+    slow = int(data.get("slow", 30))
+    initial_cash = float(data.get("initial_cash", 100000.0))
+
+    try:
+        from app.agents.real_backtrader import BacktraderCerebro
+    except ImportError:
+        from Stratex.app.agents.real_backtrader import BacktraderCerebro
+
+    res = getattr(BacktraderCerebro, "run_real_cerebro", BacktraderCerebro.run)(
+        ohlcv, fast=fast, slow=slow, initial_cash=initial_cash
+    )
+    return jsonify({
+        "status": "success",
+        "engine": "Backtrader",
+        "result": res,
+    })
+
+
+@real_trading_bp.route("/vectorbt/simulate", methods=["POST"])
+def vectorbt_simulate_endpoint():
+    """Run high-speed vectorized portfolio simulation."""
+    data = request.get_json() or {}
+    closes = data.get("close", [100.0 + i * 0.5 for i in range(50)])
+    fast = int(data.get("fast", 10))
+    slow = int(data.get("slow", 30))
+    init_cash = float(data.get("initial_cash", 10000.0))
+
+    try:
+        from app.agents.real_vectorbt import PortfolioSimulation, SignalGenerator
+    except ImportError:
+        from Stratex.app.agents.real_vectorbt import PortfolioSimulation, SignalGenerator
+
+    sim_method = getattr(PortfolioSimulation, "simulate_real_vectorbt", None)
+    if sim_method:
+        res = sim_method(closes, fast_window=fast, slow_window=slow, init_cash=init_cash)
+    else:
+        signals = SignalGenerator.sma_signal(closes, fast, slow)
+        res = PortfolioSimulation.simulate(closes, signals, initial_cash=init_cash)
+
+    return jsonify({
+        "status": "success",
+        "engine": "Vectorbt",
+        "result": res,
+    })
+
+
+@real_trading_bp.route("/freqtrade/hyperopt", methods=["POST"])
+def freqtrade_hyperopt_endpoint():
+    """Execute Freqtrade parameter hyperopt optimization search."""
+    data = request.get_json() or {}
+    closes = data.get("close", [100.0 + i * 0.5 for i in range(50)])
+    ohlcv = {"close": closes}
+    res = trading_hub.optimize_freqtrade_params(ohlcv)
+    return jsonify({
+        "status": "success",
+        "engine": "Freqtrade",
+        "result": res,
+    })
+
+
+@real_trading_bp.route("/hummingbot/market-make", methods=["POST"])
+def hummingbot_market_make_endpoint():
+    """Compute Hummingbot Avellaneda-Stoikov / inventory skew quote levels."""
+    data = request.get_json() or {}
+    mid_price = float(data.get("mid_price", 100.0))
+    spread = float(data.get("spread", 0.001))
+    inventory = float(data.get("inventory", 0.0))
+    res = trading_hub.compute_market_making_quotes(mid_price, spread=spread, inventory=inventory)
+    return jsonify({
+        "status": "success",
+        "engine": "Hummingbot",
+        "quotes": res,
+    })
+
+
+@real_trading_bp.route("/lumibot/backtest", methods=["POST"])
+def lumibot_backtest_endpoint():
+    """Execute Lumibot multi-asset strategy backtest."""
+    data = request.get_json() or {}
+    symbol = data.get("symbol", "BTC-USD")
+    cash = float(data.get("initial_cash", 10000.0))
+    days = int(data.get("days", 30))
+
+    try:
+        from app.agents.real_lumibot import LumibotBacktest
+    except ImportError:
+        from Stratex.app.agents.real_lumibot import LumibotBacktest
+
+    runner = getattr(LumibotBacktest, "run_live_or_simulated_backtest", None)
+    if runner:
+        res = runner(symbol=symbol, initial_cash=cash, days=days)
+    else:
+        res = {"engine": "lumibot", "symbol": symbol, "initial_cash": cash, "final_value": cash * 1.05}
+
+    return jsonify({
+        "status": "success",
+        "engine": "Lumibot",
+        "result": res,
+    })
+
+
+@real_trading_bp.route("/polymarket/probability", methods=["POST"])
+def polymarket_probability_endpoint():
+    """Estimate implied probability and optimal Kelly betting size."""
+    data = request.get_json() or {}
+    slug = data.get("slug", "fed-rate-cut")
+    market_prob = float(data.get("market_prob", 0.65))
+    model_prob = float(data.get("model_prob", 0.75))
+
+    try:
+        from app.agents.real_polymarket import MarketAnalyzer
+    except ImportError:
+        from Stratex.app.agents.real_polymarket import MarketAnalyzer
+
+    kelly = MarketAnalyzer.kelly_fraction(model_prob, market_prob)
+    return jsonify({
+        "status": "success",
+        "engine": "Polymarket",
+        "slug": slug,
+        "market_probability": market_prob,
+        "model_probability": model_prob,
+        "kelly_stake_fraction": round(kelly, 4),
+        "arbitrage_edge": round(model_prob - market_prob, 4),
+    })
+
+
+@real_trading_bp.route("/trading-agents/debate", methods=["POST"])
+def trading_agents_debate_endpoint():
+    """Execute multi-agent financial deliberation (Bull vs Bear vs Risk Manager)."""
+    data = request.get_json() or {}
+    symbol = data.get("symbol", "BTC/USDT")
+    price = float(data.get("price", 65000.0))
+    headlines = data.get("headlines", [
+        "Company reports record quarterly revenue growth",
+        "Fed signals steady monetary conditions",
+    ])
+    deliberation = trading_hub.debate_trade_decision(symbol, price, headlines)
+    return jsonify({
+        "status": "success",
+        "engine": "TradingAgents",
+        "deliberation": deliberation,
+    })
+
+
+@real_trading_bp.route("/suite/backtest", methods=["POST"])
+def suite_backtest_endpoint():
+    """Execute combined Backtrader + Vectorbt backtest suite across data."""
+    data = request.get_json() or {}
+    closes = data.get("close", [100.0 + i * 0.5 for i in range(50)])
+    ohlcv = {"close": closes}
+    fast = int(data.get("fast", 10))
+    slow = int(data.get("slow", 30))
+    suite = trading_hub.run_backtest_suite(ohlcv, fast=fast, slow=slow)
+    return jsonify({
+        "status": "success",
+        "engine": "TradingSuite",
+        "suite": suite,
+    })

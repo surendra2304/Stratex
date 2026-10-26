@@ -137,13 +137,13 @@ class MultiVenueExecutionEngine:
     def _register_default_venues(self):
         """Register default trading venues."""
         venues = [
-            ("binance", "Binance", "CEX", 5.0, 1.5, 1e9, 0.9, 15.0),
-            ("coinbase", "Coinbase Pro", "CEX", 4.0, 2.0, 5e8, 0.85, 20.0),
-            ("kraken", "Kraken", "CEX", 4.5, 2.5, 3e8, 0.8, 25.0),
-            ("uniswap_v3", "Uniswap V3", "DEX", 3.0, 5.0, 1e8, 0.7, 50.0),
-            ("sushiswap", "SushiSwap", "DEX", 3.5, 6.0, 5e7, 0.65, 60.0),
-            ("dark_pool", "Dark Pool", "dark_pool", 1.0, 0.5, 1e9, 0.75, 30.0),
-            ("ecn", "ECN", "ECN", 2.0, 1.0, 5e8, 0.8, 10.0),
+            ("binance", "Binance", "CEX", 5.0, 1.5, 0.001, 1e9, 0.9, 15.0),
+            ("coinbase", "Coinbase Pro", "CEX", 4.0, 2.0, 0.001, 5e8, 0.85, 20.0),
+            ("kraken", "Kraken", "CEX", 4.5, 2.5, 0.001, 3e8, 0.8, 25.0),
+            ("uniswap_v3", "Uniswap V3", "DEX", 3.0, 5.0, 0.01, 1e8, 0.7, 50.0),
+            ("sushiswap", "SushiSwap", "DEX", 3.5, 6.0, 0.01, 5e7, 0.65, 60.0),
+            ("dark_pool", "Dark Pool", "dark_pool", 1.0, 0.5, 1.0, 1e9, 0.75, 30.0),
+            ("ecn", "ECN", "ECN", 2.0, 1.0, 0.1, 5e8, 0.8, 10.0),
         ]
 
         for vid, name, vtype, fee, slip, min_sz, max_sz, liq, lat in venues:
