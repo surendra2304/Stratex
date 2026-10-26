@@ -547,7 +547,7 @@ class TelegramBotClient:
             f"• <b>Combined Portfolio Value</b>: <code>${comb['combined_equity']:,.2f} USD</code>\n"
             f"• <b>Active Positions</b>: <code>{len(pos)} open</code>\n"
             f"• <b>Market Regime</b>: Multi-Timeframe Trend & Volatility Scanning Active\n"
-            f"• <b>Risk Enforcement</b>: 1% Max Risk Cap per trade, 2:1 minimum R/R, Tag 1002 Broker SL\n\n"
+            f"• <b>Risk Enforcement</b>: 1% Max Risk Cap per trade, 2:1 minimum R/R, Dynamic Algorithmic SL/TP\n\n"
             "<i>Type <code>/balance</code>, <code>/positions</code>, or <code>/pnl</code> for full ledger breakdowns.</i>"
         )
 

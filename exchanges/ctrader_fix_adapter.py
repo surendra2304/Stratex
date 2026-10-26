@@ -480,11 +480,6 @@ class CTraderFixAdapter(BaseExchange):
             order.append_pair(38, units)
             order.append_pair(40, 1)  # Market
             order.append_pair(60, now_str)
-            # Attach broker-side Stop Loss (Tag 1002) and Take Profit (Tag 1000)
-            if stop_loss and float(stop_loss) > 0:
-                order.append_pair(1002, round(float(stop_loss), 5))
-            if take_profit and float(take_profit) > 0:
-                order.append_pair(1000, round(float(take_profit), 5))
             return order
 
         logger.info(f"[CTRADER_FIX] Sending Order: {cl_ord_id} {norm_side} {quantity} lots ({units} units) {canonical_sym} (ID: {symbol_id})")
