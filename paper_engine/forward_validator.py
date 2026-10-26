@@ -5,13 +5,6 @@ import uuid
 
 import pandas as pd
 
-# Backtrader integration for enhanced backtesting
-try:
-    import backtrader as bt
-    BACKTRADER_AVAILABLE = True
-except ImportError:
-    BACKTRADER_AVAILABLE = False
-
 from logger import get_logger
 from paper_engine.benchmark import BenchmarkComparators
 from paper_engine.daily_report import DailyReportGenerator
@@ -52,56 +45,6 @@ class ForwardValidator:
         with open(reg_file, 'w') as f:
             json.dump(data, f, indent=4)
             
-    def run_backtrader_backtest(self, df: pd.DataFrame, strategy_name: str = "sma_cross") -> dict:
-        """
-        Run backtest using Backtrader framework for enhanced analysis.
-        
-        Args:
-            df: DataFrame with OHLCV data
-            strategy_name: Backtrader strategy to use
-            
-        Returns:
-            Dictionary with backtest results
-        """
-        if not BACKTRADER_AVAILABLE:
-            logger.warning("[FORWARD_VALIDATOR] Backtrader not available, falling back to default")
-            return self.run_simulated_forward(df, lambda x: "HOLD")
-        
-        try:
-            # Create Backtrader cerebro
-            cerebro = bt.Cerebro()
-            
-            # Add data
-            data = bt.feeds.PandasData(dataname=df)
-            cerebro.adddata(data)
-            
-            # Add strategy
-            if strategy_name == "sma_cross":
-                cerebro.addstrategy(bt.strategies.SMACross)
-            elif strategy_name == "rsi":
-                cerebro.addstrategy(bt.strategies.RSIStrategy)
-            else:
-                cerebro.addstrategy(bt.strategies.SMACross)
-            
-            # Set initial cash
-            cerebro.broker.setcash(10000.0)
-            
-            # Run backtest
-            results = cerebro.run()
-            
-            # Get final value
-            final_value = cerebro.broker.getvalue()
-            
-            return {
-                "final_value": final_value,
-                "return_pct": ((final_value - 10000.0) / 10000.0) * 100,
-                "strategy": strategy_name,
-                "backtrader_used": True
-            }
-        except Exception as e:
-            logger.error(f"[FORWARD_VALIDATOR] Backtrader backtest failed: {e}")
-            return self.run_simulated_forward(df, lambda x: "HOLD")
-
     def run_simulated_forward(self, df: pd.DataFrame, strategy_func):
         """
         Runs the forward validation on a held-out DataFrame.

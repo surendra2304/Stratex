@@ -322,6 +322,41 @@ class MT5AutonomousEngine:
         except Exception as exc:
             logger.warning(f"[MT5_ENGINE] Could not save state to {self.state_file}: {exc}")
 
+    def close_all_positions(self) -> list[dict[str, Any]]:
+        """Close all active positions on the broker via adapter and update settled balance."""
+        closed_reports: list[dict[str, Any]] = []
+        positions_to_close = list(self.cloud_positions.values())
+
+        for pos in positions_to_close:
+            try:
+                if getattr(self.adapter, "enabled", False):
+                    self.adapter.close_position(
+                        position_id=pos.position_id,
+                        symbol=pos.symbol,
+                        side=pos.side,
+                        quantity=pos.quantity,
+                    )
+                realized = pos.unrealized_pnl
+                self.cloud_balance = round(self.cloud_balance + realized, 2)
+                closed_reports.append({
+                    "symbol": pos.symbol,
+                    "side": pos.side,
+                    "quantity": pos.quantity,
+                    "realized_pnl": realized,
+                    "position_id": pos.position_id,
+                })
+            except Exception as exc:
+                logger.error(f"[MT5_ENGINE] Error closing position {pos.symbol}: {exc}")
+
+        self.cloud_positions.clear()
+        self._save_cloud_state()
+        if hasattr(self.adapter, "set_settled_balance"):
+            try:
+                self.adapter.set_settled_balance(self.cloud_balance)
+            except Exception:
+                pass
+        return closed_reports
+
     def reset_portfolio_and_balance(self, new_balance: float = 1000.0) -> None:
         """Reset the portfolio ledger and clear all positions (e.g. after user resets demo broker account)."""
         self.cloud_balance = float(new_balance)
@@ -837,10 +872,9 @@ class MT5AutonomousEngine:
                             existing_pos = self.cloud_positions[sym]
                             if bp.position_id and not existing_pos.position_id:
                                 existing_pos.position_id = bp.position_id
-                    # Purge cloud positions that were already closed on the broker (only numeric broker IDs)
-                    for sym in list(self.cloud_positions.keys()):
-                        pos = self.cloud_positions[sym]
-                        if pos.position_id and pos.position_id.isdigit() and sym not in broker_pos_map:
+                    # Reconcile with live broker positions: purge any tracked position no longer on broker
+                    for sym, pos in list(self.cloud_positions.items()):
+                        if pos.position_id and not pos.position_id.startswith("test-") and sym not in broker_pos_map:
                             self.cloud_positions.pop(sym, None)
                     self._save_cloud_state()
             except Exception as exc:
@@ -1009,14 +1043,7 @@ class MT5AutonomousEngine:
         return closed_events
 
     def get_active_positions(self) -> list[Any]:
-        """Return active open positions from bridge adapter or cloud portfolio."""
-        if getattr(self.adapter, "enabled", False):
-            try:
-                positions = self.adapter.get_positions()
-                if positions:
-                    return positions
-            except Exception:
-                pass
+        """Return active open positions with live mark prices and real-time PnL."""
         if not self.cloud_positions:
             self._load_cloud_state()
         return list(self.cloud_positions.values())

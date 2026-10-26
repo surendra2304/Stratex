@@ -17,6 +17,19 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
+# Real Vectorbt library integration
+try:
+    import vectorbt as vbt
+    import pandas as pd
+    import numpy as np
+    HAS_REAL_VECTORBT = True
+except ImportError:
+    vbt = None
+    pd = None
+    np = None
+    HAS_REAL_VECTORBT = False
+
+
 
 @dataclass
 class SignalGenerator:
@@ -353,3 +366,63 @@ class VectorbtPortfolio:
                 else:
                     signals.append(0)
         return signals
+
+def simulate_real_vectorbt(close_prices: list[float], fast_window: int = 10, slow_window: int = 30, init_cash: float = 10000.0) -> dict[str, Any]:
+    """Run true vectorized simulation using the real vectorbt library if available."""
+    if HAS_REAL_VECTORBT and vbt is not None and pd is not None:
+        try:
+            dt_idx = pd.date_range(start="2025-01-01", periods=len(close_prices), freq="D")
+            price_series = pd.Series(close_prices, index=dt_idx)
+            fast_ma = vbt.MA.run(price_series, fast_window)
+            slow_ma = vbt.MA.run(price_series, slow_window)
+            entries = fast_ma.ma_crossed_above(slow_ma)
+            exits = fast_ma.ma_crossed_below(slow_ma)
+            
+            pf = vbt.Portfolio.from_signals(price_series, entries, exits, init_cash=init_cash, freq="1D")
+            
+            total_return = float(pf.total_return())
+            try:
+                sharpe_val = pf.sharpe_ratio()
+                sharpe = float(sharpe_val) if not (np.isnan(sharpe_val) or np.isinf(sharpe_val)) else 0.0
+            except Exception:
+                sharpe = 0.0
+            try:
+                max_dd_val = pf.max_drawdown()
+                max_dd = float(max_dd_val) if not (np.isnan(max_dd_val) or np.isinf(max_dd_val)) else 0.0
+            except Exception:
+                max_dd = 0.0
+            
+            return {
+                'engine': 'vectorbt_real',
+                'init_cash': init_cash,
+                'final_value': float(pf.final_value()),
+                'total_return': total_return,
+                'sharpe_ratio': sharpe,
+                'max_drawdown': max_dd,
+                'trade_count': int(pf.trades.count()),
+            }
+        except Exception:
+            pass
+    
+    # Fallback to internal simulation
+    signals = SignalGenerator.sma_signal(close_prices, fast_window, slow_window)
+    res = PortfolioSimulation.simulate(close_prices, signals, initial_capital=init_cash)
+    vals = res.get("portfolio_values", [init_cash])
+    tot_ret = VectorbtMetrics.total_return(vals)
+    sharpe = VectorbtMetrics.sharpe_ratio(vals)
+    max_dd = VectorbtMetrics.max_drawdown(vals)
+    return {
+        'engine': 'vectorbt_simulated',
+        'init_cash': init_cash,
+        'final_value': res.get("final_value", init_cash),
+        'total_return': tot_ret,
+        'sharpe_ratio': sharpe,
+        'max_drawdown': max_dd,
+        'trade_count': len(res.get("trades", [])),
+    }
+
+
+
+
+PortfolioSimulation.simulate_real_vectorbt = staticmethod(simulate_real_vectorbt)
+SignalGenerator.simulate_real_vectorbt = staticmethod(simulate_real_vectorbt)

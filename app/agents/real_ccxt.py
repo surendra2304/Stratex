@@ -2,7 +2,8 @@
 Stratex — CCXT Engine
 
 Unified trading API with 100+ crypto exchanges and prediction markets.
-Exchange classes, market data, order management, rate limiting, unified error handling.
+Exchange classes, market data, order management, rate limiting, unified error handling,
+and live CCXT library integration.
 
 Source: https://github.com/ccxt/ccxt
 Tests: tests/test_real_batch4b.py
@@ -16,12 +17,20 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
+# Real CCXT library integration
+try:
+    import ccxt as real_ccxt
+    HAS_REAL_CCXT = True
+except ImportError:
+    real_ccxt = None
+    HAS_REAL_CCXT = False
+
 
 EXCHANGE_NAMES = [
     "binance", "coinbasepro", "kraken", "okx", "bybit", "kucoin",
     "gate", "mexc", "huobi", "bitfinex", "bitstamp", "gemini",
-    "kucoin", "bittrex", "poloniex", "kraken", "coinbase", "ftx",
-    "bkex", "bigone", "binance", "bitget", "btcalpha", "btcmarkets",
+    "bittrex", "poloniex", "coinbase", "ftx",
+    "bkex", "bigone", "bitget", "btcalpha", "btcmarkets",
 ]
 
 
@@ -99,17 +108,68 @@ class MarketData:
 
 @dataclass
 class ExchangeBase:
-    """Base exchange class with unified API."""
+    """Base exchange class with unified API and real CCXT SDK integration."""
     config: ExchangeConfig = field(default_factory=ExchangeConfig)
     markets: dict[str, MarketData] = field(default_factory=dict)
     balances: dict[str, float] = field(default_factory=dict)
     rate_limits: list[float] = field(default_factory=list)
     order_count: int = 0
+    _real_client: Any = field(default=None, repr=False)
 
-    def load_markets(self) -> dict[str, MarketData]:
+    def __post_init__(self):
+        if HAS_REAL_CCXT and self._real_client is None:
+            self._init_real_client()
+
+    def _init_real_client(self):
+        """Initialize live CCXT exchange client if installed."""
+        if not HAS_REAL_CCXT or real_ccxt is None:
+            return
+        ex_class = getattr(real_ccxt, self.config.name.lower(), None)
+        if ex_class:
+            try:
+                params = {
+                    "enableRateLimit": self.config.enable_rate_limit,
+                    "timeout": int(self.config.timeout * 1000),
+                }
+                if self.config.has_credentials:
+                    params["apiKey"] = self.config.api_key
+                    params["secret"] = self.config.secret
+                    if self.config.password:
+                        params["password"] = self.config.password
+                self._real_client = ex_class(params)
+            except Exception:
+                self._real_client = None
+
+    def get_real_exchange(self) -> Any:
+        """Return the underlying real CCXT client instance if available."""
+        if self._real_client is None and HAS_REAL_CCXT:
+            self._init_real_client()
+        return self._real_client
+
+    def load_markets(self, reload_live: bool = False) -> dict[str, MarketData]:
+        # Always populate standard base markets first for instant availability
         for base, quote in [("BTC", "USDT"), ("ETH", "USDT"), ("SOL", "USDT"), ("ADA", "USDT"), ("DOGE", "USDT")]:
             symbol = f"{base}/{quote}"
             self.markets[symbol] = MarketData.create_market(base, quote)
+
+        # If live network reload explicitly requested and real client exists
+        if reload_live and self._real_client is not None:
+            try:
+                real_markets = self._real_client.load_markets()
+                for sym, data in list(real_markets.items())[:25]:
+                    base = data.get("base", "UNKNOWN")
+                    quote = data.get("quote", "UNKNOWN")
+                    self.markets[sym] = MarketData(
+                        symbol=sym,
+                        base_id=base,
+                        quote_id=quote,
+                        market_type=data.get("type", "spot"),
+                        spot=data.get("spot", True),
+                        active=data.get("active", True),
+                    )
+            except Exception:
+                pass
+
         return self.markets
 
     @staticmethod
@@ -129,6 +189,7 @@ class ExchangeBase:
         return symbol
 
     def fetch_ticker(self, symbol: str) -> dict[str, Any]:
+        """Fetch ticker synchronously with simulated data."""
         base, quote = self.parse_symbol(symbol)
         return {
             "symbol": symbol,
@@ -143,14 +204,51 @@ class ExchangeBase:
             "timestamp": time.time(),
         }
 
+    def fetch_live_ticker(self, symbol: str) -> dict[str, Any]:
+        """Fetch ticker, querying real CCXT if available with fallback to standard ticker."""
+        if self._real_client is not None:
+            try:
+                t = self._real_client.fetch_ticker(symbol)
+                return {
+                    "symbol": symbol,
+                    "base": self.parse_symbol(symbol)[0],
+                    "quote": self.parse_symbol(symbol)[1],
+                    "last": float(t.get("last") or 100.0),
+                    "bid": float(t.get("bid") or (t.get("last", 100.0) * 0.999)),
+                    "ask": float(t.get("ask") or (t.get("last", 100.0) * 1.001)),
+                    "high": float(t.get("high") or (t.get("last", 100.0) * 1.05)),
+                    "low": float(t.get("low") or (t.get("last", 100.0) * 0.95)),
+                    "volume": float(t.get("baseVolume") or t.get("volume") or 1000.0),
+                    "timestamp": t.get("timestamp") or time.time(),
+                    "source": "ccxt_live",
+                }
+            except Exception:
+                pass
+        return self.fetch_ticker(symbol)
+
     def fetch_order_book(self, symbol: str, limit: int = 20) -> dict[str, Any]:
+        """Fetch simulated order book."""
         base, quote = self.parse_symbol(symbol)
         mid_price = 100.0
         bids = [(mid_price * (1 - 0.001 * (i + 1)), 1.0) for i in range(limit // 2)]
         asks = [(mid_price * (1 + 0.001 * (i + 1)), 1.0) for i in range(limit // 2)]
         return {"symbol": symbol, "bids": bids, "asks": asks, "timestamp": time.time()}
 
+    def fetch_live_order_book(self, symbol: str, limit: int = 20) -> dict[str, Any]:
+        """Fetch live order book via real CCXT if available."""
+        if self._real_client is not None:
+            try:
+                ob = self._real_client.fetch_order_book(symbol, limit=limit)
+                bids = [(float(b[0]), float(b[1])) for b in ob.get("bids", [])[:limit // 2]]
+                asks = [(float(a[0]), float(a[1])) for a in ob.get("asks", [])[:limit // 2]]
+                if bids and asks:
+                    return {"symbol": symbol, "bids": bids, "asks": asks, "timestamp": time.time(), "source": "ccxt_live"}
+            except Exception:
+                pass
+        return self.fetch_order_book(symbol, limit)
+
     def fetch_ohlcv(self, symbol: str, timeframe: str = "1h", limit: int = 100) -> list[list[float]]:
+        """Fetch simulated OHLCV data instantly."""
         base, quote = self.parse_symbol(symbol)
         ohlcv = []
         price = 100.0
@@ -164,6 +262,17 @@ class ExchangeBase:
             price = c
         return ohlcv
 
+    def fetch_live_ohlcv(self, symbol: str, timeframe: str = "1h", limit: int = 100) -> list[list[float]]:
+        """Fetch live OHLCV candles via real CCXT if available."""
+        if self._real_client is not None:
+            try:
+                candles = self._real_client.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+                if candles:
+                    return candles
+            except Exception:
+                pass
+        return self.fetch_ohlcv(symbol, timeframe, limit)
+
     def create_order(self, symbol: str, type_: str, side: str, amount: float, price: float = 0.0) -> dict[str, Any]:
         self.order_count += 1
         order = {
@@ -176,15 +285,24 @@ class ExchangeBase:
             "timestamp": time.time(),
             "status": "closed",
         }
+        base, quote = self.parse_symbol(symbol)
         if side == "buy":
-            self.balances[self.parse_symbol(symbol)[1]] = self.balances.get(self.parse_symbol(symbol)[1], 0) - amount * price
-            self.balances[self.parse_symbol(symbol)[0]] = self.balances.get(self.parse_symbol(symbol)[0], 0) + amount
+            self.balances[quote] = self.balances.get(quote, 0) - amount * price
+            self.balances[base] = self.balances.get(base, 0) + amount
         elif side == "sell":
-            self.balances[self.parse_symbol(symbol)[0]] = self.balances.get(self.parse_symbol(symbol)[0], 0) - amount
-            self.balances[self.parse_symbol(symbol)[1]] = self.balances.get(self.parse_symbol(symbol)[1], 0) + amount * price
+            self.balances[base] = self.balances.get(base, 0) - amount
+            self.balances[quote] = self.balances.get(quote, 0) + amount * price
         return order
 
     def fetch_balance(self) -> dict[str, float]:
+        if self._real_client is not None and self.config.has_credentials:
+            try:
+                bal = self._real_client.fetch_balance()
+                total = bal.get("total", {})
+                if total:
+                    return {k: float(v) for k, v in total.items() if float(v) > 0}
+            except Exception:
+                pass
         return self.balances
 
     def apply_rate_limit(self) -> float:
@@ -214,6 +332,56 @@ class CCXTManager:
         exchange.load_markets()
         self.exchanges[name] = exchange
         return exchange
+
+    def get_exchange(self, name: str) -> ExchangeBase | None:
+        return self.exchanges.get(name)
+
+    def fetch_all_tickers(self, symbol: str) -> dict[str, dict[str, Any]]:
+        """Fetch tickers across all configured exchanges."""
+        results = {}
+        for name, ex in self.exchanges.items():
+            results[name] = ex.fetch_ticker(symbol)
+        return results
+
+    def find_arbitrage_opportunities(self, symbol: str, min_spread_pct: float = 0.5) -> list[dict[str, Any]]:
+        """Detect cross-exchange spatial arbitrage opportunities."""
+        tickers = self.fetch_all_tickers(symbol)
+        opportunities = []
+        ex_names = list(tickers.keys())
+        for i in range(len(ex_names)):
+            for j in range(i + 1, len(ex_names)):
+                ex1, ex2 = ex_names[i], ex_names[j]
+                t1, t2 = tickers[ex1], tickers[ex2]
+                
+                # Buy on ex1, sell on ex2
+                if t1["ask"] > 0 and t2["bid"] > t1["ask"]:
+                    spread = t2["bid"] - t1["ask"]
+                    pct = (spread / t1["ask"]) * 100
+                    if pct >= min_spread_pct:
+                        opportunities.append({
+                            "symbol": symbol,
+                            "buy_exchange": ex1,
+                            "buy_price": t1["ask"],
+                            "sell_exchange": ex2,
+                            "sell_price": t2["bid"],
+                            "spread": spread,
+                            "spread_pct": round(pct, 3),
+                        })
+                # Buy on ex2, sell on ex1
+                elif t2["ask"] > 0 and t1["bid"] > t2["ask"]:
+                    spread = t1["bid"] - t2["ask"]
+                    pct = (spread / t2["ask"]) * 100
+                    if pct >= min_spread_pct:
+                        opportunities.append({
+                            "symbol": symbol,
+                            "buy_exchange": ex2,
+                            "buy_price": t2["ask"],
+                            "sell_exchange": ex1,
+                            "sell_price": t1["bid"],
+                            "spread": spread,
+                            "spread_pct": round(pct, 3),
+                        })
+        return opportunities
 
     @staticmethod
     def find_best_price(prices: dict[str, dict[str, float]]) -> dict[str, Any]:

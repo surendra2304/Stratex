@@ -15,6 +15,31 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
+# Real Backtrader library integration
+try:
+    import backtrader as bt
+    import pandas as pd
+    HAS_REAL_BACKTRADER = True
+except ImportError:
+    bt = None
+    pd = None
+    HAS_REAL_BACKTRADER = False
+
+if HAS_REAL_BACKTRADER:
+    class BtSmaCrossoverStrategy(bt.Strategy):
+        params = (("fast", 10), ("slow", 30))
+        def __init__(self):
+            self.sma_fast = bt.indicators.SMA(self.data.close, period=self.params.fast)
+            self.sma_slow = bt.indicators.SMA(self.data.close, period=self.params.slow)
+            self.crossover = bt.indicators.CrossOver(self.sma_fast, self.sma_slow)
+        def next(self):
+            if not self.position:
+                if self.crossover > 0:
+                    self.buy()
+            elif self.crossover < 0:
+                self.close()
+
+
 
 @dataclass
 class DataFeed:
@@ -385,3 +410,53 @@ class BacktraderCerebro:
             result["params"] = trial
             results.append(result)
         return results
+
+    @staticmethod
+    def run_real_cerebro(data_dict_or_df, fast: int = 10, slow: int = 30, initial_cash: float = 100000.0, commission: float = 0.001) -> dict[str, Any]:
+        """Execute a real Backtrader Cerebro backtest if the library is available, with safe fallback."""
+        if HAS_REAL_BACKTRADER and bt is not None and pd is not None:
+            try:
+                cerebro = bt.Cerebro()
+                cerebro.broker.setcash(initial_cash)
+                cerebro.broker.setcommission(commission=commission)
+                
+                if isinstance(data_dict_or_df, pd.DataFrame):
+                    df = data_dict_or_df
+                else:
+                    closes = data_dict_or_df.get('close', [])
+                    opens = data_dict_or_df.get('open', closes)
+                    highs = data_dict_or_df.get('high', closes)
+                    lows = data_dict_or_df.get('low', closes)
+                    volumes = data_dict_or_df.get('volume', [1000.0] * len(closes))
+                    dates = pd.date_range(start='2024-01-01', periods=len(closes), freq='1h')
+                    df = pd.DataFrame({'open': opens, 'high': highs, 'low': lows, 'close': closes, 'volume': volumes}, index=dates)
+                
+                feed = bt.feeds.PandasData(dataname=df)
+                cerebro.adddata(feed)
+                cerebro.addstrategy(BtSmaCrossoverStrategy, fast=fast, slow=slow)
+                cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe')
+                cerebro.addanalyzer(bt.analyzers.DrawDown, _name='drawdown')
+                
+                results = cerebro.run()
+                strat = results[0]
+                final_val = cerebro.broker.getvalue()
+                
+                sharpe_analysis = strat.analyzers.sharpe.get_analysis()
+                sharpe_val = sharpe_analysis.get('sharperatio')
+                dd_analysis = strat.analyzers.drawdown.get_analysis()
+                max_dd = dd_analysis.get('max', {}).get('drawdown', 0.0) / 100.0 if dd_analysis else 0.0
+                
+                return {
+                    'engine': 'backtrader_real',
+                    'initial_cash': initial_cash,
+                    'final_value': final_val,
+                    'total_pnl': final_val - initial_cash,
+                    'return_pct': (final_val - initial_cash) / initial_cash,
+                    'sharpe': float(sharpe_val) if sharpe_val is not None else 0.0,
+                    'max_drawdown': float(max_dd),
+                }
+            except Exception:
+                pass
+        
+        # Fallback to internal Cerebro
+        return BacktraderCerebro.run(data_dict_or_df, initial_cash=initial_cash, commission=commission)

@@ -16,6 +16,15 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
+# Real Polymarket CLOB integration
+try:
+    import py_clob_client
+    HAS_REAL_CLOB = True
+except ImportError:
+    py_clob_client = None
+    HAS_REAL_CLOB = False
+
+
 
 @dataclass
 class PredictionMarket:
@@ -330,3 +339,39 @@ class PredictionMarketAnalyzer:
         if total_vol <= 0:
             return 0.0
         return total_price_vol / total_vol
+
+    @staticmethod
+    def fetch_live_prediction_odds(slug: str = "fed-interest-rate") -> dict[str, Any]:
+        """Fetch live prediction market odds via Gamma API or simulated fallbacks."""
+        import urllib.request
+        import json
+        
+        try:
+            url = f"https://gamma-api.polymarket.com/events?slug={slug}&limit=1"
+            req = urllib.request.Request(url, headers={"User-Agent": "FRIDAY-Universe/1.0"})
+            with urllib.request.urlopen(req, timeout=3.0) as resp:
+                data = json.loads(resp.read().decode())
+                if data and isinstance(data, list):
+                    event = data[0]
+                    return {
+                        "engine": "polymarket_live",
+                        "title": event.get("title", slug),
+                        "markets": event.get("markets", []),
+                        "volume": event.get("volume", 0.0),
+                        "source": "gamma_api",
+                    }
+        except Exception:
+            pass
+            
+        # Fallback to simulated prediction market
+        return {
+            "engine": "polymarket_simulated",
+            "slug": slug,
+            "has_real_clob": HAS_REAL_CLOB,
+            "probability": 0.65,
+            "outcomes": [{"name": "Yes", "price": 0.65}, {"name": "No", "price": 0.35}],
+            "source": "simulated",
+        }
+
+
+MarketAnalyzer = PredictionMarketAnalyzer

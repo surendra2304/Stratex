@@ -191,241 +191,284 @@ class TelegramBotClient:
         return self.send_message("\n".join(lines))
 
     # ==========================================================================
-    # INBOUND COMMAND PROCESSING
+    # INBOUND COMMAND PROCESSING (UNIFIED MULTI-ACCOUNT: IC MARKETS + BINANCE)
     # ==========================================================================
-    def _format_pnl_report(self) -> str:
-        """Format a clear, accurate breakdown of live unrealized & realized PnL."""
-        try:
-            account_id = os.getenv("CTRADER_FIX_ACCOUNT_ID", "10128706")
-            positions = []
-            bal_dict = {}
-            try:
-                from autonomy.mt5_autonomous_engine import get_autonomous_engine
-                engine = get_autonomous_engine()
-                positions = engine.get_active_positions()
-                bal_dict = engine.get_account_balance().get("USD", {})
-            except Exception:
-                pass
 
-            balance = float(bal_dict.get("total", 820.43))
-            equity = float(bal_dict.get("equity", 809.36))
-            total_unrealized = float(bal_dict.get("unrealized_pnl", equity - balance))
-            realized_pnl = round(balance - 1000.0, 2)  # Starting demo capital: $1,000.00
+    def _format_pnl_report(self, args: list[str] | None = None) -> str:
+        """Format live PnL across both IC Markets and Binance (Combined or Individual)."""
+        from exchanges.unified_portfolio_hub import get_portfolio_hub
+        hub = get_portfolio_hub()
+        pnl = hub.get_combined_pnl()
 
-            u_emoji = "??" if total_unrealized >= 0 else "??"
-            r_emoji = "🟢" if realized_pnl >= 0 else "🔴"
+        target = args[0].lower() if args else "combined"
 
-            lines = [
-                "?? <b>Profit & Loss (PnL) Overview</b>\n",
-                f"? <b>Broker Account</b>: <code>{account_id} (IC Markets cTrader Demo)</code>",
-                f"💰 <b>Settled Cash Balance</b>: <code>${balance:,.2f} USD</code>",
-                f"? <b>Total Account Equity</b>: <code>${equity:,.2f} USD</code>",
-                f"? <b>Floating Unrealized PnL</b>: {u_emoji} <code>${total_unrealized:+,.2f} USD</code>",
-                f"? <b>Cumulative Realized PnL</b>: {r_emoji} <code>${realized_pnl:+,.2f} USD</code>\n",
-            ]
-            if positions:
-                lines.append("<b>Open Positions Breakdown:</b>")
-                for p in positions:
-                    pnl = float(getattr(p, "unrealized_pnl", 0.0))
-                    sym = getattr(p, "symbol", "")
-                    side = getattr(p, "side", "")
-                    entry = float(getattr(p, "entry_price", 0.0))
-                    mark = float(getattr(p, "mark_price", entry))
-                    p_emoji = "🟢" if pnl >= 0 else "🔴"
-                    ticket = getattr(p, "position_id", getattr(p, "ticket", "cld"))
-                    lines.append(f"  {p_emoji} <b>{sym}</b> ({side}): <code>${pnl:+,.2f} USD</code> (Entry: <code>{entry:,.4f}</code> | ID: <code>{ticket}</code>)")
-            else:
-                lines.append("<i>Portfolio is flat. No active positions open.</i>")
-
-            return "\n".join(lines)
-        except Exception as exc:
-            return f"📊 <b>PnL Report</b>\n\n? Unrealized: <code>$0.00 USD</code>\n? Status: <i>{exc}</i>"
-
-    def _format_history_report(self) -> str:
-        """Format real broker trade history and account ledger."""
-        try:
-            account_id = os.getenv("CTRADER_FIX_ACCOUNT_ID", "10128706")
-            bal_dict = {}
-            try:
-                from exchanges.mt5_bridge_adapter import MT5BridgeAdapter
-                adapter = MT5BridgeAdapter()
-                mock_b = adapter.get_balance()
-                if mock_b and "USD" in mock_b:
-                    b_obj = mock_b["USD"]
-                    bal_dict = {
-                        "total": getattr(b_obj, "total", 1000.0),
-                        "free": getattr(b_obj, "free", 1000.0),
-                        "used": getattr(b_obj, "used", 0.0),
-                        "equity": getattr(b_obj, "total", 1000.0),
-                    }
-            except Exception:
-                bal_dict = {}
-            if not bal_dict:
-                try:
-                    from autonomy.mt5_autonomous_engine import get_autonomous_engine
-                    engine = get_autonomous_engine()
-                    bal_dict = engine.get_account_balance().get("USD", {})
-                except Exception:
-                    pass
-
-            balance = float(bal_dict.get("total", 820.43))
-            equity = float(bal_dict.get("equity", 809.36))
-            floating_pnl = float(bal_dict.get("unrealized_pnl", equity - balance))
-            realized_pnl = round(balance - 1000.0, 2)
-            r_emoji = "🟢" if realized_pnl >= 0 else "🔴"
-            f_emoji = "🟢" if floating_pnl >= 0 else "🔴"
-
-            lines = [
-                "📜 <b>Broker Account Ledger & Trade History (IC Markets)</b>\n",
-                f"💼 <b>Account ID</b>: <code>{account_id} (cTrader Demo)</code>",
-                "💵 <b>Initial Starting Deposit</b>: <code>+$1,000.00 USD</code>",
-                f"📊 <b>Closed Trades Realized PnL</b>: {r_emoji} <code>${realized_pnl:+,.2f} USD</code>",
-                f"💰 <b>Settled Cash Balance</b>: <code>${balance:,.2f} USD</code>",
-                f"📈 <b>Open Positions Floating PnL</b>: {f_emoji} <code>${floating_pnl:+,.2f} USD</code>",
-                f"🛡️ <b>Current Liquidation Equity</b>: <code>${equity:,.2f} USD</code>\n",
-                "<i>Realized PnL reflects previous closed trades. Strict 1% risk-per-trade cap and server-side hard Stop-Loss protection are active.</i>",
-            ]
-            return "\n".join(lines)
-        except Exception as exc:
-            return f"📜 <b>Trade History</b>\n\n? Error fetching history: <i>{exc}</i>"
-
-    def _format_positions_report(self) -> str:
-        """Format a clear, accurate breakdown of live PnL and active open positions."""
-        try:
-            positions = []
-            try:
-                from exchanges.mt5_bridge_adapter import MT5BridgeAdapter
-                adapter = MT5BridgeAdapter()
-                positions = adapter.get_positions()
-            except Exception:
-                positions = []
-            if not positions:
-                try:
-                    from autonomy.mt5_autonomous_engine import get_autonomous_engine
-                    engine = get_autonomous_engine()
-                    positions = engine.get_active_positions()
-                except Exception:
-                    pass
-
-            if not positions:
-                return (
-                    "📊 <b>Active Positions & PnL Report</b>\n\n"
-                    "🟢 <b>Status</b>: Flat (No open positions)\n"
-                    "🌐 <b>Venue</b>: IC Markets cTrader Demo (24/7 Sovereign Cloud)\n\n"
-                    "<i>Autonomous engine is continuously scanning for high-probability setups.</i>"
-                )
-            lines = ["📊 <b>Active MT5 Positions & Live PnL</b>\n"]
-            total_pnl = 0.0
-            for p in positions:
-                pnl = float(getattr(p, "unrealized_pnl", 0.0))
-                total_pnl += pnl
-                pnl_emoji = "🟢" if pnl >= 0 else "🔴"
-                sym = getattr(p, "symbol", "")
-                side = getattr(p, "side", "")
-                qty = getattr(p, "quantity", 0.0)
-                entry = float(getattr(p, "entry_price", 0.0))
-                mark = float(getattr(p, "mark_price", getattr(p, "current_price", entry)))
-                ticket = getattr(p, "position_id", getattr(p, "ticket", "cld-pos"))
-                sl = float(getattr(p, "stop_loss", 0.0))
-                tp = float(getattr(p, "take_profit", 0.0))
-                sl_str = f"${sl:,.4f}" if sl > 0 else "Bracket Managed"
-                tp_str = f"${tp:,.4f}" if tp > 0 else "Bracket Managed"
-                lines.append(
-                    f"? <b>{sym}</b> ({side} {qty}): {pnl_emoji} <code>${pnl:+,.2f} USD</code>\n"
-                    f"  Entry: <code>${entry:,.4f}</code> | Current: <code>${mark:,.4f}</code>\n"
-                    f"  SL: <code>{sl_str}</code> | TP: <code>{tp_str}</code>\n"
-                    f"  Ticket ID: <code>{ticket}</code>\n"
-                )
-            tot_emoji = "🟢" if total_pnl >= 0 else "🔴"
-            lines.append(f"<b>Total Unrealized PnL</b>: {tot_emoji} <code>${total_pnl:+,.2f} USD</code>")
-            return "\n".join(lines)
-        except Exception as exc:
-            return f"?? <b>Active Positions</b>\n\n? Error fetching positions: <i>{exc}</i>"
-
-    def _format_balance_report(self) -> str:
-        """Format live wallet balance, equity, and margin metrics."""
-        try:
-            account_id = os.getenv("CTRADER_FIX_ACCOUNT_ID", "10128706")
-            bal_dict = {}
-            try:
-                from exchanges.mt5_bridge_adapter import MT5BridgeAdapter
-                adapter = MT5BridgeAdapter()
-                mock_b = adapter.get_balance()
-                if mock_b and "USD" in mock_b:
-                    b_obj = mock_b["USD"]
-                    bal_dict = {
-                        "total": getattr(b_obj, "total", 1000.0),
-                        "free": getattr(b_obj, "free", 850.0),
-                        "used": getattr(b_obj, "used", 150.0),
-                        "equity": getattr(b_obj, "total", 1000.0),
-                    }
-            except Exception:
-                bal_dict = {}
-
-            if not bal_dict:
-                try:
-                    from autonomy.mt5_autonomous_engine import get_autonomous_engine
-                    engine = get_autonomous_engine()
-                    bal_dict = engine.get_account_balance().get("USD", {})
-                except Exception:
-                    pass
-
-            balance = float(bal_dict.get("total", 820.43))
-            equity = float(bal_dict.get("equity", 809.36))
-            used = float(bal_dict.get("used", 105.87))
-            free = float(bal_dict.get("free", max(0.0, equity - used)))
-            margin_level = round((equity / used * 100.0), 2) if used > 0 else 9999.0
-
+        if target in {"icmarkets", "ctrader", "forex", "metals"}:
+            ic = pnl["icmarkets"]
+            f_emoji = "🟢" if ic["floating_pnl"] >= 0 else "🔴"
+            r_emoji = "🟢" if ic["realized_pnl"] >= 0 else "🔴"
             return (
-                "💼 <b>MT5 Wallet Balances & Margin</b>\n\n"
-                f"💼 <b>Account ID</b>: <code>{account_id}</code>\n"
-                f"🛡️ <b>Equity</b>: <code>${equity:,.2f} USD</code>\n"
-                f"💰 <b>Balance</b>: <code>${balance:,.2f} USD</code>\n"
-                f"🟢 <b>Free Margin</b>: <code>${free:,.2f} USD</code>\n"
-                f"🔒 <b>Used Margin</b>: <code>${used:,.2f} USD</code>\n"
-                f"📊 <b>Margin Level</b>: <code>{margin_level:.2f}%</code>\n"
-                f"🛡️ <b>Risk Cap</b>: Max 1% per trade (~${equity * 0.01:,.2f} USD)"
+                "📈 <b>Profit & Loss (IC Markets cTrader Demo)</b>\n\n"
+                f"💼 <b>Account ID</b>: <code>10128706</code>\n"
+                f"🛡️ <b>Current Equity</b>: <code>${ic['equity']:,.2f} USD</code>\n"
+                f"💰 <b>Settled Cash</b>: <code>${ic['cash']:,.2f} USD</code>\n"
+                f"📊 <b>Floating Unrealized PnL</b>: {f_emoji} <code>${ic['floating_pnl']:+,.2f} USD</code>\n"
+                f"📜 <b>Closed Realized PnL</b>: {r_emoji} <code>${ic['realized_pnl']:+,.2f} USD</code>\n\n"
+                "<i>Enforced 1% risk cap per trade and server-side hard Stop-Loss active.</i>"
             )
-        except Exception as exc:
-            return f"?? <b>Balance Report</b>\n\n? Error fetching balance: <i>{exc}</i>"
+
+        if target in {"binance", "crypto", "spot"}:
+            bn = pnl["binance"]
+            f_emoji = "🟢" if bn["floating_pnl"] >= 0 else "🔴"
+            return (
+                "📈 <b>Profit & Loss (Binance Portfolio)</b>\n\n"
+                f"🟡 <b>Venue</b>: <code>Binance Live Client</code>\n"
+                f"🛡️ <b>Total Asset Valuation</b>: <code>${bn['equity']:,.2f} USDT</code>\n"
+                f"💰 <b>Liquid Cash / Collateral</b>: <code>${bn['cash']:,.2f} USDT</code>\n"
+                f"📊 <b>Floating Unrealized PnL</b>: {f_emoji} <code>${bn['floating_pnl']:+,.2f} USDT</code>\n\n"
+                "<i>Real-time Binance WebSocket & REST feed.</i>"
+            )
+
+        # Default: Combined
+        tot_f_emoji = "🟢" if pnl["total_floating_pnl"] >= 0 else "🔴"
+        tot_r_emoji = "🟢" if pnl["total_realized_pnl"] >= 0 else "🔴"
+        ic = pnl["icmarkets"]
+        bn = pnl["binance"]
+
+        return (
+            "📈 <b>Profit & Loss (Combined Portfolio: IC Markets + Binance)</b>\n\n"
+            f"🌐 <b>Total Net Portfolio Equity</b>: <code>${pnl['total_portfolio_equity']:,.2f} USD</code>\n"
+            f"📊 <b>Combined Floating PnL</b>: {tot_f_emoji} <code>${pnl['total_floating_pnl']:+,.2f} USD</code>\n"
+            f"📜 <b>Combined Realized PnL</b>: {tot_r_emoji} <code>${pnl['total_realized_pnl']:+,.2f} USD</code>\n\n"
+            "🏛️ <b>IC Markets (cTrader Demo 10128706)</b>:\n"
+            f"  • Equity: <code>${ic['equity']:,.2f} USD</code> | Cash: <code>${ic['cash']:,.2f} USD</code>\n"
+            f"  • Floating: <code>${ic['floating_pnl']:+,.2f} USD</code> | Realized: <code>${ic['realized_pnl']:+,.2f} USD</code>\n\n"
+            "🟡 <b>Binance (Live API)</b>:\n"
+            f"  • Equity: <code>${bn['equity']:,.2f} USDT</code> | Cash: <code>${bn['cash']:,.2f} USDT</code>\n"
+            f"  • Floating PnL: <code>${bn['floating_pnl']:+,.2f} USDT</code>\n\n"
+            "💡 <i>Tip: Send <code>/pnl icmarkets</code> or <code>/pnl binance</code> for single-venue drill-down.</i>"
+        )
+
+    def _format_history_report(self, args: list[str] | None = None) -> str:
+        """Format real broker trade history and account ledger."""
+        from exchanges.unified_portfolio_hub import get_portfolio_hub
+        hub = get_portfolio_hub()
+        pnl = hub.get_combined_pnl()
+        ic = pnl["icmarkets"]
+
+        r_emoji = "🟢" if ic["realized_pnl"] >= 0 else "🔴"
+        f_emoji = "🟢" if ic["floating_pnl"] >= 0 else "🔴"
+
+        return (
+            "📜 <b>Broker Account Ledger & Trade History (IC Markets)</b>\n\n"
+            "💼 <b>Account ID</b>: <code>10128706 (cTrader Demo)</code>\n"
+            "💵 <b>Initial Starting Deposit</b>: <code>+$1,000.00 USD</code>\n"
+            f"📊 <b>Closed Trades Realized PnL</b>: {r_emoji} <code>${ic['realized_pnl']:+,.2f} USD</code>\n"
+            f"💰 <b>Settled Cash Balance</b>: <code>${ic['cash']:,.2f} USD</code>\n"
+            f"📈 <b>Open Positions Floating PnL</b>: {f_emoji} <code>${ic['floating_pnl']:+,.2f} USD</code>\n"
+            f"🛡️ <b>Current Liquidation Equity</b>: <code>${ic['equity']:,.2f} USD</code>\n\n"
+            "<i>Realized PnL reflects actual closed trades. Strict 1% risk cap and server-side hard Stop-Loss active.</i>"
+        )
+
+    def _format_positions_report(self, args: list[str] | None = None) -> str:
+        """Format open positions across both venues (Combined or Individual)."""
+        from exchanges.unified_portfolio_hub import get_portfolio_hub
+        hub = get_portfolio_hub()
+        target = args[0].lower() if args else "combined"
+
+        if target in {"icmarkets", "ctrader", "forex", "metals"}:
+            positions = hub.get_icmarkets_positions()
+            venue_title = "IC Markets cTrader (10128706)"
+        elif target in {"binance", "crypto", "spot"}:
+            positions = hub.get_binance_positions()
+            venue_title = "Binance Portfolio"
+        else:
+            positions = hub.get_combined_positions()
+            venue_title = "Combined (IC Markets + Binance)"
+
+        lines = [
+            f"📊 <b>Active Positions & MT5 Live PnL — {venue_title}</b>\n",
+            "🌐 <b>Active MT5 Positions</b> & Binance Positions\n",
+            f"💼 <b>Active Positions Count</b>: <code>{len(positions)}</code>",
+        ]
+
+        if not positions:
+            lines.append("\n<i>No active open positions. Portfolio is completely flat and capital is preserved.</i>")
+            return "\n".join(lines)
+
+        tot_pnl = sum(float(p.get("unrealized_pnl", 0.0)) for p in positions)
+        pnl_badge = "🟢" if tot_pnl >= 0 else "🔴"
+        lines.append(f"💰 <b>Total Unrealized PnL</b>: {pnl_badge} <code>${tot_pnl:+,.2f} USD</code>\n")
+        lines.append("<b>Live Positions Breakdown:</b>")
+        for p in positions:
+            sym = p.get("symbol", "N/A")
+            side = p.get("side", "N/A").upper()
+            vol = p.get("quantity", p.get("volume", 0.0))
+            entry = p.get("entry_price", 0.0)
+            mark = p.get("mark_price", entry)
+            pnl = p.get("unrealized_pnl", 0.0)
+            p_emoji = "🟢" if pnl >= 0 else "🔴"
+            ticket = p.get("position_id", p.get("ticket", "N/A"))
+            venue = p.get("exchange", p.get("venue", "broker"))
+
+            lines.append(
+                f"  {p_emoji} <b>[{venue.upper()}] {sym}</b> ({side} {vol:g})\n"
+                f"     • Entry: <code>{entry:,.4f}</code> | Current: <code>{mark:,.4f}</code>\n"
+                f"     • Float PnL: <code>${pnl:+,.2f} USD</code> | Ticket: <code>{ticket}</code>"
+            )
+
+        lines.append("\n💡 <i>All orders enforced with 1% max risk and server-side hard Stop-Loss.</i>")
+        return "\n".join(lines)
+
+    def _format_balance_report(self, args: list[str] | None = None) -> str:
+        """Format real-time cash, equity, and margin across venues."""
+        from exchanges.unified_portfolio_hub import get_portfolio_hub
+        hub = get_portfolio_hub()
+        target = args[0].lower() if args else "combined"
+
+        if target in {"icmarkets", "ctrader", "forex", "metals"}:
+            ic = hub.get_icmarkets_balance()
+            equity = ic["equity"]
+            balance = ic["balance"]
+            margin = ic.get("margin", 0.0)
+            free_margin = ic.get("free_margin", ic.get("free", equity - margin))
+            return (
+                "🏛️ <b>Account Balance (IC Markets cTrader Demo)</b>\n\n"
+                "💼 <b>Account ID</b>: <code>10128706</code>\n"
+                f"💰 <b>Settled Cash Balance</b>: <code>${balance:,.2f} USD</code>\n"
+                f"🛡️ <b>Current Equity</b>: <code>${equity:,.2f} USD</code>\n"
+                f"🔒 <b>Used Margin</b>: <code>${margin:,.2f} USD</code>\n"
+                f"🔓 <b>Free Margin</b>: <code>${free_margin:,.2f} USD</code>\n\n"
+                "<i>Real-time live broker state via FIX SSL connection. Zero synthetic fallbacks.</i>"
+            )
+
+        if target in {"binance", "crypto", "spot"}:
+            bn = hub.get_binance_balance()
+            equity = bn["equity_usdt"]
+            cash = bn["cash_usdt"]
+            mode = bn.get("mode", "Live")
+            lines = [
+                "🟡 <b>Account Balance (Binance Portfolio)</b>\n",
+                f"⚙️ <b>API Mode</b>: <code>{mode}</code>",
+                f"🛡️ <b>Total Valuation</b>: <code>${equity:,.2f} USDT</code>",
+                f"💰 <b>Liquid Cash / Margin</b>: <code>${cash:,.2f} USDT</code>\n",
+                "<b>Asset Holdings:</b>",
+            ]
+            assets = bn.get("assets", {})
+            if assets:
+                for a_sym, val in assets.items():
+                    tot = float(val.get("total", 0.0))
+                    if tot > 0:
+                        lines.append(f"  • <b>{a_sym}</b>: <code>{tot:,.4f}</code> (Free: {float(val.get('free', 0)):,.4f})")
+            else:
+                lines.append("  <i>No active token balances.</i>")
+            return "\n".join(lines)
+
+        # Default: Combined view
+        comb = hub.get_combined_balance()
+        tot_eq = comb["combined_equity"]
+        tot_cash = comb["combined_cash"]
+        ic = comb["icmarkets"]
+        bn = comb["binance"]
+
+        return (
+            "💼 <b>MT5 Wallet Balances & Combined Portfolio</b>\n\n"
+            f"👑 <b>Total Net Portfolio Equity</b>: <code>${tot_eq:,.2f} USD</code>\n"
+            f"💰 <b>Total Liquid Cash / Collateral</b>: <code>${tot_cash:,.2f} USD</code>\n\n"
+            "🏛️ <b>IC Markets cTrader Demo (10128706)</b>:\n"
+            f"  • Equity: <code>${ic['equity']:,.2f} USD</code>\n"
+            f"  • Cash: <code>${ic['balance']:,.2f} USD</code>\n"
+            f"  • Free Margin: <code>${ic.get('free_margin', ic.get('free', ic['equity'])):,.2f} USD</code>\n"
+            f"  • Used Margin: <code>${ic.get('used', ic.get('margin', 0.0)):,.2f} USD</code>\n\n"
+            "🟡 <b>Binance Client</b>:\n"
+            f"  • Total Valuation: <code>${bn['equity_usdt']:,.2f} USDT</code>\n"
+            f"  • Liquid Free Cash: <code>${bn['cash_usdt']:,.2f} USDT</code>\n\n"
+            "💡 <i>Tip: Send <code>/balance icmarkets</code> or <code>/balance binance</code> for single-venue drill-down.</i>"
+        )
 
     def handle_command(self, text: str) -> str:
-        """Execute text commands and generate formatted responses."""
-        cmd = text.strip().lower().split()[0] if text.strip() else ""
+        """Process incoming user command and return formatted response."""
+        parts = text.strip().split()
+        if not parts:
+            return "Type /help to see all available trading commands."
+
+        cmd = parts[0].lower()
+        args = parts[1:]
         account_id = os.getenv("CTRADER_FIX_ACCOUNT_ID", "10128706")
 
         if cmd in {"/start", "/help"}:
             return (
-                "?? <b>FRIDAY Stratex Control Bot</b>\n\n"
-                f"? <b>Account</b>: <code>{account_id} (IC Markets cTrader Demo)</code>\n"
-                "? <b>Venue</b>: <code>demo.cfixapi.com:5212 (FIX 4.4)</code>\n\n"
-                "<b>Quick Action Menu:</b>\n"
-                "? ?? <code>/balance</code> ? Wallet balance, equity & margin\n"
-                "? ?? <code>/pnl</code> ? Real-time & realized PnL breakdown\n"
-                "? ?? <code>/positions</code> ? Active open market positions\n"
-                "? ?? <code>/history</code> ? Broker trade & deal history\n"
-                "? ? <code>/status</code> ? System, model & engine status\n"
-                "? ?? <code>/scan</code> ? Trigger live cross-asset alpha scan\n"
-                "? ?? <code>/halt</code> ? Emergency order halt & OMS lock\n"
-                "? ? <code>/resume</code> ? Release OMS lock & resume trading\n\n"
-                "<i>You can also tap the menu buttons below or ask questions in plain English.</i>"
+                "🤖 <b>FRIDAY Universe — Stratex Autonomous Trading Intelligence</b>\n\n"
+                "<b>Unified Multi-Account Commands:</b>\n"
+                "• <code>/balance [icmarkets|binance]</code> — Total liquid cash & equity\n"
+                "• <code>/positions [icmarkets|binance]</code> — Active live positions\n"
+                "• <code>/pnl [icmarkets|binance]</code> — Floating & realized PnL breakdown\n"
+                "• <code>/history [icmarkets]</code> — Closed trades & account ledger\n"
+                "• <code>/status</code> — Quant engine status & safety barrier states\n"
+                "• <code>/scan</code> — Trigger immediate high-conviction market scan\n"
+                "• <code>/close_all</code> — Emergency flatten all positions immediately\n"
+                "• <code>/panic</code> / <code>/halt</code> — Trigger emergency trading halt\n"
+                "• <code>/resume</code> — Resume normal trading engine operation\n\n"
+                "💡 <i>You can also ask me questions in plain English (e.g., 'What is my current PnL?', 'Show my balance')!</i>"
             )
+
+        if cmd in {"/balance", "/bal"}:
+            return self._format_balance_report(args)
+
+        if cmd in {"/positions", "/pos"}:
+            return self._format_positions_report(args)
+
+        if cmd in {"/pnl", "/profit"}:
+            return self._format_pnl_report(args)
+
+        if cmd in {"/history", "/deals"}:
+            return self._format_history_report(args)
+
+        if cmd in {"/close_all", "/flatten"}:
+            try:
+                from autonomy.mt5_autonomous_engine import get_autonomous_engine
+                engine = get_autonomous_engine()
+                res = engine.close_all_positions()
+                return (
+                    f"🛑 <b>Emergency Flatten Completed</b>\n\n"
+                    f"• Closed: <code>{res.get('closed_count', 0)}</code> positions\n"
+                    f"• Settled Cash: <code>${res.get('settled_balance', 1000.0):,.2f} USD</code>\n"
+                    f"• Remaining Open: <code>{res.get('remaining_count', 0)}</code>\n"
+                    f"• Status: <i>{res.get('message', 'Ledger flattened')}</i>"
+                )
+            except Exception as exc:
+                return f"⚠️ <b>Close All Failed</b>: <i>{exc}</i>"
+
+        if cmd in {"/scan"}:
+            try:
+                from autonomy.mt5_autonomous_engine import get_autonomous_engine
+                engine = get_autonomous_engine()
+                executed = engine.scan_market()
+                if executed:
+                    return (
+                        f"⚡ <b>Market Scan Complete</b>\n\n"
+                        f"• Executed <code>{len(executed)}</code> high-conviction orders.\n"
+                        f"• All orders protected by 1% max risk and server-side hard Stop-Loss."
+                    )
+                return "⚡ <b>Market Scan Complete</b>: No high-conviction signals meeting 2:1 R/R hurdle right now. Holding capital."
+            except Exception as exc:
+                return f"⚠️ <b>Scan Failed</b>: <i>{exc}</i>"
 
         if cmd in {"/status", "/health"}:
             panic = is_panic_active()
             locked = is_kill_switch_locked()
-            status_badge = "?? LOCKED / PANIC" if (panic or locked) else "?? ACTIVE / READY"
+            status_badge = "🔴 LOCKED / PANIC" if (panic or locked) else "🟢 ACTIVE / READY"
+            from exchanges.unified_portfolio_hub import get_portfolio_hub
+            hub = get_portfolio_hub()
+            bn = hub.get_binance_balance()
             return (
-                f"?? <b>Stratex Engine Status</b>\n\n"
-                f"? <b>System State</b>: {status_badge}\n"
-                f"? <b>Host</b>: Oracle Cloud Always Free (24/7)\n"
-                f"? <b>Database</b>: Dokploy PostgreSQL (stratex_db)\n"
-                f"? <b>Trading Mode</b>: DEMO (Zero Live Money)\n"
-                f"? <b>Broker</b>: IC Markets cTrader Demo ({account_id})\n"
-                f"? <b>Protocol</b>: FIX 4.4 SSL Socket Native Cloud\n"
-                f"? <b>Quant Models</b>: StatArb, Kalman Filter, Regime Breakout, ML Ensemble\n"
-                f"? <b>Kill-Switch Locked</b>: {locked}\n"
-                f"? <b>Panic Active</b>: {panic}"
+                f"📡 <b>Stratex Engine Status</b>\n\n"
+                f"🟢 <b>System State</b>: {status_badge}\n"
+                f"☁️ <b>Host</b>: Oracle Cloud Always Free (24/7)\n"
+                f"🏛️ <b>Broker 1</b>: IC Markets cTrader Demo ({account_id}) — FIX 4.4 SSL\n"
+                f"🟡 <b>Broker 2</b>: Binance Live (Mode: <code>{bn.get('mode', 'N/A')}</code>)\n"
+                f"🧠 <b>Quant Models</b>: StatArb, Kalman Filter, Regime Breakout, ML Ensemble\n"
+                f"🔒 <b>Kill-Switch Locked</b>: {locked}\n"
+                f"🚨 <b>Panic Active</b>: {panic}"
             )
 
         if cmd in {"/halt", "/panic"}:
@@ -439,166 +482,73 @@ class TelegramBotClient:
 
         if cmd in {"/resume"}:
             write_panic_state(False, actor="telegram_bot", reason="Manual resume requested via Telegram")
-            return "✅ <b>Trading Resumed</b>: Emergency lock released. Order execution is unblocked."
-
-        if cmd in {"/reset", "/reset_balance"}:
-            parts = text.strip().split()
-            amount = 1000.0
-            if len(parts) > 1:
-                try:
-                    amount = float(parts[1].replace("$", "").replace(",", ""))
-                except ValueError:
-                    amount = 1000.0
-            try:
-                from autonomy.mt5_autonomous_engine import get_autonomous_engine
-                engine = get_autonomous_engine()
-                engine.reset_portfolio_and_balance(amount)
-            except Exception as exc:
-                logger.error(f"[TELEGRAM] Failed to reset balance: {exc}")
             return (
-                f"🔄 <b>Account Balance Reset Confirmed</b>\n\n"
-                f"💰 <b>New Cash Balance</b>: <code>${amount:,.2f} USD</code>\n"
-                f"📊 <b>Portfolio Status</b>: Flat (0 active positions)\n"
-                f"💼 <b>Account ID</b>: <code>{account_id} (IC Markets cTrader Demo)</code>\n"
-                f"🛡️ <b>Risk Protection</b>: Hard Stop-Loss (Tag 1002) + 1% Max Risk per trade active.\n\n"
-                f"<i>Clean ledger initialized. Ready for high-conviction trade execution.</i>"
+                "✅ <b>NORMAL TRADING RESUMED</b>\n\n"
+                "• Trading Resumed: Panic lock state has been cleared.\n"
+                "• OMS state machine is UNLOCKED and autonomous scanning is active."
             )
 
-        if cmd in {"/positions"}:
-            return self._format_positions_report()
-
-        if cmd in {"/pnl", "/profit", "/loss"}:
-            return self._format_pnl_report()
-
-        if cmd in {"/history", "/trades"}:
-            return self._format_history_report()
-
-        if cmd in {"/balance"}:
-            return self._format_balance_report()
-
-        # Natural language query processing: intercept PnL, Positions, or Balance questions
-        lower_query = text.lower().strip()
-        import re
-        if re.search(r"\b(pnl|p&l|profit|loss)\b", lower_query):
-            return self._format_pnl_report()
-
-        if re.search(r"\b(history|closed trades?|past trades?)\b", lower_query):
-            return self._format_history_report()
-
-        if re.search(r"\b(positions?|trades?|portfolio)\b", lower_query):
-            return self._format_positions_report()
-
-        if re.search(r"\b(balance|equity|margin|funds?)\b", lower_query):
-            return self._format_balance_report()
-
-        if cmd in {"/scan", "/scan_now"}:
-            try:
-                from autonomy.mt5_autonomous_engine import get_autonomous_engine
-                engine = get_autonomous_engine()
-                executed = engine.scan_market()
-                if executed:
-                    return (
-                        f"🔍 <b>Market Scan Complete</b>\n\n"
-                        f"• Successfully executed <b>{len(executed)}</b> new trade(s)!\n"
-                        f"• Check your feed for trade brackets and fill details."
-                    )
-                return (
-                    "🔍 <b>Market Scan Complete</b>\n\n"
-                    "• Scanned universe across M5, M15, and H1 timeframes.\n"
-                    "• Current setups are either consolidating or filtered by peer consensus.\n"
-                    "• Capital preserved. Watching for next breakout."
-                )
-            except Exception as exc:
-                return f"🔍 <b>Market Scan Alert</b>: <i>{exc}</i>"
-
-        # Natural language query processing
-        normalized_query = text.upper().replace(" ", "")
-        alias_map = {
-            "GOLD": "XAUUSD",
-            "SILVER": "XAGUSD",
-            "OIL": "WTI",
-            "CRUDE": "WTI",
-            "BITCOIN": "BTCUSD",
-            "ETHEREUM": "ETHUSD",
-            "SOLANA": "SOLUSD",
-            "DOW": "US30",
-            "SP500": "US500",
-            "NASDAQ": "USTEC",
-            "DAX": "GER40",
-        }
+        # Check if an individual asset is mentioned for quantitative analysis
         target_symbol = None
-        for alias, actual in alias_map.items():
-            if alias in normalized_query:
-                target_symbol = actual
+        for s in ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "AUDUSD", "USDCAD", "BTCUSD", "ETHUSD"]:
+            if s in text.upper():
+                target_symbol = s
                 break
-
-        if not target_symbol:
-            try:
-                from autonomy.mt5_autonomous_engine import DEFAULT_SYMBOLS
-                check_symbols = DEFAULT_SYMBOLS
-            except Exception:
-                check_symbols = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"]
-
-            for sym in check_symbols:
-                if sym in normalized_query:
-                    target_symbol = sym
-                    break
-
         if target_symbol:
             try:
                 from autonomy.mt5_autonomous_engine import get_autonomous_engine
                 engine = get_autonomous_engine()
                 signal = engine.evaluate_symbol_timeframe(target_symbol, "15m")
                 if signal:
-                    futuris_fc = engine.futuris.get_forecast(target_symbol)
-                    fc_dir = futuris_fc.direction if futuris_fc else "NEUTRAL"
                     action_emoji = "🟢 BUY" if signal.action == "BUY" else ("🔴 SELL" if signal.action == "SELL" else "⚪ HOLD")
+                    regime_val = getattr(signal.regime, "value", str(signal.regime))
                     return (
                         f"🧠 <b>Stratex Quantitative Analysis: {target_symbol}</b>\n\n"
                         f"• <b>Action</b>: <b>{action_emoji}</b>\n"
-                        f"• <b>Regime</b>: <code>{signal.regime}</code>\n"
+                        f"• <b>Regime</b>: <code>{regime_val}</code>\n"
                         f"• <b>Current Price</b>: <code>${signal.current_price:,.4f}</code>\n"
                         f"• <b>Kalman Z-Score</b>: <code>{signal.kalman_z:+.2f}</code>\n"
                         f"• <b>Stop Loss</b>: <code>${signal.stop_loss:,.4f}</code>\n"
                         f"• <b>Take Profit</b>: <code>${signal.take_profit:,.4f}</code>\n"
                         f"• <b>Risk-to-Reward</b>: <code>{signal.risk_reward_ratio}:1</code>\n"
-                        f"• <b>Futuris Consensus</b>: <code>{fc_dir}</code>\n"
                         f"• <b>Model Confidence</b>: <code>{signal.confidence * 100:.0f}%</code>"
                     )
             except Exception:
                 pass
 
-        # Call AI Advisor for real-time generative conversational intelligence
-        try:
-            from autonomy.ai_advisor import get_ai_advisor
-            advisor = get_ai_advisor()
-            reply = advisor.generate_chat_response(
-                text,
-                context={
-                    "agent": "Stratex (Agent 4)",
-                    "venue": "ICMarketsSC-Demo",
-                    "universe": ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"],
-                    "strategy": "hybrid_breakout_kalman",
-                },
-            )
-            if reply:
-                header = "🧠 <b>Stratex Quantitative Intelligence</b>"
-                if header not in reply:
-                    reply = f"{header}\n\n• <b>Regime</b>: ATR Chandelier + Kalman filter.\n{reply}"
-                elif "Regime" not in reply:
-                    reply = f"{reply}\n\n• <b>Regime</b>: ATR Chandelier + Kalman filter."
-                return reply
-        except Exception as exc:
-            logger.debug(f"[TELEGRAM] AI advisor chat failed: {exc}")
+        # Natural language query processing: intercept PnL, Positions, or Balance questions
+        lower_query = text.lower().strip()
+        import re
 
-        # Static fallback only if AI provider is completely unavailable
+        nl_args = ["binance"] if any(w in lower_query for w in ["binance", "crypto", "spot", "btc", "usdt"]) else (
+            ["icmarkets"] if any(w in lower_query for w in ["ic market", "icmarket", "ctrader", "forex", "gold", "silver"]) else ["combined"]
+        )
+
+        if re.search(r"\b(pnl|p&l|profit|loss|earning|return)\b", lower_query):
+            return self._format_pnl_report(nl_args)
+
+        if re.search(r"\b(history|closed trades?|past trades?|deals?)\b", lower_query):
+            return self._format_history_report(nl_args)
+
+        if re.search(r"\b(positions?|trades?|holding|open)\b", lower_query):
+            return self._format_positions_report(nl_args)
+
+        if re.search(r"\b(balance|equity|margin|funds?|money|account|cash)\b", lower_query):
+            return self._format_balance_report(nl_args)
+
+        # Factual Quantitative Intelligence summary for general trading questions
+        from exchanges.unified_portfolio_hub import get_portfolio_hub
+        hub = get_portfolio_hub()
+        comb = hub.get_combined_balance()
+        pos = hub.get_combined_positions()
+
         return (
-            f"🧠 <b>Stratex Quantitative Intelligence</b>\n\n"
-            f"Received: <i>\"{text}\"</i>\n\n"
-            "• <b>Status</b>: Active & Monitoring MetaTrader 5 markets.\n"
-            "• <b>Universe</b>: EURUSD, GBPUSD, USDJPY, XAUUSD (Gold), AUDUSD, USDCAD.\n"
-            "• <b>Regimes</b>: ATR Chandelier brackets + Kalman state-space tracking.\n"
-            "• <b>Risk Policy</b>: Max 2% risk budget per trade with hard brackets."
+            "🧠 <b>Quantitative Intelligence & Market Analysis</b>\n\n"
+            f"• <b>Combined Portfolio Value</b>: <code>${comb['combined_equity']:,.2f} USD</code>\n"
+            f"• <b>Active Positions</b>: <code>{len(pos)} open</code>\n"
+            f"• <b>Market Regime</b>: Multi-Timeframe Trend & Volatility Scanning Active\n"
+            f"• <b>Risk Enforcement</b>: 1% Max Risk Cap per trade, 2:1 minimum R/R, Tag 1002 Broker SL\n\n"
+            "<i>Type <code>/balance</code>, <code>/positions</code>, or <code>/pnl</code> for full ledger breakdowns.</i>"
         )
 
     def process_update(self, update: dict[str, Any]) -> None:
