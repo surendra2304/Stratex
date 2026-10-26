@@ -88,6 +88,12 @@ class TradingEngine:
         self._trades: list[Trade] = []
         self._equity = 10000.0  # starting equity
 
+    def analyze_momentum(self, symbol: str, price: float, previous_close: float,
+                         closes: list[float | None]):
+        """Jarvis market analysis through the public Stratex engine."""
+        from Stratex.real_market_momentum import MarketMomentumEngine
+        return MarketMomentumEngine().analyze(symbol, price, previous_close, closes)
+
     # ── Technical Indicators ──────────────────────────────────────────────
 
     def sma(self, prices: list[float], period: int = 20) -> list[float]:
@@ -164,6 +170,17 @@ class TradingEngine:
 
     def generate_signals(self, symbol: str, bars: list[PriceBar], strategy: str = "sma_cross") -> list[Signal]:
         """Generate trading signals based on technical indicators."""
+        if strategy == "jarvis_momentum":
+            signals = []
+            for i in range(9, len(bars)):
+                report = self.analyze_momentum(symbol, bars[i].close, bars[i-1].close,
+                                              [b.close for b in bars[max(0, i-14):i+1]])
+                side = "buy" if "BUY" in report.signal else "sell" if "SELL" in report.signal else "hold"
+                if side != "hold":
+                    signals.append(Signal(symbol, side, 0.8 if "STRONG" in report.signal else 0.5,
+                                          bars[i].close, strategy, timestamp=bars[i].timestamp,
+                                          reasons=[report.signal, f"SMA5={report.short_average}; SMA15={report.long_average}"]))
+            return signals
         if len(bars) < 30:
             return []
 
@@ -251,6 +268,68 @@ class TradingEngine:
 
         return signals
 
+    def _backtest_momentum(self, symbol: str, bars: list[PriceBar], initial_capital: float,
+                           position_size_pct: float, fee_pct: float) -> BacktestResult:
+        """Execute prior-close signals at the next bar open, long-only with fees."""
+        if (not math.isfinite(initial_capital) or initial_capital <= 0 or
+                not 0 < position_size_pct <= 1 or not 0 <= fee_pct < 1):
+            raise ValueError("invalid backtest capital, sizing or fees")
+        if any(not math.isfinite(b.open) or b.open <= 0 or not math.isfinite(b.close) or b.close <= 0
+               for b in bars) or any(a.timestamp >= b.timestamp for a, b in zip(bars, bars[1:])):
+            raise ValueError("positive finite prices and strictly increasing timestamps required")
+        signals = {s.timestamp: s for s in self.generate_signals(symbol, bars, "jarvis_momentum")}
+        cash = initial_capital
+        position = None
+        trades = []
+        curve = [cash]
+        peak = cash
+        drawdown = 0.0
+        entry_fee = 0.0
+        for index, bar in enumerate(bars):
+            prior = signals.get(bars[index-1].timestamp) if index else None
+            side = prior.signal if prior else "hold"
+            if position is not None and side == "sell":
+                proceeds = position.quantity * bar.open
+                exit_fee = proceeds * fee_pct
+                cash += proceeds - exit_fee
+                position.exit_price = bar.open
+                position.exit_time = bar.timestamp
+                position.pnl = proceeds - position.quantity * position.entry_price - entry_fee - exit_fee
+                position.pnl_pct = 100 * position.pnl / (position.quantity * position.entry_price + entry_fee)
+                position.status = "closed"
+                trades.append(position)
+                position = None
+            elif position is None and side == "buy":
+                notional = cash * position_size_pct / (1 + fee_pct)
+                entry_fee = notional * fee_pct
+                cash -= notional + entry_fee
+                position = Trade(f"trd_{uuid.uuid4().hex[:12]}", symbol, "buy", notional / bar.open,
+                                 bar.open, strategy="jarvis_momentum")
+            equity = cash + (position.quantity * bar.close if position else 0)
+            if index == len(bars)-1 and position is not None:
+                proceeds = position.quantity * bar.close
+                exit_fee = proceeds * fee_pct
+                cash += proceeds - exit_fee
+                position.exit_price = bar.close
+                position.exit_time = bar.timestamp
+                position.pnl = proceeds - position.quantity * position.entry_price - entry_fee - exit_fee
+                position.pnl_pct = 100 * position.pnl / (position.quantity * position.entry_price + entry_fee)
+                position.status = "closed"
+                trades.append(position)
+                position = None
+                equity = cash
+            curve.append(equity)
+            peak = max(peak, equity)
+            drawdown = max(drawdown, (peak-equity)/peak*100)
+        returns = [b/a-1 for a, b in zip(curve, curve[1:]) if a > 0]
+        mean = sum(returns)/len(returns) if returns else 0
+        variance = sum((r-mean)**2 for r in returns)/len(returns) if returns else 0
+        sharpe = mean/math.sqrt(variance)*math.sqrt(len(returns)) if variance else 0
+        return BacktestResult(symbol, "jarvis_momentum", (cash/initial_capital-1)*100, sharpe,
+                              drawdown, 100*sum(t.pnl > 0 for t in trades)/len(trades) if trades else 0,
+                              len(trades), sum(t.pnl_pct for t in trades)/len(trades) if trades else 0,
+                              cash, trades)
+
     # ── Backtesting ────────────────────────────────────────────────────────
 
     def backtest(
@@ -259,6 +338,8 @@ class TradingEngine:
         fee_pct: float = 0.001
     ) -> BacktestResult:
         """Run a backtest on historical price data."""
+        if strategy == "jarvis_momentum":
+            return self._backtest_momentum(symbol, bars, initial_capital, position_size_pct, fee_pct)
         if len(bars) < 30:
             return BacktestResult(
                 symbol=symbol, strategy=strategy,
