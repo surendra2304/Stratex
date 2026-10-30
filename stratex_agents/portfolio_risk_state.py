@@ -2,16 +2,47 @@
 
 Only broker/account equity snapshots that are already normalized to one reporting
 currency should be passed here. The store does not infer PnL or currency rates.
-Supports both PostgreSQL (dokploy-postgres) and SQLite backends.
+
+Backends: PostgreSQL through ``psycopg`` 3, Oracle Autonomous Database 26ai
+through SQLAlchemy 2.x and ``python-oracledb``, and SQLite only for an explicit
+local path (unit tests / local development). The public contract is identical on
+all three backends.
 """
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+
+from .persistence_backend import (
+    ORACLE_PREFIXES,
+    POSTGRES_PREFIXES,
+    OracleDatabase,
+    detect_dialect,
+    normalize_oracle_dsn,
+    oracle_error_code,
+    redact_dsn,
+    row_to_dict,
+)
+
+logger = logging.getLogger(__name__)
+
+_ORACLE_PORTFOLIO_EQUITY_STATE_DDL = """
+CREATE TABLE portfolio_equity_state (
+    account_key VARCHAR2(256 CHAR) NOT NULL,
+    reporting_currency VARCHAR2(32 CHAR) NOT NULL,
+    utc_day VARCHAR2(10 CHAR) NOT NULL,
+    day_start_equity BINARY_DOUBLE NOT NULL,
+    high_water_equity BINARY_DOUBLE NOT NULL,
+    updated_at BINARY_DOUBLE NOT NULL,
+    CONSTRAINT pk_portfolio_equity_state
+        PRIMARY KEY (account_key, reporting_currency, utc_day)
+)
+""".strip()
 
 
 class PortfolioRiskStateError(RuntimeError):
@@ -21,26 +52,39 @@ class PortfolioRiskStateError(RuntimeError):
 class PortfolioRiskStateStore:
     def __init__(self, path: str | None = None):
         configured_dsn = (os.getenv("STRATEX_DATABASE_URL") or "").strip()
-        postgres_prefixes = ("postgresql://", "postgres://", "postgresql+psycopg://")
         if path is not None:
             self.path = path
         elif configured_dsn:
-            if not configured_dsn.lower().startswith(postgres_prefixes):
-                raise RuntimeError("STRATEX_DATABASE_URL must use PostgreSQL; refusing an implicit local-ledger fallback.")
+            if not configured_dsn.lower().startswith(POSTGRES_PREFIXES + ORACLE_PREFIXES):
+                raise RuntimeError(
+                    "STRATEX_DATABASE_URL must use PostgreSQL or Oracle; refusing an implicit "
+                    "local-ledger fallback."
+                )
             self.path = configured_dsn
         else:
-            self.path = os.getenv("STRATEX_PORTFOLIO_RISK_DB", "state/portfolio_risk.sqlite3")
+            raise RuntimeError(
+                "Portfolio risk state requires STRATEX_DATABASE_URL pointing to an Oracle "
+                "Autonomous Database; SQLite and PostgreSQL are not supported production "
+                "backends. Pass an explicit path only in isolated tests."
+            )
 
-        self._use_postgres = self.path.lower().startswith(
-            ("postgresql://", "postgres://", "postgresql+psycopg://")
-        )
+        self._dialect = detect_dialect(self.path)
+        self._use_postgres = self._dialect == "postgresql"
+        self._use_oracle = self._dialect == "oracle"
         self._dsn = self.path
-        if self._dsn.startswith("postgresql+psycopg://"):
-            self._dsn = "postgresql://" + self._dsn[len("postgresql+psycopg://"):]
-        elif self._dsn.startswith("postgres://"):
-            self._dsn = "postgresql://" + self._dsn[len("postgres://"):]
-        if not self._use_postgres and self.path != ":memory:":
+        if self._use_postgres:
+            if self._dsn.startswith("postgresql+psycopg://"):
+                self._dsn = "postgresql://" + self._dsn[len("postgresql+psycopg://"):]
+            elif self._dsn.startswith("postgres://"):
+                self._dsn = "postgresql://" + self._dsn[len("postgres://"):]
+        elif self._use_oracle:
+            self._dsn = normalize_oracle_dsn(self._dsn)
+        if not (self._use_postgres or self._use_oracle) and self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+        self._oracle = (
+            OracleDatabase(self._dsn, component="portfolio risk state")
+            if self._use_oracle else None
+        )
         self._initialize()
 
     def _connect(self):
@@ -51,6 +95,8 @@ class PortfolioRiskStateStore:
             except ImportError as exc:
                 raise RuntimeError("PostgreSQL storage requires psycopg 3.") from exc
             return psycopg.connect(self._dsn, row_factory=dict_row, connect_timeout=5)
+        if self._use_oracle:  # pragma: no cover - defensive: Oracle uses SQLAlchemy
+            raise RuntimeError("Oracle connections are managed through SQLAlchemy; use _managed_connection().")
         conn = sqlite3.connect(self.path, timeout=10.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout=10000")
@@ -62,6 +108,11 @@ class PortfolioRiskStateStore:
 
     @contextmanager
     def _managed_connection(self):
+        if self._use_oracle:
+            assert self._oracle is not None
+            with self._oracle.connection() as oracle_conn:
+                yield oracle_conn
+            return
         conn = self._connect()
         try:
             yield conn
@@ -73,6 +124,9 @@ class PortfolioRiskStateStore:
             conn.close()
 
     def _initialize(self):
+        if self._use_oracle:
+            self._initialize_oracle()
+            return
         with self._managed_connection() as conn:
             if self._use_postgres:
                 conn.execute("""
@@ -99,6 +153,20 @@ class PortfolioRiskStateStore:
                     )
                 """)
 
+    def _initialize_oracle(self) -> None:
+        """Idempotently create the Oracle baseline table in the current schema."""
+        assert self._oracle is not None
+        with self._oracle.connection() as conn:
+            schema = self._oracle.current_schema(conn)
+            logger.info(
+                "Stratex portfolio risk state Oracle bootstrap: schema=%s target=%s",
+                schema,
+                redact_dsn(self._dsn),
+            )
+            self._oracle.ensure_table(
+                conn, "PORTFOLIO_EQUITY_STATE", _ORACLE_PORTFOLIO_EQUITY_STATE_DDL
+            )
+
     def observe(
         self,
         *,
@@ -120,27 +188,32 @@ class PortfolioRiskStateStore:
             raise PortfolioRiskStateError("equity must be positive and timestamps/equity finite")
         day = datetime.datetime.fromtimestamp(now, datetime.timezone.utc).date().isoformat()
         with self._managed_connection() as conn:
-            row = conn.execute(
-                self._sql("SELECT day_start_equity, high_water_equity FROM portfolio_equity_state "
-                          "WHERE account_key=? AND reporting_currency=? AND utc_day=?"),
-                (key, currency, day),
-            ).fetchone()
-            if row is None:
-                day_start = value
-                high_water = value
-                conn.execute(
-                    self._sql("INSERT INTO portfolio_equity_state(account_key, reporting_currency, utc_day, "
-                              "day_start_equity, high_water_equity, updated_at) VALUES (?, ?, ?, ?, ?, ?)"),
-                    (key, currency, day, day_start, high_water, now),
+            if self._use_oracle:
+                day_start, high_water = self._observe_oracle(
+                    conn, key=key, currency=currency, day=day, value=value, now=now
                 )
             else:
-                day_start = float(row["day_start_equity"])
-                high_water = max(float(row["high_water_equity"]), value)
-                conn.execute(
-                    self._sql("UPDATE portfolio_equity_state SET high_water_equity=?, updated_at=? "
+                row = conn.execute(
+                    self._sql("SELECT day_start_equity, high_water_equity FROM portfolio_equity_state "
                               "WHERE account_key=? AND reporting_currency=? AND utc_day=?"),
-                    (high_water, now, key, currency, day),
-                )
+                    (key, currency, day),
+                ).fetchone()
+                if row is None:
+                    day_start = value
+                    high_water = value
+                    conn.execute(
+                        self._sql("INSERT INTO portfolio_equity_state(account_key, reporting_currency, utc_day, "
+                                  "day_start_equity, high_water_equity, updated_at) VALUES (?, ?, ?, ?, ?, ?)"),
+                        (key, currency, day, day_start, high_water, now),
+                    )
+                else:
+                    day_start = float(row["day_start_equity"])
+                    high_water = max(float(row["high_water_equity"]), value)
+                    conn.execute(
+                        self._sql("UPDATE portfolio_equity_state SET high_water_equity=?, updated_at=? "
+                                  "WHERE account_key=? AND reporting_currency=? AND utc_day=?"),
+                        (high_water, now, key, currency, day),
+                    )
         return {
             "utc_day": day,
             "day_start_equity": day_start,
@@ -150,6 +223,59 @@ class PortfolioRiskStateStore:
             "captured_at": now,
             "equity_basis": "account_equity",
         }
+
+    def _observe_oracle(self, conn, *, key: str, currency: str, day: str,
+                        value: float, now: float) -> tuple[float, float]:
+        """Atomic Oracle upsert of the daily baseline and high-water mark.
+
+        ``MERGE`` performs the select-then-insert/update atomically: the insert
+        branch keeps the first observed equity as the day baseline, while the
+        update branch only raises the high-water mark. The row is then read back
+        under the same transaction/lock. A concurrent first observation can make
+        Oracle raise ORA-00001 for the uncommitted duplicate; the statement is
+        retried once, at which point it takes the MATCHED branch.
+        """
+        assert self._oracle is not None
+        merge_sql = (
+            "MERGE INTO portfolio_equity_state t "
+            "USING dual "
+            "ON (t.account_key = :account_key "
+            "AND t.reporting_currency = :reporting_currency "
+            "AND t.utc_day = :utc_day) "
+            "WHEN MATCHED THEN UPDATE SET "
+            "t.high_water_equity = GREATEST(t.high_water_equity, :equity), "
+            "t.updated_at = :updated_at "
+            "WHEN NOT MATCHED THEN INSERT "
+            "(account_key, reporting_currency, utc_day, day_start_equity, high_water_equity, updated_at) "
+            "VALUES (:account_key, :reporting_currency, :utc_day, :equity, :equity, :updated_at)"
+        )
+        select_sql = (
+            "SELECT day_start_equity, high_water_equity FROM portfolio_equity_state "
+            "WHERE account_key = :account_key AND reporting_currency = :reporting_currency "
+            "AND utc_day = :utc_day"
+        )
+        params = {
+            "account_key": key,
+            "reporting_currency": currency,
+            "utc_day": day,
+            "equity": value,
+            "updated_at": now,
+        }
+        row: dict[str, Any] | None = None
+        for attempt in range(2):
+            try:
+                self._oracle.execute(conn, merge_sql, params)
+            except Exception as exc:
+                if oracle_error_code(exc) != "ORA-00001" or attempt == 1:
+                    raise
+                continue
+            row = self._oracle.fetchone(conn, select_sql, params)
+            if row is not None:
+                return float(row["day_start_equity"]), float(row["high_water_equity"])
+            raise PortfolioRiskStateError(
+                "Oracle merge completed but the portfolio baseline row was not readable"
+            )
+        raise PortfolioRiskStateError("Oracle portfolio baseline upsert did not converge")
 
     def get_baseline(
         self,
@@ -167,11 +293,23 @@ class PortfolioRiskStateStore:
             import datetime
             utc_day = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
         with self._managed_connection() as conn:
-            row = conn.execute(
-                self._sql("SELECT day_start_equity, high_water_equity, updated_at FROM portfolio_equity_state "
-                          "WHERE account_key=? AND reporting_currency=? AND utc_day=?"),
-                (key, currency, utc_day),
-            ).fetchone()
+            if self._use_oracle:
+                assert self._oracle is not None
+                row = self._oracle.fetchone(
+                    conn,
+                    "SELECT day_start_equity, high_water_equity, updated_at "
+                    "FROM portfolio_equity_state "
+                    "WHERE account_key = :account_key "
+                    "AND reporting_currency = :reporting_currency AND utc_day = :utc_day",
+                    {"account_key": key, "reporting_currency": currency, "utc_day": utc_day},
+                )
+            else:
+                fetched = conn.execute(
+                    self._sql("SELECT day_start_equity, high_water_equity, updated_at FROM portfolio_equity_state "
+                              "WHERE account_key=? AND reporting_currency=? AND utc_day=?"),
+                    (key, currency, utc_day),
+                ).fetchone()
+                row = row_to_dict(fetched) if fetched is not None else None
         if row is None:
             return None
         return {

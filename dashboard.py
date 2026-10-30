@@ -1175,6 +1175,47 @@ def health_readiness():
 
     payload["panic_active"] = panic
     payload["kill_switch_locked"] = locked
+    # Database backend and connectivity from the configured store. The URL is read
+    # from the process environment because config exposes operational constants only.
+    db_backend = "unconfigured"
+    db_status = "unavailable"
+    try:
+        import config as cfg
+        import os as _os
+        db_url = (
+            _os.getenv("STRATEX_DATABASE_URL")
+            or _os.getenv("DATABASE_URL")
+            or getattr(cfg, "DATABASE_URL", "")
+            or getattr(cfg, "DB_URL", "")
+        )
+        if db_url and isinstance(db_url, str):
+            url_low = db_url.lower()
+            if url_low.startswith(("oracle", "oracledb")):
+                db_backend = "oracle"
+            elif url_low.startswith(("postgresql", "postgres")):
+                db_backend = "postgresql"
+            elif url_low.startswith("sqlite"):
+                db_backend = "sqlite"
+            else:
+                db_backend = "unconfigured"
+
+            from sqlalchemy import create_engine, text
+            from sqlalchemy.pool import NullPool
+
+            probe_url = db_url
+            if db_backend == "oracle" and probe_url.startswith("oracle+oracledb_async://"):
+                probe_url = "oracle+oracledb://" + probe_url[len("oracle+oracledb_async://"):]
+            engine = create_engine(probe_url, poolclass=NullPool, pool_pre_ping=True)
+            try:
+                with engine.connect() as conn:
+                    conn.execute(text("SELECT 1 FROM DUAL" if db_backend == "oracle" else "SELECT 1"))
+                db_status = "connected"
+            finally:
+                engine.dispose()
+    except Exception:
+        db_status = "unavailable"
+    payload["database"] = db_status
+    payload["database_backend"] = db_backend
 
     ready = (
         payload["engine_healthy"]
@@ -1182,6 +1223,16 @@ def health_readiness():
         and not panic
         and not locked
     )
+    # Production readiness: non-Oracle backend must return 503
+    is_prod = False
+    try:
+        import os as _os
+        env = _os.getenv("ENVIRONMENT") or _os.getenv("APP_ENV") or "development"
+        is_prod = str(env).lower() == "production"
+    except Exception:
+        pass
+    if is_prod and db_backend != "oracle" and ready:
+        ready = False
     payload["status"] = "ready" if ready else "not_ready"
     return jsonify(payload), 200 if ready else 503
 

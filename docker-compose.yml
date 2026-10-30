@@ -16,6 +16,7 @@ services:
       - TESTNET_ONLY=TRUE
       - TESTNET_ENABLED=${TESTNET_ENABLED:-False}
       - LIVE_TRADING_ENABLED=False
+      - STRATEX_DATABASE_URL=${STRATEX_DATABASE_URL:?STRATEX_DATABASE_URL must be an Oracle DSN}
     volumes:
       # Persist state files, ledgers, portfolios, and logs across container restarts
       - ./testnet_portfolio.json:/app/testnet_portfolio.json
@@ -23,8 +24,6 @@ services:
       - ./testnet_opportunity_log.jsonl:/app/testnet_opportunity_log.jsonl
       - ./testnet_equity_history.jsonl:/app/testnet_equity_history.jsonl
       - ./active_trades.json:/app/active_trades.json
-      # Durable SQLite OMS ledger; persists across container recreation and redeploys.
-      - stratex_order_state:/app/state
       - ./bot.log:/app/bot.log
     command: python scripts/supervise_services.py
     healthcheck:
@@ -35,9 +34,6 @@ services:
       start_period: 15s
     networks:
       - friday_mesh
-
-volumes:
-  stratex_order_state:
 
 networks:
   friday_mesh:
