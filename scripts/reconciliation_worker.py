@@ -19,6 +19,7 @@ if REPO_ROOT not in sys.path:
 
 from logger import get_logger
 from stratex_agents.order_store import OrderIntentStore
+from stratex_agents.persistence_backend import configured_dsn, redact_dsn
 from stratex_agents.reconciliation_agent import OrderReconciliationAgent
 
 logger = get_logger("reconciliation_worker")
@@ -107,7 +108,7 @@ def run_worker(stop_event: threading.Event | None = None) -> int:
 
     logger.info(
         "[RECONCILIATION] Starting read-only worker; interval=%ss; ledger=%s",
-        interval, os.getenv("STRATEX_ORDER_DB", "state/stratex_orders.sqlite3"),
+        interval, redact_dsn(configured_dsn() or "unconfigured"),
     )
     agent = None
 

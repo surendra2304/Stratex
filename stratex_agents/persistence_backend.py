@@ -1,40 +1,69 @@
-"""Dialect selection and Oracle Autonomous Database support for Stratex stores.
+"""Oracle Autonomous Database support for the Stratex persistence stores.
 
-PostgreSQL remains the authoritative production ledger and is reached through
-``psycopg`` 3 exactly as before. Oracle Autonomous Database 26ai (23.26) is
-reached through SQLAlchemy 2.x and ``python-oracledb``. SQLite remains available
-only when a caller passes an explicit local path (unit tests / local dev); it is
-never an implicit substitute for a configured production DSN.
+Oracle Autonomous Database 26ai is the only supported production backend and is
+reached through SQLAlchemy 2.x and ``python-oracledb``. A local SQLite file is
+accepted only when an isolated test passes an explicit filesystem path; it is
+never an implicit substitute for a configured DSN and is never opened outside a
+test process. PostgreSQL is not supported at all.
 
-SQLAlchemy and ``oracledb`` are imported lazily, so a PostgreSQL or SQLite
-deployment does not need the Oracle driver installed. No Oracle SQL is executed
-until an Oracle DSN is selected and the store is constructed.
+SQLAlchemy and ``oracledb`` are imported lazily, so importing a store module does
+not require the Oracle driver until an Oracle DSN is actually selected.
 """
 from __future__ import annotations
 
 import logging
+import os
 import re
+import sys
 from contextlib import contextmanager
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 logger = logging.getLogger(__name__)
 
-POSTGRES_PREFIXES = ("postgresql://", "postgres://", "postgresql+psycopg://")
 ORACLE_PREFIXES = ("oracle://", "oracle+oracledb://", "oracledb://")
+DATABASE_URL_VARIABLES = ("STRATEX_DATABASE_URL", "DATABASE_URL")
 
 _ORA_CODE = re.compile(r"\b(ORA-\d{5})\b")
 _WALLET_PASSWORD = re.compile(r"(wallet_password=)[^&]*", re.IGNORECASE)
 
 
 def detect_dialect(value: str) -> str:
-    """Return ``"postgresql"``, ``"oracle"`` or ``"sqlite"`` for a path/DSN."""
+    """Return ``"oracle"`` for an Oracle DSN, otherwise ``"sqlite"`` (a path)."""
     lowered = (value or "").strip().lower()
-    if lowered.startswith(POSTGRES_PREFIXES):
-        return "postgresql"
-    if lowered.startswith(ORACLE_PREFIXES):
-        return "oracle"
-    return "sqlite"
+    return "oracle" if lowered.startswith(ORACLE_PREFIXES) else "sqlite"
+
+
+def configured_dsn() -> str | None:
+    """Return the first configured database URL (``STRATEX_DATABASE_URL`` first)."""
+    for name in DATABASE_URL_VARIABLES:
+        value = (os.getenv(name) or "").strip()
+        if value:
+            return value
+    return None
+
+
+def running_under_tests() -> bool:
+    """Return True only inside an isolated test process.
+
+    SQLite is a test fixture, never a runtime backend. Production processes never
+    satisfy this check, so an explicit filesystem path fails closed there.
+    """
+    if "pytest" in sys.modules:
+        return True
+    environment = (os.getenv("STRATEX_ENV") or os.getenv("FRIDAY_ENV") or "").strip().lower()
+    return environment in {"test", "testing"}
+
+
+def require_test_sqlite(path: str, component: str) -> None:
+    """Refuse a filesystem database path outside an isolated test process."""
+    if running_under_tests():
+        return
+    raise RuntimeError(
+        f"{component} accepts a local SQLite path only in isolated tests; "
+        "configure STRATEX_DATABASE_URL (or DATABASE_URL) with an "
+        "oracle+oracledb:// Autonomous Database DSN for runtime use."
+    )
 
 
 def normalize_oracle_dsn(value: str) -> str:
@@ -85,11 +114,10 @@ def oracle_error_code(exc: BaseException) -> str | None:
 
 
 def row_to_dict(row: Any) -> dict[str, Any]:
-    """Normalize a sqlite3.Row, psycopg dict row or SQLAlchemy Row to lowercase keys.
+    """Normalize a SQLite row or SQLAlchemy Row to lowercase keys.
 
-    Oracle returns unquoted identifiers in upper case, while PostgreSQL and
-    SQLite return them in lower case. This keeps the public result contract
-    identical regardless of backend.
+    Oracle returns unquoted identifiers in upper case while SQLite returns them
+    in lower case. This keeps the public result contract identical.
     """
     mapping = getattr(row, "_mapping", None)
     items = mapping.items() if mapping is not None else dict(row).items()

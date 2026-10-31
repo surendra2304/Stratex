@@ -2,18 +2,15 @@
 
 Backends
 --------
-``STRATEX_DATABASE_URL`` (or an explicit DSN passed as ``path``) may be:
+``STRATEX_DATABASE_URL`` (or ``DATABASE_URL``) must be an Oracle Autonomous
+Database 26ai DSN -- ``oracle+oracledb://``, ``oracle://`` or ``oracledb://`` --
+reached through SQLAlchemy 2.x and ``python-oracledb``. Unqualified table names
+resolve to the Oracle schema that owns the connection (the production owner is
+the Oracle user ``STRATEX``).
 
-* PostgreSQL -- ``postgresql://``, ``postgres://`` or
-  ``postgresql+psycopg://``, reached through ``psycopg`` 3.
-* Oracle Autonomous Database 26ai -- ``oracle+oracledb://``, ``oracle://`` or
-  ``oracledb://``, reached through SQLAlchemy 2.x and ``python-oracledb``.
-  Unqualified table names resolve to the Oracle schema that owns the
-  connection (the production owner is the Oracle user ``STRATEX``).
-
-An explicit local file path (or ``:memory:``) selects SQLite. SQLite is a unit
-test / local-development backend only; it is never used as an implicit fallback
-when OMS or reconciliation is enabled.
+An explicit local file path (or ``:memory:``) selects SQLite, but only inside an
+isolated test process. SQLite is a unit-test fixture: it is never used as an
+implicit fallback and a production process refuses an explicit path.
 
 Contract
 --------
@@ -33,9 +30,9 @@ Contract
     ``error_text`` is replaced on every transition. Each accepted transition
     appends one ``ORDER_STATE_TRANSITION`` audit event.
 
-Audit events are append-only and are enforced at the database level (trigger on
-SQLite/PostgreSQL, trigger on Oracle). There is no TTL or expiry: an intent is
-immutable once terminal and duplicate protection is status-based, not
+Audit events are append-only and are enforced at the database level (Oracle
+triggers; a SQLite trigger in the test fixture). There is no TTL or expiry: an
+intent is immutable once terminal and duplicate protection is status-based, not
 time-based. ``created_at``/``updated_at`` are Unix epoch seconds and are used
 only for ordering/reporting.
 """
@@ -43,7 +40,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import sqlite3
 from contextlib import contextmanager
 import time
@@ -51,14 +47,14 @@ from pathlib import Path
 from typing import Any
 
 from .persistence_backend import (
-    ORACLE_PREFIXES,
-    POSTGRES_PREFIXES,
     OracleDatabase,
     clob_text,
+    configured_dsn,
     detect_dialect,
     normalize_oracle_dsn,
     oracle_error_code,
     redact_dsn,
+    require_test_sqlite,
     row_to_dict,
 )
 
@@ -159,36 +155,33 @@ class OrderIntentStore:
     }
 
     def __init__(self, path: str | None = None):
-        # Prefer the agent's authoritative database when configured. Explicit
-        # paths remain useful for isolated SQLite unit tests and local dev.
-        configured_dsn = (os.getenv("STRATEX_DATABASE_URL") or "").strip()
-        if path is not None:
-            self.path = path
-        elif configured_dsn:
-            if not configured_dsn.lower().startswith(POSTGRES_PREFIXES + ORACLE_PREFIXES):
-                raise RuntimeError(
-                    "STRATEX_DATABASE_URL must use PostgreSQL or Oracle; refusing an implicit "
-                    "local-ledger fallback."
-                )
-            self.path = configured_dsn
+        explicit = (path or "").strip() or None
+        if explicit is not None:
+            self._dialect = detect_dialect(explicit)
+            if self._dialect == "oracle":
+                self._dsn = normalize_oracle_dsn(explicit)
+            else:
+                require_test_sqlite(explicit, "The Stratex order ledger")
+                self._dsn = ""
         else:
-            raise RuntimeError(
-                "Stratex OMS/reconciliation requires STRATEX_DATABASE_URL pointing to an "
-                "Oracle Autonomous Database; SQLite and PostgreSQL are not supported "
-                "production backends. Pass an explicit path only in isolated tests."
-            )
-        self._dialect = detect_dialect(self.path)
-        self._use_postgres = self._dialect == "postgresql"
+            configured = configured_dsn()
+            if not configured:
+                raise RuntimeError(
+                    "Stratex OMS/reconciliation requires STRATEX_DATABASE_URL (or "
+                    "DATABASE_URL) pointing to an Oracle Autonomous Database; SQLite "
+                    "and PostgreSQL are not supported production backends. Pass an "
+                    "explicit path only in isolated tests."
+                )
+            if detect_dialect(configured) != "oracle":
+                raise RuntimeError(
+                    "STRATEX_DATABASE_URL must be an oracle+oracledb:// DSN; PostgreSQL, "
+                    "SQLite and other backends are not supported production backends."
+                )
+            self._dialect = "oracle"
+            self._dsn = normalize_oracle_dsn(configured)
         self._use_oracle = self._dialect == "oracle"
-        self._dsn = self.path
-        if self._use_postgres:
-            if self._dsn.startswith("postgresql+psycopg://"):
-                self._dsn = "postgresql://" + self._dsn[len("postgresql+psycopg://"):]
-            elif self._dsn.startswith("postgres://"):
-                self._dsn = "postgresql://" + self._dsn[len("postgres://"):]
-        elif self._use_oracle:
-            self._dsn = normalize_oracle_dsn(self._dsn)
-        if not (self._use_postgres or self._use_oracle) and self.path != ":memory:":
+        self.path = self._dsn if self._use_oracle else explicit
+        if not self._use_oracle and self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self._oracle = (
             OracleDatabase(self._dsn, component="order ledger") if self._use_oracle else None
@@ -196,13 +189,6 @@ class OrderIntentStore:
         self._initialize()
 
     def _connect(self):
-        if self._use_postgres:
-            try:
-                import psycopg
-                from psycopg.rows import dict_row
-            except ImportError as exc:  # pragma: no cover - packaging guard
-                raise RuntimeError("PostgreSQL order storage requires psycopg 3.") from exc
-            return psycopg.connect(self._dsn, row_factory=dict_row, connect_timeout=5)
         if self._use_oracle:  # pragma: no cover - defensive: Oracle uses SQLAlchemy
             raise RuntimeError("Oracle connections are managed through SQLAlchemy; use _managed_connection().")
         conn = sqlite3.connect(self.path, timeout=10.0)
@@ -211,13 +197,9 @@ class OrderIntentStore:
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
-    def _sql(self, statement: str) -> str:
-        """Translate query placeholders for psycopg while preserving SQLite SQL."""
-        return statement.replace("?", "%s") if self._use_postgres else statement
-
     @contextmanager
     def _managed_connection(self):
-        """Close SQLite connections reliably; Connection.__exit__ only commits/rolls back.
+        """Close SQLite test connections reliably; Connection.__exit__ only commits/rolls back.
 
         Oracle connections come from the SQLAlchemy pool and use an explicit
         transaction so a failed statement can be rolled back without closing
@@ -243,72 +225,32 @@ class OrderIntentStore:
             self._initialize_oracle()
             return
         with self._managed_connection() as conn:
-            if self._use_postgres:
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS order_intents (
-                        client_order_id TEXT PRIMARY KEY, payload_hash TEXT NOT NULL,
-                        payload_json TEXT NOT NULL, status TEXT NOT NULL, result_json TEXT,
-                        error_text TEXT, created_at DOUBLE PRECISION NOT NULL,
-                        updated_at DOUBLE PRECISION NOT NULL
-                    )
-                """)
-            else:
-                conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS order_intents (
-                        client_order_id TEXT PRIMARY KEY, payload_hash TEXT NOT NULL,
-                        payload_json TEXT NOT NULL, status TEXT NOT NULL, result_json TEXT,
-                        error_text TEXT, created_at REAL NOT NULL, updated_at REAL NOT NULL
-                    )
-                """)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS order_intents (
+                    client_order_id TEXT PRIMARY KEY, payload_hash TEXT NOT NULL,
+                    payload_json TEXT NOT NULL, status TEXT NOT NULL, result_json TEXT,
+                    error_text TEXT, created_at REAL NOT NULL, updated_at REAL NOT NULL
+                )
+            """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_order_intents_status ON order_intents(status)")
-            if self._use_postgres:
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS order_audit_events (
-                        event_id BIGSERIAL PRIMARY KEY, client_order_id TEXT NOT NULL,
-                        event_type TEXT NOT NULL, previous_status TEXT, new_status TEXT,
-                        details_json TEXT NOT NULL, created_at DOUBLE PRECISION NOT NULL,
-                        FOREIGN KEY(client_order_id) REFERENCES order_intents(client_order_id)
-                    )
-                """)
-            else:
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS order_audit_events (
-                        event_id INTEGER PRIMARY KEY AUTOINCREMENT, client_order_id TEXT NOT NULL,
-                        event_type TEXT NOT NULL, previous_status TEXT, new_status TEXT,
-                        details_json TEXT NOT NULL, created_at REAL NOT NULL,
-                        FOREIGN KEY(client_order_id) REFERENCES order_intents(client_order_id)
-                    )
-                """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS order_audit_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT, client_order_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL, previous_status TEXT, new_status TEXT,
+                    details_json TEXT NOT NULL, created_at REAL NOT NULL,
+                    FOREIGN KEY(client_order_id) REFERENCES order_intents(client_order_id)
+                )
+            """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_order_audit_client_time ON order_audit_events(client_order_id, created_at)")
-            if self._use_postgres:
-                conn.execute("""
-                    CREATE OR REPLACE FUNCTION stratex_order_audit_immutable()
-                    RETURNS TRIGGER AS $$
-                    BEGIN
-                        RAISE EXCEPTION 'audit events are append-only';
-                    END;
-                    $$ LANGUAGE plpgsql
-                """)
-                conn.execute("DROP TRIGGER IF EXISTS order_audit_no_update ON order_audit_events")
-                conn.execute("DROP TRIGGER IF EXISTS order_audit_no_delete ON order_audit_events")
-                conn.execute("""
-                    CREATE TRIGGER order_audit_no_update BEFORE UPDATE ON order_audit_events
-                    FOR EACH ROW EXECUTE FUNCTION stratex_order_audit_immutable()
-                """)
-                conn.execute("""
-                    CREATE TRIGGER order_audit_no_delete BEFORE DELETE ON order_audit_events
-                    FOR EACH ROW EXECUTE FUNCTION stratex_order_audit_immutable()
-                """)
-            else:
-                conn.execute("""
-                    CREATE TRIGGER IF NOT EXISTS order_audit_no_update BEFORE UPDATE ON order_audit_events
-                    BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END
-                """)
-                conn.execute("""
-                    CREATE TRIGGER IF NOT EXISTS order_audit_no_delete BEFORE DELETE ON order_audit_events
-                    BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END
-                """)
+            conn.execute("""
+                CREATE TRIGGER IF NOT EXISTS order_audit_no_update BEFORE UPDATE ON order_audit_events
+                BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END
+            """)
+            conn.execute("""
+                CREATE TRIGGER IF NOT EXISTS order_audit_no_delete BEFORE DELETE ON order_audit_events
+                BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END
+            """)
 
     def _initialize_oracle(self) -> None:
         """Idempotently create the Oracle ledger objects in the current schema.
@@ -362,11 +304,12 @@ class OrderIntentStore:
                 },
             )
             return
-        conn.execute(self._sql(
+        conn.execute(
             "INSERT INTO order_audit_events "
             "(client_order_id,event_type,previous_status,new_status,details_json,created_at) "
-            "VALUES (?,?,?,?,?,?)"
-        ), (client_order_id, event_type, previous_status, new_status, details_json, timestamp))
+            "VALUES (?,?,?,?,?,?)",
+            (client_order_id, event_type, previous_status, new_status, details_json, timestamp),
+        )
 
     @staticmethod
     def _result_summary(result: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -395,39 +338,21 @@ class OrderIntentStore:
                 now=now,
             )
         with self._managed_connection() as conn:
-            if self._use_postgres:
-                inserted = conn.execute(
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT * FROM order_intents WHERE client_order_id = ?", (client_order_id,)
+            ).fetchone()
+            if row is None:
+                conn.execute(
                     "INSERT INTO order_intents "
                     "(client_order_id,payload_hash,payload_json,status,created_at,updated_at) "
-                    "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (client_order_id) DO NOTHING RETURNING client_order_id",
+                    "VALUES (?,?,?,?,?,?)",
                     (client_order_id, payload_hash, payload_json, "RESERVED", now, now),
-                ).fetchone()
-                if inserted is not None:
-                    self._append_audit_event(conn, client_order_id=client_order_id, event_type="INTENT_RESERVED",
-                                              previous_status=None, new_status="RESERVED",
-                                              details={"payload_hash": payload_hash, **safe_payload}, timestamp=now)
-                    return {"kind": "new", "status": "RESERVED"}
-                row = conn.execute(
-                    "SELECT * FROM order_intents WHERE client_order_id = %s FOR UPDATE", (client_order_id,)
-                ).fetchone()
-            else:
-                conn.execute("BEGIN IMMEDIATE")
-                row = conn.execute(
-                    "SELECT * FROM order_intents WHERE client_order_id = ?", (client_order_id,)
-                ).fetchone()
-                if row is None:
-                    conn.execute(
-                        "INSERT INTO order_intents "
-                        "(client_order_id,payload_hash,payload_json,status,created_at,updated_at) "
-                        "VALUES (?,?,?,?,?,?)",
-                        (client_order_id, payload_hash, payload_json, "RESERVED", now, now),
-                    )
-                    self._append_audit_event(conn, client_order_id=client_order_id, event_type="INTENT_RESERVED",
-                                              previous_status=None, new_status="RESERVED",
-                                              details={"payload_hash": payload_hash, **safe_payload}, timestamp=now)
-                    return {"kind": "new", "status": "RESERVED"}
-            if row is None:
-                raise RuntimeError("Order intent conflict resolved but existing row was not found")
+                )
+                self._append_audit_event(conn, client_order_id=client_order_id, event_type="INTENT_RESERVED",
+                                          previous_status=None, new_status="RESERVED",
+                                          details={"payload_hash": payload_hash, **safe_payload}, timestamp=now)
+                return {"kind": "new", "status": "RESERVED"}
             return self._existing_intent_result(
                 conn, row_to_dict(row), client_order_id=client_order_id,
                 payload_hash=payload_hash, now=now,
@@ -528,17 +453,18 @@ class OrderIntentStore:
             )
             return
         with self._managed_connection() as conn:
-            row = conn.execute(self._sql("SELECT status FROM order_intents WHERE client_order_id=?"),
+            row = conn.execute("SELECT status FROM order_intents WHERE client_order_id=?",
                                 (client_order_id,)).fetchone()
             if row is None:
                 raise KeyError(f"Unknown order intent: {client_order_id}")
             previous_status = str(row["status"]).upper()
             if status not in self.PROGRESSIONS.get(previous_status, set()):
                 raise ValueError(f"Invalid order lifecycle transition: {previous_status} -> {status}")
-            cur = conn.execute(self._sql(
+            cur = conn.execute(
                 "UPDATE order_intents SET status=?, result_json=COALESCE(?, result_json), "
-                "error_text=?, updated_at=? WHERE client_order_id=?"
-            ), (status, result_json, error, now, client_order_id))
+                "error_text=?, updated_at=? WHERE client_order_id=?",
+                (status, result_json, error, now, client_order_id),
+            )
             if cur.rowcount != 1:
                 raise KeyError(f"Unknown order intent: {client_order_id}")
             self._append_audit_event(
@@ -612,7 +538,7 @@ class OrderIntentStore:
                     {"client_order_id": client_order_id},
                 )
             else:
-                row = conn.execute(self._sql("SELECT * FROM order_intents WHERE client_order_id=?"),
+                row = conn.execute("SELECT * FROM order_intents WHERE client_order_id=?",
                                     (client_order_id,)).fetchone()
             if row is None:
                 return None
@@ -634,12 +560,13 @@ class OrderIntentStore:
                 return self._oracle_intent_rows(
                     self._oracle.fetchall(conn, _ORACLE_RECONCILABLE_SQL, {"row_limit": limit})
                 )
-            rows = conn.execute(self._sql(
+            rows = conn.execute(
                 "SELECT client_order_id,status,created_at,updated_at,error_text "
                 "FROM order_intents "
                 "WHERE status IN ('RESERVED','SUBMITTING','UNKNOWN','ACCEPTED','PARTIALLY_FILLED') "
-                "ORDER BY created_at ASC LIMIT ?"
-            ), (limit,)).fetchall()
+                "ORDER BY created_at ASC LIMIT ?",
+                (limit,),
+            ).fetchall()
         return [row_to_dict(row) for row in rows]
 
     def record_correction(
@@ -670,7 +597,7 @@ class OrderIntentStore:
                     {"client_order_id": client_order_id},
                 )
             else:
-                row = conn.execute(self._sql("SELECT status FROM order_intents WHERE client_order_id=?"),
+                row = conn.execute("SELECT status FROM order_intents WHERE client_order_id=?",
                                     (client_order_id,)).fetchone()
             if row is None:
                 raise KeyError(f"Unknown order intent: {client_order_id}")
@@ -715,13 +642,15 @@ class OrderIntentStore:
                         {"row_limit": bounded_limit},
                     )
             elif client_order_id:
-                rows = conn.execute(self._sql(
-                    "SELECT * FROM order_audit_events WHERE client_order_id=? ORDER BY event_id ASC LIMIT ?"
-                ), (client_order_id, bounded_limit)).fetchall()
+                rows = conn.execute(
+                    "SELECT * FROM order_audit_events WHERE client_order_id=? ORDER BY event_id ASC LIMIT ?",
+                    (client_order_id, bounded_limit),
+                ).fetchall()
             else:
-                rows = conn.execute(self._sql(
-                    "SELECT * FROM order_audit_events ORDER BY event_id ASC LIMIT ?"
-                ), (bounded_limit,)).fetchall()
+                rows = conn.execute(
+                    "SELECT * FROM order_audit_events ORDER BY event_id ASC LIMIT ?",
+                    (bounded_limit,),
+                ).fetchall()
             # Parse CLOB-backed JSON before the connection returns to the pool.
             result = []
             for row in rows:
@@ -738,9 +667,10 @@ class OrderIntentStore:
                 return self._oracle_intent_rows(
                     self._oracle.fetchall(conn, _ORACLE_UNRESOLVED_SQL, {"row_limit": limit})
                 )
-            rows = conn.execute(self._sql(
+            rows = conn.execute(
                 "SELECT client_order_id,status,created_at,updated_at,error_text "
                 "FROM order_intents WHERE status IN ('RESERVED','SUBMITTING','UNKNOWN') "
-                "ORDER BY created_at ASC LIMIT ?"
-            ), (limit,)).fetchall()
+                "ORDER BY created_at ASC LIMIT ?",
+                (limit,),
+            ).fetchall()
         return [row_to_dict(row) for row in rows]

@@ -110,7 +110,7 @@ class TradingEngine:
         """Cloud9 Academy-inspired risk/review tools, persisted per Stratex state."""
         TradingCoach = _load_support("real_trading_coach").TradingCoach
         if not hasattr(self, "_coach"):
-            self._coach = TradingCoach(os.path.join(self._state_dir, "trading_journal.sqlite3"))
+            self._coach = TradingCoach(self._state_dir)
         return self._coach
 
     @staticmethod

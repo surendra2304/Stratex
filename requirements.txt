@@ -29,5 +29,5 @@ httpx>=0.27.0
 # patches google.genai.Client, so the SDK must be installed in CI and production.
 google-genai>=2.0.0,<3.0.0
 
-# PostgreSQL driver for the durable order-intent ledger.
-psycopg[binary]>=3.2,<4
+# Oracle Autonomous Database driver for the durable order-intent ledger.
+oracledb>=2.5.0,<27.0.0

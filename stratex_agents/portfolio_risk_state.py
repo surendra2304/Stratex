@@ -3,15 +3,14 @@
 Only broker/account equity snapshots that are already normalized to one reporting
 currency should be passed here. The store does not infer PnL or currency rates.
 
-Backends: PostgreSQL through ``psycopg`` 3, Oracle Autonomous Database 26ai
-through SQLAlchemy 2.x and ``python-oracledb``, and SQLite only for an explicit
-local path (unit tests / local development). The public contract is identical on
-all three backends.
+Backend: Oracle Autonomous Database 26ai through SQLAlchemy 2.x and
+``python-oracledb``. A local SQLite file is available only when an isolated test
+passes an explicit path; a production process refuses one. PostgreSQL is not
+supported. The public contract is identical for both paths.
 """
 from __future__ import annotations
 
 import logging
-import os
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -19,13 +18,13 @@ from pathlib import Path
 from typing import Any
 
 from .persistence_backend import (
-    ORACLE_PREFIXES,
-    POSTGRES_PREFIXES,
     OracleDatabase,
+    configured_dsn,
     detect_dialect,
     normalize_oracle_dsn,
     oracle_error_code,
     redact_dsn,
+    require_test_sqlite,
     row_to_dict,
 )
 
@@ -51,35 +50,33 @@ class PortfolioRiskStateError(RuntimeError):
 
 class PortfolioRiskStateStore:
     def __init__(self, path: str | None = None):
-        configured_dsn = (os.getenv("STRATEX_DATABASE_URL") or "").strip()
-        if path is not None:
-            self.path = path
-        elif configured_dsn:
-            if not configured_dsn.lower().startswith(POSTGRES_PREFIXES + ORACLE_PREFIXES):
-                raise RuntimeError(
-                    "STRATEX_DATABASE_URL must use PostgreSQL or Oracle; refusing an implicit "
-                    "local-ledger fallback."
-                )
-            self.path = configured_dsn
+        explicit = (path or "").strip() or None
+        if explicit is not None:
+            self._dialect = detect_dialect(explicit)
+            if self._dialect == "oracle":
+                self._dsn = normalize_oracle_dsn(explicit)
+            else:
+                require_test_sqlite(explicit, "The Stratex portfolio risk store")
+                self._dsn = ""
         else:
-            raise RuntimeError(
-                "Portfolio risk state requires STRATEX_DATABASE_URL pointing to an Oracle "
-                "Autonomous Database; SQLite and PostgreSQL are not supported production "
-                "backends. Pass an explicit path only in isolated tests."
-            )
-
-        self._dialect = detect_dialect(self.path)
-        self._use_postgres = self._dialect == "postgresql"
+            configured = configured_dsn()
+            if not configured:
+                raise RuntimeError(
+                    "Portfolio risk state requires STRATEX_DATABASE_URL (or DATABASE_URL) "
+                    "pointing to an Oracle Autonomous Database; SQLite and PostgreSQL are "
+                    "not supported production backends. Pass an explicit path only in "
+                    "isolated tests."
+                )
+            if detect_dialect(configured) != "oracle":
+                raise RuntimeError(
+                    "STRATEX_DATABASE_URL must be an oracle+oracledb:// DSN; PostgreSQL, "
+                    "SQLite and other backends are not supported production backends."
+                )
+            self._dialect = "oracle"
+            self._dsn = normalize_oracle_dsn(configured)
         self._use_oracle = self._dialect == "oracle"
-        self._dsn = self.path
-        if self._use_postgres:
-            if self._dsn.startswith("postgresql+psycopg://"):
-                self._dsn = "postgresql://" + self._dsn[len("postgresql+psycopg://"):]
-            elif self._dsn.startswith("postgres://"):
-                self._dsn = "postgresql://" + self._dsn[len("postgres://"):]
-        elif self._use_oracle:
-            self._dsn = normalize_oracle_dsn(self._dsn)
-        if not (self._use_postgres or self._use_oracle) and self.path != ":memory:":
+        self.path = self._dsn if self._use_oracle else explicit
+        if not self._use_oracle and self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self._oracle = (
             OracleDatabase(self._dsn, component="portfolio risk state")
@@ -88,13 +85,6 @@ class PortfolioRiskStateStore:
         self._initialize()
 
     def _connect(self):
-        if self._use_postgres:
-            try:
-                import psycopg
-                from psycopg.rows import dict_row
-            except ImportError as exc:
-                raise RuntimeError("PostgreSQL storage requires psycopg 3.") from exc
-            return psycopg.connect(self._dsn, row_factory=dict_row, connect_timeout=5)
         if self._use_oracle:  # pragma: no cover - defensive: Oracle uses SQLAlchemy
             raise RuntimeError("Oracle connections are managed through SQLAlchemy; use _managed_connection().")
         conn = sqlite3.connect(self.path, timeout=10.0)
@@ -102,9 +92,6 @@ class PortfolioRiskStateStore:
         conn.execute("PRAGMA busy_timeout=10000")
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
-
-    def _sql(self, statement: str) -> str:
-        return statement.replace("?", "%s") if self._use_postgres else statement
 
     @contextmanager
     def _managed_connection(self):
@@ -128,30 +115,17 @@ class PortfolioRiskStateStore:
             self._initialize_oracle()
             return
         with self._managed_connection() as conn:
-            if self._use_postgres:
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS portfolio_equity_state (
-                        account_key TEXT NOT NULL,
-                        reporting_currency TEXT NOT NULL,
-                        utc_day TEXT NOT NULL,
-                        day_start_equity DOUBLE PRECISION NOT NULL,
-                        high_water_equity DOUBLE PRECISION NOT NULL,
-                        updated_at DOUBLE PRECISION NOT NULL,
-                        PRIMARY KEY (account_key, reporting_currency, utc_day)
-                    )
-                """)
-            else:
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS portfolio_equity_state (
-                        account_key TEXT NOT NULL,
-                        reporting_currency TEXT NOT NULL,
-                        utc_day TEXT NOT NULL,
-                        day_start_equity REAL NOT NULL,
-                        high_water_equity REAL NOT NULL,
-                        updated_at REAL NOT NULL,
-                        PRIMARY KEY (account_key, reporting_currency, utc_day)
-                    )
-                """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS portfolio_equity_state (
+                    account_key TEXT NOT NULL,
+                    reporting_currency TEXT NOT NULL,
+                    utc_day TEXT NOT NULL,
+                    day_start_equity REAL NOT NULL,
+                    high_water_equity REAL NOT NULL,
+                    updated_at REAL NOT NULL,
+                    PRIMARY KEY (account_key, reporting_currency, utc_day)
+                )
+            """)
 
     def _initialize_oracle(self) -> None:
         """Idempotently create the Oracle baseline table in the current schema."""
@@ -194,24 +168,24 @@ class PortfolioRiskStateStore:
                 )
             else:
                 row = conn.execute(
-                    self._sql("SELECT day_start_equity, high_water_equity FROM portfolio_equity_state "
-                              "WHERE account_key=? AND reporting_currency=? AND utc_day=?"),
+                    "SELECT day_start_equity, high_water_equity FROM portfolio_equity_state "
+                    "WHERE account_key=? AND reporting_currency=? AND utc_day=?",
                     (key, currency, day),
                 ).fetchone()
                 if row is None:
                     day_start = value
                     high_water = value
                     conn.execute(
-                        self._sql("INSERT INTO portfolio_equity_state(account_key, reporting_currency, utc_day, "
-                                  "day_start_equity, high_water_equity, updated_at) VALUES (?, ?, ?, ?, ?, ?)"),
+                        "INSERT INTO portfolio_equity_state(account_key, reporting_currency, utc_day, "
+                        "day_start_equity, high_water_equity, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
                         (key, currency, day, day_start, high_water, now),
                     )
                 else:
                     day_start = float(row["day_start_equity"])
                     high_water = max(float(row["high_water_equity"]), value)
                     conn.execute(
-                        self._sql("UPDATE portfolio_equity_state SET high_water_equity=?, updated_at=? "
-                                  "WHERE account_key=? AND reporting_currency=? AND utc_day=?"),
+                        "UPDATE portfolio_equity_state SET high_water_equity=?, updated_at=? "
+                        "WHERE account_key=? AND reporting_currency=? AND utc_day=?",
                         (high_water, now, key, currency, day),
                     )
         return {
@@ -305,8 +279,8 @@ class PortfolioRiskStateStore:
                 )
             else:
                 fetched = conn.execute(
-                    self._sql("SELECT day_start_equity, high_water_equity, updated_at FROM portfolio_equity_state "
-                              "WHERE account_key=? AND reporting_currency=? AND utc_day=?"),
+                    "SELECT day_start_equity, high_water_equity, updated_at FROM portfolio_equity_state "
+                    "WHERE account_key=? AND reporting_currency=? AND utc_day=?",
                     (key, currency, utc_day),
                 ).fetchone()
                 row = row_to_dict(fetched) if fetched is not None else None

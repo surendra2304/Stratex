@@ -71,9 +71,7 @@ def build_portfolio_risk_context(
             currency_to_reporting_rate=fx_rates,
         )
         snapshot = agent.snapshot(reporting_currency=reporting_currency)
-        store = state_store or PortfolioRiskStateStore(
-            os.getenv("STRATEX_PORTFOLIO_RISK_DB", "state/portfolio_risk.sqlite3")
-        )
+        store = state_store or PortfolioRiskStateStore()
         context["portfolio"] = store.enrich_snapshot(snapshot, account_key=account_key)
     except Exception as exc:
         context["portfolio"] = {

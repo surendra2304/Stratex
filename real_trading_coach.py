@@ -9,10 +9,14 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import json
 import math
+import os
+import re
 import sqlite3
+import sys
+import threading
 import time
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 
 CURRICULUM = (
@@ -101,14 +105,171 @@ class JournalReview:
     flags: list[str]
 
 
+_ORACLE_PREFIXES = ("oracle://", "oracle+oracledb://", "oracledb://")
+_ORA_UNIQUE = re.compile(r"\bORA-00001\b")
+
+
+def _oracle_dsn(value: str | None) -> str | None:
+    """Return a normalised Oracle DSN, or ``None`` for a filesystem path."""
+    text = (value or "").strip()
+    if not text.lower().startswith(_ORACLE_PREFIXES):
+        return None
+    scheme, _, rest = text.partition("://")
+    if scheme.lower() in {"oracle", "oracledb"}:
+        return "oracle+oracledb://" + rest
+    return text
+
+
+def _testing_process() -> bool:
+    """Return True only inside an isolated test process (SQLite fixture allowed)."""
+    if "pytest" in sys.modules:
+        return True
+    environment = (os.getenv("STRATEX_ENV") or os.getenv("FRIDAY_ENV") or "").strip().lower()
+    return environment in {"testing", "test"}
+
+
+def resolve_journal_dsn(journal_path: str | None) -> str | None:
+    """Resolve the journal backend.
+
+    An explicit Oracle DSN wins. Otherwise ``STRATEX_DATABASE_URL`` /
+    ``DATABASE_URL`` supplies the Oracle DSN. A filesystem path never becomes a
+    production journal: under pytest it is a test-only SQLite override, and
+    outside tests it is refused in production and otherwise leaves the journal
+    disabled. A missing configuration leaves the journal disabled.
+    """
+    explicit = _oracle_dsn(journal_path)
+    if explicit:
+        return explicit
+    testing = _testing_process()
+    if journal_path and testing:
+        return None
+    configured_raw = (os.getenv("STRATEX_DATABASE_URL") or os.getenv("DATABASE_URL") or "").strip()
+    configured = _oracle_dsn(configured_raw)
+    if configured:
+        return configured
+    if journal_path:
+        environment = (os.getenv("STRATEX_ENV") or os.getenv("FRIDAY_ENV") or "").strip().lower()
+        if environment == "production":
+            raise RuntimeError(
+                "The Stratex trade journal requires an Oracle DSN in production; "
+                "explicit filesystem journals are test-only."
+            )
+        return None
+    if configured_raw:
+        raise RuntimeError(
+            "STRATEX_DATABASE_URL must be an oracle+oracledb:// DSN; SQLite and "
+            "PostgreSQL are not supported production backends."
+        )
+    return None
+
+
+class _OracleJournal:
+    """Oracle-backed trade journal owned by the Stratex schema."""
+
+    def __init__(self, dsn: str) -> None:
+        self.dsn = dsn
+        self._engine: Any | None = None
+        self._lock = threading.RLock()
+        self._ensure_schema()
+
+    def _get_engine(self):
+        if self._engine is not None:
+            return self._engine
+        with self._lock:
+            if self._engine is None:
+                from sqlalchemy import create_engine
+
+                self._engine = create_engine(
+                    self.dsn,
+                    pool_pre_ping=True,
+                    pool_size=2,
+                    max_overflow=3,
+                    pool_recycle=1800,
+                )
+        return self._engine
+
+    def _ensure_schema(self) -> None:
+        from sqlalchemy import text
+
+        with self._get_engine().begin() as conn:
+            present = conn.execute(
+                text("SELECT COUNT(*) FROM user_tables WHERE table_name = 'TRADING_JOURNAL'")
+            ).scalar_one()
+            if not present:
+                conn.exec_driver_sql(
+                    """CREATE TABLE trading_journal (
+                        id VARCHAR2(100) PRIMARY KEY,
+                        symbol VARCHAR2(40) NOT NULL,
+                        side VARCHAR2(10) NOT NULL,
+                        entry NUMBER NOT NULL,
+                        stop NUMBER NOT NULL,
+                        target NUMBER,
+                        quantity NUMBER NOT NULL,
+                        opened_at NUMBER NOT NULL,
+                        closed_at NUMBER,
+                        exit_price NUMBER,
+                        emotion VARCHAR2(300),
+                        followed_plan NUMBER(1),
+                        notes VARCHAR2(4000),
+                        planned_risk NUMBER NOT NULL,
+                        fees NUMBER DEFAULT 0 NOT NULL
+                    )"""
+                )
+
+    def insert(self, record: tuple) -> None:
+        from sqlalchemy import text
+
+        statement = text(
+            """INSERT INTO trading_journal
+               (id, symbol, side, entry, stop, target, quantity, opened_at, closed_at,
+                exit_price, emotion, followed_plan, notes, planned_risk, fees)
+               VALUES (:id, :symbol, :side, :entry, :stop, :target, :quantity, :opened_at,
+                       :closed_at, :exit_price, :emotion, :followed_plan, :notes,
+                       :planned_risk, :fees)"""
+        )
+        keys = ("id", "symbol", "side", "entry", "stop", "target", "quantity", "opened_at",
+                "closed_at", "exit_price", "emotion", "followed_plan", "notes",
+                "planned_risk", "fees")
+        params = dict(zip(keys, record))
+        try:
+            with self._get_engine().begin() as conn:
+                conn.execute(statement, params)
+        except Exception as error:
+            if _ORA_UNIQUE.search(str(error)):
+                raise ValueError("trade ID already exists") from error
+            raise
+
+    def rows(self, limit: int) -> list[tuple]:
+        from sqlalchemy import text
+
+        statement = text(
+            """SELECT symbol, side, entry, stop, quantity, opened_at, closed_at,
+                      exit_price, emotion, followed_plan, planned_risk, fees
+               FROM trading_journal ORDER BY opened_at DESC FETCH FIRST :limit ROWS ONLY"""
+        )
+        with self._get_engine().connect() as conn:
+            return [tuple(row) for row in conn.execute(statement, {"limit": limit})]
+
+
 class TradingCoach:
     """Typed, deterministic Cloud9 curriculum calculations attached to Stratex."""
 
     def __init__(self, journal_path: str | None = None) -> None:
-        self.journal_path = journal_path
-        if journal_path:
-            Path(journal_path).parent.mkdir(parents=True, exist_ok=True)
-            with sqlite3.connect(journal_path) as db:
+        dsn = resolve_journal_dsn(journal_path)
+        self._oracle: _OracleJournal | None = _OracleJournal(dsn) if dsn else None
+        self.journal_path: str | None = None
+        # A filesystem journal exists only as an isolated test fixture. Outside
+        # tests the journal is Oracle-only (or disabled when no DSN is set), so
+        # no production process ever creates a SQLite file.
+        if self._oracle is None and journal_path and _testing_process():
+            candidate = Path(journal_path)
+            self.journal_path = (
+                str(candidate / "trading_journal.sqlite3")
+                if candidate.is_dir() else journal_path
+            )
+        if self.journal_path:
+            Path(self.journal_path).parent.mkdir(parents=True, exist_ok=True)
+            with sqlite3.connect(self.journal_path) as db:
                 db.execute("""CREATE TABLE IF NOT EXISTS journal (
                     id TEXT PRIMARY KEY, symbol TEXT NOT NULL, side TEXT NOT NULL,
                     entry REAL NOT NULL, stop REAL NOT NULL, target REAL,
@@ -272,7 +433,7 @@ class TradingCoach:
                      exit_price: float | None = None, closed_at: float | None = None,
                      emotion: str = "", followed_plan: bool | None = None, notes: str = "",
                      fees: float = 0.0) -> dict:
-        if not self.journal_path: raise RuntimeError("trade journal is not configured")
+        if not self.journal_path and self._oracle is None: raise RuntimeError("trade journal is not configured")
         if not trade_id or len(trade_id)>100 or not symbol.strip() or len(symbol)>40 or side not in {"long","short"}:
             raise ValueError("invalid trade identity")
         entry=self._finite(entry,"entry",True);stop=self._finite(stop,"stop",True);quantity=self._finite(quantity,"quantity",True)
@@ -288,21 +449,28 @@ class TradingCoach:
         risk=abs(entry-stop)*quantity
         record=(trade_id,symbol.upper(),side,entry,stop,target,quantity,opened_at,closed_at,exit_price,
                 emotion,None if followed_plan is None else int(followed_plan),notes,risk,fees)
-        try:
-            with sqlite3.connect(self.journal_path) as db:
-                db.execute("INSERT INTO journal (id,symbol,side,entry,stop,target,quantity,opened_at,closed_at,exit_price,emotion,followed_plan,notes,planned_risk,fees) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",record)
-        except sqlite3.IntegrityError as error:
-            raise ValueError("trade ID already exists") from error
+        if self._oracle is not None:
+            self._oracle.insert(record)
+        else:
+            try:
+                with sqlite3.connect(self.journal_path) as db:
+                    db.execute("INSERT INTO journal (id,symbol,side,entry,stop,target,quantity,opened_at,closed_at,exit_price,emotion,followed_plan,notes,planned_risk,fees) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",record)
+            except sqlite3.IntegrityError as error:
+                raise ValueError("trade ID already exists") from error
         return {"trade_id":trade_id,"status":"closed" if exit_price is not None else "open","planned_cash_risk":risk}
 
     def review_journal(self, limit: int = 500) -> JournalReview:
-        if not self.journal_path:raise RuntimeError("trade journal is not configured")
+        if not self.journal_path and self._oracle is None:raise RuntimeError("trade journal is not configured")
         if not 1<=limit<=10000:raise ValueError("limit must be between 1 and 10000")
-        with sqlite3.connect(self.journal_path) as db:
-            rows=db.execute("SELECT symbol,side,entry,stop,quantity,opened_at,closed_at,exit_price,emotion,followed_plan,planned_risk,fees FROM journal ORDER BY opened_at DESC LIMIT ?",(limit,)).fetchall()
+        if self._oracle is not None:
+            rows=self._oracle.rows(limit)
+        else:
+            with sqlite3.connect(self.journal_path) as db:
+                rows=db.execute("SELECT symbol,side,entry,stop,quantity,opened_at,closed_at,exit_price,emotion,followed_plan,planned_risk,fees FROM journal ORDER BY opened_at DESC LIMIT ?",(limit,)).fetchall()
         closed=[];flags=[];chronological=sorted(rows,key=lambda row:row[5]);loss_streak=peak_streak=0;last_closed=None
         for row in chronological:
             symbol,side,entry,stop,qty,opened,closed_at,exit_price,emotion,followed,risk,fees=row
+            emotion = emotion or ""
             if closed_at is None:
                 if followed==0:flags.append(f"{symbol}: open trade recorded as not following plan")
                 continue
