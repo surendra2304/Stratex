@@ -988,6 +988,56 @@ def get_candles():
             "error": str(e)
         }), 503
 
+def _daemon_engine_snapshot(max_age_seconds: int = 180):
+    """Observed state of the autonomous trading daemon, if it is alive.
+
+    In FUTURES mode the component that evaluates and executes trades is the
+    Stratex daemon, a separate process from this API. It rewrites its portfolio
+    state atomically every cycle, so the freshness of that file is direct
+    evidence of an engine that is working. The API-side heartbeat describes a
+    different process, and reading it alone made a daemon that was actively
+    managing 15 positions report ``engine: offline`` and ``/ready`` 503.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(os.getcwd(), "state", "cloud_portfolio_state.json"),
+        os.path.join(here, "state", "cloud_portfolio_state.json"),
+    ]
+    for path in candidates:
+        if not os.path.exists(path):
+            continue
+        try:
+            age = time.time() - os.path.getmtime(path)
+            if age > max_age_seconds:
+                continue
+            with open(path, "r", encoding="utf-8") as fh:
+                state = json.load(fh)
+        except Exception:
+            continue
+        positions = state.get("positions") or {}
+        if isinstance(positions, dict):
+            open_positions = len(positions)
+            unrealized = 0.0
+            for pos in positions.values():
+                try:
+                    unrealized += float(pos.get("unrealized_pnl") or 0.0)
+                except (TypeError, ValueError):
+                    continue
+        else:
+            open_positions = len(positions)
+            unrealized = 0.0
+        return {
+            "engine_source": "autonomous_daemon",
+            "daemon_state_age_seconds": round(age, 1),
+            "daemon_balance": state.get("balance"),
+            "daemon_updated_at": state.get("updated_at"),
+            "open_positions": open_positions,
+            "unrealized_pnl": round(unrealized, 2),
+            "environment": "ctrader_demo",
+        }
+    return None
+
+
 def get_engine_health_data():
     """Reads engine heartbeat and verifies live process state."""
     env_hb = os.getenv("TESTNET_HEARTBEAT_FILE")
@@ -1087,11 +1137,30 @@ def get_engine_health_data():
                 )
         trading_capable = is_healthy and not capability_reasons
 
+        # FUTURES mode is traded by the daemon, not by this API worker. A fresh
+        # daemon portfolio with open positions is stronger evidence of a working
+        # engine than a missing API-side heartbeat, and without this the one agent
+        # that earns is the only one that always reports "not ready".
+        _daemon_snapshot = None
+        if not trading_capable and getattr(config, "TRADING_MODE", "").upper() == "FUTURES":
+            _daemon_snapshot = _daemon_engine_snapshot()
+            if _daemon_snapshot:
+                is_healthy = True
+                engine_status = "ONLINE"
+                trading_capable = True
+                capability_reasons = []
+
         return {
             "engine_status": engine_status,
             "healthy": is_healthy,
             "trading_capable": trading_capable,
             "capability_reasons": capability_reasons,
+            "capability_warnings": (
+                ["DEMO_ENVIRONMENT: execution venue is ctrader demo"]
+                if _daemon_snapshot
+                else []
+            ),
+            **(_daemon_snapshot or {}),
             "worker_alive": worker_alive,
             "heartbeat_age_seconds": round(age, 2),
             **_paper,
@@ -1141,6 +1210,15 @@ def _health_payload(evidence_class):
         "engine_healthy": engine_data["healthy"],
         "engine_trading_capable": engine_data.get("trading_capable", False),
         "capability_reasons": engine_data.get("capability_reasons", []),
+        # Surface *why* readiness passed: which process is trading, what it holds
+        # and on which venue. A bare "ready: true" from a demo account would be
+        # the same kind of half-truth this endpoint was fixed to stop telling.
+        "capability_warnings": engine_data.get("capability_warnings", []),
+        "engine_source": engine_data.get("engine_source"),
+        "open_positions": engine_data.get("open_positions"),
+        "daemon_balance": engine_data.get("daemon_balance"),
+        "unrealized_pnl": engine_data.get("unrealized_pnl"),
+        "environment": engine_data.get("environment"),
         "mode": getattr(config, "TRADING_MODE", "TESTNET"),
         "evidence_class": evidence_class,
         "observed_at": now_iso,
