@@ -175,7 +175,26 @@ class StratexAIAdvisor:
 
     @staticmethod
     def _fail_closed_verdict(symbol: str, reason: str) -> AITradeVerdict:
-        """Return a non-approving verdict when AI evidence is absent or invalid."""
+        """Verdict when AI evidence is absent or invalid.
+
+        The AI advisor is an *enhancer*, not a single point of failure. Unless
+        STRATEX_AI_ADVISOR_STRICT is set, an LLM outage degrades to a
+        deterministic-quant decision at reduced size instead of blocking every
+        trade in the book.
+        """
+        strict = os.getenv("STRATEX_AI_ADVISOR_STRICT", "false").lower() in {"1", "true", "yes"}
+        if not strict:
+            return AITradeVerdict(
+                approved=True,
+                verdict="DAMPENED",
+                confidence=0.55,
+                thesis=(
+                    f"AI advisor unavailable for {symbol} ({reason}); "
+                    "proceeding on deterministic quant gates at 0.7x size."
+                ),
+                risk_factors=[reason, "AI review skipped: provider unavailable."],
+                model_used="unavailable-fail-open",
+            )
         return AITradeVerdict(
             approved=False,
             verdict="REJECTED",

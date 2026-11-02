@@ -1,5 +1,5 @@
 """
-autonomy/mt5_autonomous_engine.py — Autonomous Multi-Asset Multi-Timeframe MT5 Quantitative Trading Engine.
+autonomy/mt5_autonomous_engine.py — Autonomous Multi-Asset Multi-Timeframe IC Markets cTrader Quantitative Trading Engine.
 
 Features:
 1. Multi-Asset Scanning:
@@ -18,12 +18,12 @@ Features:
    - IntelXContractClient: Sourced intelligence & macro sentiment filter
    - MemoraScopedClient: Scoped audit persistence (Universal/Shared)
    - FridayGatewayClient: Telemetry & intent broadcast to FRIDAY Core Gateway (http://friday:10000)
-5. Execution via MT5:
+5. Execution via IC Markets cTrader FIX 4.4:
    - Broker-native preflight checks (order_check)
-   - Dynamic lot sizing adhering to broker volume step (0.01) and max 2% risk budget
-   - Mandatory protective Stop-Loss and Take-Profit brackets (minimum 1.5:1 reward/risk)
+   - Risk-based lot sizing that honours the broker volume step
+   - Mandatory protective Stop-Loss and Take-Profit brackets (minimum reward/risk floor)
 6. Instant Telegram Alerts & 2-Way Bot Integration:
-   - Real-time HTML alerts with emojis on signal discovery, consensus approval, fill, and rejection
+   - Fill and exit alerts only (proposal/heartbeat noise suppressed)
    - Interactive command hooks (/scan, /positions, /balance, /status)
 """
 from __future__ import annotations
@@ -65,7 +65,7 @@ from strategies.strategy_registry import strategy_registry
 from strategies.ensemble_strategy import get_signal as ensemble_get_signal
 from strategies.ml_ensemble import get_signal as ml_ensemble_get_signal
 
-logger = get_logger("mt5_autonomous_engine")
+logger = get_logger("ctrader_autonomous_engine")
 
 DEFAULT_SYMBOLS = [
     # Forex Majors
@@ -136,6 +136,29 @@ def _get_contract_multiplier(symbol: str) -> float:
     if "JPY" in sym:
         return 1000.0  # Scaled for 2-decimal JPY currency
     return 100000.0  # Standard Forex 100,000 units
+
+
+def _min_stop_distance(symbol: str, price: float) -> float:
+    """Minimum sensible stop distance in price terms.
+
+    Stops tighter than the broker spread are noise, not risk management: they
+    exit on the first tick regardless of signal quality. Thresholds are set at
+    roughly 3-5x a typical IC Markets spread for each asset class.
+    """
+    sym = symbol.upper().replace("/", "")
+    if any(k in sym for k in ["BTC", "ETH", "SOL"]):
+        return price * 0.004
+    if "XAU" in sym or "GOLD" in sym:
+        return 1.20
+    if "XAG" in sym or "SILVER" in sym:
+        return 0.06
+    if any(k in sym for k in ["WTI", "BRENT", "OIL"]):
+        return 0.15
+    if any(k in sym for k in ["US30", "US500", "USTEC", "DE40", "GER40", "UK100", "JP225", "AUS200", "F40"]):
+        return price * 0.0012
+    if "JPY" in sym:
+        return 0.08  # 8 pips on 3-decimal JPY pairs
+    return 0.00080  # 8 pips on 5-decimal FX pairs
 
 
 def _calculate_position_margin(symbol: str, quantity: float) -> float:
@@ -209,7 +232,7 @@ class ConsensusDecision:
 
 
 class MT5AutonomousEngine:
-    """Autonomous trading engine orchestrating MT5 execution and the FRIDAY peer mesh."""
+    """Autonomous trading engine orchestrating IC Markets cTrader execution and the FRIDAY peer mesh."""
 
     def __init__(
         self,
@@ -242,10 +265,16 @@ class MT5AutonomousEngine:
         if max_active_positions is not None:
             self.max_active_positions = max_active_positions
         else:
-            self.max_active_positions = int(os.getenv("STRATEX_MAX_POSITIONS", "5"))
-        self.max_risk_per_trade_pct = min(0.02, max(0.001, max_risk_per_trade_pct))
+            self.max_active_positions = int(os.getenv("STRATEX_MAX_POSITIONS", "10"))
+        self.max_risk_per_trade_pct = min(
+            0.02,
+            max(0.001, float(os.getenv("STRATEX_RISK_PER_TRADE_PCT", str(max_risk_per_trade_pct)))),
+        )
         self.max_daily_drawdown_pct = min(0.05, max(0.01, max_daily_drawdown_pct))
-        self.min_confidence = min_confidence
+        self.min_confidence = float(os.getenv("STRATEX_MIN_CONFIDENCE", str(min_confidence)))
+        self.max_entries_per_cycle = int(os.getenv("STRATEX_MAX_ENTRIES_PER_CYCLE", "3"))
+        self.min_risk_reward = float(os.getenv("STRATEX_MIN_RR", "1.2"))
+        self.notify_proposed = os.getenv("STRATEX_NOTIFY_PROPOSED", "false").lower() in {"1", "true", "yes"}
         self.dry_run = dry_run
 
         # FRIDAY Universe Peer Mesh
@@ -268,6 +297,14 @@ class MT5AutonomousEngine:
         self.cloud_positions: dict[str, CloudPosition] = {}
         self.cloud_balance: float = float(os.getenv("STRATEX_INITIAL_BALANCE", str(initial_balance)))
         self._load_cloud_state()
+        # A restart must not inherit a phantom book: positions that are no longer
+        # open at IC Markets would otherwise hold the scan at the position cap.
+        try:
+            purged = self.reconcile_with_broker(notify=False)
+            if purged:
+                logger.info(f"[CTRADER_ENGINE] Startup reconciliation purged {purged} phantom position(s).")
+        except Exception as exc:
+            logger.warning(f"[CTRADER_ENGINE] Startup reconciliation skipped: {exc}")
 
         # Quantitative Models
         self.breakout_model = VolatilityRegimeBreakoutModel(atr_period=14, chandelier_mult=2.5, lookback=40)
@@ -300,9 +337,9 @@ class MT5AutonomousEngine:
                     strategy=p_data.get("strategy", ""),
                     ai_thesis=p_data.get("ai_thesis"),
                 )
-            logger.info(f"[MT5_ENGINE] Loaded {len(self.cloud_positions)} cloud positions from state file (Balance: ${self.cloud_balance:,.2f})")
+            logger.info(f"[CTRADER_ENGINE] Loaded {len(self.cloud_positions)} cloud positions from state file (Balance: ${self.cloud_balance:,.2f})")
         except Exception as exc:
-            logger.warning(f"[MT5_ENGINE] Could not load state from {self.state_file}: {exc}")
+            logger.warning(f"[CTRADER_ENGINE] Could not load state from {self.state_file}: {exc}")
 
     def _save_cloud_state(self) -> None:
         """Persist positions and balance to disk for zero-laptop resilience and cross-process access."""
@@ -320,7 +357,7 @@ class MT5AutonomousEngine:
                 json.dump(data, f, indent=2)
             os.replace(tmp_file, self.state_file)
         except Exception as exc:
-            logger.warning(f"[MT5_ENGINE] Could not save state to {self.state_file}: {exc}")
+            logger.warning(f"[CTRADER_ENGINE] Could not save state to {self.state_file}: {exc}")
 
     def close_all_positions(self) -> list[dict[str, Any]]:
         """Close all active positions on the broker via adapter and update settled balance."""
@@ -346,7 +383,7 @@ class MT5AutonomousEngine:
                     "position_id": pos.position_id,
                 })
             except Exception as exc:
-                logger.error(f"[MT5_ENGINE] Error closing position {pos.symbol}: {exc}")
+                logger.error(f"[CTRADER_ENGINE] Error closing position {pos.symbol}: {exc}")
 
         self.cloud_positions.clear()
         self._save_cloud_state()
@@ -367,7 +404,7 @@ class MT5AutonomousEngine:
                 self.adapter.set_settled_balance(new_balance)
             except Exception:
                 pass
-        logger.info(f"[MT5_ENGINE] Portfolio reset to ${new_balance:,.2f} USD with 0 active positions.")
+        logger.info(f"[CTRADER_ENGINE] Portfolio reset to ${new_balance:,.2f} USD with 0 active positions.")
 
     def evaluate_symbol_timeframe(
         self,
@@ -382,7 +419,7 @@ class MT5AutonomousEngine:
                 try:
                     candles = self.adapter.get_historical_data(symbol, timeframe=timeframe, limit=80)
                 except Exception as exc:
-                    logger.debug(f"[MT5_ENGINE] Bridge failed fetching candles for {symbol} ({timeframe}): {exc}")
+                    logger.debug(f"[CTRADER_ENGINE] Bridge failed fetching candles for {symbol} ({timeframe}): {exc}")
                     candles = None
 
             # 2. Resilient Zero-Laptop Cloud Market Feed
@@ -390,7 +427,7 @@ class MT5AutonomousEngine:
                 try:
                     candles = self.cloud_feed.get_candles(symbol, timeframe=timeframe, limit=80)
                 except Exception as exc:
-                    logger.debug(f"[MT5_ENGINE] Cloud feed failed fetching candles for {symbol} ({timeframe}): {exc}")
+                    logger.debug(f"[CTRADER_ENGINE] Cloud feed failed fetching candles for {symbol} ({timeframe}): {exc}")
                     return None
 
         if not candles or len(candles) < 30:
@@ -409,7 +446,7 @@ class MT5AutonomousEngine:
 
         # Chaos Regime Defense: Never initiate new positions in chaotic markets
         if regime == MarketRegime.EXTREME_VOL_CHAOS:
-            logger.info(f"[MT5_ENGINE] Chaos regime detected for {symbol} ({timeframe}); skipping.")
+            logger.info(f"[CTRADER_ENGINE] Chaos regime detected for {symbol} ({timeframe}); skipping.")
             return None
 
         # 2. Kalman Filter Model
@@ -428,7 +465,7 @@ class MT5AutonomousEngine:
             if b_action in {"BUY", "SELL"}:
                 # Avoid entering if Kalman filter indicates extreme counter-extension
                 if (b_action == "BUY" and kalman_z > 2.5) or (b_action == "SELL" and kalman_z < -2.5):
-                    logger.debug(f"[MT5_ENGINE] {symbol} {b_action} filtered by Kalman overextension (Z={kalman_z:.2f})")
+                    logger.debug(f"[CTRADER_ENGINE] {symbol} {b_action} filtered by Kalman overextension (Z={kalman_z:.2f})")
                     return None
                 else:
                     action = b_action
@@ -474,7 +511,7 @@ class MT5AutonomousEngine:
                         stop_loss = float(ml_result.sl)
                         take_profit = float(ml_result.tp)
             except Exception as exc:
-                logger.debug(f"[MT5_ENGINE] Ensemble/ML fallback failed for {symbol}: {exc}")
+                logger.debug(f"[CTRADER_ENGINE] Ensemble/ML fallback failed for {symbol}: {exc}")
 
         if action == "HOLD" or stop_loss <= 0 or take_profit <= 0:
             return None
@@ -490,8 +527,28 @@ class MT5AutonomousEngine:
         if risk_dist <= 1e-6:
             return None
 
+        # Realistic stop floor: cloud/indicative candles can compress ATR to a
+        # fraction of a pip, which produces stops inside the spread and gets
+        # scalped out instantly. Re-anchor the bracket to a tradable distance
+        # while preserving the intended reward:risk.
+        min_stop = _min_stop_distance(symbol, current_price)
+        if risk_dist < min_stop:
+            intended_rr = max(reward_dist / risk_dist, self.min_risk_reward)
+            if action == "BUY":
+                stop_loss = current_price - min_stop
+                take_profit = current_price + (min_stop * intended_rr)
+            else:
+                stop_loss = current_price + min_stop
+                take_profit = current_price - (min_stop * intended_rr)
+            logger.info(
+                f"[CTRADER_ENGINE] {symbol} bracket widened to a tradable stop "
+                f"({risk_dist:.5f} -> {min_stop:.5f}, R:R {intended_rr:.2f})"
+            )
+            risk_dist = abs(current_price - stop_loss)
+            reward_dist = abs(take_profit - current_price)
+
         risk_reward_ratio = reward_dist / risk_dist
-        if risk_reward_ratio < 1.4:
+        if risk_reward_ratio < self.min_risk_reward:
             return None  # Enforce minimum favorable risk-reward ratio
 
         return OpportunitySignal(
@@ -520,10 +577,10 @@ class MT5AutonomousEngine:
         # 1. Sentinel Governance Check
         sentinel_res = self.sentinel.verify_action_authorization(
             action=f"ORDER_{signal.action}",
-            actor="mt5_autonomous_engine",
+            actor="ctrader_autonomous_engine",
             context={
                 "symbol": signal.symbol,
-                "venue": "mt5",
+                "venue": "ctrader",
                 "stop_loss": signal.stop_loss,
                 "take_profit": signal.take_profit,
                 "confidence": signal.confidence,
@@ -634,32 +691,41 @@ class MT5AutonomousEngine:
         except Exception:
             pass
 
-        # Try native broker sizing calculator first
+        # Broker-reported sizing is only a floor on volume step / minimum size;
+        # IC Markets' cTrader adapter returns a flat 0.01 recommendation which
+        # would silently keep every trade at micro-lot size regardless of the
+        # risk budget. Size deterministically from the actual stop distance.
+        step = 0.01
+        min_vol = 0.01
         try:
             sizing = self.adapter.calculate_position_size(symbol, side, stop_loss, take_profit)
-            rec_volume = float(sizing.get("recommended_volume", 0.01))
-            step = float(sizing.get("volume_step", 0.01))
-            min_vol = float(sizing.get("volume_min", 0.01))
-            final_vol = max(min_vol, round((rec_volume * multiplier) / step) * step)
-            return round(final_vol, 2)
+            step = max(0.01, float(sizing.get("volume_step", 0.01) or 0.01))
+            min_vol = max(0.01, float(sizing.get("volume_min", 0.01) or 0.01))
         except Exception:
             pass
 
-        # Robust deterministic fallback sizing (strictly micro-lots for $1,000 base)
-        risk_budget = equity * self.max_risk_per_trade_pct * multiplier
+        risk_budget = equity * self.max_risk_per_trade_pct * max(multiplier, 0.1)
         risk_per_unit = abs(current_price - stop_loss)
         if risk_per_unit <= 1e-6:
-            return 0.01
+            return min_vol
 
         # Standard Forex contract size is 100,000 units. For XAUUSD it is 100 oz.
         contract_size = 100.0 if "XAU" in symbol.upper() else 100000.0
         raw_lots = risk_budget / (risk_per_unit * contract_size)
-        stepped_lots = max(0.01, round(raw_lots / 0.01) * 0.01)
-        # Cap strictly at 0.01 lots for capital preservation on $1,000 account
-        return round(min(0.01, stepped_lots), 2)
+        stepped_lots = max(min_vol, math.floor(raw_lots / step) * step)
+        # Hard ceiling for a four-figure demo account; a data glitch in the
+        # stop distance must never translate into an outsized position.
+        stepped_lots = min(stepped_lots, 0.50)
+
+        # Margin sanity: never commit more than 25% of equity as margin.
+        margin_per_lot = _calculate_position_margin(symbol, 1.0)
+        if margin_per_lot > 0:
+            stepped_lots = min(stepped_lots, (equity * 0.25) / margin_per_lot)
+
+        return round(max(min_vol, stepped_lots), 2)
 
     def execute_signal(self, signal: OpportunitySignal, decision: ConsensusDecision) -> dict[str, Any]:
-        """Execute the approved trade on MT5 demo and dispatch notifications."""
+        """Execute the approved trade on IC Markets cTrader demo and dispatch notifications."""
         volume = self.calculate_lot_size(
             symbol=signal.symbol,
             side=signal.action,
@@ -670,12 +736,12 @@ class MT5AutonomousEngine:
         )
 
         intent = TradeIntent(
-            venue="mt5",
+            venue="ctrader",
             symbol=signal.symbol,
             side=signal.action,
             order_type="MARKET",
             quantity=volume,
-            environment="mt5_demo",
+            environment="ctrader_demo",
             stop_loss=signal.stop_loss,
             take_profit=signal.take_profit,
             strategy=signal.strategy_source,
@@ -690,8 +756,10 @@ class MT5AutonomousEngine:
             },
         )
 
-        # Notify Telegram of Proposed Intent
-        self.telegram.notify_trade_intent(intent, status="PROPOSED")
+        # Optional proposed-intent notification (off by default: only fills and
+        # exits are worth a push; proposal spam makes the channel unusable).
+        if self.notify_proposed:
+            self.telegram.notify_trade_intent(intent, status="PROPOSED")
 
         # Notify FRIDAY Gateway
         self.friday.broadcast_trade_event(
@@ -709,7 +777,7 @@ class MT5AutonomousEngine:
         )
 
         if self.dry_run:
-            logger.info(f"[MT5_ENGINE] DRY_RUN: Simulated execution of {intent.side} {intent.quantity} {intent.symbol}")
+            logger.info(f"[CTRADER_ENGINE] DRY_RUN: Simulated execution of {intent.side} {intent.quantity} {intent.symbol}")
             result = {
                 "status": "SIMULATED_FILLED",
                 "order_id": f"dry-{int(time.time())}",
@@ -745,7 +813,7 @@ class MT5AutonomousEngine:
                     }
                     executed_on_bridge = True
                 except Exception as exc:
-                    logger.error(f"[MT5_ENGINE] Execution failed for {signal.symbol}: {exc}")
+                    logger.error(f"[CTRADER_ENGINE] Execution failed for {signal.symbol}: {exc}")
                     self.telegram.notify_risk_rejection(intent, f"Execution failed: {exc}")
                     return {"status": "FAILED", "error": str(exc), "symbol": signal.symbol}
 
@@ -763,17 +831,32 @@ class MT5AutonomousEngine:
                     }
                 else:
                     logger.warning(
-                        f"[MT5_ENGINE] Bridge offline or execution disabled. Rejecting {signal.action} {signal.symbol} "
+                        f"[CTRADER_ENGINE] Bridge offline or execution disabled. Rejecting {signal.action} {signal.symbol} "
                         f"to prevent phantom trades."
                     )
                     self.telegram.notify_risk_rejection(
-                        intent, "Execution rejected: MT5 Bridge offline (orders must fill on IC Markets demo)"
+                        intent, "Execution rejected: cTrader FIX session offline (orders must fill on IC Markets demo)"
                     )
                     return {
                         "status": "REJECTED_NO_BRIDGE",
-                        "error": "MT5 Bridge not connected to live terminal",
+                        "error": "cTrader FIX session not connected to IC Markets",
                         "symbol": signal.symbol,
                     }
+
+        # Confirm the fill against the live broker so the ledger and the
+        # Telegram alert carry the venue's ticket and execution price rather
+        # than the FIX acknowledgement (which reports price 0 while PENDING).
+        if getattr(self.adapter, "enabled", False) and result.get("status") in {"FILLED", "PENDING"}:
+            for _ in range(4):
+                snapshot = self._broker_positions_snapshot()
+                broker_pos = snapshot.get(signal.symbol) if snapshot else None
+                if broker_pos:
+                    if broker_pos.position_id:
+                        result["order_id"] = broker_pos.position_id
+                    if broker_pos.entry_price and broker_pos.entry_price > 0:
+                        result["price"] = broker_pos.entry_price
+                    break
+                time.sleep(0.6)
 
         # Register position into tracked cloud portfolio
         pos_id = str(result.get("order_id") or f"pos-{int(time.time())}")
@@ -799,20 +882,21 @@ class MT5AutonomousEngine:
         self.telegram.notify_trade_intent(
             intent,
             status="FILLED",
-            fill_price=result.get("price", signal.current_price),
+            fill_price=fill_px,
+            order_id=pos_id,
         )
 
         # Record in Memora Scoped Audit Memory
         self.memora.record_scoped_event(
-            event_type="MT5_TRADE_EXECUTED",
+            event_type="CTRADER_TRADE_EXECUTED",
             scope="Universal",
-            summary=f"Stratex executed {signal.action} {volume} lots of {signal.symbol} at ${result.get('price'):,.4f}",
+            summary=f"Stratex executed {signal.action} {volume} lots of {signal.symbol} on IC Markets cTrader at {fill_px:,.5f}",
             details={
                 "intent": intent.to_dict(),
                 "execution_result": result,
                 "consensus": asdict(decision),
             },
-            tags=["trading", "mt5", "execution", signal.symbol.lower()],
+            tags=["trading", "ctrader", "execution", signal.symbol.lower()],
         )
 
         # Broadcast to FRIDAY Core Gateway
@@ -840,45 +924,113 @@ class MT5AutonomousEngine:
 
         return result
 
+    def _broker_positions_snapshot(self) -> dict[str, Any] | None:
+        """Return live broker positions keyed by symbol, or None when the venue is unavailable.
+
+        A ``None`` result must never be treated as "flat book": a timed-out FIX
+        session or a logged-out bridge returns an empty list, and purging the
+        local ledger on that signal would erase real positions and re-enter the
+        same symbols. Only a positively healthy venue may authoritatively report
+        zero positions.
+        """
+        if not getattr(self.adapter, "enabled", False):
+            return None
+        try:
+            if not getattr(self.adapter, "is_connected", False) and hasattr(self.adapter, "_ensure_connection"):
+                self.adapter._ensure_connection()
+        except Exception as exc:
+            logger.warning(f"[CTRADER_ENGINE] Broker connect failed ({exc}); skipping position reconciliation.")
+            return None
+        if not getattr(self.adapter, "is_connected", False):
+            return None
+        try:
+            broker_positions = self.adapter.get_positions()
+        except Exception as exc:
+            logger.warning(f"[CTRADER_ENGINE] Broker position query failed ({exc}); skipping reconciliation.")
+            return None
+        # A transport failure flips the adapter offline mid-query; an empty list
+        # while still logged on is a genuinely flat book.
+        if not getattr(self.adapter, "is_connected", False) or not getattr(self.adapter, "_is_logged_on", True):
+            logger.warning("[CTRADER_ENGINE] Broker session dropped during position query; skipping reconciliation.")
+            return None
+        if broker_positions is None:
+            return None
+        return {bp.symbol: bp for bp in broker_positions}
+
+    def reconcile_with_broker(self, notify: bool = True, broker_pos_map: dict[str, Any] | None = None) -> int:
+        """Drop tracked positions that no longer exist at the broker. Returns count purged.
+
+        ``notify`` is disabled during startup so stale ledger rows left over
+        from an old deployment do not produce phantom "closed" alerts.
+        """
+        if broker_pos_map is None:
+            broker_pos_map = self._broker_positions_snapshot()
+        if broker_pos_map is None:
+            return 0
+        broker_ids = {str(getattr(bp, "position_id", "") or "") for bp in broker_pos_map.values()}
+        purged = 0
+        for sym, pos in list(self.cloud_positions.items()):
+            pid = str(pos.position_id or "")
+            if sym in broker_pos_map or (pid and pid in broker_ids):
+                continue
+            logger.info(
+                f"[CTRADER_ENGINE] Reconciled closed position {sym} "
+                f"(id={pid or 'n/a'}): no longer open at IC Markets."
+            )
+            self.cloud_positions.pop(sym, None)
+            purged += 1
+            if notify:
+                try:
+                    pnl = float(pos.unrealized_pnl or 0.0)
+                    emoji = "💰" if pnl >= 0 else "🔻"
+                    self.telegram.send_message(
+                        f"🔔 <b>Position closed at broker</b>\n\n"
+                        f"• <b>Symbol</b>: <code>{sym}</code>\n"
+                        f"• <b>Side</b>: <code>{pos.side}</code>\n"
+                        f"• <b>Entry</b>: <code>{pos.entry_price:,.5f}</code>\n"
+                        f"• <b>Last mark</b>: <code>{float(pos.mark_price or pos.entry_price):,.5f}</code>\n"
+                        f"• <b>Estimated PnL</b>: {emoji} <code>${pnl:+,.2f} USD</code>\n"
+                        f"• <b>Ticket</b>: <code>{pid or 'n/a'}</code>"
+                    )
+                except Exception as exc:
+                    logger.debug(f"[CTRADER_ENGINE] Close notification failed for {sym}: {exc}")
+        if purged:
+            self._save_cloud_state()
+        return purged
+
     def manage_cloud_positions(self) -> list[dict[str, Any]]:
         """Monitor active cloud positions, update unrealized PnL, and execute Take-Profit / Stop-Loss exits via broker."""
         closed_events: list[dict[str, Any]] = []
 
-        # Synchronize with live broker positions if adapter is connected
-        if getattr(self.adapter, "enabled", False):
+        # Synchronize with live broker positions when the venue is positively healthy
+        broker_pos_map = self._broker_positions_snapshot()
+        if broker_pos_map is not None:
+            self.reconcile_with_broker(notify=True, broker_pos_map=broker_pos_map)
             try:
-                broker_positions = self.adapter.get_positions()
-                if broker_positions is not None:
-                    broker_pos_map = {bp.symbol: bp for bp in broker_positions}
-                    # Add any broker position not yet tracked
-                    for sym, bp in broker_pos_map.items():
-                        if sym not in self.cloud_positions:
-                            direction = 1.0 if bp.side.upper() in {"BUY", "LONG"} else -1.0
-                            self.cloud_positions[sym] = CloudPosition(
-                                position_id=bp.position_id or f"brk-{int(time.time())}",
-                                symbol=sym,
-                                side="BUY" if direction > 0 else "SELL",
-                                quantity=bp.quantity,
-                                entry_price=bp.entry_price,
-                                stop_loss=bp.entry_price * (0.985 if direction > 0 else 1.015),
-                                take_profit=bp.entry_price * (1.025 if direction > 0 else 0.975),
-                                mark_price=bp.entry_price,
-                                unrealized_pnl=0.0,
-                                opened_at=_utc_now_iso(),
-                                strategy="broker_synced",
-                            )
-                        else:
-                            # Update existing position with broker ticket ID if available
-                            existing_pos = self.cloud_positions[sym]
-                            if bp.position_id and not existing_pos.position_id:
-                                existing_pos.position_id = bp.position_id
-                    # Reconcile with live broker positions: purge any tracked position no longer on broker
-                    for sym, pos in list(self.cloud_positions.items()):
-                        if pos.position_id and not pos.position_id.startswith("test-") and sym not in broker_pos_map:
-                            self.cloud_positions.pop(sym, None)
-                    self._save_cloud_state()
+                for sym, bp in broker_pos_map.items():
+                    if sym not in self.cloud_positions:
+                        direction = 1.0 if bp.side.upper() in {"BUY", "LONG"} else -1.0
+                        self.cloud_positions[sym] = CloudPosition(
+                            position_id=bp.position_id or f"brk-{int(time.time())}",
+                            symbol=sym,
+                            side="BUY" if direction > 0 else "SELL",
+                            quantity=bp.quantity,
+                            entry_price=bp.entry_price,
+                            stop_loss=bp.entry_price * (0.985 if direction > 0 else 1.015),
+                            take_profit=bp.entry_price * (1.025 if direction > 0 else 0.975),
+                            mark_price=bp.entry_price,
+                            unrealized_pnl=0.0,
+                            opened_at=_utc_now_iso(),
+                            strategy="broker_synced",
+                        )
+                    else:
+                        # Update existing position with broker ticket ID if available
+                        existing_pos = self.cloud_positions[sym]
+                        if bp.position_id and not existing_pos.position_id:
+                            existing_pos.position_id = bp.position_id
+                self._save_cloud_state()
             except Exception as exc:
-                logger.warning(f"[MT5_ENGINE] Broker position reconciliation: {exc}")
+                logger.warning(f"[CTRADER_ENGINE] Broker position reconciliation: {exc}")
 
         if not self.cloud_positions:
             return closed_events
@@ -934,7 +1086,7 @@ class MT5AutonomousEngine:
                     trail_level = pos.entry_price + (profit_distance * 0.40)
                     if pos.stop_loss < trail_level:
                         pos.stop_loss = round(trail_level, 5)
-                        logger.info(f"[MT5_ENGINE] Trailing stop advanced for {pos.symbol} BUY: New SL = {pos.stop_loss}")
+                        logger.info(f"[CTRADER_ENGINE] Trailing stop advanced for {pos.symbol} BUY: New SL = {pos.stop_loss}")
             elif pos.side == "SELL":
                 profit_distance = pos.entry_price - current_price
                 target_distance = pos.entry_price - pos.take_profit
@@ -942,7 +1094,7 @@ class MT5AutonomousEngine:
                     trail_level = pos.entry_price - (profit_distance * 0.40)
                     if pos.stop_loss > trail_level:
                         pos.stop_loss = round(trail_level, 5)
-                        logger.info(f"[MT5_ENGINE] Trailing stop advanced for {pos.symbol} SELL: New SL = {pos.stop_loss}")
+                        logger.info(f"[CTRADER_ENGINE] Trailing stop advanced for {pos.symbol} SELL: New SL = {pos.stop_loss}")
 
             # Check Take Profit
             tp_hit = (pos.side == "BUY" and current_price >= pos.take_profit) or (pos.side == "SELL" and current_price <= pos.take_profit)
@@ -966,7 +1118,7 @@ class MT5AutonomousEngine:
                     try:
                         self.adapter.record_realized_pnl(realized_pnl)
                     except Exception as exc:
-                        logger.warning(f'[MT5_ENGINE] Failed updating adapter ledger: {exc}')
+                        logger.warning(f'[CTRADER_ENGINE] Failed updating adapter ledger: {exc}')
                 symbols_to_remove.append(symbol)
 
                 # Close position on broker via adapter
@@ -978,19 +1130,20 @@ class MT5AutonomousEngine:
                             side=pos.side,
                             quantity=pos.quantity,
                         )
-                        logger.info(f"[MT5_ENGINE] Successfully closed broker position for {pos.symbol} (ID: {pos.position_id}) via FIX")
+                        logger.info(f"[CTRADER_ENGINE] Successfully closed broker position for {pos.symbol} (ID: {pos.position_id}) via FIX")
                     except Exception as exc:
-                        logger.error(f"[MT5_ENGINE] Failed closing broker position for {pos.symbol}: {exc}")
+                        logger.error(f"[CTRADER_ENGINE] Failed closing broker position for {pos.symbol}: {exc}")
 
                 # Telegram Notification
                 pnl_emoji = "💰" if realized_pnl >= 0 else "🔻"
+                disp_qty = pos.quantity / 100000.0 if pos.quantity >= 1000.0 and "JPY" not in pos.symbol.upper() else pos.quantity
                 msg = (
                     f"<b>{status_emoji}</b>\n\n"
                     f"• <b>Symbol</b>: <code>{pos.symbol}</code>\n"
                     f"• <b>Side</b>: <code>{pos.side}</code>\n"
-                    f"• <b>Quantity</b>: <code>{pos.quantity} lots</code>\n"
-                    f"• <b>Entry Price</b>: <code>${pos.entry_price:,.4f}</code>\n"
-                    f"• <b>Exit Price</b>: <code>${current_price:,.4f}</code>\n"
+                    f"• <b>Size</b>: <code>{disp_qty:g} lots</code>\n"
+                    f"• <b>Entry</b>: <code>{pos.entry_price:,.5f}</code>\n"
+                    f"• <b>Exit</b>: <code>{current_price:,.5f}</code>\n"
                     f"• <b>Realized PnL</b>: {pnl_emoji} <code>${realized_pnl:+,.2f} USD</code>\n"
                     f"• <b>Updated Balance</b>: <code>${self.cloud_balance:,.2f} USD</code>\n"
                     f"• <b>Ticket</b>: <code>{pos.position_id}</code>"
@@ -999,7 +1152,7 @@ class MT5AutonomousEngine:
 
                 # Memora Audit
                 self.memora.record_scoped_event(
-                    event_type=f"MT5_{exit_type}_TRIGGERED",
+                    event_type=f"CTRADER_{exit_type}_TRIGGERED",
                     scope="Universal",
                     summary=f"Stratex closed {pos.symbol} {pos.side} at ${current_price:,.4f} ({exit_type}) | PnL: ${realized_pnl:+,.2f}",
                     details={
@@ -1077,7 +1230,7 @@ class MT5AutonomousEngine:
     def scan_market(self) -> list[dict[str, Any]]:
         """Run a full scan across the asset universe and multiple timeframes."""
         if is_panic_active() or is_kill_switch_locked():
-            logger.warning("[MT5_ENGINE] Emergency halt or kill-switch is active. Scan aborted.")
+            logger.warning("[CTRADER_ENGINE] Emergency halt or kill-switch is active. Scan aborted.")
             return []
 
         # 1. Manage active cloud positions (bracket checks & realized PnL)
@@ -1095,7 +1248,7 @@ class MT5AutonomousEngine:
 
         if len(active_symbols) >= self.max_active_positions:
             logger.info(
-                f"[MT5_ENGINE] Max active positions reached ({len(active_symbols)}/{self.max_active_positions}). Holding."
+                f"[CTRADER_ENGINE] Max active positions reached ({len(active_symbols)}/{self.max_active_positions}). Holding."
             )
             return []
 
@@ -1104,7 +1257,12 @@ class MT5AutonomousEngine:
         for symbol in self.symbols:
             if len(active_symbols) >= self.max_active_positions:
                 logger.info(
-                    f"[MT5_ENGINE] Max active positions cap reached ({len(active_symbols)}/{self.max_active_positions}). Stopping scan."
+                    f"[CTRADER_ENGINE] Max active positions cap reached ({len(active_symbols)}/{self.max_active_positions}). Stopping scan."
+                )
+                break
+            if len(executed) >= self.max_entries_per_cycle:
+                logger.info(
+                    f"[CTRADER_ENGINE] Entry quota reached for this cycle ({len(executed)}/{self.max_entries_per_cycle})."
                 )
                 break
 
@@ -1120,7 +1278,7 @@ class MT5AutonomousEngine:
                     continue
 
                 logger.info(
-                    f"[MT5_ENGINE] Found signal on {symbol} ({tf}): {signal.action} "
+                    f"[CTRADER_ENGINE] Found signal on {symbol} ({tf}): {signal.action} "
                     f"@ {signal.current_price:.5f} (SL: {signal.stop_loss:.5f}, TP: {signal.take_profit:.5f}, "
                     f"R:R {signal.risk_reward_ratio}, Conf: {signal.confidence})"
                 )
@@ -1128,7 +1286,7 @@ class MT5AutonomousEngine:
                 # Peer Consensus Gate
                 decision = self.consult_peer_mesh(signal)
                 if not decision.approved:
-                    logger.info(f"[MT5_ENGINE] Peer consensus rejected {symbol}: {decision.reasons}")
+                    logger.info(f"[CTRADER_ENGINE] Peer consensus rejected {symbol}: {decision.reasons}")
                     continue
 
                 # Execute
@@ -1137,10 +1295,7 @@ class MT5AutonomousEngine:
 
                 if exec_result.get("status") in {"FILLED", "PENDING", "SIMULATED_FILLED"}:
                     active_symbols.add(symbol)
-                    logger.info(f"[MT5_ENGINE] Initiated 1 new position for {symbol}. Pausing entries for this cycle.")
-                    return executed
-
-                # Move to next symbol
+                    logger.info(f"[CTRADER_ENGINE] Opened position for {symbol}; continuing to next candidate.")
                 break
 
         return executed
@@ -1148,7 +1303,7 @@ class MT5AutonomousEngine:
     def run_continuous_loop(self, poll_interval_sec: float = 60.0, max_iterations: int | None = None) -> None:
         """Continuous execution loop suitable for headless Docker containers on Oracle Cloud."""
         logger.info(
-            f"[MT5_ENGINE] Starting 24/7 autonomous loop for {len(self.symbols)} symbols across "
+            f"[CTRADER_ENGINE] Starting 24/7 autonomous loop for {len(self.symbols)} symbols across "
             f"{self.timeframes}. Interval: {poll_interval_sec}s."
         )
         # Ensure Telegram bot listener is running concurrently
@@ -1160,7 +1315,7 @@ class MT5AutonomousEngine:
             try:
                 self.scan_market()
             except Exception as exc:
-                logger.error(f"[MT5_ENGINE] Error in market scan iteration: {exc}", exc_info=True)
+                logger.error(f"[CTRADER_ENGINE] Error in market scan iteration: {exc}", exc_info=True)
             if max_iterations is not None and iterations >= max_iterations:
                 break
             time.sleep(poll_interval_sec)

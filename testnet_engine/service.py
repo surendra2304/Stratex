@@ -461,6 +461,115 @@ class TestnetService:
                     if not isinstance(value, bool) and finite_or_none(value) is not None and value >= 0:
                         self.stats[k] = value
 
+        # ── Telegram: outbound trade/PnL alerts ────────────────────────────
+        # Polling is owned by exactly one process (run_stratex.py). The engine
+        # only sends messages, so it can run alongside the command listener.
+        self.telegram = None
+        if os.getenv("TELEGRAM_ENABLED", "True").lower() != "false":
+            try:
+                from notifications.telegram_bot import get_telegram_bot
+
+                self.telegram = get_telegram_bot()
+                if not self.telegram.is_configured:
+                    logger.warning("[TELEGRAM] Not configured (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID missing).")
+                    self.telegram = None
+            except Exception as exc:
+                logger.warning(f"[TELEGRAM] Could not initialize: {exc}")
+
+    # ------------------------------------------------------------------
+    # Telegram helpers
+    # ------------------------------------------------------------------
+    def _tg(self):
+        bot = getattr(self, "telegram", None)
+        return bot if (bot and getattr(bot, "is_configured", False)) else None
+
+    def _tg_trade_opened(self, **kwargs) -> None:
+        bot = self._tg()
+        if not bot:
+            return
+        try:
+            if getattr(config, "FUTURES_LEVERAGE", None):
+                kwargs.setdefault("leverage", config.FUTURES_LEVERAGE)
+            sent = bot.notify_trade_opened(**kwargs)
+            logger.info(f"[TELEGRAM] trade-opened alert symbol={kwargs.get('symbol')} sent={sent}")
+        except Exception as exc:
+            logger.warning(f"[TELEGRAM] trade-opened alert failed: {exc}")
+
+    def _tg_trade_closed(self, **kwargs) -> None:
+        bot = self._tg()
+        if not bot:
+            return
+        try:
+            sent = bot.notify_trade_closed(**kwargs)
+            logger.info(f"[TELEGRAM] trade-closed alert symbol={kwargs.get('symbol')} sent={sent}")
+        except Exception as exc:
+            logger.warning(f"[TELEGRAM] trade-closed alert failed: {exc}")
+
+    def _alert_closed_trade(self, symbol: str) -> None:
+        """Send a Telegram alert for the most recent closed trade on `symbol`."""
+        if not self._tg():
+            return
+        try:
+            from trading_report import load_trades, metrics as ledger_metrics
+
+            trades = [t for t in load_trades() if t["symbol"] == symbol]
+            if not trades:
+                return
+            trade = trades[-1]
+            key = f"{symbol}|{trade['closed_at']}|{trade['exit_price']}"
+            alerted = getattr(self, "_alerted_exits", None)
+            if alerted is None:
+                alerted = self._alerted_exits = set()
+            if key in alerted:
+                return
+            alerted.add(key)
+            if len(alerted) > 500:
+                self._alerted_exits = set(list(alerted)[-250:])
+
+            try:
+                from config import STARTING_BALANCE
+
+                today_pnl = ledger_metrics(starting_balance=float(STARTING_BALANCE))["today_pnl"]
+            except Exception:
+                today_pnl = None
+
+            self._tg_trade_closed(
+                symbol=trade["symbol"],
+                side=trade["side"],
+                quantity=trade["quantity"],
+                entry_price=trade["entry_price"],
+                exit_price=trade["exit_price"],
+                net_pnl=trade["net_pnl"],
+                fees=trade["fees"],
+                reason=trade["exit_reason"],
+                strategy=trade["strategy"],
+                equity=float(getattr(self, "current_equity", 0.0)) or None,
+                today_pnl=today_pnl,
+            )
+        except Exception as exc:
+            logger.debug(f"[TELEGRAM] closed-trade alert failed for {symbol}: {exc}")
+
+    def _daily_summary_loop(self):
+        """Send a daily PnL summary at STRATEX_DAILY_SUMMARY_HOUR (UTC)."""
+        hour = int(os.getenv("STRATEX_DAILY_SUMMARY_HOUR", "21"))
+        last_sent_date = None
+        while True:
+            try:
+                now = datetime.datetime.utcnow()
+                bot = self._tg()
+                if bot and now.hour == hour and last_sent_date != now.date():
+                    try:
+                        from config import TRADING_MODE as _mode
+
+                        bot.send_daily_summary(mode=str(_mode), venue="Binance Futures Testnet")
+                        last_sent_date = now.date()
+                        logger.info("[TELEGRAM] Daily summary dispatched.")
+                    except Exception as exc:
+                        logger.warning(f"[TELEGRAM] Daily summary failed: {exc}")
+            except Exception as exc:
+                logger.debug(f"[DAILY_SUMMARY] loop error: {exc}")
+            time.sleep(60)
+
     def _register_active_strategies_in_registry(self):
         """Records config-admitted strategies as RESEARCH without claiming validation."""
         if not getattr(self, "registry", None):
@@ -563,7 +672,14 @@ class TestnetService:
         """Stage 2: Reconcile local active_trades with Binance open orders and balances."""
         try:
             if TRADING_MODE == "FUTURES":
-                open_orders = self.client.futures_get_open_orders() if hasattr(self.client, "futures_get_open_orders") else []
+                regular_orders = self.client.futures_get_open_orders() if hasattr(self.client, "futures_get_open_orders") else []
+                algo_orders = []
+                if hasattr(self.client, "futures_get_open_algo_orders"):
+                    try:
+                        algo_orders = self.client.futures_get_open_algo_orders() or []
+                    except Exception:
+                        algo_orders = []
+                open_orders = list(regular_orders) + list(algo_orders)
                 positions = account.get("positions", [])
                 # Exchange truth, not the strategy registry: a position that exists
                 # must be adopted and protected whatever governance currently
@@ -1268,6 +1384,17 @@ class TestnetService:
                                 logger.warning(f"[INTELX_GATE_WARN] Error evaluating IntelX sentiment for {symbol}: {e}")
                                 intelx_ok, intelx_mult, intelx_reason = True, 1.0, "INTELX_FAIL_OPEN"
 
+                        # An advisory peer being unreachable is missing evidence, not a
+                        # bearish verdict. By default we stand down that multiplier and
+                        # let the local profitability/risk gates decide; set
+                        # ADVISORY_GATES_FAIL_CLOSED=True to require peer data.
+                        if (
+                            not intelx_ok
+                            and intelx_reason in {"INTELX_RESEARCH_UNAVAILABLE", "INTELX_NOT_EVALUATED"}
+                            and not getattr(config, "ADVISORY_GATES_FAIL_CLOSED", False)
+                        ):
+                            intelx_ok, intelx_mult, intelx_reason = True, 1.0, f"{intelx_reason}_FAIL_OPEN"
+
                         if not intelx_ok:
                             self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
                             self.stats["INTELX_REJECTED"] = self.stats.get("INTELX_REJECTED", 0) + 1
@@ -1293,6 +1420,15 @@ class TestnetService:
                             except Exception as e:
                                 logger.warning(f"[FUTURIS_GATE_WARN] Error evaluating Futuris forecast for {symbol}: {e}")
                                 futuris_ok, futuris_mult, futuris_reason = True, 1.0, "FUTURIS_FAIL_OPEN"
+
+                        # Same advisory policy as IntelX: a Futuris outage must not veto
+                        # every entry. Real regime/drawdown conflicts still veto.
+                        if (
+                            not futuris_ok
+                            and futuris_reason in {"FUTURIS_FORECAST_UNAVAILABLE", "FUTURIS_NOT_EVALUATED"}
+                            and not getattr(config, "ADVISORY_GATES_FAIL_CLOSED", False)
+                        ):
+                            futuris_ok, futuris_mult, futuris_reason = True, 1.0, f"{futuris_reason}_FAIL_OPEN"
 
                         if not futuris_ok:
                             self.stats["OTHER_REJECTED"] = self.stats.get("OTHER_REJECTED", 0) + 1
@@ -1810,6 +1946,18 @@ class TestnetService:
                                 est_fee = notional * 0.001
                                 
                                 logger.info(f"[ORDER_FILLED] {symbol} {side} {executed_qty} @ {actual_price:.4f} | OrderID: {entry_oid} | SignalID: {signal_id}")
+                                self._tg_trade_opened(
+                                    symbol=symbol,
+                                    side=side,
+                                    quantity=float(executed_qty),
+                                    entry_price=float(actual_price),
+                                    stop_loss=float(sl) if sl else None,
+                                    take_profit=float(tp) if tp else None,
+                                    strategy=strategy_name,
+                                    venue="binance_futures" if TRADING_MODE in ("FUTURES", "TESTNET") else "binance_spot",
+                                    confidence=float(fresh_metrics.get("confidence") or fresh_metrics.get("prob_win") or 0.0) or None,
+                                    equity=float(getattr(self, "current_equity", 0.0)) or None,
+                                )
                                 self.log_opportunity(
                                     signal_id, symbol, side, fresh_metrics, "EXECUTED", "ORDER_FILLED_DISPATCHED",
                                     current_price=actual_price, candidate=candidate
@@ -2370,6 +2518,7 @@ class TestnetService:
                             logger.info(f"[SERVICE] Position for {sym} closed. Risk bounds will update on next PnL parse.")
                             self._restore_daily_risk_state()
                             self.stats["CLOSED_TRADES"] += 1
+                            self._alert_closed_trade(sym)
                             
                     self.active_positions = new_active_positions
                 except Exception as e:
@@ -2943,7 +3092,7 @@ class TestnetService:
         """Atomically writes worker heartbeat state for dashboard, supervisor, and health checks."""
         try:
             now_iso = datetime.datetime.utcnow().isoformat() + "Z"
-            symbols = self.scanner.symbols if hasattr(self, 'scanner') and self.scanner else list(self.symbol_filters.keys())
+            symbols = self.scanner.symbols if hasattr(self, 'scanner') and self.scanner else list(getattr(self, "symbol_filters", {}).keys())
             
             last_m_update = None
             if hasattr(self, 'scanner') and self.scanner and hasattr(self.scanner, 'last_market_update'):
@@ -2958,22 +3107,22 @@ class TestnetService:
                     last_candle_close = max(closes).isoformat() + "Z"
                 
             last_eval = None
-            if self.last_evaluation:
+            if getattr(self, "last_evaluation", None):
                 eval_times = [v for v in self.last_evaluation.values() if v]
                 if eval_times:
                     last_eval = max(eval_times)
 
             # Report what the engine ACTUALLY loaded (post-governance-gate),
             # not the raw config — the dashboard must mirror real testnet state.
-            loaded_strats = sorted({name for tf_strats in self.strategies.values() for name, _ in tf_strats})
-            loaded_tfs = sorted(self.strategies.keys())
+            loaded_strats = sorted({name for tf_strats in getattr(self, "strategies", {}).values() for name, _ in tf_strats})
+            loaded_tfs = sorted(getattr(self, "strategies", {}).keys())
             hb = {
                 "worker_alive": worker_alive,
                 "status": status,
                 "pid": os.getpid(),
                 "timestamp": now_iso,
                 "mode": "TESTNET",
-                "binance_connected": self.client is not None,
+                "binance_connected": getattr(self, "client", None) is not None,
                 "websocket_connected": hasattr(self, 'scanner') and bool(self.scanner),
                 "strategy": loaded_strats[0] if loaded_strats else "none",
                 "strategies": loaded_strats,
@@ -3058,7 +3207,14 @@ class TestnetService:
         try:
             from testnet_engine.protection import place_oco_protection
             if TRADING_MODE == "FUTURES":
-                open_orders = self.client.futures_get_open_orders() if hasattr(self.client, "futures_get_open_orders") else []
+                regular_orders = self.client.futures_get_open_orders() if hasattr(self.client, "futures_get_open_orders") else []
+                algo_orders = []
+                if hasattr(self.client, "futures_get_open_algo_orders"):
+                    try:
+                        algo_orders = self.client.futures_get_open_algo_orders() or []
+                    except Exception:
+                        algo_orders = []
+                open_orders = list(regular_orders) + list(algo_orders)
                 account = self.client.futures_account() if hasattr(self.client, "futures_account") else {}
             else:
                 open_orders = self.client.get_open_orders()
@@ -3320,6 +3476,29 @@ class TestnetService:
             logger.error(f"[TESTNET_ADVISORY] Failed to start testnet advisory scheduler (non-fatal): {e}")
 
         logger.info("[ENGINE_READY] Binance Testnet trading engine is fully initialized and operational.")
+
+        # 5c. Telegram: single-owner command listener + daily PnL summary
+        if self._tg():
+            try:
+                self._tg().start_polling_in_background()
+                threading.Thread(target=self._daily_summary_loop, daemon=True, name="DailySummary").start()
+                strategies = sorted({name for pairs in self.strategies.values() for name, _ in pairs})
+                self._tg().send_message(
+                    "🚀 <b>STRATEX ENGINE ONLINE</b>\n\n"
+                    f"• <b>Mode</b>: <code>{TRADING_MODE}</code>\n"
+                    f"• <b>Venue</b>: <code>Binance "
+                    f"{'USDT-M Futures (testnet)' if TRADING_MODE == 'FUTURES' else 'Spot (testnet)'}</code>\n"
+                    f"• <b>Symbols</b>: <code>{len(symbol_list)}</code>\n"
+                    f"• <b>Strategies</b>: <code>{', '.join(strategies) or 'none'}</code>\n"
+                    f"• <b>Equity</b>: <code>${float(getattr(self, 'current_equity', 0.0)):,.2f}</code>\n"
+                    f"• <b>Max open positions</b>: <code>{getattr(config, 'MAX_OPEN_POSITIONS', 8)}</code>\n"
+                    f"• <b>Risk/trade</b>: <code>{float(getattr(config, 'MAX_TESTNET_RISK_PER_TRADE', 0.01)) * 100:.1f}%</code>\n\n"
+                    "Send <code>/summary</code>, <code>/risk</code>, <code>/status</code> or <code>/help</code>."
+                )
+                logger.info("[TELEGRAM] Command listener started.")
+            except Exception as exc:
+                logger.warning(f"[TELEGRAM] Failed to start listener: {exc}")
+
         
         # 6. Keep Main Thread Alive
         try:

@@ -43,6 +43,9 @@ logger = get_logger("trailing")
 def _cfg(name, default):
     import config
     value = getattr(config, name, default)
+    # Boolean flags are legitimate config values (TRAILING_STOP_ENABLED etc.).
+    if isinstance(value, bool):
+        return value
     number = finite_float(value)
     if number is None or number < 0:
         logger.error(f"[TRAIL] Invalid config {name}={value!r}; using {default}")

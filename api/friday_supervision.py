@@ -48,6 +48,33 @@ def _is_panic_active() -> bool:
     return is_panic_active() or is_kill_switch_locked()
 
 
+def _task_receipt(
+    *,
+    requested_action: str,
+    target: str = "stratex",
+    authorization_decision: str = "AUTHORIZED",
+    result: Any = None,
+    verification_evidence: dict[str, Any] | None = None,
+    failure_reason: str | None = None,
+) -> dict[str, Any]:
+    """Receipt for the Universal Task Protocol, mirroring FRIDAY's ActionReceipt.
+
+    FRIDAY's cognitive mesh only certifies a task COMPLETED when the peer answers
+    with a receipt that names the action it dispatched, targets this agent, and
+    carries non-empty verification evidence. Without one the work is UNVERIFIED,
+    even when the underlying action really ran.
+    """
+    return {
+        "requested_action": requested_action,
+        "target": target,
+        "authorization_decision": authorization_decision,
+        "execution_timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "result": dict(result) if isinstance(result, dict) else {"result": result},
+        "verification_evidence": dict(verification_evidence or {}),
+        "failure_reason": failure_reason,
+    }
+
+
 def _is_kill_switch_locked() -> bool:
     return is_kill_switch_locked()
 
@@ -465,6 +492,30 @@ def execute_friday_task():
             "summary": f"Processed supervisory action '{action}' for {source_agent}.",
             "execution_time_ms": int((time.time() - t0) * 1000)
         }
+
+    if response_payload.get("status") == "SUCCESS":
+        result_body = response_payload.get("result")
+        evidence: dict[str, Any] = {
+            "source": "stratex.v1.task",
+            "action": action,
+            "task_id": task_id,
+            "trading_mode": (
+                result_body.get("trading_mode")
+                if isinstance(result_body, dict)
+                else None
+            ),
+            "panic_active": (
+                result_body.get("panic_active")
+                if isinstance(result_body, dict)
+                else _is_panic_active()
+            ),
+        }
+        response_payload["receipt"] = _task_receipt(
+            requested_action=action,
+            target="stratex",
+            result=result_body,
+            verification_evidence=evidence,
+        )
 
     if idempotency_key:
         get_idempotency_store().complete_request(idempotency_key, response_payload)

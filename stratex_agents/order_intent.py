@@ -35,7 +35,7 @@ class TradeIntent:
         side = self.side.strip().upper()
         order_type = self.order_type.strip().upper()
         environment = self.environment.strip().lower()
-        if venue not in {"binance", "mt5"}:
+        if venue not in {"binance", "mt5", "ctrader"}:
             raise ValueError(f"Unsupported execution venue: {self.venue!r}")
         if not self.symbol or not self.symbol.strip():
             raise ValueError("symbol is required")
@@ -43,12 +43,14 @@ class TradeIntent:
             raise ValueError("side must be BUY/SELL/LONG/SHORT")
         if order_type not in {"MARKET", "LIMIT", "STOP", "STOP_LIMIT"}:
             raise ValueError(f"Unsupported order type: {self.order_type!r}")
-        if environment not in {"binance_demo", "binance_testnet", "mt5_demo"}:
-            raise ValueError("Only Binance Demo/Testnet and MT5 Demo environments are allowed")
+        if environment not in {"binance_demo", "binance_testnet", "mt5_demo", "ctrader_demo"}:
+            raise ValueError("Only Binance Demo/Testnet, MT5 Demo and cTrader Demo environments are allowed")
         if venue == "binance" and environment not in {"binance_demo", "binance_testnet"}:
             raise ValueError("Binance venue requires a Binance Demo or Testnet environment")
         if venue == "mt5" and environment != "mt5_demo":
             raise ValueError("MT5 venue is restricted to the demo environment")
+        if venue == "ctrader" and environment != "ctrader_demo":
+            raise ValueError("cTrader venue is restricted to the demo environment")
         if not math.isfinite(float(self.quantity)) or float(self.quantity) <= 0:
             raise ValueError("quantity must be finite and positive")
         if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,36}", self.client_order_id):

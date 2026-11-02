@@ -60,8 +60,11 @@ def get_signal(df, strategy_registry=None, regime="TRENDING"):
     if len(candidates) < 2:
         return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
 
-    # Take top 3-5 strategies for ensemble
-    ensemble_members = candidates[:5]
+    # Take top 3-5 strategies for ensemble. Never include ensemble members that
+    # dispatch back into the registry, or the call recurses until Python's stack
+    # limit is hit (ensemble -> registry -> ensemble -> ...).
+    recursive = {"ensemble_strategy", "ml_ensemble_meta"}
+    ensemble_members = [s for s in candidates if s.name not in recursive][:5]
     votes = []
     weighted_sl = []
     weighted_tp = []

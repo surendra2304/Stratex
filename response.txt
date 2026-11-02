@@ -1,0 +1,9 @@
+📡 <b>Stratex Engine Status</b>
+
+🟢 <b>System State</b>: 🟢 ACTIVE / READY
+☁️ <b>Host</b>: Oracle Cloud Always Free (24/7)
+🏛️ <b>Broker 1</b>: IC Markets cTrader Demo (10128706) — FIX 4.4 SSL
+🟡 <b>Broker 2</b>: Binance Live (Mode: <code>futures_testnet</code>)
+🧠 <b>Quant Models</b>: StatArb, Kalman Filter, Regime Breakout, ML Ensemble
+🔒 <b>Kill-Switch Locked</b>: False
+🚨 <b>Panic Active</b>: False

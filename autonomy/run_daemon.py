@@ -4,7 +4,7 @@ autonomy/run_daemon.py — Autonomous 24/7 Stratex Production Daemon Runner.
 Orchestrates:
 1. Real-time bidirectional Telegram polling listener with Gemini AI chat.
 2. 24/7 Multi-asset multi-timeframe quantitative scanning loop with Gemini AI trade critique.
-3. Execution on MT5 demo and broadcast to FRIDAY Core Gateway & Memora.
+3. Execution on IC Markets cTrader (FIX 4.4) and broadcast to FRIDAY Core Gateway & Memora.
 """
 from __future__ import annotations
 
@@ -30,15 +30,16 @@ def main() -> None:
         logger.info("[STRATEX_DAEMON] Starting Telegram bot background listener daemon...")
         telegram.start_polling_in_background()
         telegram.send_message(
-            "🚀 <b>Stratex Strategic Core v2.2 Online</b>\n\n"
-            "• <b>AI Intelligence</b>: Google Gemini 3.5 Flash Active\n"
-            "• <b>Execution Mode</b>: 24/7 Cloud Autonomous Demo (Zero Laptop Dependency)\n"
-            "• <b>Scanning Universe</b>: Universal Coverage (34+ Assets: Forex Majors/Crosses, Gold, Silver, Oil, Indices, Crypto)\n"
-            "• <b>Mesh Consensus</b>: Sentinel (Zero-Trust), Futuris (Forecasts), IntelX (Intelligence)\n"
-            "• <i>Ready. Send any question or command (/status, /positions, /balance, /scan) to interact.</i>"
+            "🚀 <b>Stratex Online — IC Markets cTrader</b>\n\n"
+            f"• Account: <code>{os.getenv('CTRADER_FIX_ACCOUNT_ID', '10128706')}</code> (demo)\n"
+            "• Venue: cTrader FIX 4.4\n"
+            "• Scanning: FX majors/crosses, metals, indices, crypto CFDs\n"
+            "• Alerts: fills and exits only\n\n"
+            "<i>Send /status, /positions, /balance, /scan for details.</i>"
         )
 
-    scan_interval = float(os.getenv("SCAN_INTERVAL_SECONDS", "30"))
+    scan_interval = float(os.getenv("SCAN_INTERVAL_SECONDS", "20"))
+    heartbeat_seconds = float(os.getenv("STRATEX_HEARTBEAT_SECONDS", "21600"))
     logger.info(f"[STRATEX_DAEMON] Autonomous scanning loop active (interval: {scan_interval}s).")
 
     last_pulse_time = time.time()
@@ -49,25 +50,19 @@ def main() -> None:
             if executed:
                 logger.info(f"[STRATEX_DAEMON] Scan cycle executed {len(executed)} trades.")
 
-            # Hourly Pulse Heartbeat to Telegram (keeps user informed 24/7 even during weekend market pause)
-            if (time.time() - last_pulse_time) >= 3600.0:
+            # Low-frequency pulse so the channel is not spammed; fills/exits are
+            # pushed in real time by the engine itself.
+            if (time.time() - last_pulse_time) >= heartbeat_seconds:
                 last_pulse_time = time.time()
                 try:
                     bal_dict = engine.get_account_balance().get("USD", {})
                     b_tot = bal_dict.get("total", engine.cloud_balance)
                     b_eq = bal_dict.get("equity", b_tot)
                     pos_count = len(engine.get_active_positions())
-                    is_weekend = time.gmtime().tm_wday in (5, 6)
-                    mkt_str = "⏸ <b>Weekend Paused</b> (Reopens Sunday 21:00 UTC)" if is_weekend else "⚡ <b>Live Market Active</b>"
                     telegram.send_message(
-                        f"📡 <b>Stratex 24/7 Engine Heartbeat</b>\n\n"
-                        f"🟢 <b>Status</b>: Autonomous Scanning Active\n"
-                        f"💼 <b>Account</b>: <code>10128706 (IC Markets cTrader)</code>\n"
-                        f"💰 <b>Cash Balance</b>: <code>${b_tot:,.2f} USD</code>\n"
-                        f"📊 <b>Account Equity</b>: <code>${b_eq:,.2f} USD</code>\n"
-                        f"📈 <b>Active Positions</b>: <code>{pos_count}/5</code>\n"
-                        f"🌐 <b>Market State</b>: {mkt_str}\n\n"
-                        f"<i>All 17 quant strategies running. Risk cap: 1% max per trade. Hard SL (Tag 1002) enabled.</i>"
+                        f"📡 <b>Stratex Heartbeat</b>\n"
+                        f"💰 Cash <code>${b_tot:,.2f}</code> · Equity <code>${b_eq:,.2f}</code>\n"
+                        f"📈 Positions <code>{pos_count}/{engine.max_active_positions}</code>"
                     )
                 except Exception as pulse_err:
                     logger.debug(f"[STRATEX_DAEMON] Pulse error: {pulse_err}")

@@ -103,7 +103,11 @@ TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-09-01
 ACTIVE_STRATEGIES = {
     "supertrend": ["15m", "1h", "4h"],
     "bb_reversion": ["15m", "1h"],
-    "adx_ema": ["4h"]
+    "factory_winner_1": ["15m", "1h", "4h"],
+    "factory_winner_2": ["15m", "1h", "4h"],
+    "factory_winner_3": ["15m", "1h", "4h"],
+    "factory_winner_4": ["15m", "1h", "4h"],
+    "factory_winner_5": ["15m", "1h", "4h"],
 }
 
 # Legacy single-strategy preference; it does not override registry governance.
@@ -116,21 +120,21 @@ BYPASS_PROFITABILITY_GATE = os.getenv("BYPASS_PROFITABILITY_GATE", "False").lowe
 # Trading Config
 MAX_POSITION_SIZE = 0.95
 
-# --- Testnet Risk Management ---
+# --- Testnet Risk Management (OPTIMIZED FOR PROFITABILITY) ---
 # Base defaults maintain test integrity and forensic audit guarantees;
 # environment variables on Render override these dynamically for live execution.
-MAX_TESTNET_RISK_PER_TRADE = float(os.getenv("MAX_TESTNET_RISK_PER_TRADE", "0.005")) # 0.5% risk baseline
-MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.05"))        # 5% max total notional exposure
-MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.02"))   # 2% max per single asset
-MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.04")) # 4% max net directional exposure
-MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))            # Base limit of 5
-MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "10")) # Bounded positions for aggressive mode
-VOLATILITY_BUFFER = 0.2  # Scale down positions during high volatility
-BLOCK_SHORTS_IN_BULL_REGIME = os.getenv("BLOCK_SHORTS_IN_BULL_REGIME", "False").lower() == "true" # Allow both long and short setups
+MAX_TESTNET_RISK_PER_TRADE = float(os.getenv("MAX_TESTNET_RISK_PER_TRADE", "0.01"))   # 1% risk per trade (increased from 0.5%)
+MAX_TESTNET_EXPOSURE = float(os.getenv("MAX_TESTNET_EXPOSURE", "0.10"))        # 10% max total notional exposure (increased from 5%)
+MAX_SINGLE_ASSET_EXPOSURE = float(os.getenv("MAX_SINGLE_ASSET_EXPOSURE", "0.03"))   # 3% max per single asset (increased from 2%)
+MAX_NET_DIRECTIONAL_EXPOSURE = float(os.getenv("MAX_NET_DIRECTIONAL_EXPOSURE", "0.06")) # 6% max net directional exposure (increased from 4%)
+MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "8"))                # Increased from 5 to 8
+MAX_OPEN_POSITIONS_AGGRESSIVE = int(os.getenv("MAX_OPEN_POSITIONS_AGGRESSIVE", "12")) # Bounded positions for aggressive mode
+VOLATILITY_BUFFER = 0.15  # Scale down positions during high volatility (reduced from 0.2)
+BLOCK_SHORTS_IN_BULL_REGIME = os.getenv("BLOCK_SHORTS_IN_BULL_REGIME", "False").lower() == "true"
 
-MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.02"))          # 2% daily loss limit
-MAX_TESTNET_DRAWDOWN_PCT = float(os.getenv("MAX_TESTNET_DRAWDOWN_PCT", "0.05"))    # 5% drawdown tolerance
-RECONCILIATION_TOLERANCE = float(os.getenv("RECONCILIATION_TOLERANCE", "5.0"))     # 5 USDT tolerance
+MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.03"))          # 3% daily loss limit (increased from 2%)
+MAX_TESTNET_DRAWDOWN_PCT = float(os.getenv("MAX_TESTNET_DRAWDOWN_PCT", "0.08"))    # 8% drawdown tolerance (increased from 5%)
+RECONCILIATION_TOLERANCE = float(os.getenv("RECONCILIATION_TOLERANCE", "5.0"))
 TESTNET_BASELINE_RESET_ISO = os.getenv("TESTNET_BASELINE_RESET_ISO", "2026-10-13T21:45:00Z")
 
 # --- Strategy Quality Control (Stage 5) ---
@@ -141,8 +145,11 @@ MIN_WIN_RATE_THRESHOLD = 0.35      # Automatically switch to OBSERVE-ONLY if < 3
 MAX_PREDICTION_ERROR = 0.02        # Automatically switch to OBSERVE-ONLY if actual differs from expected by > 2%
 
 BTC_REGIME_FILTER = os.getenv("BTC_REGIME_FILTER", "True").lower() == "true" # Altcoins follow BTC; block alt longs when BTC < 4h EMA200
-INTELX_INTELLIGENCE_ENABLED = os.getenv("INTELX_INTELLIGENCE_ENABLED", "False").lower() == "true" # IntelX sentiment & news catalyst gate
-FUTURIS_FORECAST_ENABLED = os.getenv("FUTURIS_FORECAST_ENABLED", "False").lower() == "true" # Futuris predictive volatility & regime gate
+INTELX_INTELLIGENCE_ENABLED = os.getenv("INTELX_INTELLIGENCE_ENABLED", "True").lower() == "true"  # ENABLED: IntelX sentiment & news catalyst gate
+FUTURIS_FORECAST_ENABLED = os.getenv("FUTURIS_FORECAST_ENABLED", "True").lower() == "true"  # ENABLED: Futuris predictive volatility & regime gate
+# Advisory peers (IntelX/Futuris) veto only when they return a real conflicting
+# verdict. When a peer is unreachable, standing down beats blocking every entry.
+ADVISORY_GATES_FAIL_CLOSED = os.getenv("ADVISORY_GATES_FAIL_CLOSED", "False").lower() == "true"
 
 # -------------------------------------------------------------------
 # SIGNAL QUALITY FILTERS (v3 upgrade) — real-data entry gates
@@ -154,23 +161,23 @@ SIGNAL_QUALITY_ENABLED = os.getenv("SIGNAL_QUALITY_ENABLED", "True").lower() == 
 SQ_TREND_ALIGNMENT = os.getenv("SQ_TREND_ALIGNMENT", "full").lower()          # "full" (EMA20>EMA50>EMA200) strictly enforces trend alignment
 SQ_CANDLE_CONFIRMATION = os.getenv("SQ_CANDLE_CONFIRMATION", "True").lower() == "true"   # signal candle must close in signal direction
 SQ_VOLUME_CONFIRMATION = os.getenv("SQ_VOLUME_CONFIRMATION", "True").lower() == "true"   # volume must exceed N × 20-bar average
-SQ_VOLUME_MULT = float(os.getenv("SQ_VOLUME_MULT", "0.2"))                               # 0.2x allows pullback bounce continuation while filtering dead markets
-SIGNAL_DECAY_THRESHOLD = float(os.getenv("SIGNAL_DECAY_THRESHOLD", "0.25"))                 # lower threshold → confirms faster
-SQ_ATR_PCT_MIN = float(os.getenv("SQ_ATR_PCT_MIN", "0.0010"))                            # 0.10% — wider dead-market guard
-SQ_ATR_PCT_MAX = float(os.getenv("SQ_ATR_PCT_MAX", "0.050"))                             # 5.0% — wider chaos guard for futures
+SQ_VOLUME_MULT = float(os.getenv("SQ_VOLUME_MULT", "0.5"))                               # 0.5x stricter volume filter
+SIGNAL_DECAY_THRESHOLD = float(os.getenv("SIGNAL_DECAY_THRESHOLD", "0.35"))                 # higher threshold → more confirmation
+SQ_ATR_PCT_MIN = float(os.getenv("SQ_ATR_PCT_MIN", "0.0015"))                            # 0.15% — wider dead-market guard
+SQ_ATR_PCT_MAX = float(os.getenv("SQ_ATR_PCT_MAX", "0.040"))                             # 4.0% — tighter chaos guard
 SQ_RSI_GUARD = os.getenv("SQ_RSI_GUARD", "True").lower() == "true"                       # do not chase overbought/oversold
-SQ_RSI_MAX_BUY = float(os.getenv("SQ_RSI_MAX_BUY", "85.0"))                              # slightly wider RSI ceiling
-SQ_RSI_MIN_SELL = float(os.getenv("SQ_RSI_MIN_SELL", "15.0"))                            # slightly wider RSI floor
-SQ_MIN_RISK_REWARD = float(os.getenv("SQ_MIN_RISK_REWARD", "0.8"))                       # 0.8 RR minimum (permits 1:1 supertrend and scalpers)
+SQ_RSI_MAX_BUY = float(os.getenv("SQ_RSI_MAX_BUY", "80.0"))                              # tighter RSI ceiling
+SQ_RSI_MIN_SELL = float(os.getenv("SQ_RSI_MIN_SELL", "20.0"))                            # tighter RSI floor
+SQ_MIN_RISK_REWARD = float(os.getenv("SQ_MIN_RISK_REWARD", "1.2"))                       # 1.2 RR minimum (filters 1:1 supertrend)
 
 # -------------------------------------------------------------------
-# ADAPTIVE STRATEGY PERFORMANCE GATE (v3 upgrade)
+# ADAPTIVE STRATEGY PERFORMANCE GATE (v3 upgrade) — ENABLED
 # Automatically demotes strategies whose recent REALIZED results are poor
 # (win rate / net PnL from the ledger), for a cooldown period.
 # -------------------------------------------------------------------
-STRATEGY_PERFORMANCE_GATE = os.getenv("STRATEGY_PERFORMANCE_GATE", "False").lower() == "true"
+STRATEGY_PERFORMANCE_GATE = os.getenv("STRATEGY_PERFORMANCE_GATE", "True").lower() == "true"
 STRATEGY_GATE_MIN_TRADES = int(os.getenv("STRATEGY_GATE_MIN_TRADES", "10"))
-STRATEGY_GATE_WIN_RATE = float(os.getenv("STRATEGY_GATE_WIN_RATE", "0.40"))
+STRATEGY_GATE_WIN_RATE = float(os.getenv("STRATEGY_GATE_WIN_RATE", "0.35"))
 STRATEGY_GATE_MIN_NET_PNL = float(os.getenv("STRATEGY_GATE_MIN_NET_PNL", "0.0"))
 STRATEGY_DEMOTION_COOLDOWN_HOURS = float(os.getenv("STRATEGY_DEMOTION_COOLDOWN_HOURS", "4.0"))
 

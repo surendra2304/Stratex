@@ -21,7 +21,15 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+try:  # keep local runs and CLI tools working without an ambient EnvironmentFile
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except Exception:  # pragma: no cover - dotenv is optional at runtime
+    pass
+
 logger = logging.getLogger("unified_portfolio_hub")
+
 
 
 class BinanceAccountClient:
@@ -210,6 +218,7 @@ class UnifiedPortfolioHub:
                     "used": used,
                     "margin": used,
                     "unrealized_pnl": round(equity - tot, 2),
+                    "source": "fix",
                 }
         except Exception:
             pass
@@ -247,6 +256,7 @@ class UnifiedPortfolioHub:
             "used": used,
             "margin": used,
             "unrealized_pnl": unrealized,
+            "source": "ledger",
         }
 
     def get_binance_balance(self) -> dict[str, Any]:
@@ -370,12 +380,15 @@ class UnifiedPortfolioHub:
                 "cash": ic_cash,
                 "floating_pnl": ic_floating,
                 "realized_pnl": ic_realized,
+                "source": ic_bal.get("source", "ledger"),
             },
             "binance": {
                 "equity": bn_equity,
                 "cash": bn_cash,
                 "floating_pnl": bn_floating,
                 "realized_pnl": bn_realized,
+                "mode": bn_bal.get("mode", "unconnected"),
+                "connected": bool(bn_bal.get("is_connected")),
             },
         }
 

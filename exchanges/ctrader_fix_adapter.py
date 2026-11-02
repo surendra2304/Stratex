@@ -187,14 +187,14 @@ class CTraderFixAdapter(BaseExchange):
         """Calculate Tag 38 (OrderQty) string for cTrader FIX based on asset class and broker limits."""
         sym = canonical_sym.upper()
         if sym in {"XAUUSD", "GOLD", "XAUEUR"}:
-            # Gold: 1 unit = 1 oz (~$27 margin). Cap at 2 oz on $1000 account.
-            return str(max(1, min(2, int(round(quantity * 100)))))
+            # Gold: 1 unit = 1 oz. Risk-based lots are converted at 100 oz/lot.
+            return str(max(1, min(2000, int(round(quantity * 100)))))
         elif sym in {"XAGUSD", "SILVER", "XAGEUR"}:
             # Silver: 50 units = 50 oz (~$6 margin). Safe micro lot.
-            return "50" if quantity <= 0.05 else str(max(10, min(100, int(round(quantity * 1000)))))
+            return "50" if quantity <= 0.05 else str(max(10, min(50000, int(round(quantity * 5000)))))
         elif sym in {"XTIUSD", "WTI", "XBRUSD", "BRENT", "XNGUSD"}:
             # Oil: Minimum allowed broker volume is 100 units (100 barrels)
-            return "100"
+            return str(max(100, int(round(quantity * 1000))))
         elif sym in {"BTCUSD"}:
             # Crypto: 0.01 BTC (~$680 notional, ~$7 margin)
             return "0.01" if quantity < 0.05 else f"{quantity:.2f}".rstrip("0").rstrip(".")
@@ -206,12 +206,13 @@ class CTraderFixAdapter(BaseExchange):
             "DE40", "DE30", "GER40", "USTEC", "US30", "US500", "UK100",
             "JP225", "AUS200", "F40", "STOXX50", "ES35", "US2000", "HK50"
         }:
-            # Index CFDs: Minimum broker volume is 0.10. 1.0 contract requires $1,000-$2,600 margin.
-            # Using 0.10 contract requires only $50-$260 margin, preventing NOT_ENOUGH_MONEY rejections.
-            return "0.1"
+            # Index CFDs: broker minimum is 0.10 contracts; scale with the
+            # risk-based size instead of pinning every trade to the minimum.
+            return f"{max(0.1, round(quantity, 1)):.1f}"
         else:
-            # Standard FX: 1 lot = 100,000 units. Micro lot 0.01 = 1,000 units (~$2-$3 margin).
-            return str(max(1000, min(2000, int(round(quantity * 100000)))))
+            # Standard FX: 1 lot = 100,000 units. Micro lot 0.01 = 1,000 units.
+            # Never pin large risk-based sizes down to micro-lot volume.
+            return str(max(1000, min(10_000_000, int(round(quantity * 100000)))))
 
     def _ensure_connection(self):
         """Ensure SSL socket is open and logged on to CSERVER."""
@@ -479,6 +480,11 @@ class CTraderFixAdapter(BaseExchange):
             order.append_pair(54, fix_side)
             order.append_pair(38, units)
             order.append_pair(40, 1)  # Market
+            # NOTE: cTrader FIX 4.4 rejects the Open-API custom tags 1002/1003
+            # ("Tag not defined for this message type"), so protective levels
+            # cannot ride along on the entry order. Exits are managed by the
+            # engine's bracket monitor, which re-adopts broker positions after
+            # a restart.
             order.append_pair(60, now_str)
             return order
 
@@ -551,7 +557,12 @@ class CTraderFixAdapter(BaseExchange):
         norm_side = side.upper()
         # Closing a BUY/LONG requires a SELL (2); closing a SELL/SHORT requires a BUY (1)
         close_fix_side = 2 if norm_side in {"BUY", "LONG"} else 1
-        units = str(quantity) if isinstance(quantity, (int, float)) and quantity < 10 else str(int(round(quantity)))
+        # The ledger mixes lots (0.01) and broker units (1000); normalise both to
+        # the units cTrader expects on tag 38 before closing.
+        if quantity >= 100:
+            units = str(int(round(quantity)))
+        else:
+            units = self.calculate_units(canonical_sym, quantity)
 
         cl_ord_id = f"CLS_{int(time.time())}_{uuid.uuid4().hex[:6]}"
         now_str = datetime.datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3]
