@@ -213,10 +213,13 @@ class KalmanFilterMeanReversionModel:
         confidence = 0.0
         if last_z <= -self.z_threshold:
             action = "BUY"
-            confidence = min(0.95, 0.6 + abs(last_z) * 0.1)
+            # Dynamic confidence: base 0.55 + Z-strength + innovation quality
+            innovation_quality = 1.0 - min(abs(last_error) / (prices[-1] * 0.01), 1.0)
+            confidence = min(0.85, 0.55 + abs(last_z) * 0.08 + innovation_quality * 0.15)
         elif last_z >= self.z_threshold:
             action = "SELL"
-            confidence = min(0.95, 0.6 + abs(last_z) * 0.1)
+            innovation_quality = 1.0 - min(abs(last_error) / (prices[-1] * 0.01), 1.0)
+            confidence = min(0.85, 0.55 + abs(last_z) * 0.08 + innovation_quality * 0.15)
 
         return {
             "strategy": "kalman_mean_reversion",
@@ -224,7 +227,7 @@ class KalmanFilterMeanReversionModel:
             "latent_price": self.state_mean,
             "innovation_error": last_error,
             "z_score": last_z,
-            "confidence": confidence,
+            "confidence": round(confidence, 2),
             "timestamp": _utc_now_iso(),
         }
 
@@ -320,28 +323,37 @@ class VolatilityRegimeBreakoutModel:
             action = "HOLD"
             confidence = 0.0
         elif regime in {MarketRegime.LOW_VOL_TRENDING, MarketRegime.HIGH_VOL_TRENDING}:
-            # Breakout signals
+            # Breakout signals with dynamic confidence
+            trend_strength = abs(current_price - closes[-10]) / atr if len(closes) >= 10 else 1.0
+            trend_strength = min(trend_strength / 5.0, 1.0)  # Normalize
+            volatility_quality = 1.0 - min(atr / current_price * 100, 0.5)  # Lower vol = better quality
+            
             if current_price >= highest_high * 0.999:
                 action = "BUY"
-                confidence = 0.85 if regime == MarketRegime.LOW_VOL_TRENDING else 0.70
+                base_conf = 0.65 if regime == MarketRegime.LOW_VOL_TRENDING else 0.55
+                confidence = min(0.80, base_conf + trend_strength * 0.15 + volatility_quality * 0.10)
                 stop_loss = chandelier_long_stop
                 take_profit = current_price + (2.0 * (current_price - stop_loss))
             elif current_price <= lowest_low * 1.001:
                 action = "SELL"
-                confidence = 0.85 if regime == MarketRegime.LOW_VOL_TRENDING else 0.70
+                base_conf = 0.65 if regime == MarketRegime.LOW_VOL_TRENDING else 0.55
+                confidence = min(0.80, base_conf + trend_strength * 0.15 + volatility_quality * 0.10)
                 stop_loss = chandelier_short_stop
                 take_profit = current_price - (2.0 * (stop_loss - current_price))
         elif regime == MarketRegime.CHOP_MEAN_REVERTING:
-            # Fade extremes within channel
-            mid = (highest_high + lowest_low) / 2.0
+            # Fade extremes within channel with dynamic confidence
+            channel_width = highest_high - lowest_low
+            position_in_channel = (current_price - lowest_low) / channel_width if channel_width > 0 else 0.5
+            edge_proximity = min(abs(position_in_channel - 0.5) * 2, 1.0)  # 1 at edges, 0 at middle
+            
             if current_price >= highest_high * 0.995:
                 action = "SELL"
-                confidence = 0.75
+                confidence = min(0.75, 0.55 + edge_proximity * 0.20)
                 stop_loss = highest_high + (1.0 * atr)
                 take_profit = mid
             elif current_price <= lowest_low * 1.005:
                 action = "BUY"
-                confidence = 0.75
+                confidence = min(0.75, 0.55 + edge_proximity * 0.20)
                 stop_loss = lowest_low - (1.0 * atr)
                 take_profit = mid
 

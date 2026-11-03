@@ -202,10 +202,24 @@ class AlgorithmicStrategyLibrary:
         return result
 
     def generate_signal(self, strategy_id: str, symbol: str) -> StrategySignal:
-        """Generate a trading signal from a strategy."""
+        """Generate a trading signal from a strategy.
+        
+        NOTE: This is a placeholder implementation. Real signal generation
+        should use actual market data and strategy logic, not deterministic hashes.
+        """
         strategy = self._strategies.get(strategy_id)
         if not strategy:
             raise HTTPException(404, f"Strategy {strategy_id} not found")
+
+        # PLACEHOLDER: Replace with real market analysis
+        # This is a deterministic fallback that should NOT be used for live trading
+        import warnings
+        warnings.warn(
+            f"algorithmic_strategy_library.generate_signal() called for {strategy_id}/{symbol} "
+            "with placeholder hash-based logic. Implement real signal generation.",
+            RuntimeWarning,
+            stacklevel=2
+        )
 
         direction = hashlib.md5(
             f"signal:{strategy_id}:{symbol}:{time.time()}".encode()

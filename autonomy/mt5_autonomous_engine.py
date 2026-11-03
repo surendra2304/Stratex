@@ -673,6 +673,27 @@ class MT5AutonomousEngine:
         if risk_reward_ratio < self.min_risk_reward:
             return None  # Enforce minimum favorable risk-reward ratio
 
+        # REJECT templated/fake signals that indicate the strategy didn't actually work
+        # These are the telltale signs of hardcoded fallbacks
+        is_fake_signal = (
+            abs(confidence - 0.95) < 0.01 and   # Fake confidence cap
+            abs(risk_reward_ratio - 1.67) < 0.01 and  # Fake R:R template
+            strategy_source in {"ensemble_consensus", "ml_ensemble", "hybrid_breakout_kalman"}
+        )
+        if is_fake_signal:
+            logger.warning(
+                f"[CTRADER_ENGINE] Rejected fake signal for {symbol} ({timeframe}): "
+                f"conf={confidence:.2f}, R:R={risk_reward_ratio:.2f}, source={strategy_source}"
+            )
+            return None
+
+        # Additional quality gate: require minimum signal quality
+        if strategy_source in {"ensemble_consensus", "ml_ensemble"}:
+            # These fallbacks need stronger validation
+            if confidence < 0.65:
+                logger.debug(f"[CTRADER_ENGINE] Low-confidence fallback signal for {symbol}: {confidence:.2f}")
+                return None
+
         return OpportunitySignal(
             symbol=symbol,
             timeframe=timeframe,

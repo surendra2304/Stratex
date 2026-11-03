@@ -121,7 +121,7 @@ def get_signal(df, strategy_registry=None, regime="TRENDING"):
         consensus_side = "SELL"
         consensus_weight = bearish_weight
     else:
-        return SignalResult(None, None, None, _STRATEGY_TYPE, _OOS_WIN_RATE_PRIOR, _RR_RATIO)
+        return SignalResult(None, None, None, _STRATEGY_TYPE, 0.0, 0.0)
 
     # Weighted average SL/TP
     avg_sl = sum(weighted_sl) / total_weight if total_weight > 0 else close - atr * 1.5
@@ -129,21 +129,25 @@ def get_signal(df, strategy_registry=None, regime="TRENDING"):
 
     # Confidence based on consensus strength and agreement ratio
     agreement_ratio = max(bullish, bearish) / len(votes)
-    confidence = (_OOS_WIN_RATE_PRIOR * 0.5 + agreement_ratio * 0.3 +
-                  (consensus_weight / total_weight) * 0.2)
+    # Base confidence from agreement, minimum 0.3 for weak signals
+    confidence = max(0.3, agreement_ratio * 0.4 + (consensus_weight / total_weight) * 0.3)
 
-    # Regime adjustment
+    # Regime adjustment - only boost for strong regime alignment
     if regime.upper() in ("TRENDING", "BULL_TREND") and consensus_side == "BUY":
-        confidence = min(0.95, confidence + 0.05)
+        confidence = min(0.80, confidence + 0.10)
     elif regime.upper() in ("BEAR_TREND",) and consensus_side == "SELL":
-        confidence = min(0.95, confidence + 0.05)
+        confidence = min(0.80, confidence + 0.10)
     elif regime.upper() in ("RANGING", "CHOP"):
-        confidence = max(0.5, confidence - 0.05)
+        confidence = max(0.3, confidence - 0.10)
 
     logger.info(
         f"Ensemble signal: {consensus_side} on {len(votes)} strategies, "
         f"confidence={confidence:.2f}, agreement={agreement_ratio:.2f}"
     )
+
+    # Calculate dynamic R:R from actual SL/TP
+    dynamic_rr = abs(avg_tp - close) / max(abs(close - avg_sl), 1e-9) if avg_sl and avg_tp else 1.5
+    dynamic_rr = min(max(dynamic_rr, 1.0), 3.0)
 
     return SignalResult(
         consensus_side,
@@ -151,5 +155,5 @@ def get_signal(df, strategy_registry=None, regime="TRENDING"):
         avg_tp,
         _STRATEGY_TYPE,
         confidence,
-        _RR_RATIO,
+        dynamic_rr,
     )
