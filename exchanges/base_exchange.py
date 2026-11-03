@@ -45,6 +45,9 @@ class UnifiedPosition:
     exchange: str = ""
     # Native ticket/position identifier (important for MT5 hedge-mode accounts).
     position_id: str | None = None
+    # Broker-side protective levels (cTrader reports AbsoluteSL/TP, tags 1002/1000).
+    stop_loss: float = 0.0
+    take_profit: float = 0.0
 
 
 @dataclass

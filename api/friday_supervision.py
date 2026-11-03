@@ -20,6 +20,7 @@ import json
 import os
 import re
 import time
+from dataclasses import asdict, is_dataclass
 from typing import Any
 
 from flask import Blueprint, jsonify, request
@@ -79,29 +80,394 @@ def _is_kill_switch_locked() -> bool:
     return is_kill_switch_locked()
 
 
+# ---------------------------------------------------------------------------
+# Real trading-data helpers (Stratex cTrader demo engine)
+# ---------------------------------------------------------------------------
+
+_LAST_MARKET_ANALYSIS: dict[str, Any] | None = None
+_LAST_MARKET_ANALYSIS_TS: float = 0.0
+_MARKET_ANALYSIS_INTERVAL_SEC: float = 60.0
+
+
+def _safe_engine():
+    """Return the autonomous engine singleton if it can be imported, else None."""
+    try:
+        from autonomy.mt5_autonomous_engine import get_autonomous_engine
+
+        return get_autonomous_engine()
+    except Exception as exc:
+        logger.debug(f"[FRIDAY_SUPERVISION] Engine unavailable: {exc}")
+        return None
+
+
+def _state_file_path(engine=None) -> str:
+    if engine is not None and getattr(engine, "state_file", None):
+        return str(engine.state_file)
+    here = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(here)
+    candidates = [
+        os.path.join(os.getcwd(), "state", "cloud_portfolio_state.json"),
+        os.path.join(repo_root, "state", "cloud_portfolio_state.json"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return os.path.join(repo_root, "state", "cloud_portfolio_state.json")
+
+
+def _read_cloud_state(engine=None) -> dict[str, Any]:
+    path = _state_file_path(engine)
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        logger.debug(f"[FRIDAY_SUPERVISION] Could not read cloud state: {exc}")
+        return {}
+
+
+def _position_to_dict(pos: Any) -> dict[str, Any]:
+    if is_dataclass(pos):
+        try:
+            return asdict(pos)
+        except Exception:
+            pass
+    if isinstance(pos, dict):
+        return dict(pos)
+    fields = [
+        "position_id", "symbol", "side", "quantity", "entry_price", "stop_loss",
+        "take_profit", "mark_price", "unrealized_pnl", "opened_at", "strategy",
+        "ai_thesis", "lots",
+    ]
+    out: dict[str, Any] = {}
+    for f in fields:
+        if hasattr(pos, f):
+            try:
+                out[f] = getattr(pos, f)
+            except Exception:
+                pass
+    return out
+
+
+def _signal_to_dict(sig: Any) -> dict[str, Any]:
+    if is_dataclass(sig):
+        try:
+            return asdict(sig)
+        except Exception:
+            pass
+    if isinstance(sig, dict):
+        return dict(sig)
+    fields = [
+        "symbol", "timeframe", "action", "regime", "current_price", "stop_loss",
+        "take_profit", "risk_reward_ratio", "confidence", "kalman_z", "atr",
+        "strategy_source", "timestamp", "metadata",
+    ]
+    out: dict[str, Any] = {}
+    for f in fields:
+        if hasattr(sig, f):
+            try:
+                out[f] = getattr(sig, f)
+            except Exception:
+                pass
+    # Normalise enum-like regime to string.
+    if "regime" in out and not isinstance(out["regime"], str):
+        out["regime"] = str(out["regime"])
+    return out
+
+
+def _last_trade_time(engine, positions: list[dict[str, Any]]) -> str | None:
+    # Prefer the engine's execution journal (real fills).
+    try:
+        journal = getattr(engine, "execution_journal", None)
+        if isinstance(journal, list) and journal:
+            last = journal[-1]
+            if isinstance(last, dict):
+                ts = last.get("timestamp") or last.get("time")
+                if ts:
+                    return str(ts)
+    except Exception:
+        pass
+    # Fall back to the most recent position open time.
+    try:
+        opened = [p.get("opened_at") for p in positions if p.get("opened_at")]
+        if opened:
+            return str(max(opened))
+    except Exception:
+        pass
+    # Fall back to cloud state updated_at.
+    try:
+        state = _read_cloud_state(engine)
+        ts = state.get("updated_at")
+        if ts:
+            return str(ts)
+    except Exception:
+        pass
+    return None
+
+
+def _real_trading_data(engine=None) -> dict[str, Any]:
+    """Collect real trading data from the engine (or its persisted state)."""
+    if engine is None:
+        engine = _safe_engine()
+
+    positions: list[dict[str, Any]] = []
+    balance = None
+    unrealized_pnl = 0.0
+    last_trade = None
+    max_positions = None
+    trading_mode = "ctrader_demo"
+    panic_active = False
+
+    try:
+        from panic_state import is_panic_active, is_kill_switch_locked
+
+        panic_active = bool(is_panic_active() or is_kill_switch_locked())
+    except Exception:
+        pass
+
+    if engine is not None:
+        max_positions = getattr(engine, "max_active_positions", None)
+        trading_mode = "ctrader_demo"
+        # Balance
+        try:
+            bal = engine.get_account_balance()
+            if isinstance(bal, dict):
+                usd = bal.get("USD", {})
+                if isinstance(usd, dict):
+                    if usd.get("total") is not None:
+                        balance = float(usd.get("total"))
+                    if usd.get("unrealized_pnl") is not None:
+                        unrealized_pnl = float(usd.get("unrealized_pnl"))
+        except Exception as exc:
+            logger.debug(f"[FRIDAY_SUPERVISION] get_account_balance failed: {exc}")
+        # Positions
+        try:
+            for pos in engine.get_active_positions() or []:
+                positions.append(_position_to_dict(pos))
+        except Exception as exc:
+            logger.debug(f"[FRIDAY_SUPERVISION] get_active_positions failed: {exc}")
+        # Unrealized PnL from positions if balance call did not provide it.
+        if not positions:
+            pass
+        else:
+            try:
+                unrealized_pnl = round(sum(float(p.get("unrealized_pnl") or 0.0) for p in positions), 2)
+            except Exception:
+                pass
+        last_trade = _last_trade_time(engine, positions)
+
+    # Fallback to persisted state file.
+    state = _read_cloud_state(engine)
+    if balance is None:
+        try:
+            if state.get("balance") is not None:
+                balance = float(state.get("balance"))
+        except (TypeError, ValueError):
+            balance = None
+    if balance is None:
+        balance = 0.0
+    if not positions and isinstance(state.get("positions"), dict):
+        for sym, pdata in state.get("positions", {}).items():
+            if isinstance(pdata, dict):
+                positions.append(dict(pdata))
+
+    # Market conditions: combine capacity + last analysis.
+    active_count = len(positions)
+    capacity_pct = 0.0
+    if max_positions and max_positions > 0:
+        capacity_pct = round((active_count / max_positions) * 100.0, 1)
+    market_conditions: dict[str, Any] = {
+        "trading_mode": trading_mode,
+        "venue": "ctrader_demo",
+        "max_positions": max_positions,
+        "active_positions": active_count,
+        "capacity_used_pct": capacity_pct,
+        "at_capacity": bool(max_positions and active_count >= max_positions),
+        "panic_active": panic_active,
+        "last_analysis": None,
+    }
+    global _LAST_MARKET_ANALYSIS
+    if _LAST_MARKET_ANALYSIS:
+        market_conditions["last_analysis"] = _LAST_MARKET_ANALYSIS.get("analysis_timestamp")
+        market_conditions["last_analysis_signals"] = _LAST_MARKET_ANALYSIS.get("signal_count")
+        market_conditions["buy_signals"] = _LAST_MARKET_ANALYSIS.get("buy_signals")
+        market_conditions["sell_signals"] = _LAST_MARKET_ANALYSIS.get("sell_signals")
+
+    return {
+        "positions": positions,
+        "open_positions": positions,
+        "current_positions": positions,
+        "position_count": active_count,
+        "open_positions_count": active_count,
+        "balance": round(float(balance), 2),
+        "cash": round(float(balance), 2),
+        "unrealized_pnl": round(float(unrealized_pnl), 2),
+        "last_trade_time": last_trade,
+        "max_positions": max_positions,
+        "market_conditions": market_conditions,
+        "trading_mode": trading_mode,
+        "panic_active": panic_active,
+    }
+
+
+def _run_market_analysis(payload: Any = None) -> dict[str, Any]:
+    """Run a real analysis cycle using the engine and log the results."""
+    global _LAST_MARKET_ANALYSIS, _LAST_MARKET_ANALYSIS_TS
+
+    engine = _safe_engine()
+    if not isinstance(payload, dict):
+        payload = {}
+
+    symbols = payload.get("symbols") if isinstance(payload, dict) else None
+    if not symbols and engine is not None:
+        all_symbols = getattr(engine, "symbols", None) or []
+        # Keep analysis responsive by default; callers may pass an explicit list.
+        symbols = list(all_symbols)[:8] if all_symbols else None
+    if not symbols:
+        symbols = ["EURUSD", "GBPUSD", "XAUUSD"]
+    if isinstance(symbols, str):
+        symbols = [symbols]
+    symbols = [str(s).upper() for s in symbols][:25]
+
+    timeframes = payload.get("timeframes") or payload.get("timeframe")
+    if isinstance(timeframes, str):
+        timeframes = [timeframes]
+    if not timeframes and engine is not None:
+        all_tfs = getattr(engine, "timeframes", None) or []
+        timeframes = list(all_tfs)[:2] if all_tfs else None
+    if not timeframes:
+        timeframes = ["15m"]
+    timeframes = [str(t) for t in timeframes][:6]
+
+    signals: list[dict[str, Any]] = []
+    errors: list[str] = []
+    analyzed = 0
+    for symbol in symbols:
+        best_signal = None
+        best_score = -1.0
+        for tf in timeframes:
+            analyzed += 1
+            try:
+                sig = engine.evaluate_symbol_timeframe(symbol, tf) if engine is not None else None
+            except Exception as exc:
+                errors.append(f"{symbol}/{tf}: {exc}")
+                continue
+            if sig is None:
+                continue
+            sig_dict = _signal_to_dict(sig)
+            if not sig_dict:
+                continue
+            try:
+                conf = float(sig_dict.get("confidence", 0.0) or 0.0)
+                rr = float(sig_dict.get("risk_reward_ratio", 0.0) or 0.0)
+                score = conf * min(max(rr, 0.1), 3.0)
+            except (TypeError, ValueError):
+                score = 0.0
+            if score > best_score:
+                best_score = score
+                best_signal = sig_dict
+        if best_signal is not None:
+            signals.append(best_signal)
+            logger.info(
+                f"[STRATEX_ANALYSIS] {best_signal.get('symbol')} ({best_signal.get('timeframe')}): "
+                f"{best_signal.get('action')} @ {best_signal.get('current_price')} "
+                f"conf={best_signal.get('confidence')} rr={best_signal.get('risk_reward_ratio')}"
+            )
+
+    buys = sum(1 for s in signals if str(s.get("action", "")).upper() == "BUY")
+    sells = sum(1 for s in signals if str(s.get("action", "")).upper() == "SELL")
+
+    trading_data = _real_trading_data(engine)
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+
+    market_conditions = {
+        "symbols_analyzed": len(symbols),
+        "timeframes": timeframes,
+        "signals_found": len(signals),
+        "buy_signals": buys,
+        "sell_signals": sells,
+        "hold_signals": max(0, len(symbols) - len(signals)),
+        "max_positions": trading_data.get("max_positions"),
+        "active_positions": trading_data.get("position_count", 0),
+        "at_capacity": trading_data.get("market_conditions", {}).get("at_capacity", False),
+        "errors": errors[:10],
+    }
+
+    result = {
+        "status": "SUCCESS",
+        "analysis_timestamp": now_iso,
+        "engine": "stratex",
+        "symbols_analyzed": symbols,
+        "timeframes": timeframes,
+        "signals": signals,
+        "signal_count": len(signals),
+        "buy_signals": buys,
+        "sell_signals": sells,
+        "market_conditions": market_conditions,
+        "positions": trading_data.get("positions", []),
+        "position_count": trading_data.get("position_count", 0),
+        "balance": trading_data.get("balance", 0.0),
+        "unrealized_pnl": trading_data.get("unrealized_pnl", 0.0),
+        "last_trade_time": trading_data.get("last_trade_time"),
+        "errors": errors[:10],
+    }
+
+    _LAST_MARKET_ANALYSIS = {
+        "analysis_timestamp": now_iso,
+        "signal_count": len(signals),
+        "buy_signals": buys,
+        "sell_signals": sells,
+    }
+    _LAST_MARKET_ANALYSIS_TS = time.time()
+
+    logger.info(
+        f"[STRATEX_ANALYSIS] Cycle complete: {len(signals)} signals from {len(symbols)} symbols "
+        f"({buys} BUY, {sells} SELL)."
+    )
+    return result
+
+
+def _ensure_market_analysis(engine=None) -> None:
+    global _LAST_MARKET_ANALYSIS_TS
+    now = time.time()
+    if _LAST_MARKET_ANALYSIS is None or (now - _LAST_MARKET_ANALYSIS_TS) >= _MARKET_ANALYSIS_INTERVAL_SEC:
+        try:
+            engine = _safe_engine() if engine is None else engine
+            symbols = None
+            timeframes = None
+            if engine is not None:
+                symbols = list(getattr(engine, "symbols", []) or [])[:5]
+                timeframes = list(getattr(engine, "timeframes", []) or [])[:1]
+            _run_market_analysis({"symbols": symbols, "timeframes": timeframes})
+        except Exception as exc:
+            logger.debug(f"[FRIDAY_SUPERVISION] Market analysis refresh failed: {exc}")
+
+
 def _get_engine_status_summary() -> dict[str, Any]:
     overlay = get_advisory_overlay()
     pending = overlay.get_pending_recommendations()
 
-    # Determine portfolio state
-    equity = 10000.0
-    cash = 10000.0
-    open_positions = 0
-    drawdown_pct = 0.0
-
     mode = str(getattr(config, "TRADING_MODE", "PAPER")).upper()
-    portfolio_file = "testnet_portfolio.json" if mode in ["TESTNET", "FUTURES"] else "paper_portfolio.json"
-    if os.path.exists(portfolio_file):
-        try:
-            with open(portfolio_file, "r", encoding="utf-8") as pf:
-                pdata = json.load(pf)
-                equity = float(pdata.get("equity", pdata.get("current_equity", 10000.0)))
-                cash = float(pdata.get("cash", pdata.get("usdt_cash", equity)))
-                positions = pdata.get("positions", {})
-                open_positions = len(positions) if isinstance(positions, (dict, list)) else 0
-                drawdown_pct = float(pdata.get("max_drawdown", pdata.get("drawdown_pct", 0.0)))
-        except Exception:
-            pass
+
+    # Refresh market analysis periodically so status reports real conditions.
+    engine = _safe_engine()
+    try:
+        _ensure_market_analysis(engine)
+    except Exception as exc:
+        logger.debug(f"[FRIDAY_SUPERVISION] ensure analysis failed: {exc}")
+
+    trading = _real_trading_data(engine)
+
+    # Preserve legacy portfolio fields but sourced from real engine data.
+    equity = trading.get("balance", 0.0)
+    try:
+        equity = float(equity) + float(trading.get("unrealized_pnl", 0.0))
+    except (TypeError, ValueError):
+        equity = trading.get("balance", 0.0)
+    cash = trading.get("balance", 0.0)
+    open_positions = trading.get("position_count", 0)
 
     return {
         "engine": "Stratex",
@@ -110,7 +476,7 @@ def _get_engine_status_summary() -> dict[str, Any]:
         "paper_safe_mode": bool(getattr(config, "PAPER_SAFE_MODE", True)),
         "live_trading_enabled": False,
         "live_money_permanently_blocked": True,
-        "panic_active": _is_panic_active(),
+        "panic_active": trading.get("panic_active", _is_panic_active()),
         "kill_switch_active": _is_kill_switch_locked(),
         "exchange_connected": mode in ["TESTNET", "FUTURES"] and getattr(config, "TESTNET_ENABLED", False),
         "telemetry_freshness": {
@@ -118,12 +484,25 @@ def _get_engine_status_summary() -> dict[str, Any]:
             "max_staleness_seconds": MAX_TELEMETRY_STALENESS_SECONDS
         },
         "portfolio": {
-            "equity": equity,
-            "cash": cash,
+            "equity": round(float(equity), 2),
+            "cash": round(float(cash), 2),
             "open_positions_count": open_positions,
-            "drawdown_pct": drawdown_pct,
+            "drawdown_pct": 0.0,
             "reconciliation_status": "RECONCILED"
         },
+        # Real trading data (cTrader demo)
+        "positions": trading.get("positions", []),
+        "open_positions": trading.get("positions", []),
+        "current_positions": trading.get("positions", []),
+        "position_count": trading.get("position_count", 0),
+        "open_positions_count": trading.get("position_count", 0),
+        "balance": trading.get("balance", 0.0),
+        "cash_balance": trading.get("balance", 0.0),
+        "unrealized_pnl": trading.get("unrealized_pnl", 0.0),
+        "last_trade_time": trading.get("last_trade_time"),
+        "max_positions": trading.get("max_positions"),
+        "market_conditions": trading.get("market_conditions", {}),
+        "last_market_analysis": _LAST_MARKET_ANALYSIS,
         "active_strategies": list(getattr(config, "ACTIVE_STRATEGIES", {}).keys()),
         "pending_advisories_count": len(pending)
     }
@@ -483,6 +862,19 @@ def execute_friday_task():
             "summary": msg,
             "execution_time_ms": int((time.time() - t0) * 1000)
         }
+    elif action in ["analyze", "analysis", "market_analysis", "run_analysis", "scan_analysis"]:
+        analysis = _run_market_analysis(payload)
+        response_payload = {
+            "task_id": task_id,
+            "target_agent": "stratex",
+            "status": analysis.get("status", "SUCCESS"),
+            "result": analysis,
+            "summary": (
+                f"Stratex market analysis complete: {analysis.get('signal_count', 0)} signals "
+                f"from {len(analysis.get('symbols_analyzed', []))} symbols for {source_agent}."
+            ),
+            "execution_time_ms": int((time.time() - t0) * 1000)
+        }
     else:
         response_payload = {
             "task_id": task_id,
@@ -508,6 +900,31 @@ def execute_friday_task():
                 result_body.get("panic_active")
                 if isinstance(result_body, dict)
                 else _is_panic_active()
+            ),
+            "position_count": (
+                result_body.get("position_count")
+                if isinstance(result_body, dict)
+                else None
+            ),
+            "balance": (
+                result_body.get("balance")
+                if isinstance(result_body, dict)
+                else None
+            ),
+            "unrealized_pnl": (
+                result_body.get("unrealized_pnl")
+                if isinstance(result_body, dict)
+                else None
+            ),
+            "last_trade_time": (
+                result_body.get("last_trade_time")
+                if isinstance(result_body, dict)
+                else None
+            ),
+            "market_conditions": (
+                result_body.get("market_conditions")
+                if isinstance(result_body, dict)
+                else None
             ),
         }
         response_payload["receipt"] = _task_receipt(

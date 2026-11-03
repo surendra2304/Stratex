@@ -186,25 +186,28 @@ class CTraderFixAdapter(BaseExchange):
     def calculate_units(self, canonical_sym: str, quantity: float) -> str:
         """Calculate Tag 38 (OrderQty) string for cTrader FIX based on asset class and broker limits."""
         sym = canonical_sym.upper()
-        if sym in {"XAUUSD", "GOLD", "XAUEUR"}:
-            # Gold: 1 unit = 1 oz. Risk-based lots are converted at 100 oz/lot.
-            return str(max(1, min(2000, int(round(quantity * 100)))))
-        elif sym in {"XAGUSD", "SILVER", "XAGEUR"}:
-            # Silver: 50 units = 50 oz (~$6 margin). Safe micro lot.
+        if sym in {"XAUUSD", "GOLD", "XAUEUR", "XAUGBP", "XAUJPY", "XAUAUD", "XAUCHF", "XPTUSD", "XPDUSD"}:
+            # Gold / platinum / palladium: 1 unit = 1 oz, 100 oz per lot.
+            return str(max(1, min(5000, int(round(quantity * 100)))))
+        elif sym in {"XAGUSD", "SILVER", "XAGEUR", "XAGAUD"}:
+            # Silver: 5,000 oz per lot; micro size floors at 50 oz.
             return "50" if quantity <= 0.05 else str(max(10, min(50000, int(round(quantity * 5000)))))
         elif sym in {"XTIUSD", "WTI", "XBRUSD", "BRENT", "XNGUSD"}:
-            # Oil: Minimum allowed broker volume is 100 units (100 barrels)
-            return str(max(100, int(round(quantity * 1000))))
-        elif sym in {"BTCUSD"}:
-            # Crypto: 0.01 BTC (~$680 notional, ~$7 margin)
-            return "0.01" if quantity < 0.05 else f"{quantity:.2f}".rstrip("0").rstrip(".")
-        elif sym in {"ETHUSD"}:
-            return "0.1" if quantity <= 1.0 else f"{quantity:.1f}".rstrip("0").rstrip(".")
-        elif sym in {"SOLUSD"}:
-            return "1" if quantity <= 5.0 else str(int(round(quantity)))
+            # Oil & gas: minimum allowed broker volume is 100 units.
+            return str(max(100, min(100000, int(round(quantity * 1000)))))
+        elif sym in {
+            "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "LTCUSD", "BNBUSD",
+            "ADAUSD", "DOGEUSD", "DOTUSD", "BCHUSD", "XLMUSD", "TRXUSD",
+        }:
+            # Crypto CFDs: tag 38 is denominated in coins, not lots.
+            qty = max(0.01, float(quantity))
+            if qty >= 100:
+                return str(int(round(qty)))
+            return f"{qty:.2f}".rstrip("0").rstrip(".")
         elif sym in {
             "DE40", "DE30", "GER40", "USTEC", "US30", "US500", "UK100",
-            "JP225", "AUS200", "F40", "STOXX50", "ES35", "US2000", "HK50"
+            "JP225", "AUS200", "HK50", "US2000", "SWI20", "F40", "STOXX50",
+            "ES35", "IT40", "AEX", "WIG20",
         }:
             # Index CFDs: broker minimum is 0.10 contracts; scale with the
             # risk-based size instead of pinning every trade to the minimum.
@@ -213,6 +216,30 @@ class CTraderFixAdapter(BaseExchange):
             # Standard FX: 1 lot = 100,000 units. Micro lot 0.01 = 1,000 units.
             # Never pin large risk-based sizes down to micro-lot volume.
             return str(max(1000, min(10_000_000, int(round(quantity * 100000)))))
+
+    def _price_decimals(self, symbol_id: int) -> int:
+        """Return the decimal precision allowed for the symbol's order price.
+
+        cTrader rejects orders where the price has more decimals than the
+        symbol supports. Use the exact precision from the broker's spec.
+        """
+        # JPY pairs and JPY crosses: 3 decimals (0.001)
+        if symbol_id in {3, 4, 7, 11, 13, 15, 21}:
+            return 3
+        # Metals (gold, silver, platinum, palladium): 2 decimals
+        if symbol_id in {41, 42, 43, 44}:
+            return 2
+        # Indices: 1 decimal (e.g., 10000=DE30, 10013=US500)
+        if 10000 <= symbol_id <= 10020 or symbol_id in {10046}:
+            return 1
+        # Oil/energy: 3 decimals
+        if symbol_id in {10018, 10019, 10020, 10021, 10022}:
+            return 3
+        # Crypto: 2 decimals
+        if 10026 <= symbol_id <= 10030:
+            return 2
+        # Default FX majors/crosses: 5 decimals
+        return 5
 
     def _ensure_connection(self):
         """Ensure SSL socket is open and logged on to CSERVER."""
@@ -395,6 +422,10 @@ class CTraderFixAdapter(BaseExchange):
                             unrealized_pnl=0.0,
                             exchange="ctrader_fix",
                             position_id=pos_id_str,
+                            # AbsoluteSL (1002) / AbsoluteTP (1000) are reported
+                            # when the position is protected at the venue.
+                            stop_loss=float(msg.get(1002) or 0),
+                            take_profit=float(msg.get(1000) or 0),
                         )
                     )
 
@@ -542,6 +573,234 @@ class CTraderFixAdapter(BaseExchange):
             exchange="ctrader_fix",
         )
 
+    def _submit_pending_order(
+        self,
+        *,
+        symbol_id: int,
+        fix_side: int,
+        ord_type: int,
+        quantity_units: str,
+        price: float,
+        position_id: str = "",
+        designation: str = "",
+    ) -> str:
+        """Send a Stop (ord_type=3) or Limit (ord_type=2) order.
+
+        cTrader protects an open position with *separate pending orders* linked
+        to it through PosMaintRptID (tag 721). NewOrderSingle has no SL/TP
+        fields, and tags 1000/1002 on it are rejected, so this is the only
+        broker-side protection the FIX API exposes. Returns the client order id
+        so the order can be amended or cancelled later.
+        """
+        cl_ord_id = f"{designation or 'PND'}_{uuid.uuid4().hex[:12]}"
+        now_str = datetime.datetime.utcnow().strftime("%Y%m%d-%H:%M:%S.%f")[:-3]
+        price_tag = 44 if ord_type == 2 else 99
+        decimals = self._price_decimals(symbol_id)
+
+        def build(seq):
+            order = self._create_message("D", seq)
+            order.append_pair(11, cl_ord_id)
+            order.append_pair(55, symbol_id)
+            order.append_pair(54, fix_side)
+            order.append_pair(60, now_str)
+            order.append_pair(40, ord_type)
+            order.append_pair(38, quantity_units)
+            order.append_pair(price_tag, f"{float(price):.{decimals}f}")
+            if position_id:
+                order.append_pair(721, position_id)
+            if designation:
+                order.append_pair(494, designation)
+            return order
+
+        resp = self._send_transaction(build)
+        parser = simplefix.FixParser()
+        parser.append_buffer(resp)
+        while True:
+            msg = parser.get_message()
+            if not msg:
+                break
+            mtype = msg.get(35)
+            if mtype == b"8":
+                if msg.get(39) in {b"0", b"1", b"2"}:
+                    return cl_ord_id
+                reason = (msg.get(58) or b"rejected").decode()
+                raise CTraderFixError(f"Protective order rejected: {reason}")
+            if mtype in {b"j", b"3"}:
+                reason = (msg.get(58) or b"rejected").decode()
+                raise CTraderFixError(f"Protective order rejected: {reason}")
+        raise CTraderFixError("No execution report for protective order")
+
+    def place_protective_orders(
+        self,
+        *,
+        position_id: str,
+        symbol: str,
+        side: str,
+        units: float,
+        stop_loss: float,
+        take_profit: float,
+    ) -> dict[str, Any]:
+        """Attach a broker-side stop-loss and take-profit to an open position."""
+        canonical_sym, symbol_id = self.resolve_symbol(symbol)
+        result: dict[str, Any] = {"stop_client_id": "", "limit_client_id": "", "errors": []}
+        if not symbol_id:
+            result["errors"].append("symbol not found in FIX map")
+            return result
+        close_side = 2 if side.upper() in {"BUY", "LONG"} else 1
+        # For indices/crypto/metals, units is already the correct order qty format.
+        # For FX, units is broker units (1000 = 0.01 lot); convert to the string
+        # expected by tag 38 (same as calculate_units output).
+        if float(units) < 100 and any(
+            k in symbol.upper()
+            for k in (
+                "XAU",
+                "XAG",
+                "XPT",
+                "XPD",
+                "XTI",
+                "XBR",
+                "XNG",
+                "BTC",
+                "ETH",
+                "SOL",
+                "XRP",
+                "LTC",
+                "BNB",
+                "ADA",
+                "DOGE",
+                "DOT",
+                "DE40",
+                "DE30",
+                "GER",
+                "US30",
+                "US500",
+                "USTEC",
+                "UK100",
+                "JP225",
+                "AUS200",
+                "HK50",
+                "US2000",
+                "SWI20",
+                "F40",
+                "STOXX50",
+                "ES35",
+                "IT40",
+                "AEX",
+                "WIG20",
+            )
+        ):
+            qty = str(units)  # already formatted by calculate_units (e.g., "0.1", "50")
+        else:
+            qty = str(int(round(float(units))))  # FX units -> integer
+        if qty in {"0", ""}:
+            result["errors"].append("position volume is zero")
+            return result
+        if stop_loss and float(stop_loss) > 0:
+            try:
+                result["stop_client_id"] = self._submit_pending_order(
+                    symbol_id=symbol_id,
+                    fix_side=close_side,
+                    ord_type=3,
+                    quantity_units=qty,
+                    price=float(stop_loss),
+                    position_id=position_id,
+                    designation="SL",
+                )
+            except Exception as exc:
+                result["errors"].append(f"SL: {exc}")
+        if take_profit and float(take_profit) > 0:
+            try:
+                result["limit_client_id"] = self._submit_pending_order(
+                    symbol_id=symbol_id,
+                    fix_side=close_side,
+                    ord_type=2,
+                    quantity_units=qty,
+                    price=float(take_profit),
+                    position_id=position_id,
+                    designation="TP",
+                )
+            except Exception as exc:
+                result["errors"].append(f"TP: {exc}")
+        return result
+
+    def amend_protective_order(
+        self,
+        client_order_id: str,
+        ord_type: int,
+        units: float,
+        price: float,
+        symbol_id: int,
+    ) -> bool:
+        """Cancel/replace a protective order (used to move a trailing stop)."""
+        if not client_order_id:
+            return False
+
+        decimals = self._price_decimals(symbol_id)
+
+        def build(seq):
+            amend = self._create_message("G", seq)
+            amend.append_pair(41, client_order_id)
+            amend.append_pair(11, f"AMD_{uuid.uuid4().hex[:12]}")
+            # Preserve index/crypto/metal unit format (e.g., "0.1", "50")
+            if float(units) < 100:
+                qty = str(units)
+            else:
+                qty = str(int(round(float(units))))
+            amend.append_pair(38, qty)
+            amend.append_pair(44 if ord_type == 2 else 99, f"{float(price):.{decimals}f}")
+            return amend
+
+        try:
+            resp = self._send_transaction(build)
+        except Exception as exc:
+            logger.warning(f"[CTRADER_FIX] Amend failed for {client_order_id}: {exc}")
+            return False
+
+        parser = simplefix.FixParser()
+        parser.append_buffer(resp)
+        while True:
+            msg = parser.get_message()
+            if not msg:
+                break
+            mtype = msg.get(35)
+            if mtype == b"8" and msg.get(39) in {b"0", b"1", b"2"}:
+                return True
+            if mtype in {b"j", b"3", b"9"}:
+                reason = (msg.get(58) or b"rejected").decode()
+                logger.warning(f"[CTRADER_FIX] Amend rejected for {client_order_id}: {reason}")
+                return False
+        return False
+
+    def cancel_pending_order(self, client_order_id: str) -> bool:
+        """Cancel a protective order by its client order id."""
+        if not client_order_id:
+            return False
+
+        def build(seq):
+            cancel = self._create_message("F", seq)
+            cancel.append_pair(41, client_order_id)
+            cancel.append_pair(11, f"CNL_{uuid.uuid4().hex[:12]}")
+            return cancel
+
+        try:
+            resp = self._send_transaction(build)
+        except Exception as exc:
+            logger.warning(f"[CTRADER_FIX] Cancel failed for {client_order_id}: {exc}")
+            return False
+
+        parser = simplefix.FixParser()
+        parser.append_buffer(resp)
+        while True:
+            msg = parser.get_message()
+            if not msg:
+                break
+            mtype = msg.get(35)
+            if mtype == b"8" and msg.get(39) in {b"2", b"4", b"C", b"0", b"1"}:
+                return True
+            if mtype in {b"j", b"3", b"9"}:
+                return False
+        return False
+
     def close_position(
         self,
         position_id: str,
@@ -557,6 +816,25 @@ class CTraderFixAdapter(BaseExchange):
         norm_side = side.upper()
         # Closing a BUY/LONG requires a SELL (2); closing a SELL/SHORT requires a BUY (1)
         close_fix_side = 2 if norm_side in {"BUY", "LONG"} else 1
+
+        # Resolve the live position ticket. Older ledger rows stored the entry
+        # *order* id, which tag 721 rejects; the broker position id is the only
+        # one that closes the trade.
+        try:
+            live = {p.symbol: p for p in self.get_positions()}
+            live_pos = live.get(canonical_sym)
+            if live_pos and live_pos.position_id:
+                if str(live_pos.position_id) != str(position_id):
+                    logger.info(
+                        f"[CTRADER_FIX] Close ticket {position_id} resolved to live position "
+                        f"{live_pos.position_id} for {canonical_sym}"
+                    )
+                position_id = live_pos.position_id
+                if float(live_pos.quantity or 0) >= 100:
+                    quantity = float(live_pos.quantity)
+        except Exception as exc:
+            logger.warning(f"[CTRADER_FIX] Could not resolve live position id for {canonical_sym}: {exc}")
+
         # The ledger mixes lots (0.01) and broker units (1000); normalise both to
         # the units cTrader expects on tag 38 before closing.
         if quantity >= 100:

@@ -101,41 +101,108 @@ DEFAULT_SYMBOLS = [
     "CADCHF",
     "NZDCAD",
     "NZDCHF",
-    # Commodities & Precious Metals (Micro-lots)
+    # Scandinavian & SGD Crosses (liquid, broker-tight spreads)
+    "USDNOK",
+    "USDSEK",
+    "EURNOK",
+    "EURSEK",
+    "NOKJPY",
+    "NOKSEK",
+    "SEKJPY",
+    "USDSGD",
+    "EURSGD",
+    "GBPSGD",
+    "AUDSGD",
+    "NZDSGD",
+    "SGDJPY",
+    "CHFSGD",
+    # Precious & Industrial Metals
     "XAUUSD",
     "XAGUSD",
-    # Global Indices (0.1 contract micro units)
+    "XPTUSD",
+    "XPDUSD",
+    # Energy
+    "XTIUSD",
+    "XBRUSD",
+    "XNGUSD",
+    # Global Indices
+    "US30",
     "US500",
     "USTEC",
-    "GER40",
-    "US30",
-    # Crypto CFDs (0.01 micro units)
+    "DE40",
+    "UK100",
+    "JP225",
+    "AUS200",
+    "HK50",
+    "US2000",
+    "SWI20",
+    # Crypto CFDs
     "BTCUSD",
     "ETHUSD",
     "SOLUSD",
+    "XRPUSD",
+    "LTCUSD",
+    "BNBUSD",
+    "ADAUSD",
+    "DOGEUSD",
+    "DOTUSD",
 ]
 
-DEFAULT_TIMEFRAMES = ["5m", "15m", "30m", "1h"]
+# Every timeframe the broker offers, from scalping to swing. The scan scores
+# each symbol across all six and keeps only its single best timeframe.
+DEFAULT_TIMEFRAMES = ["5m", "15m", "30m", "1h", "4h", "1d"]
+
+CRYPTO_SYMBOLS = {
+    "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "LTCUSD", "BNBUSD",
+    "ADAUSD", "DOGEUSD", "DOTUSD", "BCHUSD", "XLMUSD", "TRXUSD",
+}
+
+INDEX_SYMBOLS = {
+    "US30", "US500", "USTEC", "DE40", "DE30", "GER40", "UK100", "JP225",
+    "AUS200", "HK50", "US2000", "SWI20", "F40", "STOXX50", "ES35", "IT40",
+}
+
+# Currencies whose USD value is fetched directly as "<CCY>USD".
+_USD_PER_MAJOR = {"EUR", "GBP", "AUD", "NZD"}
+# Currencies quoted as "USD<CCY>"; USD value is the inverse.
+_USD_PER_MINOR = {
+    "JPY", "CHF", "CAD", "SGD", "NOK", "SEK", "DKK", "HKD",
+    "MXN", "ZAR", "TRY", "PLN", "CZK", "HUF", "CNH", "THB",
+}
 
 
 def _utc_now_iso() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _get_contract_multiplier(symbol: str) -> float:
-    """Returns pip / point contract valuation multiplier for risk and PnL calculation."""
+def _contract_size(symbol: str) -> float:
+    """Units of the underlying in 1.00 lot at IC Markets cTrader.
+
+    1 lot = 100,000 FX units, 100 oz of gold/platinum/palladium, 5,000 oz of
+    silver, 1,000 barrels of oil, 1 index contract, or 1 coin for crypto CFDs.
+    """
     sym = symbol.upper().replace("/", "")
-    if "XAU" in sym or "GOLD" in sym:
-        return 100.0  # 100 oz per standard lot
-    if "XAG" in sym or "SILVER" in sym:
-        return 5000.0  # 5,000 oz
-    if "WTI" in sym or "BRENT" in sym or "OIL" in sym:
-        return 1000.0  # 1,000 barrels
-    if any(k in sym for k in ["BTC", "ETH", "SOL", "US30", "US500", "USTEC", "GER40"]):
+    if sym in CRYPTO_SYMBOLS or sym in INDEX_SYMBOLS:
         return 1.0
-    if "JPY" in sym:
-        return 1000.0  # Scaled for 2-decimal JPY currency
-    return 100000.0  # Standard Forex 100,000 units
+    if any(k in sym for k in ("XAU", "GOLD", "XPT", "XPD")):
+        return 100.0
+    if "XAG" in sym or "SILVER" in sym:
+        return 5000.0
+    if any(k in sym for k in ("XTI", "XBR", "WTI", "BRENT", "OIL", "XNG")):
+        return 1000.0
+    return 100000.0
+
+
+def _quote_currency(symbol: str) -> str:
+    """Return the FX quote currency, or an empty string for non-FX assets."""
+    sym = symbol.upper().replace("/", "")
+    if sym in CRYPTO_SYMBOLS or sym in INDEX_SYMBOLS:
+        return ""
+    if any(k in sym for k in ("XAU", "XAG", "XPT", "XPD", "XTI", "XBR", "XNG", "WTI", "OIL")):
+        return ""
+    if len(sym) == 6 and sym.isalpha():
+        return sym[3:]
+    return ""
 
 
 def _min_stop_distance(symbol: str, price: float) -> float:
@@ -146,36 +213,57 @@ def _min_stop_distance(symbol: str, price: float) -> float:
     roughly 3-5x a typical IC Markets spread for each asset class.
     """
     sym = symbol.upper().replace("/", "")
-    if any(k in sym for k in ["BTC", "ETH", "SOL"]):
-        return price * 0.004
+    if sym in CRYPTO_SYMBOLS:
+        # 0.4% of price; for sub-dollar coins keep at least a few ticks.
+        return max(price * 0.004, 0.0002 if price >= 1 else 0.00002)
     if "XAU" in sym or "GOLD" in sym:
-        return 1.20
+        return max(1.20, price * 0.0004)
+    if any(k in sym for k in ("XPT", "XPD")):
+        return max(1.50, price * 0.0015)
     if "XAG" in sym or "SILVER" in sym:
-        return 0.06
-    if any(k in sym for k in ["WTI", "BRENT", "OIL"]):
+        return max(0.06, price * 0.0015)
+    if sym == "XNGUSD" or "NG" in sym:
+        return 0.03
+    if any(k in sym for k in ("XTI", "XBR", "WTI", "BRENT", "OIL")):
         return 0.15
-    if any(k in sym for k in ["US30", "US500", "USTEC", "DE40", "GER40", "UK100", "JP225", "AUS200", "F40"]):
+    if sym in INDEX_SYMBOLS:
         return price * 0.0012
     if "JPY" in sym:
         return 0.08  # 8 pips on 3-decimal JPY pairs
     return 0.00080  # 8 pips on 5-decimal FX pairs
 
 
-def _calculate_position_margin(symbol: str, quantity: float) -> float:
-    """Returns approximate used margin in USD for a given symbol and position size."""
+def _fallback_price(symbol: str) -> float:
+    """Rough notional price used only when no live quote is available."""
     sym = symbol.upper().replace("/", "")
+    if sym in CRYPTO_SYMBOLS:
+        return 95000.0
+    if sym in INDEX_SYMBOLS:
+        return 5000.0
     if "XAU" in sym or "GOLD" in sym:
-        oz = quantity if quantity >= 1.0 else quantity * 100.0
-        return oz * 8.0  # ~$8 margin per oz (1:500 leverage)
+        return 4000.0
     if "XAG" in sym or "SILVER" in sym:
-        oz = quantity if quantity >= 10.0 else quantity * 5000.0
-        return (oz / 50.0) * 5.40  # ~$5.40 margin per 50 oz
-    if any(k in sym for k in ["US30", "US500", "USTEC", "DE40", "GER40"]):
-        contracts = quantity if quantity <= 1.0 else quantity / 10.0
-        return contracts * 100.0
-    # Forex
-    lots = quantity / 100000.0 if quantity >= 100.0 else quantity
-    return lots * 200.0  # ~$2 margin per 0.01 lot ($200 per standard lot at 1:500)
+        return 50.0
+    if any(k in sym for k in ("XPT", "XPD")):
+        return 1500.0
+    if any(k in sym for k in ("XTI", "XBR", "WTI", "BRENT", "OIL", "XNG")):
+        return 75.0
+    return 1.0
+
+
+def _calculate_position_margin(symbol: str, lots: float, price: float | None = None) -> float:
+    """Approximate used margin in USD for ``lots`` at the venue's leverage."""
+    sym = symbol.upper().replace("/", "")
+    notional = abs(lots) * _contract_size(sym) * (price or _fallback_price(sym))
+    if sym in CRYPTO_SYMBOLS:
+        leverage = 5.0      # crypto CFDs are the most margin-hungry
+    elif sym in INDEX_SYMBOLS:
+        leverage = 200.0
+    elif any(k in sym for k in ("XTI", "XBR", "WTI", "BRENT", "OIL", "XNG")):
+        leverage = 100.0
+    else:
+        leverage = 500.0
+    return notional / leverage
 
 
 @dataclass
@@ -194,6 +282,12 @@ class CloudPosition:
     opened_at: str
     strategy: str
     ai_thesis: str | None = None
+    # Risk-based lot size. ``quantity`` holds the venue's units (oz, barrels,
+    # contracts, coins or FX units) so PnL never has to guess the asset class.
+    lots: float = 0.0
+    # Client ids of the broker-side protective orders (cTrader tags 721).
+    sl_order_id: str = ""
+    tp_order_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -323,11 +417,23 @@ class MT5AutonomousEngine:
             self.cloud_balance = float(data.get("balance", self.cloud_balance))
             saved_positions = data.get("positions", {})
             for sym, p_data in saved_positions.items():
+                raw_qty = float(p_data.get("quantity", 0.01))
+                saved_lots = float(p_data.get("lots", 0.0) or 0.0)
+                contract = _contract_size(sym)
+                if saved_lots <= 0:
+                    # Legacy ledger rows stored the lot size (0.01) rather than
+                    # the venue units (1000). Migrate them once on load so PnL
+                    # is exact for every asset class.
+                    if raw_qty < max(1.0, contract * 0.01):
+                        saved_lots = raw_qty
+                        raw_qty = round(raw_qty * contract, 8)
+                    else:
+                        saved_lots = round(raw_qty / contract, 4) if contract else raw_qty
                 self.cloud_positions[sym] = CloudPosition(
                     position_id=p_data.get("position_id", ""),
                     symbol=p_data.get("symbol", sym),
                     side=p_data.get("side", "BUY"),
-                    quantity=float(p_data.get("quantity", 0.01)),
+                    quantity=raw_qty,
                     entry_price=float(p_data.get("entry_price", 0.0)),
                     stop_loss=float(p_data.get("stop_loss", 0.0)),
                     take_profit=float(p_data.get("take_profit", 0.0)),
@@ -336,6 +442,9 @@ class MT5AutonomousEngine:
                     opened_at=p_data.get("opened_at", _utc_now_iso()),
                     strategy=p_data.get("strategy", ""),
                     ai_thesis=p_data.get("ai_thesis"),
+                    lots=saved_lots,
+                    sl_order_id=p_data.get("sl_order_id", "") or "",
+                    tp_order_id=p_data.get("tp_order_id", "") or "",
                 )
             logger.info(f"[CTRADER_ENGINE] Loaded {len(self.cloud_positions)} cloud positions from state file (Balance: ${self.cloud_balance:,.2f})")
         except Exception as exc:
@@ -366,6 +475,19 @@ class MT5AutonomousEngine:
 
         for pos in positions_to_close:
             try:
+                # Cancel broker-side protective orders first.
+                if hasattr(self.adapter, "cancel_pending_order"):
+                    if pos.sl_order_id:
+                        try:
+                            self.adapter.cancel_pending_order(pos.sl_order_id)
+                        except Exception:
+                            pass
+                    if pos.tp_order_id:
+                        try:
+                            self.adapter.cancel_pending_order(pos.tp_order_id)
+                        except Exception:
+                            pass
+
                 if getattr(self.adapter, "enabled", False):
                     self.adapter.close_position(
                         position_id=pos.position_id,
@@ -670,6 +792,34 @@ class MT5AutonomousEngine:
             reasons=tuple(reasons),
         )
 
+    def _quote_to_usd(self, quote: str) -> float:
+        """USD value of one unit of ``quote``, from the live feed when possible.
+
+        Fixed constants (1/152 for JPY, 0.72 for CAD, ...) go stale and silently
+        skew both sizing and PnL once the market moves. Quotes are cached by the
+        feed, so this costs nothing inside a scan.
+        """
+        quote = (quote or "").upper()
+        if not quote or quote == "USD":
+            return 1.0
+        fallback = {
+            "EUR": 1.05, "GBP": 1.27, "AUD": 0.65, "NZD": 0.60,
+            "JPY": 1 / 152.0, "CHF": 1.15, "CAD": 0.72, "SGD": 0.74,
+            "NOK": 0.093, "SEK": 0.095, "DKK": 0.145, "HKD": 0.128,
+            "MXN": 0.050, "ZAR": 0.055, "TRY": 0.028, "PLN": 0.25,
+            "CZK": 0.043, "HUF": 0.0028, "CNH": 0.14, "THB": 0.028,
+        }.get(quote, 1.0)
+        try:
+            if quote in _USD_PER_MAJOR:
+                px = self.cloud_feed.get_current_price(f"{quote}USD")
+                return float(px) if px and px > 0 else fallback
+            if quote in _USD_PER_MINOR:
+                px = self.cloud_feed.get_current_price(f"USD{quote}")
+                return (1.0 / float(px)) if px and px > 0 else fallback
+        except Exception:
+            return fallback
+        return fallback
+
     def calculate_lot_size(
         self,
         symbol: str,
@@ -709,16 +859,20 @@ class MT5AutonomousEngine:
         if risk_per_unit <= 1e-6:
             return min_vol
 
-        # Standard Forex contract size is 100,000 units. For XAUUSD it is 100 oz.
-        contract_size = 100.0 if "XAU" in symbol.upper() else 100000.0
-        raw_lots = risk_budget / (risk_per_unit * contract_size)
+        # Risk per lot = stop distance x contract size x quote-to-USD rate.
+        # Using a flat 100,000 contract size for every asset massively oversizes
+        # indices and crypto and undersizes gold, so derive it per instrument.
+        contract_size = _contract_size(symbol)
+        quote = _quote_currency(symbol)
+        quote_conv = self._quote_to_usd(quote) if quote else 1.0
+        raw_lots = risk_budget / max(risk_per_unit * contract_size * quote_conv, 1e-9)
         stepped_lots = max(min_vol, math.floor(raw_lots / step) * step)
         # Hard ceiling for a four-figure demo account; a data glitch in the
         # stop distance must never translate into an outsized position.
         stepped_lots = min(stepped_lots, 0.50)
 
         # Margin sanity: never commit more than 25% of equity as margin.
-        margin_per_lot = _calculate_position_margin(symbol, 1.0)
+        margin_per_lot = _calculate_position_margin(symbol, 1.0, current_price)
         if margin_per_lot > 0:
             stepped_lots = min(stepped_lots, (equity * 0.25) / margin_per_lot)
 
@@ -846,6 +1000,7 @@ class MT5AutonomousEngine:
         # Confirm the fill against the live broker so the ledger and the
         # Telegram alert carry the venue's ticket and execution price rather
         # than the FIX acknowledgement (which reports price 0 while PENDING).
+        broker_units = 0.0
         if getattr(self.adapter, "enabled", False) and result.get("status") in {"FILLED", "PENDING"}:
             for _ in range(4):
                 snapshot = self._broker_positions_snapshot()
@@ -855,6 +1010,8 @@ class MT5AutonomousEngine:
                         result["order_id"] = broker_pos.position_id
                     if broker_pos.entry_price and broker_pos.entry_price > 0:
                         result["price"] = broker_pos.entry_price
+                    if float(getattr(broker_pos, "quantity", 0) or 0) > 0:
+                        broker_units = float(broker_pos.quantity)
                     break
                 time.sleep(0.6)
 
@@ -862,11 +1019,51 @@ class MT5AutonomousEngine:
         pos_id = str(result.get("order_id") or f"pos-{int(time.time())}")
         raw_price = result.get("price")
         fill_px = float(raw_price) if raw_price and float(raw_price) > 0 else float(signal.current_price)
+        # Store the venue's units (oz / barrels / contracts / coins / FX units),
+        # not the lot size, so PnL is exact for every asset class.
+        position_units = broker_units or round(volume * _contract_size(signal.symbol), 8)
+
+        # Attach broker-side stop-loss and take-profit. cTrader protects a
+        # position with separate Stop/Limit orders linked by tag 721; without
+        # them the position would be naked if this daemon stopped.
+        sl_order_id = ""
+        tp_order_id = ""
+        if (
+            broker_units > 0
+            and pos_id
+            and not pos_id.startswith("pos-")
+            and hasattr(self.adapter, "place_protective_orders")
+        ):
+            try:
+                prot = self.adapter.place_protective_orders(
+                    position_id=pos_id,
+                    symbol=signal.symbol,
+                    side=signal.action,
+                    units=broker_units,
+                    stop_loss=signal.stop_loss,
+                    take_profit=signal.take_profit,
+                )
+                sl_order_id = prot.get("stop_client_id", "") or ""
+                tp_order_id = prot.get("limit_client_id", "") or ""
+                if prot.get("errors"):
+                    logger.warning(
+                        f"[CTRADER_ENGINE] Broker protection incomplete for {signal.symbol}: {prot['errors']}"
+                    )
+                else:
+                    logger.info(
+                        f"[CTRADER_ENGINE] Broker SL/TP attached for {signal.symbol} "
+                        f"(SL {signal.stop_loss:,.5f}, TP {signal.take_profit:,.5f})"
+                    )
+            except Exception as exc:
+                logger.warning(
+                    f"[CTRADER_ENGINE] Could not attach broker protection for {signal.symbol}: {exc}"
+                )
+
         self.cloud_positions[signal.symbol] = CloudPosition(
             position_id=pos_id,
             symbol=signal.symbol,
             side=signal.action,
-            quantity=volume,
+            quantity=position_units,
             entry_price=fill_px,
             stop_loss=signal.stop_loss,
             take_profit=signal.take_profit,
@@ -875,6 +1072,9 @@ class MT5AutonomousEngine:
             opened_at=_utc_now_iso(),
             strategy=signal.strategy_source,
             ai_thesis=decision.ai_thesis,
+            lots=volume,
+            sl_order_id=sl_order_id,
+            tp_order_id=tp_order_id,
         )
         self._save_cloud_state()
 
@@ -962,6 +1162,10 @@ class MT5AutonomousEngine:
 
         ``notify`` is disabled during startup so stale ledger rows left over
         from an old deployment do not produce phantom "closed" alerts.
+
+        For positions closed at the broker (SL/TP hit), calculates realized PnL
+        using the protective level that was triggered, updates settled balance,
+        and emits a proper exit alert.
         """
         if broker_pos_map is None:
             broker_pos_map = self._broker_positions_snapshot()
@@ -973,30 +1177,141 @@ class MT5AutonomousEngine:
             pid = str(pos.position_id or "")
             if sym in broker_pos_map or (pid and pid in broker_ids):
                 continue
+
+            # Position is gone at broker -> SL or TP was hit.
+            # Infer which level was hit using a FRESH price from the feed (not the
+            # stale mark_price which may have been updated after the close).
+            entry = float(pos.entry_price)
+            sl = float(pos.stop_loss)
+            tp = float(pos.take_profit)
+            side = pos.side
+
+            # Get current market price to infer direction since entry.
+            fresh_price = self.cloud_feed.get_current_price(sym)
+            if fresh_price and fresh_price > 0:
+                infer_price = fresh_price
+            else:
+                infer_price = float(pos.mark_price or pos.entry_price)
+
+            if side == "BUY":
+                exit_price = tp if infer_price >= entry else sl
+                direction = 1.0
+            else:
+                exit_price = tp if infer_price <= entry else sl
+                direction = -1.0
+
+            # Calculate realized PnL using venue units and quote conversion.
+            units = abs(float(pos.quantity or 0.0))
+            quote_conv = self._quote_to_usd(_quote_currency(sym))
+            realized_pnl = round((exit_price - entry) * direction * units * quote_conv, 2)
+
+            # Update settled balance and record.
+            self.cloud_balance = round(self.cloud_balance + realized_pnl, 2)
+            if hasattr(self.adapter, "record_realized_pnl"):
+                try:
+                    self.adapter.record_realized_pnl(realized_pnl)
+                except Exception:
+                    pass
+
+            # Cancel any remaining protective orders at broker.
+            if hasattr(self.adapter, "cancel_pending_order"):
+                if pos.sl_order_id:
+                    try:
+                        self.adapter.cancel_pending_order(pos.sl_order_id)
+                    except Exception:
+                        pass
+                if pos.tp_order_id:
+                    try:
+                        self.adapter.cancel_pending_order(pos.tp_order_id)
+                    except Exception:
+                        pass
+
+            exit_type = "TAKE_PROFIT" if (side == "BUY" and exit_price >= tp) or (side == "SELL" and exit_price <= tp) else "STOP_LOSS"
+            status_emoji = "🎉 TAKE PROFIT HIT" if exit_type == "TAKE_PROFIT" else "🛡️ STOP LOSS HIT"
+
             logger.info(
-                f"[CTRADER_ENGINE] Reconciled closed position {sym} "
-                f"(id={pid or 'n/a'}): no longer open at IC Markets."
+                f"[CTRADER_ENGINE] Reconciled broker exit {sym} ({exit_type}) "
+                f"entry={entry:,.5f} exit={exit_price:,.5f} realized={realized_pnl:+,.2f} "
+                f"balance={self.cloud_balance:,.2f}"
             )
+
             self.cloud_positions.pop(sym, None)
             purged += 1
+
             if notify:
                 try:
-                    pnl = float(pos.unrealized_pnl or 0.0)
-                    emoji = "💰" if pnl >= 0 else "🔻"
+                    pnl_emoji = "💰" if realized_pnl >= 0 else "🔻"
+                    disp_qty = pos.lots if pos.lots > 0 else pos.quantity / max(_contract_size(sym), 1e-9)
                     self.telegram.send_message(
-                        f"🔔 <b>Position closed at broker</b>\n\n"
+                        f"<b>{status_emoji}</b>\n\n"
                         f"• <b>Symbol</b>: <code>{sym}</code>\n"
-                        f"• <b>Side</b>: <code>{pos.side}</code>\n"
-                        f"• <b>Entry</b>: <code>{pos.entry_price:,.5f}</code>\n"
-                        f"• <b>Last mark</b>: <code>{float(pos.mark_price or pos.entry_price):,.5f}</code>\n"
-                        f"• <b>Estimated PnL</b>: {emoji} <code>${pnl:+,.2f} USD</code>\n"
+                        f"• <b>Side</b>: <code>{side}</code>\n"
+                        f"• <b>Size</b>: <code>{disp_qty:g} lots</code>\n"
+                        f"• <b>Entry</b>: <code>{entry:,.5f}</code>\n"
+                        f"• <b>Exit</b>: <code>{exit_price:,.5f}</code>\n"
+                        f"• <b>Realized PnL</b>: {pnl_emoji} <code>${realized_pnl:+,.2f} USD</code>\n"
+                        f"• <b>Updated Balance</b>: <code>${self.cloud_balance:,.2f} USD</code>\n"
                         f"• <b>Ticket</b>: <code>{pid or 'n/a'}</code>"
                     )
                 except Exception as exc:
-                    logger.debug(f"[CTRADER_ENGINE] Close notification failed for {sym}: {exc}")
+                    logger.debug(f"[CTRADER_ENGINE] Exit notification failed for {sym}: {exc}")
+
+            # Memora Audit
+            self.memora.record_scoped_event(
+                event_type=f"CTRADER_{exit_type}_TRIGGERED",
+                scope="Universal",
+                summary=f"Stratex closed {sym} {side} at ${exit_price:,.4f} ({exit_type} via broker reconciliation) | PnL: ${realized_pnl:+,.2f}",
+                details={
+                    "symbol": sym,
+                    "side": side,
+                    "ticket": pid,
+                    "entry_price": entry,
+                    "exit_price": exit_price,
+                    "realized_pnl": realized_pnl,
+                    "exit_type": exit_type,
+                    "new_balance": self.cloud_balance,
+                },
+                tags=["trading", "exit", exit_type.lower(), sym.lower()],
+            )
+
+            # Broadcast to FRIDAY Core Gateway
+            self.friday.broadcast_trade_event(
+                event_type="STRATEX_TRADE_CLOSED",
+                payload={
+                    "ticket": pid,
+                    "symbol": sym,
+                    "exit_price": exit_price,
+                    "realized_pnl": realized_pnl,
+                    "exit_type": exit_type,
+                    "balance": self.cloud_balance,
+                },
+            )
+
         if purged:
             self._save_cloud_state()
         return purged
+
+    def _amend_broker_stop(self, pos: CloudPosition) -> None:
+        """Move the broker-side stop order when the engine trails the stop."""
+        if not pos.sl_order_id or not hasattr(self.adapter, "amend_protective_order"):
+            return
+        try:
+            canonical_sym, symbol_id = self.adapter.resolve_symbol(pos.symbol)
+            if not symbol_id:
+                return
+            ok = self.adapter.amend_protective_order(
+                client_order_id=pos.sl_order_id,
+                ord_type=3,  # Stop order
+                units=pos.quantity,
+                price=pos.stop_loss,
+                symbol_id=symbol_id,
+            )
+            if ok:
+                logger.debug(f"[CTRADER_ENGINE] Amended broker SL for {pos.symbol} to {pos.stop_loss:,.5f}")
+            else:
+                logger.warning(f"[CTRADER_ENGINE] Failed to amend broker SL for {pos.symbol}")
+        except Exception as exc:
+            logger.warning(f"[CTRADER_ENGINE] Amend broker SL error for {pos.symbol}: {exc}")
 
     def manage_cloud_positions(self) -> list[dict[str, Any]]:
         """Monitor active cloud positions, update unrealized PnL, and execute Take-Profit / Stop-Loss exits via broker."""
@@ -1006,6 +1321,27 @@ class MT5AutonomousEngine:
         broker_pos_map = self._broker_positions_snapshot()
         if broker_pos_map is not None:
             self.reconcile_with_broker(notify=True, broker_pos_map=broker_pos_map)
+            # Re-attach protective orders for any position missing them.
+            for sym, bp in broker_pos_map.items():
+                cloud_pos = self.cloud_positions.get(sym)
+                if cloud_pos and (cloud_pos.sl_order_id == "" or cloud_pos.tp_order_id == ""):
+                    # Position exists but SL/TP order IDs are missing - re-attach
+                    try:
+                        prot = self.adapter.place_protective_orders(
+                            position_id=bp.position_id,
+                            symbol=sym,
+                            side=bp.side,
+                            units=bp.quantity,
+                            stop_loss=cloud_pos.stop_loss,
+                            take_profit=cloud_pos.take_profit,
+                        )
+                        if prot.get("stop_client_id"):
+                            cloud_pos.sl_order_id = prot["stop_client_id"]
+                        if prot.get("limit_client_id"):
+                            cloud_pos.tp_order_id = prot["limit_client_id"]
+                        self._save_cloud_state()
+                    except Exception as exc:
+                        logger.warning(f"[CTRADER_ENGINE] Could not re-attach broker protection for {sym}: {exc}")
             try:
                 for sym, bp in broker_pos_map.items():
                     if sym not in self.cloud_positions:
@@ -1046,36 +1382,17 @@ class MT5AutonomousEngine:
             if pos.entry_price <= 0:
                 pos.entry_price = current_price
             pos.mark_price = current_price
-            contract_multiplier = _get_contract_multiplier(symbol)
             direction = mult_map.get(pos.side, 1.0)
-            sym_upper = symbol.upper().replace("/", "")
 
-            # Normalize units for PnL calculation
-            if pos.quantity >= 100.0 and not any(k in sym_upper for k in ["BTC", "ETH", "SOL", "US30", "US500", "USTEC", "DE40", "GER40"]):
-                effective_units = pos.quantity
-            elif ("XAU" in sym_upper or "GOLD" in sym_upper) and pos.quantity >= 1.0:
-                effective_units = pos.quantity
-            elif ("XAG" in sym_upper or "SILVER" in sym_upper) and pos.quantity >= 10.0:
-                effective_units = pos.quantity
-            else:
-                effective_units = pos.quantity * contract_multiplier
+            # ``quantity`` is already in venue units (oz, barrels, contracts,
+            # coins, FX units). Only FX pairs quoted in a non-USD currency need
+            # converting to USD, and that rate is live rather than hard-coded.
+            units = abs(float(pos.quantity or 0.0))
+            if units <= 0:
+                continue
+            quote_conv = self._quote_to_usd(_quote_currency(symbol))
 
-            # Forex cross currency conversion to USD
-            quote_conv = 1.0
-            if "JPY" in sym_upper:
-                quote_conv = 1.0 / 152.0  # JPY/USD
-            elif sym_upper.endswith("NZD"):
-                quote_conv = 0.60  # NZD/USD
-            elif sym_upper.endswith("CAD"):
-                quote_conv = 0.72  # CAD/USD
-            elif sym_upper.endswith("CHF"):
-                quote_conv = 1.15  # CHF/USD
-            elif sym_upper.endswith("AUD"):
-                quote_conv = 0.65  # AUD/USD
-            elif sym_upper.endswith("GBP"):
-                quote_conv = 1.30  # GBP/USD
-
-            pnl = (current_price - pos.entry_price) * direction * effective_units * quote_conv
+            pnl = (current_price - pos.entry_price) * direction * units * quote_conv
             pos.unrealized_pnl = round(pnl, 2)
 
             # Dynamic Profit Locking & Trailing Stop
@@ -1087,6 +1404,7 @@ class MT5AutonomousEngine:
                     if pos.stop_loss < trail_level:
                         pos.stop_loss = round(trail_level, 5)
                         logger.info(f"[CTRADER_ENGINE] Trailing stop advanced for {pos.symbol} BUY: New SL = {pos.stop_loss}")
+                        self._amend_broker_stop(pos)
             elif pos.side == "SELL":
                 profit_distance = pos.entry_price - current_price
                 target_distance = pos.entry_price - pos.take_profit
@@ -1095,6 +1413,7 @@ class MT5AutonomousEngine:
                     if pos.stop_loss > trail_level:
                         pos.stop_loss = round(trail_level, 5)
                         logger.info(f"[CTRADER_ENGINE] Trailing stop advanced for {pos.symbol} SELL: New SL = {pos.stop_loss}")
+                        self._amend_broker_stop(pos)
 
             # Check Take Profit
             tp_hit = (pos.side == "BUY" and current_price >= pos.take_profit) or (pos.side == "SELL" and current_price <= pos.take_profit)
@@ -1112,7 +1431,57 @@ class MT5AutonomousEngine:
                     exit_type = "STOP_LOSS"
                     status_emoji = "🛡️ STOP LOSS HIT"
 
-                realized_pnl = pos.unrealized_pnl
+                # Close on the broker first and require confirmation. Booking a
+                # win/loss and alerting before the venue acknowledges the exit is
+                # how phantom "closed" trades get reported while the position is
+                # still open.
+                close_confirmed = not getattr(self.adapter, "enabled", False)
+                close_price = current_price
+                if not close_confirmed:
+                    try:
+                        close_res = self.adapter.close_position(
+                            position_id=pos.position_id,
+                            symbol=pos.symbol,
+                            side=pos.side,
+                            quantity=pos.quantity,
+                        )
+                        for _ in range(3):
+                            snap = self._broker_positions_snapshot()
+                            if snap is not None and symbol not in snap:
+                                close_confirmed = True
+                                break
+                            time.sleep(0.6)
+                        if close_confirmed and float(getattr(close_res, "avg_price", 0) or 0) > 0:
+                            close_price = float(close_res.avg_price)
+                        if not close_confirmed:
+                            logger.warning(
+                                f"[CTRADER_ENGINE] Exit not confirmed for {pos.symbol} "
+                                f"(status={getattr(close_res, 'status', 'unknown')}); position kept open for retry."
+                            )
+                    except Exception as exc:
+                        logger.error(f"[CTRADER_ENGINE] Failed closing broker position for {pos.symbol}: {exc}")
+
+                if not close_confirmed:
+                    continue
+
+                # Cancel broker-side protective orders so they don't linger as orphans.
+                if hasattr(self.adapter, "cancel_pending_order"):
+                    if pos.sl_order_id:
+                        try:
+                            self.adapter.cancel_pending_order(pos.sl_order_id)
+                        except Exception:
+                            pass
+                    if pos.tp_order_id:
+                        try:
+                            self.adapter.cancel_pending_order(pos.tp_order_id)
+                        except Exception:
+                            pass
+
+                realized_pnl = round(
+                    (close_price - pos.entry_price) * direction * units * quote_conv, 2
+                )
+                pos.mark_price = close_price
+                pos.unrealized_pnl = realized_pnl
                 self.cloud_balance = round(self.cloud_balance + realized_pnl, 2)
                 if hasattr(self.adapter, 'record_realized_pnl'):
                     try:
@@ -1121,29 +1490,16 @@ class MT5AutonomousEngine:
                         logger.warning(f'[CTRADER_ENGINE] Failed updating adapter ledger: {exc}')
                 symbols_to_remove.append(symbol)
 
-                # Close position on broker via adapter
-                if getattr(self.adapter, "enabled", False):
-                    try:
-                        self.adapter.close_position(
-                            position_id=pos.position_id,
-                            symbol=pos.symbol,
-                            side=pos.side,
-                            quantity=pos.quantity,
-                        )
-                        logger.info(f"[CTRADER_ENGINE] Successfully closed broker position for {pos.symbol} (ID: {pos.position_id}) via FIX")
-                    except Exception as exc:
-                        logger.error(f"[CTRADER_ENGINE] Failed closing broker position for {pos.symbol}: {exc}")
-
                 # Telegram Notification
                 pnl_emoji = "💰" if realized_pnl >= 0 else "🔻"
-                disp_qty = pos.quantity / 100000.0 if pos.quantity >= 1000.0 and "JPY" not in pos.symbol.upper() else pos.quantity
+                disp_qty = pos.lots if pos.lots > 0 else pos.quantity / max(_contract_size(pos.symbol), 1e-9)
                 msg = (
                     f"<b>{status_emoji}</b>\n\n"
                     f"• <b>Symbol</b>: <code>{pos.symbol}</code>\n"
                     f"• <b>Side</b>: <code>{pos.side}</code>\n"
                     f"• <b>Size</b>: <code>{disp_qty:g} lots</code>\n"
                     f"• <b>Entry</b>: <code>{pos.entry_price:,.5f}</code>\n"
-                    f"• <b>Exit</b>: <code>{current_price:,.5f}</code>\n"
+                    f"• <b>Exit</b>: <code>{close_price:,.5f}</code>\n"
                     f"• <b>Realized PnL</b>: {pnl_emoji} <code>${realized_pnl:+,.2f} USD</code>\n"
                     f"• <b>Updated Balance</b>: <code>${self.cloud_balance:,.2f} USD</code>\n"
                     f"• <b>Ticket</b>: <code>{pos.position_id}</code>"
@@ -1213,7 +1569,14 @@ class MT5AutonomousEngine:
                 pass
         if not self.cloud_positions:
             self._load_cloud_state()
-        used_margin = sum(_calculate_position_margin(p.symbol, p.quantity) for p in self.cloud_positions.values())
+        used_margin = sum(
+            _calculate_position_margin(
+                p.symbol,
+                (p.lots if p.lots > 0 else p.quantity / max(_contract_size(p.symbol), 1e-9)),
+                p.mark_price or p.entry_price or None,
+            )
+            for p in self.cloud_positions.values()
+        )
         unrealized_sum = sum(p.unrealized_pnl for p in self.cloud_positions.values())
         equity = self.cloud_balance + unrealized_sum
         free_margin = max(0.0, equity - used_margin)
@@ -1254,7 +1617,46 @@ class MT5AutonomousEngine:
 
         executed: list[dict[str, Any]] = []
 
+        # Warm candles for the whole universe concurrently. On a cold cache the
+        # scan touches 70 symbols x 6 timeframes; doing that serially inside the
+        # trading loop would take minutes and starve position management.
+        try:
+            self.cloud_feed.prefetch(
+                [
+                    (symbol, tf)
+                    for symbol in self.symbols
+                    if symbol not in active_symbols
+                    for tf in self.timeframes
+                ],
+                max_workers=int(os.getenv("STRATEX_PREFETCH_WORKERS", "6")),
+            )
+        except Exception as exc:
+            logger.debug(f"[CTRADER_ENGINE] Candle prefetch failed: {exc}")
+
+        # Score every symbol across every timeframe, then act only on the best
+        # setups. The previous first-come loop broke out after the entry quota
+        # and therefore always traded whichever symbols sat earliest in the
+        # list, regardless of signal quality.
+        candidates: list[OpportunitySignal] = []
         for symbol in self.symbols:
+            if symbol in active_symbols:
+                continue
+            best_signal: OpportunitySignal | None = None
+            best_score = -1.0
+            for tf in self.timeframes:
+                signal = self.evaluate_symbol_timeframe(symbol, tf)
+                if not signal or signal.confidence < self.min_confidence:
+                    continue
+                score = signal.confidence * min(max(signal.risk_reward_ratio, 0.1), 3.0)
+                if score > best_score:
+                    best_score = score
+                    best_signal = signal
+            if best_signal is not None:
+                candidates.append(best_signal)
+
+        candidates.sort(key=lambda s: (s.confidence, s.risk_reward_ratio), reverse=True)
+
+        for signal in candidates:
             if len(active_symbols) >= self.max_active_positions:
                 logger.info(
                     f"[CTRADER_ENGINE] Max active positions cap reached ({len(active_symbols)}/{self.max_active_positions}). Stopping scan."
@@ -1266,37 +1668,24 @@ class MT5AutonomousEngine:
                 )
                 break
 
-            if symbol in active_symbols:
+            logger.info(
+                f"[CTRADER_ENGINE] Best setup {signal.symbol} ({signal.timeframe}): {signal.action} "
+                f"@ {signal.current_price:.5f} (SL: {signal.stop_loss:.5f}, TP: {signal.take_profit:.5f}, "
+                f"R:R {signal.risk_reward_ratio}, Conf: {signal.confidence})"
+            )
+
+            # Peer Consensus Gate
+            decision = self.consult_peer_mesh(signal)
+            if not decision.approved:
+                logger.info(f"[CTRADER_ENGINE] Peer consensus rejected {signal.symbol}: {decision.reasons}")
                 continue
 
-            for tf in self.timeframes:
-                signal = self.evaluate_symbol_timeframe(symbol, tf)
-                if not signal:
-                    continue
+            exec_result = self.execute_signal(signal, decision)
+            executed.append(exec_result)
 
-                if signal.confidence < self.min_confidence:
-                    continue
-
-                logger.info(
-                    f"[CTRADER_ENGINE] Found signal on {symbol} ({tf}): {signal.action} "
-                    f"@ {signal.current_price:.5f} (SL: {signal.stop_loss:.5f}, TP: {signal.take_profit:.5f}, "
-                    f"R:R {signal.risk_reward_ratio}, Conf: {signal.confidence})"
-                )
-
-                # Peer Consensus Gate
-                decision = self.consult_peer_mesh(signal)
-                if not decision.approved:
-                    logger.info(f"[CTRADER_ENGINE] Peer consensus rejected {symbol}: {decision.reasons}")
-                    continue
-
-                # Execute
-                exec_result = self.execute_signal(signal, decision)
-                executed.append(exec_result)
-
-                if exec_result.get("status") in {"FILLED", "PENDING", "SIMULATED_FILLED"}:
-                    active_symbols.add(symbol)
-                    logger.info(f"[CTRADER_ENGINE] Opened position for {symbol}; continuing to next candidate.")
-                break
+            if exec_result.get("status") in {"FILLED", "PENDING", "SIMULATED_FILLED"}:
+                active_symbols.add(signal.symbol)
+                logger.info(f"[CTRADER_ENGINE] Opened position for {signal.symbol}; continuing to next candidate.")
 
         return executed
 
