@@ -1025,7 +1025,12 @@ class MT5AutonomousEngine:
         if getattr(self.adapter, "enabled", False) and result.get("status") in {"FILLED", "PENDING"}:
             for _ in range(4):
                 snapshot = self._broker_positions_snapshot()
-                broker_pos = snapshot.get(signal.symbol) if snapshot else None
+                broker_pos = None
+                if snapshot:
+                    for bp in snapshot:
+                        if bp.symbol == signal.symbol:
+                            broker_pos = bp
+                            break
                 if broker_pos:
                     if broker_pos.position_id:
                         result["order_id"] = broker_pos.position_id
@@ -1176,9 +1181,9 @@ class MT5AutonomousEngine:
             return None
         if broker_positions is None:
             return None
-        return {bp.symbol: bp for bp in broker_positions}
+        return broker_positions
 
-    def reconcile_with_broker(self, notify: bool = True, broker_pos_map: dict[str, Any] | None = None) -> int:
+    def reconcile_with_broker(self, notify: bool = True, broker_pos_map: list | None = None) -> int:
         """Drop tracked positions that no longer exist at the broker. Returns count purged.
 
         ``notify`` is disabled during startup so stale ledger rows left over
@@ -1192,11 +1197,15 @@ class MT5AutonomousEngine:
             broker_pos_map = self._broker_positions_snapshot()
         if broker_pos_map is None:
             return 0
-        broker_ids = {str(getattr(bp, "position_id", "") or "") for bp in broker_pos_map.values()}
+        broker_ids = {str(getattr(bp, "position_id", "") or "") for bp in broker_pos_map}
+        # Also map by symbol for quick lookup
+        broker_by_symbol: dict[str, list] = {}
+        for bp in broker_pos_map:
+            broker_by_symbol.setdefault(bp.symbol, []).append(bp)
         purged = 0
         for sym, pos in list(self.cloud_positions.items()):
             pid = str(pos.position_id or "")
-            if sym in broker_pos_map or (pid and pid in broker_ids):
+            if sym in broker_by_symbol or (pid and pid in broker_ids):
                 continue
 
             # Position is gone at broker -> SL or TP was hit.
@@ -1339,11 +1348,12 @@ class MT5AutonomousEngine:
         closed_events: list[dict[str, Any]] = []
 
         # Synchronize with live broker positions when the venue is positively healthy
-        broker_pos_map = self._broker_positions_snapshot()
-        if broker_pos_map is not None:
-            self.reconcile_with_broker(notify=True, broker_pos_map=broker_pos_map)
+        broker_pos_list = self._broker_positions_snapshot()
+        if broker_pos_list is not None:
+            self.reconcile_with_broker(notify=True, broker_pos_map=broker_pos_list)
             # Re-attach protective orders for any position missing them.
-            for sym, bp in broker_pos_map.items():
+            for bp in broker_pos_list:
+                sym = bp.symbol
                 cloud_pos = self.cloud_positions.get(sym)
                 if cloud_pos and (cloud_pos.sl_order_id == "" or cloud_pos.tp_order_id == ""):
                     # Position exists but SL/TP order IDs are missing - re-attach
@@ -1364,8 +1374,17 @@ class MT5AutonomousEngine:
                     except Exception as exc:
                         logger.warning(f"[CTRADER_ENGINE] Could not re-attach broker protection for {sym}: {exc}")
             try:
-                for sym, bp in broker_pos_map.items():
-                    if sym not in self.cloud_positions:
+                # Group broker positions by symbol to detect multiple positions per symbol
+                broker_by_symbol: dict[str, list] = {}
+                for bp in broker_pos_list:
+                    broker_by_symbol.setdefault(bp.symbol, []).append(bp)
+
+                for sym, bp_list in broker_by_symbol.items():
+                    cloud_pos = self.cloud_positions.get(sym)
+
+                    if not cloud_pos:
+                        # No cloud position for this symbol - adopt the first broker position
+                        bp = bp_list[0]
                         direction = 1.0 if bp.side.upper() in {"BUY", "LONG"} else -1.0
                         self.cloud_positions[sym] = CloudPosition(
                             position_id=bp.position_id or f"brk-{int(time.time())}",
@@ -1380,11 +1399,46 @@ class MT5AutonomousEngine:
                             opened_at=_utc_now_iso(),
                             strategy="broker_synced",
                         )
+                        # Close extra positions on same symbol (enforce single position rule)
+                        if len(bp_list) > 1:
+                            for extra_bp in bp_list[1:]:
+                                try:
+                                    self.adapter.close_position(
+                                        position_id=extra_bp.position_id,
+                                        symbol=sym,
+                                        side=extra_bp.side,
+                                        quantity=extra_bp.quantity,
+                                    )
+                                    logger.warning(
+                                        f"[CTRADER_ENGINE] Closed extra broker position for {sym} "
+                                        f"(id={extra_bp.position_id}, side={extra_bp.side}) to enforce single-position rule"
+                                    )
+                                except Exception as exc:
+                                    logger.warning(f"[CTRADER_ENGINE] Failed to close extra {sym} position: {exc}")
                     else:
                         # Update existing position with broker ticket ID if available
                         existing_pos = self.cloud_positions[sym]
-                        if bp.position_id and not existing_pos.position_id:
-                            existing_pos.position_id = bp.position_id
+                        # Find matching broker position (by side)
+                        matching_bp = next((bp for bp in bp_list if bp.side.upper() == existing_pos.side.upper()), None)
+                        if matching_bp and matching_bp.position_id and not existing_pos.position_id:
+                            existing_pos.position_id = matching_bp.position_id
+                        # Close any broker positions on same symbol with opposite side or extra
+                        for bp in bp_list:
+                            if bp is matching_bp:
+                                continue
+                            try:
+                                self.adapter.close_position(
+                                    position_id=bp.position_id,
+                                    symbol=sym,
+                                    side=bp.side,
+                                    quantity=bp.quantity,
+                                )
+                                logger.warning(
+                                    f"[CTRADER_ENGINE] Closed conflicting extra broker position for {sym} "
+                                    f"(id={bp.position_id}, side={bp.side}) to enforce single-position rule"
+                                )
+                            except Exception as exc:
+                                logger.warning(f"[CTRADER_ENGINE] Failed to close extra {sym} position: {exc}")
                 self._save_cloud_state()
             except Exception as exc:
                 logger.warning(f"[CTRADER_ENGINE] Broker position reconciliation: {exc}")

@@ -58,10 +58,65 @@ class UnifiedStrategyRegistry:
     """Discovers, registers, and manages all Stratex trading strategies."""
 
     SUPPORTED_TIMEFRAMES = {"1m", "5m", "15m", "1h", "4h", "1d"}
+    # Majors with deep history. Daily trend following needs breadth: 16-symbol
+    # study traded ~70 signals/year vs ~12 on BTC/ETH/SOL alone.
+    SUPPORTED_TIMEFRAMES = {"1m", "5m", "15m", "1h", "4h", "1d"}
+    # All symbols available on the demo exchange. The registry will filter
+    # to only those that actually have klines data when the engine starts.
     SUPPORTED_SYMBOLS = {
-        "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD",
-        "EURGBP", "EURJPY", "EURAUD", "EURCAD", "XAUUSD",
-        "BTCUSDT", "ETHUSDT", "SOLUSDT",
+        "BTCUSDT", "ETHUSDT", "BCHUSDT", "XRPUSDT", "LTCUSDT", "TRXUSDT", "ETCUSDT", "LINKUSDT", "XLMUSDT", "ADAUSDT",
+        "DASHUSDT", "ZECUSDT", "XTZUSDT", "BNBUSDT", "ATOMUSDT", "ONTUSDT", "IOTAUSDT", "BATUSDT", "VETUSDT", "NEOUSDT",
+        "QTUMUSDT", "IOSTUSDT", "THETAUSDT", "ALGOUSDT", "ZILUSDT", "KNCUSDT", "ZRXUSDT", "COMPUSDT", "DOGEUSDT", "SXPUSDT",
+        "KAVAUSDT", "BANDUSDT", "RLCUSDT", "SNXUSDT", "DOTUSDT", "YFIUSDT", "CRVUSDT", "TRBUSDT", "RUNEUSDT", "SUSHIUSDT",
+        "EGLDUSDT", "SOLUSDT", "ICXUSDT", "STORJUSDT", "UNIUSDT", "AVAXUSDT", "ENJUSDT", "KSMUSDT", "NEARUSDT", "AAVEUSDT",
+        "FILUSDT", "RSRUSDT", "LRCUSDT", "BELUSDT", "AXSUSDT", "ZENUSDT", "SKLUSDT", "GRTUSDT", "BNTUSDT", "1INCHUSDT",
+        "CHZUSDT", "SANDUSDT", "ANKRUSDT", "RLCUSDT", "MANAUSDT", "ALICEUSDT", "HBARUSDT", "ONEUSDT", "DENTUSDT", "CELRUSDT",
+        "HOTUSDT", "MTLUSDT", "OGNUSDT", "1000SHIBUSDT", "GTCUSDT", "BTCDOMUSDT", "MASKUSDT", "IOTXUSDT", "C98USDT", "ATAUSDT",
+        "DYDXUSDT", "1000XECUSDT", "GALAUSDT", "CELOUSDT", "ARUSDT", "ARPAUSDT", "CTSIUSDT", "LPTUSDT", "ENSUSDT", "PEOPLEUSDT",
+        "ROSEUSDT", "DUSKUSDT", "FLOWUSDT", "IMXUSDT", "ENSUSDT", "API3USDT", "GMTUSDT", "APEUSDT", "WOOUSDT", "JASMYUSDT",
+        "OPUSDT", "XMRUSDT", "INJUSDT", "STGUSDT", "SPELLUSDT", "1000LUNCUSDT", "LUNA2USDT", "LDOUSDT", "APTUSDT", "QNTUSDT",
+        "FXSUSDT", "HOOKUSDT", "MAGICUSDT", "TUSDT", "HIGHUSDT", "MINAUSDT", "ASTRUSDT", "PHBUSDT", "FETUSDT", "GMXUSDT",
+        "CFXUSDT", "STXUSDT", "ACHUSDT", "SSVUSDT", "CKBUSDT", "LQTYUSDT", "USDCUSDT", "ARBUSDT", "IDUSDT", "JOEUSDT",
+        "TRUUSDT", "RDNTUSDT", "HFTUSDT", "XVSUSDT", "BLURUSDT", "EDUUSDT", "1000PEPEUSDT", "1000FLOKIUSDT", "UMAUSDT",
+        "SUIUSDT", "NMRUSDT", "MAVUSDT", "XVGUSDT", "WLDUSDT", "PENDLEUSDT", "ARKMUSDT", "AGLDUSDT", "YGGUSDT", "DODOXUSDT",
+        "SEIUSDT", "CYBERUSDT", "ARKUSDT", "BICOUSDT", "BIGTIMEUSDT", "WAXPUSDT", "BSVUSDT", "RIFUSDT", "POLYXUSDT", "GASUSDT",
+        "POWRUSDT", "TIAUSDT", "CAKEUSDT", "MEMEUSDT", "TOKENUSDT", "ORDIUSDT", "STEEMUSDT", "ILVUSDT", "NTRNUSDT", "KASUSDT",
+        "BEAMXUSDT", "1000BONKUSDT", "PYTHUSDT", "SUPERUSDT", "USTCUSDT", "ONGUSDT", "ETHWUSDT", "JTOUSDT", "1000SATSUSDT",
+        "AUCTIONUSDT", "1000RATSUSDT", "ACEUSDT", "MOVRUSDT", "TWTUSDT", "AIUSDT", "XAIUSDT", "WIFUSDT", "MANTAUSDT", "ONDOUSDT",
+        "SAGAUSDT", "TAOUSDT", "REZUSDT", "BBUSDT", "NOTUSDT", "TURBOUSDT", "IOUSDT", "ZKUSDT", "MEWUSDT", "LISTAUSDT", "ZROUSDT",
+        "RENDERUSDT", "BANANAUSDT", "RAREUSDT", "GUSDT", "SYNUSDT", "SYSUSDT", "VOXELUSDT", "BRETTUSDT", "POPCATUSDT", "SUNUSDT",
+        "DOGSUSDT", "MBOXUSDT", "CHESSUSDT", "FLUXUSDT", "QUICKUSDT", "RPLUSDT", "POLUSDT", "NEIROUSDT", "1MBABYDOGEUSDT",
+        "FIDAUSDT", "FIOUSDT", "CATIUSDT", "GHSTUSDT", "HMSTRUSDT", "REIUSDT", "COSUSDT", "EIGENUSDT", "DIAUSDT", "1000CATUSDT",
+        "SCRUSDT", "GOATUSDT", "MOODENGUSDT", "SAFEUSDT", "SANTOSUSDT", "PONKEUSDT", "CETUSUSDT", "COWUSDT", "1000000MOGUSDT",
+        "GRASSUSDT", "DRIFTUSDT", "SWELLUSDT", "PNUTUSDT", "ACTUSDT", "HIPPOUSDT", "1000XUSDT", "DEGENUSDT", "BANUSDT", "AKTUSDT",
+        "SLERFUSDT", "SCRTUSDT", "1000WHYUSDT", "1000CHEEMSUSDT", "THEUSDT", "MORPHOUSDT", "CHILLGUYUSDT", "KAIAUSDT", "AEROUSDT",
+        "ACXUSDT", "ORCAUSDT", "MOVEUSDT", "RAYSOLUSDT", "VIRTUALUSDT", "SPXUSDT", "KOMAUSDT", "MEUSDT", "AVAUSDT",
+        "VELODROMEUSDT", "MOCAUSDT", "VANAUSDT", "PENGUUSDT", "LUMIAUSDT", "USUALUSDT", "KMNOUSDT", "CGPTUSDT", "AIXBTUSDT",
+        "FARTCOINUSDT", "HIVEUSDT", "DEXEUSDT", "PHAUSDT", "DFUSDT", "GRIFFAINUSDT", "ZEREBROUSDT", "BIOUSDT", "COOKIEUSDT",
+        "ALCHUSDT", "SWARMSUSDT", "SONICUSDT", "DUSDT", "PROMUSDT", "SUSDT", "SOLVUSDT", "ARCUSDT", "AVAAIUSDT", "TRUMPUSDT",
+        "MELANIAUSDT", "VTHOUSDT", "ANIMEUSDT", "PIPPINUSDT", "VINEUSDT", "VVVUSDT", "BERAUSDT", "TSTUSDT", "LAYERUSDT",
+        "HEIUSDT", "IPUSDT", "GPSUSDT", "SHELLUSDT", "KAITOUSDT", "REDUSDT", "VICUSDT", "EPICUSDT", "BMTUSDT", "MUBARAKUSDT",
+        "FORMUSDT", "TUTUSDT", "BIDUSDT", "BROCCOLI714USDT", "BROCCOLIF3BUSDT", "BANANAS31USDT", "SIRENUSDT", "BRUSDT",
+        "PLUMEUSDT", "JELLYJELLYUSDT", "PAXGUSDT", "WALUSDT", "FUNUSDT", "MLNUSDT", "ATHUSDT", "BABYUSDT", "FORTHUSDT",
+        "PROMPTUSDT", "STOUSDT", "FHEUSDT", "KERNELUSDT", "INITUSDT", "BANKUSDT", "EPTUSDT", "DEEPUSDT", "HYPERUSDT",
+        "FISUSDT", "JSTUSDT", "SIGNUSDT", "WCTUSDT", "GUNUSDT", "PARTIUSDT", "NILUSDT", "PUNDIXUSDT", "AIOTUSDT", "DOLOUSDT",
+        "HAEDALUSDT", "SXTUSDT", "ALPINEUSDT", "ASRUSDT", "B2USDT", "MILKUSDT", "SYRUPUSDT", "OBOLUSDT", "DOODUSDT",
+        "OGUSDT", "ZKJUSDT", "SKYAIUSDT", "NXPCUSDT", "AGTUSDT", "BUSDT", "AUSDT", "SOPHUSDT", "MERLUSDT", "HYPEUSDT",
+        "TAIKOUSDT", "SQDUSDT", "PUMPBTCUSDT", "MYXUSDT", "FUSDT", "NEWTUSDT", "DMCUSDT", "HUSDT", "SAHARAUSDT", "ICNTUSDT",
+        "BULLAUSDT", "IDOLUSDT", "MUSDT", "CROSSUSDT", "AINUSDT", "CUSDT", "VELVETUSDT", "TACUSDT", "ERAUSDT", "TAUSDT",
+        "SLPUSDT", "ZORAUSDT", "TAGUSDT", "ZRCUSDT", "ESPORTSUSDT", "TREEUSDT", "PLAYUSDT", "NAORISUSDT", "TOWNSUSDT",
+        "PROVEUSDT", "ALLUSDT", "INUSDT", "YALAUSDT", "CARVUSDT", "AIOUSDT", "XNYUSDT", "USELESSUSDT", "DAMUSDT", "SAPIENUSDT",
+        "CUDISUSDT", "AWEUSDT", "SOONUSDT", "HUMAUSDT", "LAUSDT", "RESOLVUSDT", "SPKUSDT", "XPLUSDT", "WLFIUSDT", "BASUSDT",
+        "BTRUSDT", "MITOUSDT", "HEMIUSDT", "LINEAUSDT", "QUSDT", "PTBUSDT", "ARIAUSDT", "TAKEUSDT", "PUFFERUSDT", "PORT3USDT",
+        "1000000BOBUSDT", "SKATEUSDT", "HOMEUSDT", "FLOCKUSDT", "SKYUSDT", "AVNTUSDT", "HOLOUSDT", "XPINUSDT", "UBUSDT",
+        "TOSHIUSDT", "STBLUSDT", "0GUSDT", "BARDUSDT", "ASTERUSDT", "TRADOORUSDT", "BLESSUSDT", "FLUIDUSDT", "COAIUSDT",
+        "HANAUSDT", "MIRAUSDT", "AKEUSDT", "ORDERUSDT", "LIGHTUSDT", "XANUSDT", "4USDT", "GIGGLEUSDT", "MONUSDT", "YBUSUSDT",
+        "METUSDT", "EULUSDT", "GUSDT", "LABUSDT", "RIVERUSDT", "币安人生USDT", "APRUSDT", "ONUSDT", "42USDT", "COMMONUSDT",
+        "KITEUSDT", "ATUSDT", "CCUSDT", "STABLEUSDT", "JCTUSDT", "CLANKERUSDT", "BEATUSDT", "SENTUSDT", "BOBUSDT",
+        "POWERUSDT", "WETUSDT", "NIGHTUSDT", "USUSDT", "CYSUSDT", "RAVEUSDT", "ZKPUSDT", "GUAUSDT", "IRUSDT", "BREVUSDT",
+        "COLLECTUSDT", "MAGMAUSDT", "ZAMAUSDT", "FOGOUSDT", "FRAXUSDT", "SPORTFUNUSDT", "AIAUSDT", "ACUUSDT", "我踏马来了USDT",
+        "SKRUSDT", "SPACEUSDT", "FIGHTUSDT", "BIRBUSDT", "GWEIUSDT", "MEGAUSDT", "INXUSDT", "TRIAUSDT", "ESPUSDT", "AZTECUSDT",
+        "BSBUSDT", "牛来USDT",
     }
 
     def __init__(self):
@@ -211,23 +266,47 @@ class UnifiedStrategyRegistry:
             health = self._health.get(name)
             if health:
                 health.signals_emitted += 1
-                if result and result.side:
+                # Handle both dict and object returns
+                result_side = result.get("side") if isinstance(result, dict) else getattr(result, "side", None)
+                if result_side:
                     health.signals_validated += 1
                     health.last_signal_ts = pd.Timestamp.now().timestamp()
                     health.consecutive_failures = 0
                 else:
                     health.consecutive_failures += 1
 
-            if result and result.side:
+            if result_side:
+                # Extract fields from dict or object
+                if isinstance(result, dict):
+                    side = result.get("side", "HOLD")
+                    sl = result.get("sl", 0)
+                    tp = result.get("tp", 0)
+                    win_rate = result.get("win_rate_prior", 0)
+                    rr = result.get("rr_ratio", 0)
+                    stype = result.get("strategy_type", "UNKNOWN")
+                    sl_dist = result.get("sl_dist", None)
+                    tp_dist = result.get("tp_dist", None)
+                else:
+                    side = getattr(result, "side", "HOLD")
+                    sl = getattr(result, "sl", 0)
+                    tp = getattr(result, "tp", 0)
+                    win_rate = getattr(result, "win_rate_prior", 0)
+                    rr = getattr(result, "rr_ratio", 0)
+                    stype = getattr(result, "strategy_type", "UNKNOWN")
+                    sl_dist = getattr(result, "sl_dist", None)
+                    tp_dist = getattr(result, "tp_dist", None)
+
                 return {
                     "status": "SIGNAL",
                     "strategy": name,
-                    "side": result.side,
-                    "stop_loss": result.sl,
-                    "take_profit": result.tp,
-                    "win_rate_prior": result.win_rate_prior,
-                    "rr_ratio": result.rr_ratio,
-                    "strategy_type": result.strategy_type,
+                    "side": side,
+                    "stop_loss": sl,
+                    "take_profit": tp,
+                    "win_rate_prior": win_rate,
+                    "rr_ratio": rr,
+                    "strategy_type": stype,
+                    "sl_dist": sl_dist,
+                    "tp_dist": tp_dist,
                 }
             return {"status": "NO_SIGNAL", "strategy": name}
         except Exception as e:

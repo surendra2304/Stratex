@@ -342,6 +342,7 @@ class VolatilityRegimeBreakoutModel:
                 take_profit = current_price - (2.0 * (stop_loss - current_price))
         elif regime == MarketRegime.CHOP_MEAN_REVERTING:
             # Fade extremes within channel with dynamic confidence
+            mid = (highest_high + lowest_low) / 2.0
             channel_width = highest_high - lowest_low
             position_in_channel = (current_price - lowest_low) / channel_width if channel_width > 0 else 0.5
             edge_proximity = min(abs(position_in_channel - 0.5) * 2, 1.0)  # 1 at edges, 0 at middle

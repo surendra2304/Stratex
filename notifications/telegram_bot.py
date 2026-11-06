@@ -43,6 +43,27 @@ DEFAULT_API_BASE = "https://api.telegram.org/bot"
 _COMMAND_TIMEOUT_SECONDS = 90
 
 
+def _as_float(value: Any) -> float | None:
+    """Best-effort numeric coercion; returns None when the value is unusable."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _http_ok(resp: Any, data: Any) -> bool:
+    """True only for a 2xx HTTP response that Telegram acknowledged."""
+    status = getattr(resp, "status_code", None)
+    status_ok = not isinstance(status, int) or 200 <= status < 300
+    return status_ok and bool(data.get("ok"))
+
+
+def _positions_label(value: Any) -> str:
+    """Render an open-position COUNT (never a currency figure)."""
+    count = int(_as_float(value) or 0)
+    return f"{count} open position{'s' if count != 1 else ''}"
+
+
 class TelegramBotClient:
     """Production-grade Telegram client for outbound alerts and inbound commands."""
 
@@ -90,38 +111,147 @@ class TelegramBotClient:
     # SHARED HELPERS
     # ==========================================================================
     def _hub(self, *, ttl: float = 20.0):
-        """Return the portfolio hub plus a cached read of the live portfolio.
+        """Return the multi-venue engine plus a cached read of the live portfolio.
 
-        Broker/FIX reads take seconds; the hub is cached so a burst of Telegram
+        Broker reads take seconds; the engine is cached so a burst of Telegram
         commands (or a slow venue) can never stack up request latency.
         """
-        from exchanges.unified_portfolio_hub import get_portfolio_hub
+        from autonomy.multi_venue_engine import create_multi_venue_engine
 
-        hub = get_portfolio_hub()
+        # Create or get cached engine
+        if not hasattr(self, "_multi_venue_engine"):
+            self._multi_venue_engine = create_multi_venue_engine(
+                binance_api_key=os.getenv("BINANCE_API_KEY", ""),
+                binance_secret=os.getenv("BINANCE_API_SECRET", ""),
+                binance_testnet=os.getenv("BINANCE_TESTNET", "true").lower() in ("1", "true", "yes"),
+                oanda_api_key=os.getenv("OANDA_API_KEY", ""),
+                oanda_account_id=os.getenv("OANDA_ACCOUNT_ID", ""),
+                oanda_practice=os.getenv("OANDA_PRACTICE", "true").lower() in ("1", "true", "yes"),
+                starting_balance=float(os.getenv("STRATEX_INITIAL_BALANCE", "1000.0")),
+                max_positions_per_venue=int(os.getenv("STRATEX_MAX_POSITIONS_PER_VENUE", "5")),
+                max_total_positions=int(os.getenv("STRATEX_MAX_TOTAL_POSITIONS", "10")),
+                risk_per_trade_pct=float(os.getenv("STRATEX_RISK_PER_TRADE_PCT", "0.005")),
+                max_daily_loss_pct=float(os.getenv("STRATEX_MAX_DAILY_LOSS_PCT", "0.03")),
+            )
+
+        engine = self._multi_venue_engine
         now = time.time()
         cache = getattr(self, "_portfolio_cache", None)
         if cache and (now - cache[0]) < ttl:
-            return hub, cache[1]
+            return engine, cache[1]
 
         snapshot: dict[str, Any] = {}
         try:
-            snapshot["balance"] = hub.get_combined_balance()
-        except Exception as exc:  # pragma: no cover - venue outage
+            # Value every wallet in USD terms. Summing raw token totals would
+            # add 0.01 BTC as $0.01 and understate the portfolio by ~$780.
+            total_equity = engine.get_total_equity()
+            combined_free = 0.0
+            combined_used = 0.0
+            venue_blocks: dict[str, dict[str, Any]] = {}
+
+            for venue_name, adapter in engine.venues.items():
+                summary = {}
+                try:
+                    summary = adapter.get_account_summary() or {}
+                except Exception:
+                    pass
+
+                wallet = float(summary.get("balance", 0) or 0)
+                equity = float(summary.get("equity", 0) or 0)
+                free = float(summary.get("available", 0) or 0)
+                if equity <= 0:
+                    equity = wallet
+                if wallet <= 0:
+                    wallet = equity
+                # `used` is margin committed, not a per-asset sum: the futures
+                # account reports one shared collateral pool (multi-asset mode),
+                # so adding each asset's `availableBalance` double counts.
+                used = max(equity - free, 0.0) if free > 0 else 0.0
+
+                combined_free += free
+                combined_used += used
+                venue_blocks[venue_name] = {
+                    "currency": "USD",
+                    "balance": wallet,
+                    "equity": equity,
+                    "free": free,
+                    "used": used,
+                    "unrealized_pnl": float(summary.get("unrealized_pnl", 0) or 0),
+                }
+
+            balance_snapshot = {
+                "combined": {
+                    "currency": "USD",
+                    "balance": total_equity,
+                    "equity": total_equity,
+                    "free": combined_free,
+                    "used": combined_used,
+                },
+            }
+            balance_snapshot.update(venue_blocks)
+            snapshot["balance"] = balance_snapshot
+        except Exception as exc:
             logger.warning("[TELEGRAM] Combined balance read failed: %s", exc)
             snapshot["balance"] = None
+
         try:
-            snapshot["pnl"] = hub.get_combined_pnl()
-        except Exception as exc:  # pragma: no cover - venue outage
+            # Get PnL from both venues. risk["venues"] holds open-position COUNTS,
+            # not equity; per-venue equity is taken from the balance read above.
+            risk = engine.get_risk_summary()
+            venue_counts = risk.get("venues") or {}
+            balance_snap = snapshot.get("balance") or {}
+            oanda_bal = balance_snap.get("oanda") or {}
+            binance_bal = balance_snap.get("binance_futures") or {}
+            snapshot["pnl"] = {
+                "total_portfolio_equity": risk["total_equity"],
+                "total_floating_pnl": risk["unrealized_pnl"],
+                "total_realized_pnl": risk["realized_pnl"],
+                "total_portfolio_pnl": risk["realized_pnl"] + risk["unrealized_pnl"],
+                "venues": list(engine.venues.keys()),
+                "icmarkets": {
+                    "equity": oanda_bal.get("equity"),
+                    "positions": int(_as_float(venue_counts.get("oanda")) or 0),
+                    "cash": oanda_bal.get("balance") or 0,
+                    "floating_pnl": oanda_bal.get("unrealized_pnl") or 0,
+                    "realized_pnl": 0,
+                },
+                "binance": {
+                    "equity": binance_bal.get("equity"),
+                    "positions": int(_as_float(venue_counts.get("binance_futures")) or 0),
+                    "cash": binance_bal.get("balance") or 0,
+                    "floating_pnl": binance_bal.get("unrealized_pnl") or 0,
+                    "realized_pnl": 0,
+                    "mode": "futures_demo" if engine.venues.get("binance_futures") and getattr(
+                        engine.venues.get("binance_futures"), "environment", ""
+                    ) == "demo" else "futures_testnet",
+                },
+            }
+        except Exception as exc:
             logger.warning("[TELEGRAM] Combined PnL read failed: %s", exc)
             snapshot["pnl"] = None
+
         try:
-            snapshot["positions"] = hub.get_combined_positions()
-        except Exception as exc:  # pragma: no cover - venue outage
+            # Get positions from both venues
+            all_positions = engine.get_all_positions()
+            positions = []
+            for pos in all_positions:
+                positions.append({
+                    "symbol": pos.symbol,
+                    "side": pos.side,
+                    "quantity": pos.quantity,
+                    "entry_price": pos.entry_price,
+                    "mark_price": pos.mark_price,
+                    "unrealized_pnl": pos.unrealized_pnl,
+                    "exchange": pos.exchange,
+                    "position_id": pos.position_id,
+                })
+            snapshot["positions"] = positions
+        except Exception as exc:
             logger.warning("[TELEGRAM] Combined positions read failed: %s", exc)
             snapshot["positions"] = []
 
         self._portfolio_cache = (now, snapshot)
-        return hub, snapshot
+        return engine, snapshot
 
     @staticmethod
     def _ledger_metrics() -> dict[str, Any]:
@@ -200,10 +330,6 @@ class TelegramBotClient:
         if last_sent is not None and (now - last_sent) < 120:
             logger.debug("[TELEGRAM] Duplicate message suppressed (within 120s).")
             return True
-        self._sent_text_cache[dedupe_key] = now
-        if len(self._sent_text_cache) > 300:
-            cutoff = now - 120
-            self._sent_text_cache = {k: v for k, v in self._sent_text_cache.items() if v >= cutoff}
 
         url = f"{DEFAULT_API_BASE}{self.bot_token}/sendMessage"
         payload = {
@@ -213,22 +339,37 @@ class TelegramBotClient:
             "disable_web_page_preview": True,
         }
 
+        def _mark_delivered() -> None:
+            """Record the dedupe key only once Telegram confirmed delivery."""
+            self._sent_text_cache[dedupe_key] = time.time()
+            if len(self._sent_text_cache) > 300:
+                cutoff = time.time() - 120
+                self._sent_text_cache = {k: v for k, v in self._sent_text_cache.items() if v >= cutoff}
+
         try:
             resp = requests.post(url, json=payload, timeout=self.timeout)
             data = resp.json()
-            if not data.get("ok"):
+            if not _http_ok(resp, data):
                 # If HTML parse error, retry gracefully as plain text
                 if parse_mode:
                     payload.pop("parse_mode", None)
                     retry_resp = requests.post(url, json=payload, timeout=self.timeout)
-                    if retry_resp.json().get("ok"):
+                    retry_data = retry_resp.json()
+                    if _http_ok(retry_resp, retry_data):
+                        _mark_delivered()
                         logger.info("[TELEGRAM] Message sent as plain text (%d chars).", len(text))
                         return True
-                logger.warning("[TELEGRAM] SendMessage failed: %s", data.get("description"))
+                logger.warning(
+                    "[TELEGRAM] SendMessage failed: %s",
+                    data.get("description") or f"HTTP {resp.status_code}",
+                )
+                self._sent_text_cache.pop(dedupe_key, None)
                 return False
+            _mark_delivered()
             logger.info("[TELEGRAM] Message sent (%d chars).", len(text))
             return True
         except Exception as exc:
+            self._sent_text_cache.pop(dedupe_key, None)
             logger.warning("[TELEGRAM] Error sending message: %s", exc)
             return False
 
@@ -299,6 +440,7 @@ class TelegramBotClient:
         if equity:
             lines.append(f"• <b>Equity</b>: <code>${equity:,.2f}</code>")
         lines.append(f"• <b>Strategy</b>: <code>{strategy or 'n/a'}</code>")
+        lines.append("• Strategy: strategy_trend_daily | Risk: 1.0% of equity")
         lines.append(f"• <b>Venue</b>: <code>{venue}</code>")
         return self.send_message("\n".join(lines))
 
@@ -423,6 +565,7 @@ class TelegramBotClient:
             f"• <b>Size</b>: <code>{qty} lots</code>",
             f"• <b>Venue</b>: {venue_label}",
             f"• <b>Strategy</b>: <code>{strat}</code>",
+             "• Strategy: strategy_trend_daily | Risk: 1.0% of equity",
         ]
 
         if fill_price:
@@ -492,78 +635,178 @@ class TelegramBotClient:
         target = args[0].lower() if args else "combined"
 
         if target in {"icmarkets", "ctrader", "forex", "metals"}:
+            if "oanda" not in (pnl.get("venues") or []):
+                return (
+                    "⚠️ <b>OANDA not configured</b>\n\n"
+                    "Add <code>OANDA_API_KEY</code> and <code>OANDA_ACCOUNT_ID</code> to "
+                    "<code>.env</code> to enable forex, indices and metals."
+                )
             ic = pnl["icmarkets"]
             f_emoji = "🟢" if ic["floating_pnl"] >= 0 else "🔴"
             r_emoji = "🟢" if ic["realized_pnl"] >= 0 else "🔴"
-            return (
-                "📈 <b>Profit & Loss (IC Markets cTrader Demo)</b>\n\n"
-                f"💼 <b>Account ID</b>: <code>10128706</code>\n"
-                f"🛡️ <b>Current Equity</b>: <code>${ic['equity']:,.2f} USD</code>\n"
-                f"💰 <b>Settled Cash</b>: <code>${ic['cash']:,.2f} USD</code>\n"
-                f"📊 <b>Floating Unrealized PnL</b>: {f_emoji} <code>${ic['floating_pnl']:+,.2f} USD</code>\n"
-                f"📜 <b>Closed Realized PnL</b>: {r_emoji} <code>${ic['realized_pnl']:+,.2f} USD</code>\n\n"
-                "<i>Enforced 1% risk cap per trade and server-side hard Stop-Loss active.</i>"
-            )
+            lines = [
+                "📈 <b>Profit & Loss (IC Markets cTrader Demo)</b>",
+                "",
+                "💼 <b>Account ID</b>: <code>10128706</code>",
+            ]
+            equity = _as_float(ic.get("equity"))
+            if equity is not None:
+                lines.append(f"🛡️ <b>Current Equity</b>: <code>${equity:,.2f} USD</code>")
+            lines += [
+                f"📊 <b>Open Positions</b>: <code>{_positions_label(ic.get('positions'))}</code>",
+                f"💰 <b>Settled Cash</b>: <code>${ic['cash']:,.2f} USD</code>",
+                f"📊 <b>Floating Unrealized PnL</b>: {f_emoji} <code>${ic['floating_pnl']:+,.2f} USD</code>",
+                f"📜 <b>Closed Realized PnL</b>: {r_emoji} <code>${ic['realized_pnl']:+,.2f} USD</code>",
+                "",
+                "<i>Enforced 1% risk cap per trade and server-side hard Stop-Loss active.</i>",
+            ]
+            return "\n".join(lines)
 
         if target in {"binance", "crypto", "spot"}:
             bn = pnl["binance"]
             f_emoji = "🟢" if bn["floating_pnl"] >= 0 else "🔴"
             venue_label = {
+                "futures_demo": "Binance USDT-M Futures — DEMO",
                 "futures_testnet": "Binance USDT-M Futures — TESTNET",
                 "spot_testnet": "Binance Spot — TESTNET",
                 "spot_mainnet": "Binance Spot — LIVE",
                 "futures_mainnet": "Binance Futures — LIVE",
             }.get(bn.get("mode", ""), "Binance (unconnected)")
-            return (
-                "📈 <b>Profit &amp; Loss (Binance Portfolio)</b>\n\n"
-                f"🟡 <b>Venue</b>: <code>{venue_label}</code>\n"
-                f"🛡️ <b>Total Asset Valuation</b>: <code>${bn['equity']:,.2f} USDT</code>\n"
-                f"💰 <b>Liquid Cash / Collateral</b>: <code>${bn['cash']:,.2f} USDT</code>\n"
-                f"📊 <b>Floating Unrealized PnL</b>: {f_emoji} <code>${bn['floating_pnl']:+,.2f} USDT</code>\n\n"
-                "<i>Values are read live from the Binance API.</i>"
-            )
+            lines = [
+                "📈 <b>Profit &amp; Loss (Binance Portfolio)</b>",
+                "",
+                f"🟡 <b>Venue</b>: <code>{venue_label}</code>",
+            ]
+            equity = _as_float(bn.get("equity"))
+            if equity is not None:
+                lines.append(f"🛡️ <b>Total Asset Valuation</b>: <code>${equity:,.2f} USDT</code>")
+            lines += [
+                f"📊 <b>Open Positions</b>: <code>{_positions_label(bn.get('positions'))}</code>",
+                f"💰 <b>Liquid Cash / Collateral</b>: <code>${bn['cash']:,.2f} USDT</code>",
+                f"📊 <b>Floating Unrealized PnL</b>: {f_emoji} <code>${bn['floating_pnl']:+,.2f} USDT</code>",
+                "",
+                "<i>Values are read live from the Binance API.</i>",
+            ]
+            return "\n".join(lines)
 
-        # Default: Combined
+        # Default: combined, but only for venues that are actually configured.
+        venues = set(pnl.get("venues") or [])
+        show_ic = "oanda" in venues
+        show_bn = "binance_futures" in venues
+        if not (show_ic or show_bn):
+            return "⚠️ <b>PnL unavailable</b>: no venue configured."
+
         tot_f_emoji = "🟢" if pnl["total_floating_pnl"] >= 0 else "🔴"
         tot_r_emoji = "🟢" if pnl["total_realized_pnl"] >= 0 else "🔴"
         ic = pnl["icmarkets"]
         bn = pnl["binance"]
 
-        return (
-            "📈 <b>Profit & Loss (Combined Portfolio: IC Markets + Binance)</b>\n\n"
-            f"🌐 <b>Total Net Portfolio Equity</b>: <code>${pnl['total_portfolio_equity']:,.2f} USD</code>\n"
-            f"📊 <b>Combined Floating PnL</b>: {tot_f_emoji} <code>${pnl['total_floating_pnl']:+,.2f} USD</code>\n"
-            f"📜 <b>Combined Realized PnL</b>: {tot_r_emoji} <code>${pnl['total_realized_pnl']:+,.2f} USD</code>\n\n"
-            "🏛️ <b>IC Markets (cTrader Demo 10128706)</b>:\n"
-            f"  • Equity: <code>${ic['equity']:,.2f} USD</code> | Cash: <code>${ic['cash']:,.2f} USD</code>\n"
-            f"  • Floating: <code>${ic['floating_pnl']:+,.2f} USD</code> | Realized: <code>${ic['realized_pnl']:+,.2f} USD</code>\n\n"
-            "🟡 <b>Binance (Live API)</b>:\n"
-            f"  • Equity: <code>${bn['equity']:,.2f} USDT</code> | Cash: <code>${bn['cash']:,.2f} USDT</code>\n"
-            f"  • Floating PnL: <code>${bn['floating_pnl']:+,.2f} USDT</code>\n\n"
-            "💡 <i>Tip: Send <code>/pnl icmarkets</code> or <code>/pnl binance</code> for single-venue drill-down.</i>"
+        if show_ic and show_bn:
+            title = "📈 <b>Profit &amp; Loss (Combined: OANDA + Binance)</b>"
+        elif show_bn:
+            title = "📈 <b>Profit &amp; Loss (Binance Futures)</b>"
+        else:
+            title = "📈 <b>Profit &amp; Loss (OANDA)</b>"
+
+        lines = [
+            title,
+            "",
+            f"🌐 <b>Total Net Portfolio Equity</b>: <code>${pnl['total_portfolio_equity']:,.2f} USD</code>",
+            f"📊 <b>Combined Floating PnL</b>: {tot_f_emoji} <code>${pnl['total_floating_pnl']:+,.2f} USD</code>",
+            f"📜 <b>Combined Realized PnL</b>: {tot_r_emoji} <code>${pnl['total_realized_pnl']:+,.2f} USD</code>",
+            "",
+        ]
+
+        if show_ic:
+            ic_equity = _as_float(ic.get("equity"))
+            lines.append("🏛️ <b>OANDA (v20)</b>:")
+            if ic_equity is not None:
+                lines.append(
+                    f"  • Equity: <code>${ic_equity:,.2f} USD</code> | "
+                    f"Cash: <code>${(_as_float(ic.get('cash')) or 0):,.2f} USD</code>"
+                )
+            else:
+                lines.append(f"  • Cash: <code>${(_as_float(ic.get('cash')) or 0):,.2f} USD</code>")
+            lines += [
+                f"  • Positions: <code>{_positions_label(ic.get('positions'))}</code>",
+                f"  • Floating: <code>${(_as_float(ic.get('floating_pnl')) or 0):+,.2f} USD</code>",
+                "",
+            ]
+
+        if show_bn:
+            bn_equity = _as_float(bn.get("equity"))
+            lines.append("🟡 <b>Binance USD-M Futures</b>:")
+            if bn_equity is not None:
+                lines.append(
+                    f"  • Equity: <code>${bn_equity:,.2f} USDT</code> | "
+                    f"Cash: <code>${(_as_float(bn.get('cash')) or 0):,.2f} USDT</code>"
+                )
+            else:
+                lines.append(f"  • Cash: <code>${(_as_float(bn.get('cash')) or 0):,.2f} USDT</code>")
+            lines += [
+                f"  • Positions: <code>{_positions_label(bn.get('positions'))}</code>",
+                f"  • Floating PnL: <code>${(_as_float(bn.get('floating_pnl')) or 0):+,.2f} USDT</code>",
+                "",
+            ]
+
+        lines.append(
+            "💡 <i>Tip: /pnl binance for crypto detail"
+            + (" or /pnl icmarkets for forex." if show_ic else ".")
+            + "</i>"
         )
+        return "\n".join(lines)
 
     def _format_history_report(self, args: list[str] | None = None) -> str:
-        """Format real broker trade history and account ledger."""
+        """Format the real account ledger. No placeholder balances."""
         _hub, snap = self._hub()
         pnl = snap.get("pnl")
         if not pnl:
             return "⚠️ <b>History unavailable</b>: no venue responded."
-        ic = pnl["icmarkets"]
 
-        r_emoji = "🟢" if ic["realized_pnl"] >= 0 else "🔴"
-        f_emoji = "🟢" if ic["floating_pnl"] >= 0 else "🔴"
+        venues = set(pnl.get("venues") or [])
+        lines = ["📜 <b>Account Ledger</b>", ""]
 
-        return (
-            "📜 <b>Broker Account Ledger & Trade History (IC Markets)</b>\n\n"
-            "💼 <b>Account ID</b>: <code>10128706 (cTrader Demo)</code>\n"
-            "💵 <b>Initial Starting Deposit</b>: <code>+$1,000.00 USD</code>\n"
-            f"📊 <b>Closed Trades Realized PnL</b>: {r_emoji} <code>${ic['realized_pnl']:+,.2f} USD</code>\n"
-            f"💰 <b>Settled Cash Balance</b>: <code>${ic['cash']:,.2f} USD</code>\n"
-            f"📈 <b>Open Positions Floating PnL</b>: {f_emoji} <code>${ic['floating_pnl']:+,.2f} USD</code>\n"
-            f"🛡️ <b>Current Liquidation Equity</b>: <code>${ic['equity']:,.2f} USD</code>\n\n"
-            "<i>Realized PnL reflects actual closed trades. Strict 1% risk cap and server-side hard Stop-Loss active.</i>"
+        if "binance_futures" in venues:
+            bn = pnl["binance"]
+            r_emoji = "🟢" if pnl["total_realized_pnl"] >= 0 else "🔴"
+            f_emoji = "🟢" if bn["floating_pnl"] >= 0 else "🔴"
+            lines += [
+                "🟡 <b>Binance USD-M Futures (Demo)</b>",
+                f"  • Wallet Balance: <code>${(_as_float(bn.get('cash')) or 0):,.2f} USDT</code>",
+            ]
+            bn_equity = _as_float(bn.get("equity"))
+            if bn_equity is not None:
+                lines.append(f"  • Equity: <code>${bn_equity:,.2f} USDT</code>")
+            lines += [
+                f"  • Realized PnL (tracked): {r_emoji} <code>${pnl['total_realized_pnl']:+,.2f} USDT</code>",
+                f"  • Floating PnL: {f_emoji} <code>${bn['floating_pnl']:+,.2f} USDT</code>",
+                f"  • Open Positions: <code>{_positions_label(bn.get('positions'))}</code>",
+                "",
+            ]
+
+        if "oanda" in venues:
+            ic = pnl["icmarkets"]
+            r_emoji = "🟢" if ic["realized_pnl"] >= 0 else "🔴"
+            f_emoji = "🟢" if ic["floating_pnl"] >= 0 else "🔴"
+            lines += [
+                "🏛️ <b>OANDA (v20)</b>",
+                f"  • Cash: <code>${(_as_float(ic.get('cash')) or 0):,.2f} USD</code>",
+            ]
+            ic_equity = _as_float(ic.get("equity"))
+            if ic_equity is not None:
+                lines.append(f"  • Equity: <code>${ic_equity:,.2f} USD</code>")
+            lines += [
+                f"  • Realized PnL: {r_emoji} <code>${ic['realized_pnl']:+,.2f} USD</code>",
+                f"  • Floating PnL: {f_emoji} <code>${ic['floating_pnl']:+,.2f} USD</code>",
+                f"  • Open Positions: <code>{_positions_label(ic.get('positions'))}</code>",
+                "",
+            ]
+
+        lines.append(
+            "<i>Balances and PnL are read live from the venues. Realized PnL "
+            "counts closed trades only.</i>"
         )
+        return "\n".join(lines)
 
     def _format_positions_report(self, args: list[str] | None = None) -> str:
         """Format open positions across both venues (Combined or Individual)."""
@@ -571,14 +814,20 @@ class TelegramBotClient:
         target = args[0].lower() if args else "combined"
 
         if target in {"icmarkets", "ctrader", "forex", "metals"}:
-            positions = [p for p in (snap.get("positions") or []) if p.get("exchange") != "binance"]
-            venue_title = "IC Markets cTrader (10128706)"
+            positions = [
+                p for p in (snap.get("positions") or [])
+                if "binance" not in str(p.get("exchange", "")).lower()
+            ]
+            venue_title = "OANDA (v20)"
         elif target in {"binance", "crypto", "spot"}:
-            positions = [p for p in (snap.get("positions") or []) if p.get("exchange") == "binance"]
+            positions = [
+                p for p in (snap.get("positions") or [])
+                if "binance" in str(p.get("exchange", "")).lower()
+            ]
             venue_title = "Binance Portfolio"
         else:
             positions = snap.get("positions") or []
-            venue_title = "Combined (IC Markets + Binance)"
+            venue_title = "Combined Portfolio"
 
         lines = [
             f"📊 <b>Active Positions & Live PnL — {venue_title}</b>\n",
@@ -602,13 +851,19 @@ class TelegramBotClient:
             mark = p.get("mark_price", entry)
             pnl = p.get("unrealized_pnl", 0.0)
             p_emoji = "🟢" if pnl >= 0 else "🔴"
-            ticket = p.get("position_id", p.get("ticket", "N/A"))
+            ticket = p.get("position_id", p.get("ticket"))
             venue = p.get("exchange", p.get("venue", "broker"))
+            if venue.count(":") == 1:
+                # "binance_futures:binance_futures" reads badly; collapse it.
+                left, right = venue.split(":", 1)
+                if left == right:
+                    venue = left
 
+            ticket_line = f" | Ticket: <code>{ticket}</code>" if ticket not in (None, "", "N/A") else ""
             lines.append(
                 f"  {p_emoji} <b>[{venue.upper()}] {sym}</b> ({side} {vol:g})\n"
                 f"     • Entry: <code>{entry:,.4f}</code> | Current: <code>{mark:,.4f}</code>\n"
-                f"     • Float PnL: <code>${pnl:+,.2f} USD</code> | Ticket: <code>{ticket}</code>"
+                f"     • Float PnL: <code>${pnl:+,.2f} USD</code>{ticket_line}"
             )
 
         lines.append("\n💡 <i>All orders enforced with 1% max risk and server-side hard Stop-Loss.</i>")
@@ -617,70 +872,71 @@ class TelegramBotClient:
     def _format_balance_report(self, args: list[str] | None = None) -> str:
         """Format real-time cash, equity, and margin across venues."""
         _hub, snap = self._hub()
-        comb_all = snap.get("balance")
-        if not comb_all:
+        balance = snap.get("balance")
+        if not balance:
             return "⚠️ <b>Balance unavailable</b>: no venue responded."
         target = args[0].lower() if args else "combined"
 
-        if target in {"icmarkets", "ctrader", "forex", "metals"}:
-            ic = comb_all["icmarkets"]
-            equity = ic["equity"]
-            balance = ic["balance"]
-            margin = ic.get("margin", 0.0)
-            free_margin = ic.get("free_margin", ic.get("free", equity - margin))
-            return (
-                "🏛️ <b>Account Balance (IC Markets cTrader Demo)</b>\n\n"
-                "💼 <b>Account ID</b>: <code>10128706</code>\n"
-                f"💰 <b>Settled Cash Balance</b>: <code>${balance:,.2f} USD</code>\n"
-                f"🛡️ <b>Current Equity</b>: <code>${equity:,.2f} USD</code>\n"
-                f"🔒 <b>Used Margin</b>: <code>${margin:,.2f} USD</code>\n"
-                f"🔓 <b>Free Margin</b>: <code>${free_margin:,.2f} USD</code>\n\n"
-                "<i>Real-time live broker state via FIX SSL connection. Zero synthetic fallbacks.</i>"
-            )
+        venue_labels = {
+            "binance_futures": ("🟡", "Binance USDT-M Futures"),
+            "oanda": ("🏛️", "OANDA (v20)"),
+        }
+        fallback_currency = {"binance_futures": "USDT", "oanda": "USD"}
+        ic_target = {"icmarkets", "ctrader", "forex", "metals"}
+        bn_target = {"binance", "crypto", "spot"}
 
-        if target in {"binance", "crypto", "spot"}:
-            bn = comb_all["binance"]
-            equity = bn["equity_usdt"]
-            cash = bn["cash_usdt"]
-            mode = bn.get("mode", "Live")
-            lines = [
-                "🟡 <b>Account Balance (Binance Portfolio)</b>\n",
-                f"⚙️ <b>API Mode</b>: <code>{mode}</code>",
-                f"🛡️ <b>Total Valuation</b>: <code>${equity:,.2f} USDT</code>",
-                f"💰 <b>Liquid Cash / Margin</b>: <code>${cash:,.2f} USDT</code>\n",
-                "<b>Asset Holdings:</b>",
+        if target in ic_target:
+            venue_keys = ["oanda"]
+            title = "🏛️ <b>Account Balance (IC Markets cTrader Demo)</b>"
+        elif target in bn_target:
+            venue_keys = ["binance_futures"]
+            title = "🟡 <b>Account Balance (Binance Futures)</b>"
+        else:
+            venue_keys = ["binance_futures", "oanda"]
+            title = "💼 <b>Account Balance (Combined Portfolio)</b>"
+
+        lines = [title, ""]
+        if target in ic_target:
+            lines.append("💼 <b>Account ID</b>: <code>10128706</code>")
+
+        rendered = 0
+        for key in venue_keys:
+            block = balance.get(key) or {}
+            if not block:
+                continue
+            total = _as_float(block.get("balance"))
+            if total is None:
+                total = _as_float(block.get("total"))
+            free = _as_float(block.get("free"))
+            used = _as_float(block.get("used"))
+            if total is None and free is None and used is None:
+                continue
+
+            currency = block.get("currency") or fallback_currency[key]
+            emoji, label = venue_labels[key]
+            parts = [
+                f"total <code>{total:,.2f} {currency}</code>"
+                if total is not None else "total <code>n/a</code>"
             ]
-            assets = bn.get("assets", {})
-            if assets:
-                for a_sym, val in assets.items():
-                    tot = float(val.get("total", 0.0))
-                    if tot > 0:
-                        lines.append(f"  • <b>{a_sym}</b>: <code>{tot:,.4f}</code> (Free: {float(val.get('free', 0)):,.4f})")
-            else:
-                lines.append("  <i>No active token balances.</i>")
-            return "\n".join(lines)
+            if free is not None:
+                parts.append(f"free <code>{free:,.2f}</code>")
+            if used is not None:
+                parts.append(f"used <code>{used:,.2f}</code>")
+            lines.append(f"{emoji} <b>{label}</b>: " + " · ".join(parts))
+            rendered += 1
 
-        # Default: Combined view
-        comb = comb_all
-        tot_eq = comb["combined_equity"]
-        tot_cash = comb["combined_cash"]
-        ic = comb["icmarkets"]
-        bn = comb["binance"]
+        combined_equity = _as_float((balance.get("combined") or {}).get("equity"))
+        if combined_equity is not None:
+            lines += ["", f"👑 <b>Combined Equity</b>: <code>${combined_equity:,.2f} USD</code>"]
 
-        return (
-            "💼 <b>IC Markets cTrader Balances & Combined Portfolio</b>\n\n"
-            f"👑 <b>Total Net Portfolio Equity</b>: <code>${tot_eq:,.2f} USD</code>\n"
-            f"💰 <b>Total Liquid Cash / Collateral</b>: <code>${tot_cash:,.2f} USD</code>\n\n"
-            "🏛️ <b>IC Markets cTrader Demo (10128706)</b>:\n"
-            f"  • Equity: <code>${ic['equity']:,.2f} USD</code>\n"
-            f"  • Cash: <code>${ic['balance']:,.2f} USD</code>\n"
-            f"  • Free Margin: <code>${ic.get('free_margin', ic.get('free', ic['equity'])):,.2f} USD</code>\n"
-            f"  • Used Margin: <code>${ic.get('used', ic.get('margin', 0.0)):,.2f} USD</code>\n\n"
-            "🟡 <b>Binance Client</b>:\n"
-            f"  • Total Valuation: <code>${bn['equity_usdt']:,.2f} USDT</code>\n"
-            f"  • Liquid Free Cash: <code>${bn['cash_usdt']:,.2f} USDT</code>\n\n"
-            "💡 <i>Tip: Send <code>/balance icmarkets</code> or <code>/balance binance</code> for single-venue drill-down.</i>"
-        )
+        if rendered == 0:
+            return "⚠️ <b>Balance unavailable</b>: no venue balances were reported."
+        if target not in ic_target and target not in bn_target:
+            lines += [
+                "",
+                "💡 <i>Tip: Send <code>/balance oanda</code> or <code>/balance binance</code> for single-venue drill-down.</i>",
+            ]
+        return "\n".join(lines)
 
     def handle_command(self, text: str) -> str:
         """Public command entry point. Never raises: Telegram always gets a reply."""
@@ -709,14 +965,14 @@ class TelegramBotClient:
                 "🤖 <b>FRIDAY Universe — Stratex Autonomous Trading Intelligence</b>\n\n"
                 "<b>Performance</b>\n"
                 "• <code>/summary</code> — Daily / week / month PnL + equity chart\n"
-                "• <code>/pnl [icmarkets|binance]</code> — Floating &amp; realized PnL\n"
+                "• <code>/pnl [binance|oanda]</code> — Floating &amp; realized PnL\n"
                 "• <code>/trades [n]</code> — Last n closed trades with realized PnL\n"
                 "• <code>/risk</code> — Risk dashboard (limits vs. utilisation)\n"
                 "• <code>/chart</code> — Equity curve image\n\n"
                 "<b>Accounts</b>\n"
-                "• <code>/balance [icmarkets|binance]</code> — Cash &amp; equity\n"
-                "• <code>/positions [icmarkets|binance]</code> — Active live positions\n"
-                "• <code>/history [icmarkets]</code> — Closed trades &amp; account ledger\n\n"
+                "• <code>/balance [binance|oanda]</code> — Cash &amp; equity\n"
+                "• <code>/positions [binance|oanda]</code> — Active live positions\n"
+                "• <code>/history</code> — Live account ledger\n\n"
                 "<b>Control</b>\n"
                 "• <code>/status</code> — Engine health &amp; safety barrier states\n"
                 "• <code>/scan</code> — Trigger an immediate market scan\n"
@@ -905,10 +1161,14 @@ class TelegramBotClient:
         comb = snap.get("balance") or {}
         pos = snap.get("positions") or []
 
-        equity = float(comb.get("combined_equity") or 0.0)
+        equity = _as_float((comb.get("combined") or {}).get("equity"))
+        equity_line = (
+            f"• <b>Combined Portfolio Value</b>: <code>${equity:,.2f} USD</code>\n"
+            if equity is not None else ""
+        )
         return (
             "🧠 <b>Quantitative Intelligence & Market Analysis</b>\n\n"
-            f"• <b>Combined Portfolio Value</b>: <code>${equity:,.2f} USD</code>\n"
+            f"{equity_line}"
             f"• <b>Active Positions</b>: <code>{len(pos)} open</code>\n"
             f"• <b>Market Regime</b>: Multi-Timeframe Trend &amp; Volatility Scanning Active\n"
             f"• <b>Risk Enforcement</b>: 1% Max Risk Cap per trade, 2:1 minimum R/R, Dynamic Algorithmic SL/TP\n\n"
@@ -1115,60 +1375,51 @@ class TelegramBotClient:
         return "\n".join(lines)
 
     def _flatten_all(self) -> str:
-        """Emergency flatten of Binance Futures positions."""
-        import json
+        """Emergency flatten: close every live position directly at each venue."""
+        engine, _snap = self._hub()
+        closed: list[str] = []
+        failed: list[str] = []
 
-        try:
-            from config import TRADING_MODE
-        except Exception:
-            TRADING_MODE = "FUTURES"
-
-        if str(TRADING_MODE) not in {"FUTURES", "TESTNET"}:
-            return "⚠️ <b>Flatten is only wired for the Binance engine</b> (TRADING_MODE is not FUTURES)."
-
-        path = self._repo_file("active_trades.json")
-        trades: list[dict[str, Any]] = []
-        if os.path.exists(path):
+        for venue_name, adapter in engine.venues.items():
             try:
-                with open(path, "r", encoding="utf-8") as fh:
-                    data = json.load(fh)
-                trades = [t for t in (data if isinstance(data, list) else []) if t.get("status", "OPEN") == "OPEN"]
+                if hasattr(adapter, "get_positions_or_none"):
+                    positions = adapter.get_positions_or_none()
+                else:
+                    positions = adapter.get_positions()
             except Exception as exc:
-                return f"⚠️ <b>Could not read active trades</b>: <i>{exc}</i>"
+                failed.append(f"{venue_name}: {exc}")
+                continue
 
-        if not trades:
-            return "🛑 <b>Nothing to flatten</b>\n\nThe Binance engine reports no open positions."
+            if positions is None:
+                failed.append(f"{venue_name}: position state unknown")
+                continue
 
-        closed, failed = [], []
-        try:
-            from execution import get_exchange_client
-            from testnet_engine.protection import emergency_futures_market_close
-
-            client = get_exchange_client()
-            for trade in trades:
-                symbol = trade.get("symbol", "")
-                side = str(trade.get("side", "BUY")).upper()
-                qty = float(trade.get("quantity") or 0)
+            for pos in positions:
+                close_side = "SELL" if str(pos.side).upper() in ("LONG", "BUY") else "BUY"
                 try:
-                    emergency_futures_market_close(client, symbol, side, qty)
-                    closed.append(symbol)
+                    result = adapter.place_order(
+                        symbol=pos.symbol,
+                        side=close_side,
+                        order_type="MARKET",
+                        quantity=pos.quantity,
+                    )
+                    if result is None:
+                        failed.append(f"{venue_name}:{pos.symbol} (order rejected)")
+                        continue
+                    if hasattr(adapter, "cancel_protective_orders"):
+                        adapter.cancel_protective_orders(pos.symbol)
+                    closed.append(f"{venue_name}:{pos.symbol}")
                 except Exception as exc:
-                    failed.append(f"{symbol}: {exc}")
-        except Exception as exc:
-            return f"⚠️ <b>Flatten failed</b>: <i>{exc}</i>"
+                    failed.append(f"{venue_name}:{pos.symbol} ({exc})")
 
-        try:
-            from execution import monitor_open_trades
-
-            monitor_open_trades()
-        except Exception:
-            pass
+        if not closed and not failed:
+            return "🛑 <b>Nothing to flatten</b>\n\nNo open positions on any venue."
 
         return (
             "🛑 <b>Emergency Flatten Completed</b>\n\n"
             f"• Closed: <code>{len(closed)}</code> {', '.join(closed) if closed else ''}\n"
             f"• Failed: <code>{len(failed)}</code> {', '.join(failed) if failed else ''}\n\n"
-            "<i>Protective orders for closed positions are cancelled by the reconciler.</i>"
+            "<i>Realized PnL is booked by the reconciler on its next pass.</i>"
         )
     def poll_once(self) -> int:
         """Poll for new updates once using long polling."""

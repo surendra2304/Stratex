@@ -21,6 +21,17 @@ from logger import get_logger
 
 logger = get_logger("exchange_adapters")
 
+# Import new adapters
+try:
+    from exchanges.oanda_adapter import OandaExchangeAdapter
+except ImportError:
+    OandaExchangeAdapter = None
+
+try:
+    from exchanges.binance_futures_adapter import BinanceFuturesAdapter
+except ImportError:
+    BinanceFuturesAdapter = None
+
 
 class BinanceExchangeAdapter(BaseExchange):
     """
@@ -668,10 +679,14 @@ def get_exchange_adapter(exchange_id: str) -> BaseExchange:
         "binance": BinanceExchangeAdapter,
         "bybit": BybitExchangeAdapter,
         "okx": OKXExchangeAdapter,
-        "coinbase": CoinbaseExchangeAdapter
+        "coinbase": CoinbaseExchangeAdapter,
+        "binance_futures": BinanceFuturesAdapter,
+        "oanda": OandaExchangeAdapter,
     }
     adapter_cls = ex_map.get(exchange_id.lower())
     if not adapter_cls:
         raise ValueError(f"Unsupported exchange identifier: {exchange_id}")
+    if adapter_cls is None:
+        raise ValueError(f"Adapter {exchange_id} not available (import failed)")
     return adapter_cls()  # type: ignore[abstract]
 

@@ -1233,6 +1233,21 @@ def health_liveness():
     return jsonify(_health_payload("process_liveness")), 200
 
 
+def _json_safe(obj):
+    """Recursively convert obj to JSON-serializable types."""
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    if isinstance(obj, dict):
+        return {str(k): _json_safe(v) for k, v in obj.items()}
+    # Fallback: string representation for Decimal, datetime, etc.
+    try:
+        return float(obj)
+    except (TypeError, ValueError):
+        return str(obj)
+
+
 @app.route('/ready')
 @app.route('/api/ready')
 def health_readiness():
@@ -1242,71 +1257,83 @@ def health_readiness():
     A process that is up but has loaded zero executable strategies or is locked by
     an active panic kill switch is not ready to trade, so it must not pass this gate.
     """
-    payload = _health_payload("engine_readiness")
     try:
-        from panic_state import is_kill_switch_locked, is_panic_active
-        panic = is_panic_active()
-        locked = is_kill_switch_locked()
-    except Exception:
-        panic = False
-        locked = False
+        payload = _health_payload("engine_readiness")
+        try:
+            from panic_state import is_kill_switch_locked, is_panic_active
+            panic = is_panic_active()
+            locked = is_kill_switch_locked()
+        except Exception:
+            panic = False
+            locked = False
 
-    payload["panic_active"] = panic
-    payload["kill_switch_locked"] = locked
-    # Database backend and connectivity from the configured store. The URL is read
-    # from the process environment because config exposes operational constants only.
-    # Oracle Autonomous Database is the only supported production backend.
-    db_backend = "unconfigured"
-    db_status = "unavailable"
-    try:
-        import config as cfg
-        import os as _os
-        db_url = (
-            _os.getenv("STRATEX_DATABASE_URL")
-            or _os.getenv("DATABASE_URL")
-            or getattr(cfg, "DATABASE_URL", "")
-            or getattr(cfg, "DB_URL", "")
-        )
-        if db_url and isinstance(db_url, str):
-            if db_url.lower().startswith(("oracle", "oracledb")):
-                db_backend = "oracle"
-
-                from sqlalchemy import create_engine, text
-                from sqlalchemy.pool import NullPool
-
-                probe_url = db_url
-                if probe_url.startswith("oracle+oracledb_async://"):
-                    probe_url = "oracle+oracledb://" + probe_url[len("oracle+oracledb_async://"):]
-                engine = create_engine(probe_url, poolclass=NullPool, pool_pre_ping=True)
-                try:
-                    with engine.connect() as conn:
-                        conn.execute(text("SELECT 1 FROM DUAL"))
-                    db_status = "connected"
-                finally:
-                    engine.dispose()
-    except Exception:
+        payload["panic_active"] = panic
+        payload["kill_switch_locked"] = locked
+        # Database backend and connectivity from the configured store. The URL is read
+        # from the process environment because config exposes operational constants only.
+        # Oracle Autonomous Database is the only supported production backend.
+        db_backend = "unconfigured"
         db_status = "unavailable"
-    payload["database"] = db_status
-    payload["database_backend"] = db_backend
+        try:
+            import config as cfg
+            import os as _os
+            db_url = (
+                _os.getenv("STRATEX_DATABASE_URL")
+                or _os.getenv("DATABASE_URL")
+                or getattr(cfg, "DATABASE_URL", "")
+                or getattr(cfg, "DB_URL", "")
+            )
+            if db_url and isinstance(db_url, str):
+                if db_url.lower().startswith(("oracle", "oracledb")):
+                    db_backend = "oracle"
 
-    ready = (
-        payload["engine_healthy"]
-        and payload.get("engine_trading_capable", False)
-        and not panic
-        and not locked
-    )
-    # Production readiness: non-Oracle backend must return 503
-    is_prod = False
-    try:
-        import os as _os
-        env = _os.getenv("ENVIRONMENT") or _os.getenv("APP_ENV") or "development"
-        is_prod = str(env).lower() == "production"
-    except Exception:
-        pass
-    if is_prod and db_backend != "oracle" and ready:
-        ready = False
-    payload["status"] = "ready" if ready else "not_ready"
-    return jsonify(payload), 200 if ready else 503
+                    from sqlalchemy import create_engine, text
+                    from sqlalchemy.pool import NullPool
+
+                    probe_url = db_url
+                    if probe_url.startswith("oracle+oracledb_async://"):
+                        probe_url = "oracle+oracledb://" + probe_url[len("oracle+oracledb_async://"):]
+                    engine = create_engine(probe_url, poolclass=NullPool, pool_pre_ping=True)
+                    try:
+                        with engine.connect() as conn:
+                            conn.execute(text("SELECT 1 FROM DUAL"))
+                        db_status = "connected"
+                    finally:
+                        engine.dispose()
+        except Exception:
+            db_status = "unavailable"
+        payload["database"] = db_status
+        payload["database_backend"] = db_backend
+
+        ready = (
+            payload["engine_healthy"]
+            and payload.get("engine_trading_capable", False)
+            and not panic
+            and not locked
+        )
+        # Production readiness: non-Oracle backend must return 503
+        is_prod = False
+        try:
+            import os as _os
+            env = _os.getenv("ENVIRONMENT") or _os.getenv("APP_ENV") or "development"
+            is_prod = str(env).lower() == "production"
+        except Exception:
+            pass
+        if is_prod and db_backend != "oracle" and ready:
+            ready = False
+        payload["status"] = "ready" if ready else "not_ready"
+        # Ensure all values are JSON-serializable
+        safe_payload = _json_safe(payload)
+        return jsonify(safe_payload), 200 if ready else 503
+    except Exception as e:
+        # Never leak HTML on /ready; always return JSON
+        error_payload = {
+            "status": "not_ready",
+            "error": f"READINESS_CHECK_FAILED: {type(e).__name__}",
+            "service": "stratex",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+        return jsonify(error_payload), 503
 
 @app.route('/api/engine-health')
 def api_engine_health():
