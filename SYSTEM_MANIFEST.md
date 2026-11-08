@@ -12,14 +12,14 @@
 | Attribute | Repository configuration |
 | :--- | :--- |
 | **Configured Service URL** | [https://friday-universe.duckdns.org/stratex](https://friday-universe.duckdns.org/stratex) |
-| **Internal Mesh Service URL** | `http://stratex:8000` |
-| **Internal Port / Host Port** | Port 8000 (Host: 8008) |
+| **Production Service URL** | `https://friday-universe.duckdns.org/stratex` |
+| **Production host port** | Server 1, port 8003 (systemd + Caddy) |
 | **Configured Health Check Endpoint** | `/health` (live process liveness response) |
 | **API key variable (keep value in secret environment)** | `STRATEX_API_KEY` (unique secret required; value is not stored here) |
 | **Authentication Header** | `Authorization: Bearer <STRATEX_API_KEY>` or `X-API-Key` |
-| **Configured database topology** | SQLite Trade Ledger / State Backups / Connected to Memora |
-| **Configured database URL or namespace** | sqlite+aiosqlite:///./data/trades.db |
-| **Hosting Platform** | Oracle Cloud Always Free (friday_mesh Docker bridge, Caddy HTTPS reverse proxy) |
+| **Configured database topology** | Oracle Autonomous Database, dedicated `STRATEX` schema; testnet/demo state remains isolated |
+| **Persistence** | Oracle Autonomous Database; verify each trading ledger and adapter against its configured backend |
+| **Hosting Platform** | Oracle Cloud two-VM fleet (systemd services + Caddy HTTPS ingress) |
 
 ---
 
@@ -29,7 +29,7 @@
 * Stratex is the paper/testnet strategy and risk-analysis service. The configured executable strategy set and runtime dependencies are verified from current evidence. Live-money orders remain blocked in source.
 
 ### What Stratex DOES:
-* Operates as the **Paper/Testnet Futures Strategy Service** within the 9-agent FRIDAY Universe.
+* Operates as the **Paper/Testnet Futures Strategy Service** within the 10-agent FRIDAY Universe.
 * Communicates directly with peer agents via authenticated REST and WebSocket protocols across `friday_mesh`.
 * Persists private long-term memory records to **Memora** under memora://stratex/private.
 
@@ -45,7 +45,7 @@ These variable names and URLs represent the unified Oracle Cloud container mesh 
 # ============================================================================== #
 
 # 1. ⚡ Inference AI Multi-Model Gateway
-INFERENCE_URL=https://friday-universe.duckdns.org/cortex
+INFERENCE_URL=https://friday-universe.duckdns.org/inference
 # Set INFERENCE_API_KEY to the unique key issued by the Inference service.
 
 # 2. Memora cloud memory service
@@ -88,6 +88,6 @@ FRIDAY_URL=https://friday-universe.duckdns.org/friday
 When opening this repository:
 * **Identity:** You are working inside **Stratex** (d:\FRIDAY Universe\Stratex).
 * **Configured Service URL:** https://friday-universe.duckdns.org/stratex
-* **Internal Mesh:** http://stratex:8000
+* **Production host port:** Server 1, port 8003
 * **Authentication:** Incoming requests require a unique STRATEX_API_KEY configured in the service environment.
 * **Test Evidence:** Label local tests, test doubles, and live endpoint checks separately; report only commands and results actually observed.
